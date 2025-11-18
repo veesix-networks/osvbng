@@ -15,7 +15,7 @@ If this project recieves attention and that people are actually willing to run t
     - PWHE/PWHT with existing netlink solutions
     - DDP for NIC packet classification offloading
     - Intel DPDK with VPP (or just natively with linux, eg. provide a VM on a kvm hypervisor that performs NIC PCIe passthrough)
-    - VPP.io southbound integration
+    - VPP (fd.io) southbound integration
     - Subscriber Session Load Balance at the network level
 - Basic gNMI/gRPC implementation for Northbound + CLI daemon/codebase to manage simple rule sets
 - Build simple user plane + control plane separation as per TR-459 but without PFCP. I just want it to be as simple as using a redis/existing message queue that will drive all of our events. At some point we may want to branch out the various daemon-like codebases into separate containers (incase eg. we need to scale specifically the ppp daemon for PPP hellos)
