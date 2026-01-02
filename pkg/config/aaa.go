@@ -1,0 +1,87 @@
+package config
+
+import (
+	"fmt"
+	"net"
+	"strings"
+)
+
+type PolicyContext struct {
+	MACAddress    net.HardwareAddr
+	SVLAN         uint16
+	CVLAN         uint16
+	NASPort       uint32
+	RemoteID      string
+	CircuitID     string
+	AgentRelayID  string
+	Hostname      string
+}
+
+func (p *AAAPolicy) ExpandFormat(ctx *PolicyContext) string {
+	result := p.Format
+
+	result = strings.ReplaceAll(result, "$mac-address$", ctx.MACAddress.String())
+	result = strings.ReplaceAll(result, "$svlan$", fmt.Sprintf("%d", ctx.SVLAN))
+	result = strings.ReplaceAll(result, "$cvlan$", fmt.Sprintf("%d", ctx.CVLAN))
+	result = strings.ReplaceAll(result, "$nas-port$", fmt.Sprintf("%d", ctx.NASPort))
+	result = strings.ReplaceAll(result, "$remote-id$", ctx.RemoteID)
+	result = strings.ReplaceAll(result, "$circuit-id$", ctx.CircuitID)
+	result = strings.ReplaceAll(result, "$agent-relay-id$", ctx.AgentRelayID)
+	result = strings.ReplaceAll(result, "$hostname$", ctx.Hostname)
+
+	return result
+}
+
+func (a *AAA) GetPolicy(name string) *AAAPolicy {
+	for i := range a.Policy {
+		if a.Policy[i].Name == name {
+			return &a.Policy[i]
+		}
+	}
+	return nil
+}
+
+func (a *AAA) GetRADIUSGroup(name string) *RADIUSGroup {
+	for i := range a.RADIUS {
+		if a.RADIUS[i].Name == name {
+			return &a.RADIUS[i]
+		}
+	}
+	return nil
+}
+
+func (r *RADIUSGroup) GetAuthServers() []RADIUSServer {
+	servers := make([]RADIUSServer, 0)
+	for _, srv := range r.Servers {
+		if srv.Type == "auth" {
+			servers = append(servers, srv)
+		}
+	}
+	return servers
+}
+
+func (r *RADIUSGroup) GetAcctServers() []RADIUSServer {
+	servers := make([]RADIUSServer, 0)
+	for _, srv := range r.Servers {
+		if srv.Type == "acct" {
+			servers = append(servers, srv)
+		}
+	}
+	return servers
+}
+
+func (r *RADIUSGroup) GetAccountingInterval() int {
+	if r.AccountingInterval > 0 {
+		return r.AccountingInterval
+	}
+	return 300
+}
+
+func (d *DHCP) GetServer(name string) *DHCPServer {
+	for i := range d.Servers {
+		if d.Servers[i].Name == name {
+			return &d.Servers[i]
+		}
+	}
+	return nil
+}

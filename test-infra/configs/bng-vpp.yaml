@@ -1,0 +1,130 @@
+vrfs:
+  - name: customer-a
+    rd: "65000:100"
+    import-route-targets:
+      - "65000:100"
+    export-route-targets:
+      - "65000:100"
+    address-families:
+      ipv4-unicast:
+        import-route-policy: "POLICY-IN"
+        export-route-policy: "POLICY-OUT"
+  - name: customer-b
+    rd: "65000:101"
+    address-families:
+      ipv4-unicast: {}
+      ipv6-unicast: {}
+  - name: customer-c
+    address-families:
+      ipv6-unicast: {}
+
+interfaces:
+  eth0:
+    description: "Access Interface"
+    enabled: true
+  eth1:
+    description: "Core Interface"
+    enabled: true
+    lcp: true
+  loop100:
+    description: "Subscriber Gateway Loopbackee"
+    enabled: true
+    lcp: true
+    address:
+      ipv4:
+        - 10.1.0.2/32
+      ipv6:
+        - 2001:db8:1::1/128
+
+protocols:
+  bgp:
+    asn: 214457
+    router-id: "10.1.0.2"
+  static:
+    ipv4:
+      - destination: 10.1.0.0/16
+        device: loop100
+    ipv6:
+      - destination: 2001:db8:1::/64
+        device: loop100
+
+dataplane:
+  access_interface: host-eth0
+  core_interface: eth1
+  cp_egress_interface: access
+  vpp_api_socket: /run/vpp/api.sock
+  punt_socket_path: /run/vpp/osvbng-punt.sock
+  memif_socket_path: /run/vpp/memif.sock
+  arp_punt_socket_path: /run/vpp/arp-punt.sock
+  gateway_mac: "00:00:5e:00:01:01"
+
+redis:
+  address: "redis:6379"
+  password: ""
+
+redundancy:
+  virtual_mac: "00:00:5e:00:01:01"
+  bng_id: bng-vpp-docker
+  priority: 100
+  heartbeat_interval: 1s
+  member_timeout: 5s
+
+subscriber_group:
+  default_policy: dhcp-policy-a
+  vlans:
+    - svlan: 100
+      cvlan: "any"
+      interface: loop100
+
+aaa:
+  provider: "local"
+  nas_identifier: "osvbng-vpp"
+  nas_ip: "172.20.0.1"
+  policy:
+    - name: dhcp-policy-a
+      format: "$remote-id$"
+      type: dhcp
+  radius:
+    - name: default
+      enabled: true
+      accounting_interval: 300
+      servers:
+        - address: 172.20.0.10
+          port: 1812
+          secret: testing123
+          type: auth
+        - address: 172.20.0.10
+          port: 1813
+          secret: testing123
+          type: acct
+
+dhcp:
+  provider: "local"
+  pools:
+    - name: subscriber-pool
+      network: "10.1.0.0/16"
+      range_start: "10.1.0.10"
+      range_end: "10.1.255.254"
+      gateway: "10.1.0.2"
+      dns_servers:
+        - "8.8.8.8"
+        - "8.8.4.4"
+      lease_time: 3600
+
+logging:
+  format: text
+  level: debug
+  components:
+    ipoed: debug
+    aaad: debug
+    dhcprd: debug
+    dpd: debug
+    subd: debug
+    arpd: debug
+
+monitoring:
+  prometheus:
+    enabled: true
+    listen_address: ":9090"
+    collect_interval: 5s
+    state_ttl: 30s
