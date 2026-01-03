@@ -42,6 +42,15 @@ func RegisterCommands(tree *CommandTree) {
 		cmdShowProtocolsBGPIPv6Statistics,
 	)
 
+	// Temporary command to confirm plugin commands work, we need to scrap this CLI implementation and auto-render
+	// based on some CLI registry which allows auto-registration of commands
+	// core commands are priority, plugin commands should be namespaced based on a root tree, eg. this one implements show exporters but
+	// prometheus is the main tree
+	tree.AddCommand([]string{"show", "exporters", "prometheus", "status"},
+		"Display Prometheus exporter status",
+		cmdShowExportersPrometheusStatus,
+	)
+
 	tree.AddCommand([]string{"show", "running-config"},
 		"Display running configuration",
 		cmdShowRunningConfig,

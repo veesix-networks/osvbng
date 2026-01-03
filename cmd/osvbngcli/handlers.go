@@ -152,6 +152,10 @@ func cmdShowSystemThreads(ctx context.Context, cli *CLI, args []string) error {
 	return executeShowHandler(ctx, cli, paths.SystemThreads, args)
 }
 
+func cmdShowExportersPrometheusStatus(ctx context.Context, cli *CLI, args []string) error {
+	return executeShowHandler(ctx, cli, paths.Path("exporters.prometheus.status"), args)
+}
+
 func cmdShowVRFs(ctx context.Context, cli *CLI, args []string) error {
 	return executeShowHandler(ctx, cli, paths.VRFS, args)
 }

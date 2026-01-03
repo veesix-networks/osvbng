@@ -7,6 +7,7 @@ import (
 
 	aaacomp "github.com/veesix-networks/osvbng/internal/aaa"
 	routingcomp "github.com/veesix-networks/osvbng/internal/routing"
+	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/conf/paths"
 	"github.com/veesix-networks/osvbng/pkg/conf/types"
 	"github.com/veesix-networks/osvbng/pkg/operations"
@@ -48,9 +49,10 @@ type Handler interface {
 }
 
 type ConfDeps struct {
-	Dataplane operations.Dataplane
-	AAA       *aaacomp.Component
-	Routing   *routingcomp.Component
+	Dataplane        operations.Dataplane
+	AAA              *aaacomp.Component
+	Routing          *routingcomp.Component
+	PluginComponents map[string]component.Component
 }
 
 type HandlerFactory func(deps *ConfDeps) Handler
@@ -80,12 +82,31 @@ func (r *Registry) SetCallbacks(cb *Callbacks) {
 func (r *Registry) AutoRegisterAll(deps *ConfDeps) {
 	for _, factory := range factories {
 		handler := factory(deps)
-		r.Register(handler)
+		path := handler.PathPattern().String()
+
+		if _, exists := r.handlers[path]; exists {
+			continue
+		}
+
+		r.MustRegister(handler)
 	}
 }
 
-func (r *Registry) Register(handler Handler) {
-	r.handlers[handler.PathPattern().String()] = handler
+func (r *Registry) Register(handler Handler) error {
+	path := handler.PathPattern().String()
+
+	if _, exists := r.handlers[path]; exists {
+		return fmt.Errorf("conf handler conflict: path '%s' already registered", path)
+	}
+
+	r.handlers[path] = handler
+	return nil
+}
+
+func (r *Registry) MustRegister(handler Handler) {
+	if err := r.Register(handler); err != nil {
+		panic(err)
+	}
 }
 
 func (r *Registry) GetAllPaths() []paths.Path {

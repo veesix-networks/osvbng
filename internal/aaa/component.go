@@ -297,3 +297,7 @@ func (c *Component) handleSessionLifecycle(event models.Event) error {
 
 	return nil
 }
+
+func (c *Component) GetStatsSnapshot() []*ServerStats {
+	return []*ServerStats{}
+}
