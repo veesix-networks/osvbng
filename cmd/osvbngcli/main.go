@@ -10,6 +10,9 @@ import (
 	bngpb "github.com/veesix-networks/osvbng/api/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	_ "github.com/veesix-networks/osvbng/cmd/osvbngcli/commands/all"
+	_ "github.com/veesix-networks/osvbng/plugins/all"
 )
 
 var (

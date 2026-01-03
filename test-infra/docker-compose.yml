@@ -12,11 +12,11 @@ services:
     stdin_open: true
     tty: true
 
-  bng-vpp:
+  osvbng:
     build:
       context: ..
       dockerfile: test-infra/Dockerfile.vpp
-    container_name: bng-vpp
+    container_name: osvbng
     privileged: true
     cpuset: "0-7"
     networks:
@@ -32,7 +32,7 @@ services:
       - /dev/hugepages:/dev/hugepages
       - vpp-logs:/var/log/vpp
       - ./configs/vpp-startup-docker.conf:/etc/vpp/startup.conf:ro
-      - ./configs/bng-vpp.yaml:/etc/bng/bng.yaml:ro
+      - ./configs/osvbng.yaml:/etc/bng/bng.yaml:ro
       - ./docker-entrypoint-configd.sh:/docker-entrypoint.sh
       - bng-config-versions:/var/lib/osvbng/config-versions
       - bng-startup-config:/etc/osvbng

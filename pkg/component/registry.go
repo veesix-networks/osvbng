@@ -7,20 +7,61 @@ import (
 
 type Factory func(deps Dependencies) (Component, error)
 
+type FactoryWithConfig func(config interface{}, deps Dependencies) (Component, error)
+
+type Metadata struct {
+	Name       string
+	Author     string
+	Version    string
+	Namespace  string
+	Factory    Factory
+	ConfigType interface{}
+}
+
 var (
-	registry = make(map[string]Factory)
-	mu       sync.RWMutex
+	registry         = make(map[string]Factory)
+	metadataRegistry = make(map[string]*Metadata)
+	mu               sync.RWMutex
 )
 
-func Register(name string, factory Factory) {
+func Register(namespace string, factory Factory, opts ...func(*Metadata)) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	if _, exists := registry[name]; exists {
-		panic(fmt.Sprintf("component %s already registered", name))
+	if _, exists := registry[namespace]; exists {
+		panic(fmt.Sprintf("component %s already registered", namespace))
 	}
 
-	registry[name] = factory
+	meta := &Metadata{
+		Name:      namespace,
+		Namespace: namespace,
+		Factory:   factory,
+	}
+
+	for _, opt := range opts {
+		opt(meta)
+	}
+
+	registry[namespace] = factory
+	metadataRegistry[namespace] = meta
+}
+
+func WithAuthor(author string) func(*Metadata) {
+	return func(m *Metadata) {
+		m.Author = author
+	}
+}
+
+func WithVersion(version string) func(*Metadata) {
+	return func(m *Metadata) {
+		m.Version = version
+	}
+}
+
+func WithConfig(configType interface{}) func(*Metadata) {
+	return func(m *Metadata) {
+		m.ConfigType = configType
+	}
 }
 
 func Get(name string) (Factory, bool) {
@@ -42,6 +83,25 @@ func List() []string {
 	return names
 }
 
+func GetMetadata(name string) (*Metadata, bool) {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	meta, exists := metadataRegistry[name]
+	return meta, exists
+}
+
+func AllMetadata() []*Metadata {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	metas := make([]*Metadata, 0, len(metadataRegistry))
+	for _, meta := range metadataRegistry {
+		metas = append(metas, meta)
+	}
+	return metas
+}
+
 func LoadAll(deps Dependencies) ([]Component, error) {
 	mu.RLock()
 	defer mu.RUnlock()
@@ -52,7 +112,9 @@ func LoadAll(deps Dependencies) ([]Component, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to create component %s: %w", name, err)
 		}
-		components = append(components, comp)
+		if comp != nil {
+			components = append(components, comp)
+		}
 	}
 
 	return components, nil

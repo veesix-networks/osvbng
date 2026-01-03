@@ -7,3 +7,7 @@ type Component interface {
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
 }
+
+type PluginConfig[T any] interface {
+	GetConfig() *T
+}

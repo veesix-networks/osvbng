@@ -64,7 +64,7 @@ redis:
 
 redundancy:
   virtual_mac: "00:00:5e:00:01:01"
-  bng_id: bng-vpp-docker
+  bng_id: osvbng-docker
   priority: 100
   heartbeat_interval: 1s
   member_timeout: 5s
@@ -78,7 +78,7 @@ subscriber_group:
 
 aaa:
   provider: "local"
-  nas_identifier: "osvbng-vpp"
+  nas_identifier: "osvbng"
   nas_ip: "172.20.0.1"
   policy:
     - name: dhcp-policy-a
@@ -130,3 +130,6 @@ plugins:
   exporter.prometheus:
     enabled: true
     listen_address: ":9090"
+  example.hello:
+    enabled: true
+    message: "This message is displayed via a `show` handler. It can be changed with a `conf` handler and will persist after a config commit."

@@ -32,6 +32,7 @@ type Config struct {
 	Protocols  *ProtocolConfig             `json:"protocols,omitempty" yaml:"protocols,omitempty"`
 	AAA        *AAAConfig                  `json:"aaa,omitempty" yaml:"aaa,omitempty"`
 	VRFS       []VRFSConfig                `json:"vrfs,omitempty" yaml:"vrfs,omitempty"`
+	Plugins    map[string]interface{}      `json:"plugins,omitempty" yaml:"plugins,omitempty"`
 }
 
 type VRFSConfig struct {
