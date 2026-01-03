@@ -45,6 +45,33 @@ func NewCommandTree() *CommandTree {
 	}
 }
 
+func (t *CommandTree) AddRoot(path []string, description string) {
+	current := t.root
+
+	for _, part := range path {
+		found := false
+		for _, child := range current.Children {
+			if child.Name == part {
+				current = child
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			newNode := &CommandNode{
+				Name:        part,
+				Description: description,
+				Children:    make([]*CommandNode, 0),
+			}
+			current.Children = append(current.Children, newNode)
+			current = newNode
+		} else if current.Description == "" {
+			current.Description = description
+		}
+	}
+}
+
 func (t *CommandTree) AddCommand(path []string, description string, handler CommandHandler, args ...*Argument) {
 	t.addCommand(path, description, handler, false, args...)
 }

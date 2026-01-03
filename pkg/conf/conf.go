@@ -37,8 +37,8 @@ func NewConfigDaemon() *ConfigDaemon {
 	return &ConfigDaemon{
 		registry:          handlers.NewRegistry(),
 		frrConfig:         frr.NewConfig(),
-		runningConfig:     &types.Config{Interfaces: make(map[string]*types.InterfaceConfig)},
-		startupConfig:     &types.Config{Interfaces: make(map[string]*types.InterfaceConfig)},
+		runningConfig:     &types.Config{Interfaces: make(map[string]*types.InterfaceConfig), Plugins: make(map[string]interface{})},
+		startupConfig:     &types.Config{Interfaces: make(map[string]*types.InterfaceConfig), Plugins: make(map[string]interface{})},
 		sessions:          make(map[types.SessionID]*session),
 		versions:          []types.ConfigVersion{},
 		versionDir:        DefaultVersionDir,
@@ -62,11 +62,16 @@ func (cd *ConfigDaemon) CreateCandidateSession() (types.SessionID, error) {
 
 	candidateConfig := &types.Config{
 		Interfaces: make(map[string]*types.InterfaceConfig),
+		Plugins:    make(map[string]interface{}),
 	}
 
 	for k, v := range cd.runningConfig.Interfaces {
 		ifCopy := *v
 		candidateConfig.Interfaces[k] = &ifCopy
+	}
+
+	for k, v := range cd.runningConfig.Plugins {
+		candidateConfig.Plugins[k] = v
 	}
 
 	cd.sessions[id] = &session{
@@ -454,11 +459,16 @@ func (cd *ConfigDaemon) createSessionUnlocked() (types.SessionID, error) {
 
 	candidateConfig := &types.Config{
 		Interfaces: make(map[string]*types.InterfaceConfig),
+		Plugins:    make(map[string]interface{}),
 	}
 
 	for k, v := range cd.runningConfig.Interfaces {
 		ifCopy := *v
 		candidateConfig.Interfaces[k] = &ifCopy
+	}
+
+	for k, v := range cd.runningConfig.Plugins {
+		candidateConfig.Plugins[k] = v
 	}
 
 	cd.sessions[id] = &session{

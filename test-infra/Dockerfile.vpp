@@ -60,7 +60,7 @@ RUN mkdir -p /var/log/vpp /run/vpp /etc/vpp && \
 COPY test-infra/vpp-plugins/*.so /usr/lib/x86_64-linux-gnu/vpp_plugins/
 
 COPY --from=builder /build/bin/osvbngd /usr/local/bin/osvbngd
-COPY --from=builder /build/test-infra/configs/bng-vpp.yaml /etc/bng/bng.yaml
+COPY --from=builder /build/test-infra/configs/osvbng.yaml /etc/bng/bng.yaml
 COPY --from=builder /build/test-infra/configs/vpp-startup-docker.conf /etc/vpp/startup.conf
 COPY --from=builder /build/test-infra/frr /etc/frr
 COPY --from=builder /build/templates /usr/share/osvbng/templates

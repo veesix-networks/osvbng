@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/chzyer/readline"
 	bngpb "github.com/veesix-networks/osvbng/api/proto"
+	"github.com/veesix-networks/osvbng/pkg/cli"
 )
 
 type CLI struct {
@@ -26,6 +26,31 @@ type CLI struct {
 	configSessionID  string
 }
 
+func (c *CLI) GetClient() bngpb.BNGServiceClient {
+	return c.client
+}
+
+func (c *CLI) GetConfigMode() bool {
+	return c.configMode
+}
+
+func (c *CLI) GetConfigSessionID() string {
+	return c.configSessionID
+}
+
+func (c *CLI) SetConfigMode(mode bool) {
+	c.configMode = mode
+}
+
+func (c *CLI) SetConfigSessionID(sessionID string) {
+	c.configSessionID = sessionID
+}
+
+func (c *CLI) FormatOutput(data interface{}, format string) (string, error) {
+	formatter := NewGenericFormatter()
+	return formatter.Format(data, OutputFormat(format))
+}
+
 func NewCLI(client bngpb.BNGServiceClient, serverAddr string, devMode bool, dockerComposeDir string) *CLI {
 	cli := &CLI{
 		client:           client,
@@ -36,28 +61,9 @@ func NewCLI(client bngpb.BNGServiceClient, serverAddr string, devMode bool, dock
 		dockerComposeDir: dockerComposeDir,
 	}
 
-	RegisterCommands(cli.tree)
+	cli.buildTreeFromRegistry()
 
 	return cli
-}
-
-func (c *CLI) ExecVPP(args ...string) (string, error) {
-	var cmd *exec.Cmd
-
-	if c.devMode {
-		cmdArgs := append([]string{"compose", "exec", "-T", "bng-vpp", "vppctl"}, args...)
-		cmd = exec.Command("docker", cmdArgs...)
-		cmd.Dir = c.dockerComposeDir
-	} else {
-		cmd = exec.Command("vppctl", args...)
-	}
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("vppctl error: %w\nOutput: %s", err, string(output))
-	}
-
-	return string(output), nil
 }
 
 func (c *CLI) Run() error {
@@ -188,4 +194,44 @@ func (c *CLI) processCommand(line string) error {
 	defer cancel()
 
 	return c.tree.Execute(ctx, c, line)
+}
+
+func (c *CLI) buildTreeFromRegistry() {
+	for _, root := range cli.GetAllRoots() {
+		c.tree.AddRoot(root.Path, root.Description)
+	}
+
+	for _, cmd := range cli.GetAll() {
+		if cmd.DevOnly && !c.devMode {
+			continue
+		}
+
+		handler := c.adaptHandler(cmd.Handler)
+		args := c.convertArguments(cmd.Arguments)
+
+		if cmd.DevOnly {
+			c.tree.AddDevCommand(cmd.Path, cmd.Description, handler, args...)
+		} else {
+			c.tree.AddCommand(cmd.Path, cmd.Description, handler, args...)
+		}
+	}
+}
+
+func (c *CLI) adaptHandler(h cli.CommandHandler) CommandHandler {
+	return func(ctx context.Context, cli *CLI, args []string) error {
+		return h(ctx, cli, args)
+	}
+}
+
+func (c *CLI) convertArguments(cliArgs []*cli.Argument) []*Argument {
+	args := make([]*Argument, len(cliArgs))
+	for i, cliArg := range cliArgs {
+		args[i] = &Argument{
+			Name:        cliArg.Name,
+			Description: cliArg.Description,
+			Type:        ArgumentType(cliArg.Type),
+			Values:      cliArg.Values,
+		}
+	}
+	return args
 }

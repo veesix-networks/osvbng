@@ -80,14 +80,10 @@ func (r *Registry) SetCallbacks(cb *Callbacks) {
 }
 
 func (r *Registry) AutoRegisterAll(deps *ConfDeps) {
+	r.handlers = make(map[string]Handler)
+
 	for _, factory := range factories {
 		handler := factory(deps)
-		path := handler.PathPattern().String()
-
-		if _, exists := r.handlers[path]; exists {
-			continue
-		}
-
 		r.MustRegister(handler)
 	}
 }
