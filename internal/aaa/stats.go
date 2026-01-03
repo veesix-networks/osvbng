@@ -4,8 +4,6 @@ import (
 	"net"
 	"sync"
 	"time"
-
-	"github.com/veesix-networks/osvbng/pkg/models/aaa"
 )
 
 type RADIUSStats struct {
@@ -15,19 +13,18 @@ type RADIUSStats struct {
 }
 
 type ServerStats struct {
-	AuthRequests uint64
-	AuthAccepts  uint64
-	AuthRejects  uint64
-	AuthTimeouts uint64
-	AuthErrors   uint64
-
-	AcctRequests  uint64
-	AcctResponses uint64
-	AcctTimeouts  uint64
-	AcctErrors    uint64
-
-	LastError     error
-	LastErrorTime time.Time
+	Address       string    `json:"address"`
+	AuthRequests  uint64    `json:"auth_requests"`
+	AuthAccepts   uint64    `json:"auth_accepts"`
+	AuthRejects   uint64    `json:"auth_rejects"`
+	AuthTimeouts  uint64    `json:"auth_timeouts"`
+	AuthErrors    uint64    `json:"auth_errors"`
+	AcctRequests  uint64    `json:"acct_requests"`
+	AcctResponses uint64    `json:"acct_responses"`
+	AcctTimeouts  uint64    `json:"acct_timeouts"`
+	AcctErrors    uint64    `json:"acct_errors"`
+	LastError     string    `json:"last_error"`
+	LastErrorTime time.Time `json:"last_error_time"`
 }
 
 func NewRADIUSStats() *RADIUSStats {
@@ -77,7 +74,9 @@ func (s *RADIUSStats) IncrAuthError(addr string, err error) {
 	defer s.mu.Unlock()
 	stats := s.getOrCreateServerLocked(addr)
 	stats.AuthErrors++
-	stats.LastError = err
+	if err != nil {
+		stats.LastError = err.Error()
+	}
 	stats.LastErrorTime = time.Now()
 }
 
@@ -104,7 +103,9 @@ func (s *RADIUSStats) IncrAcctError(addr string, err error) {
 	defer s.mu.Unlock()
 	stats := s.getOrCreateServerLocked(addr)
 	stats.AcctErrors++
-	stats.LastError = err
+	if err != nil {
+		stats.LastError = err.Error()
+	}
 	stats.LastErrorTime = time.Now()
 }
 
@@ -126,13 +127,13 @@ func (s *RADIUSStats) GetAllStats() map[string]*ServerStats {
 	return result
 }
 
-func (s *RADIUSStats) GetAllStatsSnapshot() []*aaa.ServerStats {
+func (s *RADIUSStats) GetAllStatsSnapshot() []*ServerStats {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	result := make([]*aaa.ServerStats, 0, len(s.servers))
+	result := make([]*ServerStats, 0, len(s.servers))
 	for addr, stats := range s.servers {
-		snapshot := &aaa.ServerStats{
+		snapshot := &ServerStats{
 			Address:       addr,
 			AuthRequests:  stats.AuthRequests,
 			AuthAccepts:   stats.AuthAccepts,
@@ -143,10 +144,8 @@ func (s *RADIUSStats) GetAllStatsSnapshot() []*aaa.ServerStats {
 			AcctResponses: stats.AcctResponses,
 			AcctTimeouts:  stats.AcctTimeouts,
 			AcctErrors:    stats.AcctErrors,
+			LastError:     stats.LastError,
 			LastErrorTime: stats.LastErrorTime,
-		}
-		if stats.LastError != nil {
-			snapshot.LastError = stats.LastError.Error()
 		}
 		result = append(result, snapshot)
 	}

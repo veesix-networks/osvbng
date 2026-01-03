@@ -375,8 +375,8 @@ func (f *GenericFormatter) formatTree(data interface{}, indent int) (string, err
 			}
 
 			if fieldValue.Kind() == reflect.Struct ||
-			   (fieldValue.Kind() == reflect.Ptr && !fieldValue.IsNil() && fieldValue.Elem().Kind() == reflect.Struct) ||
-			   fieldValue.Kind() == reflect.Slice || fieldValue.Kind() == reflect.Map {
+				(fieldValue.Kind() == reflect.Ptr && !fieldValue.IsNil() && fieldValue.Elem().Kind() == reflect.Struct) ||
+				fieldValue.Kind() == reflect.Slice || fieldValue.Kind() == reflect.Map {
 				sb.WriteString(fmt.Sprintf("%s%s:\n", prefix, fieldName))
 				nested, _ := f.formatTree(fieldValue.Interface(), indent+1)
 				sb.WriteString(nested)
@@ -394,9 +394,25 @@ func (f *GenericFormatter) formatTree(data interface{}, indent int) (string, err
 
 	case reflect.Map:
 		for _, key := range v.MapKeys() {
-			sb.WriteString(fmt.Sprintf("%s%v:\n", prefix, key.Interface()))
-			nested, _ := f.formatTree(v.MapIndex(key).Interface(), indent+1)
-			sb.WriteString(nested)
+			val := v.MapIndex(key)
+
+			needsRecursion := false
+			if val.IsValid() {
+				valKind := val.Kind()
+				if valKind == reflect.Interface && !val.IsNil() {
+					valKind = val.Elem().Kind()
+				}
+				needsRecursion = valKind == reflect.Struct || valKind == reflect.Map ||
+					valKind == reflect.Slice || valKind == reflect.Array
+			}
+
+			if needsRecursion {
+				sb.WriteString(fmt.Sprintf("%s%v:\n", prefix, key.Interface()))
+				nested, _ := f.formatTree(v.MapIndex(key).Interface(), indent+1)
+				sb.WriteString(nested)
+			} else {
+				sb.WriteString(fmt.Sprintf("%s%v: %v\n", prefix, key.Interface(), val.Interface()))
+			}
 		}
 
 	default:

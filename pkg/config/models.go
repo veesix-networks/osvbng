@@ -3,17 +3,18 @@ package config
 import "time"
 
 type Config struct {
-	Logging            Logging             `yaml:"logging"`
-	Dataplane          Dataplane           `yaml:"dataplane"`
-	Redis              Redis               `yaml:"redis"`
-	Redundancy         Redundancy          `yaml:"redundancy"`
-	SubscriberGateways []SubscriberGateway `yaml:"subscriber_gateways"`
-	SubscriberGroup    SubscriberGroup     `yaml:"subscriber_group"`
-	AAA                AAA                 `yaml:"aaa"`
-	DHCP               DHCP                `yaml:"dhcp"`
-	ZebraSocket        string              `yaml:"zebra_socket,omitempty"`
-	Monitoring         Monitoring          `yaml:"monitoring,omitempty"`
-	API                API                 `yaml:"api,omitempty"`
+	Logging            Logging                        `yaml:"logging"`
+	Dataplane          Dataplane                      `yaml:"dataplane"`
+	Redis              Redis                          `yaml:"redis"`
+	Redundancy         Redundancy                     `yaml:"redundancy"`
+	SubscriberGateways []SubscriberGateway            `yaml:"subscriber_gateways"`
+	SubscriberGroup    SubscriberGroup                `yaml:"subscriber_group"`
+	AAA                AAA                            `yaml:"aaa"`
+	DHCP               DHCP                           `yaml:"dhcp"`
+	ZebraSocket        string                         `yaml:"zebra_socket,omitempty"`
+	Monitoring         Monitoring                     `yaml:"monitoring,omitempty"`
+	API                API                            `yaml:"api,omitempty"`
+	Plugins            map[string]map[string]interface{} `yaml:"plugins,omitempty"`
 }
 
 type API struct {
@@ -172,13 +173,6 @@ type DHCPPool struct {
 }
 
 type Monitoring struct {
-	Prometheus        PrometheusConfig `yaml:"prometheus,omitempty"`
-	EnabledCollectors []string         `yaml:"enabled_collectors,omitempty"`
-}
-
-type PrometheusConfig struct {
-	Enabled        bool          `yaml:"enabled"`
-	ListenAddress  string        `yaml:"listen_address"`
-	CollectInterval time.Duration `yaml:"collect_interval,omitempty"`
-	StateTTL       time.Duration `yaml:"state_ttl,omitempty"`
+	EnabledCollectors []string      `yaml:"enabled_collectors,omitempty"`
+	CollectInterval   time.Duration `yaml:"collect_interval,omitempty"`
 }

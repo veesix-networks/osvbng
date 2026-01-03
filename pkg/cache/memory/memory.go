@@ -10,7 +10,7 @@ import (
 )
 
 type item struct {
-	value      interface{}
+	value      []byte
 	expiration time.Time
 }
 
@@ -31,7 +31,7 @@ func New() cache.Cache {
 	return c
 }
 
-func (c *Cache) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+func (c *Cache) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -48,7 +48,7 @@ func (c *Cache) Set(ctx context.Context, key string, value interface{}, ttl time
 	return nil
 }
 
-func (c *Cache) Get(ctx context.Context, key string) (interface{}, error) {
+func (c *Cache) Get(ctx context.Context, key string) ([]byte, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -62,6 +62,28 @@ func (c *Cache) Get(ctx context.Context, key string) (interface{}, error) {
 	}
 
 	return item.value, nil
+}
+
+func (c *Cache) GetAll(ctx context.Context, pattern string) (map[string][]byte, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	result := make(map[string][]byte)
+	now := time.Now()
+
+	for key, item := range c.items {
+		if !matchPattern(pattern, key) {
+			continue
+		}
+
+		if !item.expiration.IsZero() && now.After(item.expiration) {
+			continue
+		}
+
+		result[key] = item.value
+	}
+
+	return result, nil
 }
 
 func (c *Cache) Delete(ctx context.Context, key string) error {
@@ -133,17 +155,18 @@ func (c *Cache) Incr(ctx context.Context, key string) (int64, error) {
 
 	itm, exists := c.items[key]
 	if !exists {
-		c.items[key] = &item{value: int64(1)}
-		return 1, nil
+		val := int64(1)
+		c.items[key] = &item{value: []byte(fmt.Sprintf("%d", val))}
+		return val, nil
 	}
 
-	val, ok := itm.value.(int64)
-	if !ok {
+	val, err := parseInt64(itm.value)
+	if err != nil {
 		return 0, fmt.Errorf("value is not an integer")
 	}
 
 	val++
-	itm.value = val
+	itm.value = []byte(fmt.Sprintf("%d", val))
 	return val, nil
 }
 
@@ -153,18 +176,25 @@ func (c *Cache) Decr(ctx context.Context, key string) (int64, error) {
 
 	itm, exists := c.items[key]
 	if !exists {
-		c.items[key] = &item{value: int64(-1)}
-		return -1, nil
+		val := int64(-1)
+		c.items[key] = &item{value: []byte(fmt.Sprintf("%d", val))}
+		return val, nil
 	}
 
-	val, ok := itm.value.(int64)
-	if !ok {
+	val, err := parseInt64(itm.value)
+	if err != nil {
 		return 0, fmt.Errorf("value is not an integer")
 	}
 
 	val--
-	itm.value = val
+	itm.value = []byte(fmt.Sprintf("%d", val))
 	return val, nil
+}
+
+func parseInt64(b []byte) (int64, error) {
+	var val int64
+	_, err := fmt.Sscanf(string(b), "%d", &val)
+	return val, err
 }
 
 func (c *Cache) Expire(ctx context.Context, key string, ttl time.Duration) error {

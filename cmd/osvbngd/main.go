@@ -14,6 +14,7 @@ import (
 	"github.com/veesix-networks/osvbng/internal/dataplane"
 	"github.com/veesix-networks/osvbng/internal/gateway"
 	"github.com/veesix-networks/osvbng/internal/ipoe"
+	"github.com/veesix-networks/osvbng/internal/monitor"
 	"github.com/veesix-networks/osvbng/internal/routing"
 	"github.com/veesix-networks/osvbng/internal/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/auth"
@@ -30,8 +31,11 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/operations"
 	"github.com/veesix-networks/osvbng/pkg/show/handlers"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/state"
+	_ "github.com/veesix-networks/osvbng/pkg/state/collectors/all"
 	_ "github.com/veesix-networks/osvbng/plugins/auth/all"
 	_ "github.com/veesix-networks/osvbng/plugins/dhcp4/all"
+	_ "github.com/veesix-networks/osvbng/plugins/exporter/all"
 	"go.fd.io/govpp"
 )
 
@@ -68,9 +72,10 @@ func main() {
 	}
 
 	configd.AutoRegisterHandlers(&confhandlers.ConfDeps{
-		Dataplane: vppDataplane,
-		AAA:       nil,
-		Routing:   nil,
+		Dataplane:        vppDataplane,
+		AAA:              nil,
+		Routing:          nil,
+		PluginComponents: nil,
 	})
 
 	mainLog.Info("Applying startup configuration")
@@ -174,12 +179,6 @@ func main() {
 		log.Fatalf("Failed to create routing component: %v", err)
 	}
 
-	configd.AutoRegisterHandlers(&confhandlers.ConfDeps{
-		Dataplane: vppDataplane,
-		AAA:       aaaComp.(*aaa.Component),
-		Routing:   routingComp.(*routing.Component),
-	})
-
 	dataplaneComp, err := dataplane.New(deps)
 	if err != nil {
 		log.Fatalf("Failed to create dataplane component: %v", err)
@@ -221,11 +220,6 @@ func main() {
 	}
 
 	showRegistry := handlers.NewRegistry()
-	showRegistry.AutoRegisterAll(&handlers.ShowDeps{
-		Subscriber: subscriberComp.(*subscriber.Component),
-		Southbound: deps.VPP,
-		Routing:    routingComp.(*routing.Component),
-	})
 
 	gatewayAddr := "0.0.0.0:50050"
 	if cfg.API.Address != "" {
@@ -236,6 +230,31 @@ func main() {
 		log.Fatalf("Failed to create gateway component: %v", err)
 	}
 
+	collectorRegistry := state.DefaultRegistry()
+	deps.CollectorRegistry = collectorRegistry
+
+	// We should build an auto-register system here so that plugins can use the same pattern to register new collectors
+	collectorRegistry.SetProvider("subscriber.sessions", subscriberComp)
+	collectorRegistry.SetProvider("aaa.radius", aaaComp)
+	collectorRegistry.SetProvider("protocols.bgp.ipv4", routingComp)
+	collectorRegistry.SetProvider("protocols.bgp.ipv6", routingComp)
+
+	collectInterval := 5 * time.Second
+	if cfg.Monitoring.CollectInterval > 0 {
+		collectInterval = cfg.Monitoring.CollectInterval
+	}
+
+	monitorComp := monitor.New(monitor.Config{
+		Cache:             cache,
+		CollectorRegistry: collectorRegistry,
+		CollectorConfig: state.CollectorConfig{
+			Interval:   collectInterval,
+			TTL:        30 * time.Second,
+			PathPrefix: "osvbng:state:",
+		},
+		EnabledCollectors: cfg.Monitoring.EnabledCollectors,
+	})
+
 	orch := component.NewOrchestrator()
 	orch.Register(aaaComp)
 	orch.Register(routingComp)
@@ -243,16 +262,36 @@ func main() {
 	orch.Register(ipoeComp)
 	orch.Register(subscriberComp)
 	orch.Register(arpComp)
+	orch.Register(monitorComp)
 	orch.Register(gatewayComp)
 
-	// TODO: Load plugin components from registry
-	// pluginComponents, err := component.LoadAll(deps)
-	// if err != nil {
-	// 	log.Fatalf("Failed to load plugin components: %v", err)
-	// }
-	// for _, comp := range pluginComponents {
-	// 	orch.Register(comp)
-	// }
+	pluginComponents, err := component.LoadAll(deps)
+	if err != nil {
+		log.Fatalf("Failed to load plugin components: %v", err)
+	}
+
+	pluginComponentsMap := make(map[string]component.Component)
+	for _, comp := range pluginComponents {
+		if comp != nil {
+			mainLog.Info("Loaded plugin component", "name", comp.Name())
+			orch.Register(comp)
+			pluginComponentsMap[comp.Name()] = comp
+		}
+	}
+
+	configd.AutoRegisterHandlers(&confhandlers.ConfDeps{
+		Dataplane:        vppDataplane,
+		AAA:              aaaComp.(*aaa.Component),
+		Routing:          routingComp.(*routing.Component),
+		PluginComponents: pluginComponentsMap,
+	})
+
+	showRegistry.AutoRegisterAll(&handlers.ShowDeps{
+		Subscriber:       subscriberComp.(*subscriber.Component),
+		Southbound:       deps.VPP,
+		Routing:          routingComp.(*routing.Component),
+		PluginComponents: pluginComponentsMap,
+	})
 
 	ctx := context.Background()
 	if err := orch.Start(ctx); err != nil {

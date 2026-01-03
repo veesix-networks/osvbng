@@ -1717,6 +1717,7 @@ func (v *VPP) GetSubscriberStats(ctx context.Context) ([]subscribers.Statistics,
 	stream := ch.SendMultiRequest(&openbng_accounting.OpenbngAcctSubscriberDump{})
 
 	var stats []subscribers.Statistics
+	receivedCount := 0
 
 	for {
 		details := &openbng_accounting.OpenbngAcctSubscriberDetails{}
@@ -1724,6 +1725,15 @@ func (v *VPP) GetSubscriberStats(ctx context.Context) ([]subscribers.Statistics,
 		if err != nil || stop {
 			break
 		}
+
+		receivedCount++
+		v.logger.Debug("Received subscriber accounting details",
+			"session_id", string(details.SessionID[:]),
+			"ip", net.IP(details.IP4Address[:]).String(),
+			"rx_packets", details.RxPackets,
+			"tx_packets", details.TxPackets,
+			"rx_bytes", details.RxBytes,
+			"tx_bytes", details.TxBytes)
 
 		if details.RxPackets > 0 || details.TxPackets > 0 {
 			stats = append(stats, subscribers.Statistics{
@@ -1737,6 +1747,7 @@ func (v *VPP) GetSubscriberStats(ctx context.Context) ([]subscribers.Statistics,
 		}
 	}
 
+	v.logger.Debug("GetSubscriberStats complete", "received", receivedCount, "filtered", len(stats))
 	return stats, nil
 }
 

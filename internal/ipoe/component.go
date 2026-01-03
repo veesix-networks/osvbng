@@ -928,8 +928,8 @@ func (c *Component) countExistingSessions(mac net.HardwareAddr, svlan, cvlan uin
 		return 0, nil
 	}
 
-	count, ok := val.(int64)
-	if !ok {
+	var count int64
+	if _, err := fmt.Sscanf(string(val), "%d", &count); err != nil {
 		return 0, nil
 	}
 

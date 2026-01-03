@@ -6,6 +6,7 @@ import (
 
 	"github.com/veesix-networks/osvbng/internal/routing"
 	"github.com/veesix-networks/osvbng/internal/subscriber"
+	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/show/paths"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
@@ -31,9 +32,10 @@ type ShowHandler interface {
 }
 
 type ShowDeps struct {
-	Subscriber *subscriber.Component
-	Southbound *southbound.VPP
-	Routing    *routing.Component
+	Subscriber       *subscriber.Component
+	Southbound       *southbound.VPP
+	Routing          *routing.Component
+	PluginComponents map[string]component.Component
 }
 
 type HandlerFactory func(deps *ShowDeps) ShowHandler
@@ -57,13 +59,31 @@ func NewRegistry() *Registry {
 func (r *Registry) AutoRegisterAll(deps *ShowDeps) {
 	for _, factory := range factories {
 		handler := factory(deps)
-		r.Register(handler)
+		path := handler.PathPattern().String()
+
+		if _, exists := r.handlers[path]; exists {
+			continue
+		}
+
+		r.MustRegister(handler)
 	}
 }
 
-func (r *Registry) Register(handler ShowHandler) {
+func (r *Registry) Register(handler ShowHandler) error {
 	path := handler.PathPattern().String()
+
+	if _, exists := r.handlers[path]; exists {
+		return fmt.Errorf("show handler conflict: path '%s' already registered", path)
+	}
+
 	r.handlers[path] = handler
+	return nil
+}
+
+func (r *Registry) MustRegister(handler ShowHandler) {
+	if err := r.Register(handler); err != nil {
+		panic(err)
+	}
 }
 
 func (r *Registry) GetHandler(path string) (ShowHandler, error) {

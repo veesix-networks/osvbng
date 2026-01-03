@@ -123,8 +123,10 @@ logging:
     arpd: debug
 
 monitoring:
-  prometheus:
+  enabled_collectors:
+    - subscriber.sessions
+
+plugins:
+  exporter.prometheus:
     enabled: true
     listen_address: ":9090"
-    collect_interval: 5s
-    state_ttl: 30s

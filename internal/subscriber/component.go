@@ -120,18 +120,8 @@ func (c *Component) GetSessions(ctx context.Context, accessType, protocol string
 				continue
 			}
 
-			dataStr, ok := data.(string)
-			if !ok {
-				dataBytes, ok := data.([]byte)
-				if !ok {
-					c.logger.Debug("Invalid data type", "key", key, "type", fmt.Sprintf("%T", data))
-					continue
-				}
-				dataStr = string(dataBytes)
-			}
-
 			var sess models.DHCPv4Session
-			if err := json.Unmarshal([]byte(dataStr), &sess); err != nil {
+			if err := json.Unmarshal(data, &sess); err != nil{
 				c.logger.Debug("Failed to unmarshal", "key", key, "error", err)
 				continue
 			}
@@ -175,10 +165,10 @@ func (c *Component) GetSession(ctx context.Context, sessionID string) (*models.D
 		return nil, fmt.Errorf("session not found: %s", sessionID)
 	}
 
-	dataStr, ok := data.(string)
-	if !ok {
-		dataBytes, ok := data.([]byte)
-		if !ok {
+	dataStr := string(data)
+	if dataStr == "" {
+		dataBytes := data
+		if dataStr == "" {
 			return nil, fmt.Errorf("invalid session data type")
 		}
 		dataStr = string(dataBytes)
@@ -217,10 +207,10 @@ func (c *Component) GetStats(ctx context.Context) (map[string]uint32, error) {
 				continue
 			}
 
-			dataStr, ok := data.(string)
-			if !ok {
-				dataBytes, ok := data.([]byte)
-				if !ok {
+			dataStr := string(data)
+			if dataStr == "" {
+				dataBytes := data
+				if dataStr == "" {
 					continue
 				}
 				dataStr = string(dataBytes)
@@ -435,10 +425,10 @@ func (c *Component) countActiveSessions(svlan, cvlan uint16) int {
 				continue
 			}
 
-			dataStr, ok := data.(string)
-			if !ok {
-				dataBytes, ok := data.([]byte)
-				if !ok {
+			dataStr := string(data)
+			if dataStr == "" {
+				dataBytes := data
+				if dataStr == "" {
 					continue
 				}
 				dataStr = string(dataBytes)
@@ -509,7 +499,7 @@ func (c *Component) persistSession(sess *models.DHCPv4Session) error {
 
 	lookupKey := c.buildLookupKey(sess)
 	if lookupKey != "" {
-		if err := c.cache.Set(c.Ctx, lookupKey, sess.SessionID, ttl); err != nil {
+		if err := c.cache.Set(c.Ctx, lookupKey, []byte(sess.SessionID), ttl); err != nil {
 			return fmt.Errorf("set lookup key: %w", err)
 		}
 	}
@@ -517,7 +507,7 @@ func (c *Component) persistSession(sess *models.DHCPv4Session) error {
 	arpLookupKey := c.buildARPLookupKey(sess)
 	if arpLookupKey != "" {
 		c.logger.Info("Creating ARP lookup index", "key", arpLookupKey, "session_id", sess.SessionID)
-		if err := c.cache.Set(c.Ctx, arpLookupKey, sess.SessionID, ttl); err != nil {
+		if err := c.cache.Set(c.Ctx, arpLookupKey, []byte(sess.SessionID), ttl); err != nil {
 			return fmt.Errorf("set arp lookup key: %w", err)
 		}
 	} else {
@@ -561,10 +551,10 @@ func (c *Component) handleSessionExpiry(sessionID string, expiryTime time.Time) 
 		return
 	}
 
-	dataStr, ok := data.(string)
-	if !ok {
-		dataBytes, ok := data.([]byte)
-		if !ok {
+	dataStr := string(data)
+	if dataStr == "" {
+		dataBytes := data
+		if dataStr == "" {
 			c.logger.Warn("Invalid data type from cache", "session_id", sessionID)
 			return
 		}
