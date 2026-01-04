@@ -5,6 +5,7 @@ type Path string
 const (
 	AAARadiusServers           Path = "aaa.radius.servers"
 	IPTable                    Path = "ip.table"
+	PluginsInfo                Path = "plugins.info"
 	ProtocolsBGPStatistics     Path = "protocols.bgp.statistics"
 	ProtocolsBGPIPv6Statistics Path = "protocols.bgp.ipv6.statistics"
 	SubscriberSessions         Path = "subscriber.sessions"
