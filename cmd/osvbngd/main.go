@@ -288,6 +288,7 @@ func main() {
 		Subscriber:       subscriberComp.(*subscriber.Component),
 		Southbound:       deps.VPP,
 		Routing:          routingComp.(*routing.Component),
+		Cache:            cache,
 		PluginComponents: pluginComponentsMap,
 	})
 

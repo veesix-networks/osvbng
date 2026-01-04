@@ -147,10 +147,48 @@ func (t *CommandTree) Execute(ctx context.Context, cli *CLI, input string) error
 
 	if cmdNode != nil && cmdNode.Handler != nil {
 		args := tokens[argStart:]
+
+		if err := validateArguments(cmdNode, args); err != nil {
+			return err
+		}
+
 		return cmdNode.Handler(ctx, cli, args)
 	}
 
 	return fmt.Errorf("incomplete command")
+}
+
+func validateArguments(cmd *CommandNode, args []string) error {
+	if len(cmd.Arguments) == 0 {
+		return nil
+	}
+
+	requiredCount := 0
+	var requiredArgNames []string
+
+	for _, arg := range cmd.Arguments {
+		if arg.Type == ArgUserInput {
+			requiredCount++
+			requiredArgNames = append(requiredArgNames, arg.Name)
+		}
+	}
+
+	actualCount := 0
+	for _, arg := range args {
+		if arg == "|" {
+			break
+		}
+		actualCount++
+	}
+
+	if actualCount < requiredCount {
+		if len(requiredArgNames) == 1 {
+			return fmt.Errorf("%s required", requiredArgNames[0])
+		}
+		return fmt.Errorf("missing required arguments: %s", strings.Join(requiredArgNames, ", "))
+	}
+
+	return nil
 }
 
 func (t *CommandTree) GetCompletions(input string, devMode bool) []string {

@@ -57,6 +57,21 @@ func ExecuteShowHandler(ctx context.Context, c interface{}, path showpaths.Path,
 	return nil
 }
 
+func ShowHandlerFunc(path showpaths.Path) func(context.Context, interface{}, []string) error {
+	return func(ctx context.Context, c interface{}, args []string) error {
+		return ExecuteShowHandler(ctx, c, path, args)
+	}
+}
+
+func ShowHandlerFuncWithValidator(path showpaths.Path, validator func([]string) error) func(context.Context, interface{}, []string) error {
+	return func(ctx context.Context, c interface{}, args []string) error {
+		if err := validator(args); err != nil {
+			return err
+		}
+		return ExecuteShowHandler(ctx, c, path, args)
+	}
+}
+
 func ExecuteConfigSet(ctx context.Context, c interface{}, path confpaths.Path, value string) error {
 	wrapper, ok := c.(CLIWrapper)
 	if !ok {
