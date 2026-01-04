@@ -480,6 +480,89 @@ func (h *MessageHandler) Callbacks() *handlers.Callbacks {
 
 ### 6. commands_cli.go - CLI Command Registration
 
+There are three ways to define CLI command handlers, depending on your needs:
+
+#### Method 1: Simple Show Commands (Recommended)
+
+Use `commands.ShowHandlerFunc(path)` for most show commands. The CLI framework automatically validates required arguments based on the `Arguments` field:
+
+```go
+package myplugin
+
+import (
+	"github.com/veesix-networks/osvbng/cmd/osvbngcli/commands"
+	"github.com/veesix-networks/osvbng/pkg/cli"
+)
+
+func init() {
+	cli.RegisterRoot(Namespace, &cli.RootCommand{
+		Path:        []string{"show", "myplugin"},
+		Description: "My plugin commands",
+	})
+
+	// Command with no arguments
+	cli.Register(Namespace, &cli.Command{
+		Path:        []string{"show", "myplugin", "status"},
+		Description: "Display plugin status",
+		Handler:     commands.ShowHandlerFunc(ShowStatusPath),
+	})
+
+	// Command with required argument (automatic validation)
+	cli.Register(Namespace, &cli.Command{
+		Path:        []string{"show", "myplugin", "session"},
+		Description: "Display session details",
+		Handler:     commands.ShowHandlerFunc(ShowSessionPath),
+		Arguments: []*cli.Argument{
+			{Name: "session-id", Description: "Session identifier", Type: cli.ArgUserInput},
+		},
+	})
+}
+```
+
+#### Method 2: Show Commands with Custom Validation
+
+Use `commands.ShowHandlerFuncWithValidator()` only when you need custom validation logic beyond checking if required arguments are present:
+
+```go
+package myplugin
+
+import (
+	"fmt"
+
+	"github.com/veesix-networks/osvbng/cmd/osvbngcli/commands"
+	"github.com/veesix-networks/osvbng/pkg/cli"
+)
+
+func init() {
+	cli.RegisterRoot(Namespace, &cli.RootCommand{
+		Path:        []string{"show", "myplugin"},
+		Description: "My plugin commands",
+	})
+
+	// Custom validator to check argument value
+	cli.Register(Namespace, &cli.Command{
+		Path:        []string{"show", "myplugin", "info"},
+		Description: "Display plugin info",
+		Handler:     commands.ShowHandlerFuncWithValidator(
+			ShowInfoPath,
+			func(args []string) error {
+				if len(args) > 0 && args[0] != "verbose" && args[0] != "brief" {
+					return fmt.Errorf("mode must be 'verbose' or 'brief'")
+				}
+				return nil
+			},
+		),
+		Arguments: []*cli.Argument{
+			{Name: "mode", Description: "Display mode (verbose|brief)", Type: cli.ArgUserInput},
+		},
+	})
+}
+```
+
+#### Method 3: Custom Handler Functions
+
+Use custom handler functions for complex logic or config commands:
+
 ```go
 package myplugin
 
@@ -492,19 +575,6 @@ import (
 )
 
 func init() {
-	// Register show commands
-	cli.RegisterRoot(Namespace, &cli.RootCommand{
-		Path:        []string{"show", "myplugin"},
-		Description: "My plugin commands",
-	})
-
-	cli.Register(Namespace, &cli.Command{
-		Path:        []string{"show", "myplugin", "status"},
-		Description: "Display plugin status",
-		Handler:     cmdShowStatus,
-	})
-
-	// Register config commands
 	cli.RegisterRoot(Namespace, &cli.RootCommand{
 		Path:        []string{"set", "myplugin"},
 		Description: "Configure my plugin",
@@ -520,19 +590,24 @@ func init() {
 	})
 }
 
-func cmdShowStatus(ctx context.Context, c interface{}, args []string) error {
-	return commands.ExecuteShowHandler(ctx, c, ShowStatusPath, args)
-}
-
 func cmdSetMessage(ctx context.Context, c interface{}, args []string) error {
 	if len(args) < 1 {
 		return fmt.Errorf("usage: set myplugin message <text>")
 	}
 
+	// Custom logic here - e.g., transform the input
 	message := args[0]
+
 	return commands.ExecuteConfigSet(ctx, c, ConfMessagePath, message)
 }
 ```
+
+**Summary:**
+- **Method 1**: Use for most show commands (automatic validation of required arguments)
+- **Method 2**: Use for show commands that need custom validation logic (e.g., checking argument values)
+- **Method 3**: Use for config commands or when you need custom pre-processing logic before executing the handler
+
+**Note:** The CLI framework automatically validates that required arguments (defined with `Type: cli.ArgUserInput`) are provided, so you don't need Method 2 just for basic presence checks.
 
 ### 7. Register Plugin in plugins/community/all/
 

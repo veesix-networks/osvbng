@@ -11,6 +11,9 @@ const (
 	SubscriberSession          Path = "subscriber.session"
 	SubscriberStats            Path = "subscriber.stats"
 	SystemThreads              Path = "system.threads"
+	SystemCacheStatistics      Path = "system.cache.statistics"
+	SystemCacheKeys            Path = "system.cache.keys"
+	SystemCacheKey             Path = "system.cache.key"
 
 	VRFS Path = "vrfs"
 )
