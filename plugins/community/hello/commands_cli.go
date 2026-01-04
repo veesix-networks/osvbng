@@ -9,23 +9,23 @@ import (
 )
 
 func init() {
-	cli.RegisterRoot("example.hello", &cli.RootCommand{
+	cli.RegisterRoot(Namespace, &cli.RootCommand{
 		Path:        []string{"show", "example", "hello"},
 		Description: "Example hello plugin",
 	})
 
-	cli.Register("example.hello", &cli.Command{
+	cli.Register(Namespace, &cli.Command{
 		Path:        []string{"show", "example", "hello", "status"},
 		Description: "Display example hello status",
 		Handler:     cmdShowHelloStatus,
 	})
 
-	cli.RegisterRoot("example.hello", &cli.RootCommand{
+	cli.RegisterRoot(Namespace, &cli.RootCommand{
 		Path:        []string{"set", "example", "hello"},
 		Description: "Configure example hello plugin",
 	})
 
-	cli.Register("example.hello", &cli.Command{
+	cli.Register(Namespace, &cli.Command{
 		Path:        []string{"set", "example", "hello", "message"},
 		Description: "Set the hello message",
 		Handler:     cmdSetHelloMessage,

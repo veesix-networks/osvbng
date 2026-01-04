@@ -30,6 +30,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/operations"
 	"github.com/veesix-networks/osvbng/pkg/show/handlers"
+	_ "github.com/veesix-networks/osvbng/pkg/show/handlers/all"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"github.com/veesix-networks/osvbng/pkg/state"
 	_ "github.com/veesix-networks/osvbng/pkg/state/collectors/all"
