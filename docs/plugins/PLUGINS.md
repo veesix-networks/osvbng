@@ -22,6 +22,23 @@ In short, a component typically has its own lifecycle and is independent of the 
 
 For more details please [refer to the README.md](../README.md)
 
+## Quick Start: Generate Plugin Scaffold
+
+Use the cookiecutter template to generate a complete plugin structure following Pattern 1:
+
+```bash
+# Install cookiecutter (if not already installed)
+pipx install cookiecutter
+
+# Generate plugin (local repo)
+cookiecutter tools/generate_plugin -o plugins/community/
+
+# Or from GitHub
+cookiecutter gh:veesix-networks/osvbng --directory="tools/generate_plugin"
+```
+
+See [tools/generate_plugin/README.md](../../tools/generate_plugin/README.md) for details.
+
 ## Folder/File Structure
 
 There are 2 patterns to implement a plugin. Use **Pattern 1** unless you understand exactly why you should use **Pattern 2**.
