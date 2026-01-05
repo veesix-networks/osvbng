@@ -123,18 +123,6 @@ func RegisterMetric(cachePath PathLike, handlerPath PathLike) {
 	cachePathStr := cachePath.String()
 	handlerPathStr := handlerPath.String()
 
-	defaultRegistry.registrations[cachePathStr] = func(_ interface{}) CollectorFactory {
-		return func(deps *CollectorDeps) (MetricCollector, error) {
-			return NewCachedShowCollector(
-				cachePathStr,
-				handlerPathStr,
-				deps.ShowRegistry,
-				deps.Cache,
-				deps.Config,
-				deps.Logger,
-			)
-		}
-	}
 	defaultRegistry.factories[cachePathStr] = func(deps *CollectorDeps) (MetricCollector, error) {
 		return NewCachedShowCollector(
 			cachePathStr,

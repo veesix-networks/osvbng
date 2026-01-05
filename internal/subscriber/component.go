@@ -103,15 +103,11 @@ func (c *Component) GetSessions(ctx context.Context, accessType, protocol string
 	var cursor uint64
 	var sessions []*models.DHCPv4Session
 
-	c.logger.Debug("GetSessions called", "pattern", pattern, "accessType", accessType, "protocol", protocol, "svlan", svlan)
-
 	for {
 		keys, nextCursor, err := c.cache.Scan(ctx, cursor, pattern, 100)
 		if err != nil {
 			return nil, fmt.Errorf("scan sessions: %w", err)
 		}
-
-		c.logger.Debug("Scanned cache", "keys_found", len(keys), "cursor", cursor, "next_cursor", nextCursor)
 
 		for _, key := range keys {
 			data, err := c.cache.Get(ctx, key)
@@ -153,7 +149,6 @@ func (c *Component) GetSessions(ctx context.Context, accessType, protocol string
 		}
 	}
 
-	c.logger.Info("GetSessions returning", "count", len(sessions))
 	return sessions, nil
 }
 

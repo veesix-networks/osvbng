@@ -33,42 +33,18 @@ type CollectorDeps struct {
 }
 
 type CollectorRegistry struct {
-	mu            sync.RWMutex
-	registrations map[string]func(interface{}) CollectorFactory
-	factories     map[string]CollectorFactory
-	collectors    []MetricCollector
+	mu         sync.RWMutex
+	factories  map[string]CollectorFactory
+	collectors []MetricCollector
 }
 
 var defaultRegistry = &CollectorRegistry{
-	registrations: make(map[string]func(interface{}) CollectorFactory),
-	factories:     make(map[string]CollectorFactory),
-	collectors:    []MetricCollector{},
+	factories:  make(map[string]CollectorFactory),
+	collectors: []MetricCollector{},
 }
 
 func DefaultRegistry() *CollectorRegistry {
 	return defaultRegistry
-}
-
-func (r *CollectorRegistry) RegisterType(name string, factoryFunc func(interface{}) CollectorFactory) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.registrations[name] = factoryFunc
-}
-
-func RegisterType(name string, factoryFunc func(interface{}) CollectorFactory) {
-	defaultRegistry.RegisterType(name, factoryFunc)
-}
-
-func (r *CollectorRegistry) SetProvider(name string, provider interface{}) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	factoryFunc, ok := r.registrations[name]
-	if !ok {
-		return
-	}
-
-	r.factories[name] = factoryFunc(provider)
 }
 
 func (r *CollectorRegistry) CreateCollectors(deps *CollectorDeps, disabledCollectors []string) ([]MetricCollector, error) {
