@@ -5,11 +5,14 @@ import (
 
 	"github.com/veesix-networks/osvbng/pkg/show/handlers"
 	"github.com/veesix-networks/osvbng/pkg/show/paths"
+	"github.com/veesix-networks/osvbng/pkg/state"
 	"github.com/veesix-networks/osvbng/plugins/community/hello"
 )
 
 func init() {
 	handlers.RegisterFactory(NewStatusHandler)
+
+	state.RegisterMetric(hello.StateStatusPath, hello.ShowStatusPath)
 }
 
 type StatusHandler struct {

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/cache"
+	"github.com/veesix-networks/osvbng/pkg/show"
 )
 
 type CollectorConfig struct {
@@ -25,9 +26,10 @@ type MetricCollector interface {
 type CollectorFactory func(deps *CollectorDeps) (MetricCollector, error)
 
 type CollectorDeps struct {
-	Cache  cache.Cache
-	Config CollectorConfig
-	Logger *slog.Logger
+	Cache        cache.Cache
+	Config       CollectorConfig
+	Logger       *slog.Logger
+	ShowRegistry show.Registry
 }
 
 type CollectorRegistry struct {
@@ -69,25 +71,20 @@ func (r *CollectorRegistry) SetProvider(name string, provider interface{}) {
 	r.factories[name] = factoryFunc(provider)
 }
 
-func (r *CollectorRegistry) CreateCollectors(deps *CollectorDeps, enabledCollectors []string) ([]MetricCollector, error) {
+func (r *CollectorRegistry) CreateCollectors(deps *CollectorDeps, disabledCollectors []string) ([]MetricCollector, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	var collectors []MetricCollector
 
-	if len(enabledCollectors) == 0 {
-		for name := range r.factories {
-			enabledCollectors = append(enabledCollectors, name)
-		}
-	}
-
-	enabledMap := make(map[string]bool)
-	for _, name := range enabledCollectors {
-		enabledMap[name] = true
+	disabledMap := make(map[string]bool)
+	for _, name := range disabledCollectors {
+		disabledMap[name] = true
 	}
 
 	for name, factory := range r.factories {
-		if !enabledMap[name] {
+		if disabledMap[name] {
+			deps.Logger.Info("Skipping disabled collector", "name", name)
 			continue
 		}
 		collector, err := factory(deps)

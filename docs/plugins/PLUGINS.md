@@ -160,7 +160,7 @@ func (c *Component) SetMessage(msg string) {
 
 ### 3. paths.go - Path Constants
 
-Define all your show and config paths in one place:
+Define all your show, config, and state paths in one place:
 
 ```go
 package myplugin
@@ -168,13 +168,17 @@ package myplugin
 import (
 	confpaths "github.com/veesix-networks/osvbng/pkg/conf/paths"
 	showpaths "github.com/veesix-networks/osvbng/pkg/show/paths"
+	statepaths "github.com/veesix-networks/osvbng/pkg/state/paths"
 )
 
 const (
 	ShowStatusPath  = showpaths.Path("example.myplugin.status")
+	StateStatusPath = statepaths.Path("example.myplugin.status")
 	ConfMessagePath = confpaths.Path("plugins.example.myplugin.message")
 )
 ```
+
+The `StateStatusPath` is used for collector registration to enable periodic caching of your plugin's metrics.
 
 ### 4. Show Handler (Pattern 1: status_show.go, Pattern 2: show/status.go)
 
@@ -243,11 +247,15 @@ import (
 
 	"github.com/veesix-networks/osvbng/pkg/show/handlers"
 	"github.com/veesix-networks/osvbng/pkg/show/paths"
+	"github.com/veesix-networks/osvbng/pkg/state"
 	"github.com/veesix-networks/osvbng/plugins/community/myplugin"
 )
 
 func init() {
 	handlers.RegisterFactory(NewStatusHandler)
+
+	// Register metric collector to periodically cache this data for exporters
+	state.RegisterMetric(myplugin.StateStatusPath, myplugin.ShowStatusPath)
 }
 
 type StatusHandler struct {
@@ -641,6 +649,31 @@ plugins:
     enabled: true
     message: "Hello from my plugin"
 ```
+
+## Exposing Metrics for Exporters
+
+If you want your plugin's data to be periodically cached for consumption by exporters (Prometheus, SNMP, etc.), register a collector in your show handler's `init()` function:
+
+```go
+import "github.com/veesix-networks/osvbng/pkg/state"
+
+func init() {
+    handlers.RegisterFactory(NewStatusHandler)
+
+    // Enable periodic caching for exporters
+    state.RegisterMetric(myplugin.StateStatusPath, myplugin.ShowStatusPath)
+}
+```
+
+This wraps your show handler in a collector that periodically (default: every 5 seconds) calls the handler and caches the result. Exporters read from cache instead of calling components directly.
+
+**Important:**
+- Collectors run by default for all registered metrics
+- To disable a specific collector, add it to `monitoring.disabled_collectors` in config
+- The CLI and gRPC API call show handlers directly for real-time data
+- Collectors are only for exporters
+
+See [COLLECTORS.md](../COLLECTORS.md) for details.
 
 ## Key Concepts
 

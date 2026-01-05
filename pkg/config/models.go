@@ -173,6 +173,6 @@ type DHCPPool struct {
 }
 
 type Monitoring struct {
-	EnabledCollectors []string      `yaml:"enabled_collectors,omitempty"`
+	DisabledCollectors []string `yaml:"disabled_collectors,omitempty"`
 	CollectInterval   time.Duration `yaml:"collect_interval,omitempty"`
 }

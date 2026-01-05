@@ -33,7 +33,6 @@ import (
 	_ "github.com/veesix-networks/osvbng/pkg/show/handlers/all"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"github.com/veesix-networks/osvbng/pkg/state"
-	_ "github.com/veesix-networks/osvbng/pkg/state/collectors/all"
 	_ "github.com/veesix-networks/osvbng/plugins/all"
 	"go.fd.io/govpp"
 )
@@ -232,12 +231,6 @@ func main() {
 	collectorRegistry := state.DefaultRegistry()
 	deps.CollectorRegistry = collectorRegistry
 
-	// We should build an auto-register system here so that plugins can use the same pattern to register new collectors
-	collectorRegistry.SetProvider("subscriber.sessions", subscriberComp)
-	collectorRegistry.SetProvider("aaa.radius", aaaComp)
-	collectorRegistry.SetProvider("protocols.bgp.ipv4", routingComp)
-	collectorRegistry.SetProvider("protocols.bgp.ipv6", routingComp)
-
 	collectInterval := 5 * time.Second
 	if cfg.Monitoring.CollectInterval > 0 {
 		collectInterval = cfg.Monitoring.CollectInterval
@@ -251,7 +244,8 @@ func main() {
 			TTL:        30 * time.Second,
 			PathPrefix: "osvbng:state:",
 		},
-		EnabledCollectors: cfg.Monitoring.EnabledCollectors,
+		DisabledCollectors: cfg.Monitoring.DisabledCollectors,
+		ShowRegistry:      showRegistry,
 	})
 
 	orch := component.NewOrchestrator()

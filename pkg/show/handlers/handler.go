@@ -8,6 +8,7 @@ import (
 	"github.com/veesix-networks/osvbng/internal/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
+	"github.com/veesix-networks/osvbng/pkg/show"
 	"github.com/veesix-networks/osvbng/pkg/show/paths"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
@@ -21,7 +22,7 @@ const (
 )
 
 type ShowRequest struct {
-	Path    string
+	show.Request
 	Format  OutputFormat
 	Options map[string]string
 }
@@ -88,9 +89,18 @@ func (r *Registry) MustRegister(handler ShowHandler) {
 	}
 }
 
-func (r *Registry) GetHandler(path string) (ShowHandler, error) {
+func (r *Registry) GetHandler(path string) (show.Handler, error) {
 	if handler, ok := r.handlers[path]; ok {
-		return handler, nil
+		return &handlerAdapter{h: handler}, nil
 	}
 	return nil, fmt.Errorf("no handler registered for path: %s", path)
+}
+
+type handlerAdapter struct {
+	h ShowHandler
+}
+
+func (a *handlerAdapter) Collect(ctx context.Context, req *show.Request) (interface{}, error) {
+	showReq := &ShowRequest{Request: *req}
+	return a.h.Collect(ctx, showReq)
 }
