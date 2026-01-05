@@ -7,11 +7,16 @@ import (
 	"github.com/veesix-networks/osvbng/internal/routing"
 	"github.com/veesix-networks/osvbng/pkg/show/handlers"
 	"github.com/veesix-networks/osvbng/pkg/show/paths"
+	"github.com/veesix-networks/osvbng/pkg/state"
+	statepaths "github.com/veesix-networks/osvbng/pkg/state/paths"
 )
 
 func init() {
 	handlers.RegisterFactory(NewBGPStatisticsHandler)
 	handlers.RegisterFactory(NewBGPIPv6StatisticsHandler)
+
+	state.RegisterMetric(statepaths.ProtocolsBGPStatistics, paths.ProtocolsBGPStatistics)
+	state.RegisterMetric(statepaths.ProtocolsBGPIPv6Statistics, paths.ProtocolsBGPIPv6Statistics)
 }
 
 type BGPStatisticsHandler struct {

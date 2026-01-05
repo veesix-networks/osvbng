@@ -123,8 +123,12 @@ logging:
     arpd: debug
 
 monitoring:
-  enabled_collectors:
-    - subscriber.sessions
+  disabled_collectors:
+    # - subscriber.sessions
+    - aaa.radius.servers
+    # - protocols.bgp.statistics
+    # - protocols.bgp.ipv6.statistics
+    # - example.hello.status
 
 plugins:
   exporter.prometheus:

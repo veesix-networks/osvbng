@@ -8,6 +8,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/logger"
+	"github.com/veesix-networks/osvbng/pkg/show"
 	"github.com/veesix-networks/osvbng/pkg/state"
 )
 
@@ -16,28 +17,31 @@ type Component struct {
 
 	logger *slog.Logger
 
-	cache             cache.Cache
-	collectorRegistry *state.CollectorRegistry
-	collectors        []state.MetricCollector
-	collectorConfig   state.CollectorConfig
-	enabledCollectors []string
+	cache              cache.Cache
+	collectorRegistry  *state.CollectorRegistry
+	collectors         []state.MetricCollector
+	collectorConfig    state.CollectorConfig
+	disabledCollectors []string
+	showRegistry       show.Registry
 }
 
 type Config struct {
-	Cache             cache.Cache
-	CollectorRegistry *state.CollectorRegistry
-	CollectorConfig   state.CollectorConfig
-	EnabledCollectors []string
+	Cache              cache.Cache
+	CollectorRegistry  *state.CollectorRegistry
+	CollectorConfig    state.CollectorConfig
+	DisabledCollectors []string
+	ShowRegistry       show.Registry
 }
 
 func New(cfg Config) *Component {
 	return &Component{
-		Base:              component.NewBase("monitor"),
-		logger:            logger.Component("monitor"),
-		cache:             cfg.Cache,
-		collectorRegistry: cfg.CollectorRegistry,
-		collectorConfig:   cfg.CollectorConfig,
-		enabledCollectors: cfg.EnabledCollectors,
+		Base:               component.NewBase("monitor"),
+		logger:             logger.Component("monitor"),
+		cache:              cfg.Cache,
+		collectorRegistry:  cfg.CollectorRegistry,
+		collectorConfig:    cfg.CollectorConfig,
+		disabledCollectors: cfg.DisabledCollectors,
+		showRegistry:       cfg.ShowRegistry,
 	}
 }
 
@@ -47,10 +51,11 @@ func (c *Component) Start(ctx context.Context) error {
 
 	if c.collectorRegistry != nil && c.cache != nil {
 		collectors, err := c.collectorRegistry.CreateCollectors(&state.CollectorDeps{
-			Cache:  c.cache,
-			Config: c.collectorConfig,
-			Logger: c.logger,
-		}, c.enabledCollectors)
+			Cache:        c.cache,
+			Config:       c.collectorConfig,
+			Logger:       c.logger,
+			ShowRegistry: c.showRegistry,
+		}, c.disabledCollectors)
 		if err != nil {
 			return fmt.Errorf("failed to create state collectors: %w", err)
 		}

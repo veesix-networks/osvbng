@@ -14,6 +14,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/conf/types"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
+	"github.com/veesix-networks/osvbng/pkg/show"
 	"github.com/veesix-networks/osvbng/pkg/show/handlers"
 	_ "github.com/veesix-networks/osvbng/pkg/show/handlers/aaa"
 	_ "github.com/veesix-networks/osvbng/pkg/show/handlers/ip"
@@ -87,7 +88,7 @@ func (c *Component) GetOperationalStats(ctx context.Context, req *pb.GetOperatio
 		return nil, err
 	}
 
-	data, err := handler.Collect(ctx, &handlers.ShowRequest{
+	data, err := handler.Collect(ctx, &show.Request{
 		Path: req.Path,
 	})
 	if err != nil {
@@ -367,7 +368,7 @@ func (c *Component) GetSessions(ctx context.Context, req *pb.GetSessionsRequest)
 		options["svlan"] = fmt.Sprintf("%d", req.Svlan)
 	}
 
-	data, err := handler.Collect(ctx, &handlers.ShowRequest{
+	data, err := handler.Collect(ctx, &show.Request{
 		Path:    "subscriber.sessions",
 		Options: options,
 	})
@@ -407,7 +408,7 @@ func (c *Component) GetSession(ctx context.Context, req *pb.GetSessionRequest) (
 		return nil, err
 	}
 
-	data, err := handler.Collect(ctx, &handlers.ShowRequest{
+	data, err := handler.Collect(ctx, &show.Request{
 		Path: "subscriber.session",
 		Options: map[string]string{
 			"session_id": req.SessionId,
