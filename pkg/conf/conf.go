@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/conf/handlers"
+	"github.com/veesix-networks/osvbng/pkg/conf/paths"
 	"github.com/veesix-networks/osvbng/pkg/conf/types"
 	"github.com/veesix-networks/osvbng/pkg/frr"
 )
@@ -52,6 +53,17 @@ func (cd *ConfigDaemon) AutoRegisterHandlers(deps *handlers.ConfDeps) {
 	defer cd.mu.Unlock()
 
 	cd.registry.AutoRegisterAll(deps)
+}
+
+func (cd *ConfigDaemon) GetRegistry() *handlers.Registry {
+	return cd.registry
+}
+
+func (cd *ConfigDaemon) GetAllConfPaths() []paths.Path {
+	cd.mu.RLock()
+	defer cd.mu.RUnlock()
+
+	return cd.registry.GetAllPaths()
 }
 
 func (cd *ConfigDaemon) CreateCandidateSession() (types.SessionID, error) {
@@ -110,7 +122,7 @@ func (cd *ConfigDaemon) Set(id types.SessionID, path string, value interface{}) 
 
 	oldValue, err := getValueFromConfig(sess.config, path)
 	if err != nil {
-		return fmt.Errorf("failed to get old value: %w", err)
+		oldValue = nil
 	}
 
 	hctx := &handlers.HandlerContext{

@@ -82,7 +82,7 @@ func (h *MTUHandler) PathPattern() paths.Path {
 }
 
 func (h *MTUHandler) Dependencies() []paths.Path {
-	return []paths.Path{"interfaces.*"}
+	return []paths.Path{paths.Interface}
 }
 
 func (h *MTUHandler) Callbacks() *handlers.Callbacks {

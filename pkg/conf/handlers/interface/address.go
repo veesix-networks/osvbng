@@ -61,7 +61,7 @@ func (h *IPv4AddressHandler) PathPattern() paths.Path {
 }
 
 func (h *IPv4AddressHandler) Dependencies() []paths.Path {
-	return []paths.Path{"interfaces.*"}
+	return []paths.Path{paths.Interface}
 }
 
 func (h *IPv4AddressHandler) Callbacks() *handlers.Callbacks {
@@ -113,7 +113,7 @@ func (h *IPv6AddressHandler) PathPattern() paths.Path {
 }
 
 func (h *IPv6AddressHandler) Dependencies() []paths.Path {
-	return []paths.Path{"interfaces.*"}
+	return []paths.Path{paths.Interface}
 }
 
 func (h *IPv6AddressHandler) Callbacks() *handlers.Callbacks {

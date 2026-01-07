@@ -41,7 +41,7 @@ func (h *InterfaceHandler) Rollback(ctx context.Context, hctx *handlers.HandlerC
 }
 
 func (h *InterfaceHandler) PathPattern() paths.Path {
-	return "interfaces.*"
+	return paths.Interface
 }
 
 func (h *InterfaceHandler) Dependencies() []paths.Path {

@@ -7,6 +7,7 @@ import (
 
 	bngpb "github.com/veesix-networks/osvbng/api/proto"
 	confpaths "github.com/veesix-networks/osvbng/pkg/conf/paths"
+	operpaths "github.com/veesix-networks/osvbng/pkg/oper/paths"
 	showpaths "github.com/veesix-networks/osvbng/pkg/show/paths"
 )
 
@@ -98,5 +99,35 @@ func ExecuteConfigSet(ctx context.Context, c interface{}, path confpaths.Path, v
 	}
 
 	fmt.Printf("Set %s = %s\n", path, value)
+	return nil
+}
+
+func ExecuteOper(ctx context.Context, c interface{}, path operpaths.Path, body string) error {
+	wrapper, ok := c.(CLIWrapper)
+	if !ok {
+		return fmt.Errorf("invalid CLI context")
+	}
+
+	client := wrapper.GetClient()
+
+	resp, err := client.ExecuteOperation(ctx, &bngpb.ExecuteOperationRequest{
+		Path: path.String(),
+		Body: []byte(body),
+	})
+	if err != nil {
+		return fmt.Errorf("operation failed: %w", err)
+	}
+
+	var result interface{}
+	if err := json.Unmarshal(resp.Data, &result); err != nil {
+		return fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	output, err := wrapper.FormatOutput(result, "cli")
+	if err != nil {
+		return fmt.Errorf("format output: %w", err)
+	}
+
+	fmt.Print(output)
 	return nil
 }

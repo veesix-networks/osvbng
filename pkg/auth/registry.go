@@ -1,30 +1,32 @@
 package auth
 
-import "github.com/veesix-networks/osvbng/pkg/provider"
+import "fmt"
 
-var registry = provider.NewRegistry()
+type Factory func() (AuthProvider, error)
 
-func Register(name string, factory func(cfg map[string]string) (AuthProvider, error)) {
-	registry.Register(name, func(cfg map[string]string) (provider.Provider, error) {
-		return factory(cfg)
-	})
+var registry = make(map[string]Factory)
+
+func Register(name string, factory Factory) {
+	registry[name] = factory
 }
 
-func Get(name string) (func(cfg map[string]string) (AuthProvider, error), bool) {
-	factory, exists := registry.Get(name)
-	if !exists {
-		return nil, false
-	}
+func Get(name string) (Factory, bool) {
+	factory, exists := registry[name]
+	return factory, exists
+}
 
-	return func(cfg map[string]string) (AuthProvider, error) {
-		p, err := factory(cfg)
-		if err != nil {
-			return nil, err
-		}
-		return p.(AuthProvider), nil
-	}, true
+func New(name string) (AuthProvider, error) {
+	factory, exists := registry[name]
+	if !exists {
+		return nil, fmt.Errorf("auth provider %s not registered", name)
+	}
+	return factory()
 }
 
 func List() []string {
-	return registry.List()
+	names := make([]string, 0, len(registry))
+	for name := range registry {
+		names = append(names, name)
+	}
+	return names
 }

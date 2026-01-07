@@ -9,5 +9,5 @@ import (
 const (
 	ShowStatusPath  = showpaths.Path("example.hello.status")
 	StateStatusPath = statepaths.Path("example.hello.status")
-	ConfMessagePath = confpaths.Path("plugins.example.hello.message")
+	ConfMessagePath = confpaths.Path("example.hello.message")
 )

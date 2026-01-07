@@ -66,7 +66,7 @@ func extractASNFromPath(path string) (uint32, error) {
 }
 
 func (h *BGPInstanceHandler) PathPattern() paths.Path {
-	return "protocols.bgp.*"
+	return paths.ProtocolsBGPInstance
 }
 
 func (h *BGPInstanceHandler) Dependencies() []paths.Path {

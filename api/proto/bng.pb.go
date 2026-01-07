@@ -1629,6 +1629,102 @@ func (x *GetOperationalStatsResponse) GetMetrics() map[string][]byte {
 	return nil
 }
 
+type ExecuteOperationRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Body          []byte                 `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExecuteOperationRequest) Reset() {
+	*x = ExecuteOperationRequest{}
+	mi := &file_api_proto_bng_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExecuteOperationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExecuteOperationRequest) ProtoMessage() {}
+
+func (x *ExecuteOperationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_bng_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExecuteOperationRequest.ProtoReflect.Descriptor instead.
+func (*ExecuteOperationRequest) Descriptor() ([]byte, []int) {
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *ExecuteOperationRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *ExecuteOperationRequest) GetBody() []byte {
+	if x != nil {
+		return x.Body
+	}
+	return nil
+}
+
+type ExecuteOperationResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExecuteOperationResponse) Reset() {
+	*x = ExecuteOperationResponse{}
+	mi := &file_api_proto_bng_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExecuteOperationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExecuteOperationResponse) ProtoMessage() {}
+
+func (x *ExecuteOperationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_bng_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExecuteOperationResponse.ProtoReflect.Descriptor instead.
+func (*ExecuteOperationResponse) Descriptor() ([]byte, []int) {
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *ExecuteOperationResponse) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
 var File_api_proto_bng_proto protoreflect.FileDescriptor
 
 const file_api_proto_bng_proto_rawDesc = "" +
@@ -1752,7 +1848,12 @@ const file_api_proto_bng_proto_rawDesc = "" +
 	"\ametrics\x18\x01 \x03(\v24.openbng.v1.GetOperationalStatsResponse.MetricsEntryR\ametrics\x1a:\n" +
 	"\fMetricsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x012\xf8\b\n" +
+	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01\"A\n" +
+	"\x17ExecuteOperationRequest\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
+	"\x04body\x18\x02 \x01(\fR\x04body\".\n" +
+	"\x18ExecuteOperationResponse\x12\x12\n" +
+	"\x04data\x18\x01 \x01(\fR\x04data2\xd7\t\n" +
 	"\n" +
 	"BNGService\x12N\n" +
 	"\vGetSessions\x12\x1e.openbng.v1.GetSessionsRequest\x1a\x1f.openbng.v1.GetSessionsResponse\x12@\n" +
@@ -1760,7 +1861,8 @@ const file_api_proto_bng_proto_rawDesc = "" +
 	"GetSession\x12\x1d.openbng.v1.GetSessionRequest\x1a\x13.openbng.v1.Session\x12:\n" +
 	"\bGetStats\x12\x1b.openbng.v1.GetStatsRequest\x1a\x11.openbng.v1.Stats\x12]\n" +
 	"\x10TerminateSession\x12#.openbng.v1.TerminateSessionRequest\x1a$.openbng.v1.TerminateSessionResponse\x12f\n" +
-	"\x13GetOperationalStats\x12&.openbng.v1.GetOperationalStatsRequest\x1a'.openbng.v1.GetOperationalStatsResponse\x12S\n" +
+	"\x13GetOperationalStats\x12&.openbng.v1.GetOperationalStatsRequest\x1a'.openbng.v1.GetOperationalStatsResponse\x12]\n" +
+	"\x10ExecuteOperation\x12#.openbng.v1.ExecuteOperationRequest\x1a$.openbng.v1.ExecuteOperationResponse\x12S\n" +
 	"\x10GetRunningConfig\x12#.openbng.v1.GetRunningConfigRequest\x1a\x1a.openbng.v1.ConfigResponse\x12S\n" +
 	"\x10GetStartupConfig\x12#.openbng.v1.GetStartupConfigRequest\x1a\x1a.openbng.v1.ConfigResponse\x12Q\n" +
 	"\fListVersions\x12\x1f.openbng.v1.ListVersionsRequest\x1a .openbng.v1.ListVersionsResponse\x12H\n" +
@@ -1785,7 +1887,7 @@ func file_api_proto_bng_proto_rawDescGZIP() []byte {
 	return file_api_proto_bng_proto_rawDescData
 }
 
-var file_api_proto_bng_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
+var file_api_proto_bng_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
 var file_api_proto_bng_proto_goTypes = []any{
 	(*GetSessionsRequest)(nil),          // 0: openbng.v1.GetSessionsRequest
 	(*GetSessionsResponse)(nil),         // 1: openbng.v1.GetSessionsResponse
@@ -1817,7 +1919,9 @@ var file_api_proto_bng_proto_goTypes = []any{
 	(*DiffLine)(nil),                    // 27: openbng.v1.DiffLine
 	(*GetOperationalStatsRequest)(nil),  // 28: openbng.v1.GetOperationalStatsRequest
 	(*GetOperationalStatsResponse)(nil), // 29: openbng.v1.GetOperationalStatsResponse
-	nil,                                 // 30: openbng.v1.GetOperationalStatsResponse.MetricsEntry
+	(*ExecuteOperationRequest)(nil),     // 30: openbng.v1.ExecuteOperationRequest
+	(*ExecuteOperationResponse)(nil),    // 31: openbng.v1.ExecuteOperationResponse
+	nil,                                 // 32: openbng.v1.GetOperationalStatsResponse.MetricsEntry
 }
 var file_api_proto_bng_proto_depIdxs = []int32{
 	3,  // 0: openbng.v1.GetSessionsResponse.sessions:type_name -> openbng.v1.Session
@@ -1827,37 +1931,39 @@ var file_api_proto_bng_proto_depIdxs = []int32{
 	27, // 4: openbng.v1.ConfigDiffResponse.added:type_name -> openbng.v1.DiffLine
 	27, // 5: openbng.v1.ConfigDiffResponse.deleted:type_name -> openbng.v1.DiffLine
 	27, // 6: openbng.v1.ConfigDiffResponse.modified:type_name -> openbng.v1.DiffLine
-	30, // 7: openbng.v1.GetOperationalStatsResponse.metrics:type_name -> openbng.v1.GetOperationalStatsResponse.MetricsEntry
+	32, // 7: openbng.v1.GetOperationalStatsResponse.metrics:type_name -> openbng.v1.GetOperationalStatsResponse.MetricsEntry
 	0,  // 8: openbng.v1.BNGService.GetSessions:input_type -> openbng.v1.GetSessionsRequest
 	2,  // 9: openbng.v1.BNGService.GetSession:input_type -> openbng.v1.GetSessionRequest
 	4,  // 10: openbng.v1.BNGService.GetStats:input_type -> openbng.v1.GetStatsRequest
 	6,  // 11: openbng.v1.BNGService.TerminateSession:input_type -> openbng.v1.TerminateSessionRequest
 	28, // 12: openbng.v1.BNGService.GetOperationalStats:input_type -> openbng.v1.GetOperationalStatsRequest
-	8,  // 13: openbng.v1.BNGService.GetRunningConfig:input_type -> openbng.v1.GetRunningConfigRequest
-	9,  // 14: openbng.v1.BNGService.GetStartupConfig:input_type -> openbng.v1.GetStartupConfigRequest
-	11, // 15: openbng.v1.BNGService.ListVersions:input_type -> openbng.v1.ListVersionsRequest
-	13, // 16: openbng.v1.BNGService.GetVersion:input_type -> openbng.v1.GetVersionRequest
-	17, // 17: openbng.v1.BNGService.ConfigEnter:input_type -> openbng.v1.ConfigEnterRequest
-	19, // 18: openbng.v1.BNGService.ConfigSet:input_type -> openbng.v1.ConfigSetRequest
-	21, // 19: openbng.v1.BNGService.ConfigCommit:input_type -> openbng.v1.ConfigCommitRequest
-	23, // 20: openbng.v1.BNGService.ConfigDiscard:input_type -> openbng.v1.ConfigDiscardRequest
-	25, // 21: openbng.v1.BNGService.ConfigDiff:input_type -> openbng.v1.ConfigDiffRequest
-	1,  // 22: openbng.v1.BNGService.GetSessions:output_type -> openbng.v1.GetSessionsResponse
-	3,  // 23: openbng.v1.BNGService.GetSession:output_type -> openbng.v1.Session
-	5,  // 24: openbng.v1.BNGService.GetStats:output_type -> openbng.v1.Stats
-	7,  // 25: openbng.v1.BNGService.TerminateSession:output_type -> openbng.v1.TerminateSessionResponse
-	29, // 26: openbng.v1.BNGService.GetOperationalStats:output_type -> openbng.v1.GetOperationalStatsResponse
-	10, // 27: openbng.v1.BNGService.GetRunningConfig:output_type -> openbng.v1.ConfigResponse
-	10, // 28: openbng.v1.BNGService.GetStartupConfig:output_type -> openbng.v1.ConfigResponse
-	12, // 29: openbng.v1.BNGService.ListVersions:output_type -> openbng.v1.ListVersionsResponse
-	14, // 30: openbng.v1.BNGService.GetVersion:output_type -> openbng.v1.VersionResponse
-	18, // 31: openbng.v1.BNGService.ConfigEnter:output_type -> openbng.v1.ConfigEnterResponse
-	20, // 32: openbng.v1.BNGService.ConfigSet:output_type -> openbng.v1.ConfigSetResponse
-	22, // 33: openbng.v1.BNGService.ConfigCommit:output_type -> openbng.v1.ConfigCommitResponse
-	24, // 34: openbng.v1.BNGService.ConfigDiscard:output_type -> openbng.v1.ConfigDiscardResponse
-	26, // 35: openbng.v1.BNGService.ConfigDiff:output_type -> openbng.v1.ConfigDiffResponse
-	22, // [22:36] is the sub-list for method output_type
-	8,  // [8:22] is the sub-list for method input_type
+	30, // 13: openbng.v1.BNGService.ExecuteOperation:input_type -> openbng.v1.ExecuteOperationRequest
+	8,  // 14: openbng.v1.BNGService.GetRunningConfig:input_type -> openbng.v1.GetRunningConfigRequest
+	9,  // 15: openbng.v1.BNGService.GetStartupConfig:input_type -> openbng.v1.GetStartupConfigRequest
+	11, // 16: openbng.v1.BNGService.ListVersions:input_type -> openbng.v1.ListVersionsRequest
+	13, // 17: openbng.v1.BNGService.GetVersion:input_type -> openbng.v1.GetVersionRequest
+	17, // 18: openbng.v1.BNGService.ConfigEnter:input_type -> openbng.v1.ConfigEnterRequest
+	19, // 19: openbng.v1.BNGService.ConfigSet:input_type -> openbng.v1.ConfigSetRequest
+	21, // 20: openbng.v1.BNGService.ConfigCommit:input_type -> openbng.v1.ConfigCommitRequest
+	23, // 21: openbng.v1.BNGService.ConfigDiscard:input_type -> openbng.v1.ConfigDiscardRequest
+	25, // 22: openbng.v1.BNGService.ConfigDiff:input_type -> openbng.v1.ConfigDiffRequest
+	1,  // 23: openbng.v1.BNGService.GetSessions:output_type -> openbng.v1.GetSessionsResponse
+	3,  // 24: openbng.v1.BNGService.GetSession:output_type -> openbng.v1.Session
+	5,  // 25: openbng.v1.BNGService.GetStats:output_type -> openbng.v1.Stats
+	7,  // 26: openbng.v1.BNGService.TerminateSession:output_type -> openbng.v1.TerminateSessionResponse
+	29, // 27: openbng.v1.BNGService.GetOperationalStats:output_type -> openbng.v1.GetOperationalStatsResponse
+	31, // 28: openbng.v1.BNGService.ExecuteOperation:output_type -> openbng.v1.ExecuteOperationResponse
+	10, // 29: openbng.v1.BNGService.GetRunningConfig:output_type -> openbng.v1.ConfigResponse
+	10, // 30: openbng.v1.BNGService.GetStartupConfig:output_type -> openbng.v1.ConfigResponse
+	12, // 31: openbng.v1.BNGService.ListVersions:output_type -> openbng.v1.ListVersionsResponse
+	14, // 32: openbng.v1.BNGService.GetVersion:output_type -> openbng.v1.VersionResponse
+	18, // 33: openbng.v1.BNGService.ConfigEnter:output_type -> openbng.v1.ConfigEnterResponse
+	20, // 34: openbng.v1.BNGService.ConfigSet:output_type -> openbng.v1.ConfigSetResponse
+	22, // 35: openbng.v1.BNGService.ConfigCommit:output_type -> openbng.v1.ConfigCommitResponse
+	24, // 36: openbng.v1.BNGService.ConfigDiscard:output_type -> openbng.v1.ConfigDiscardResponse
+	26, // 37: openbng.v1.BNGService.ConfigDiff:output_type -> openbng.v1.ConfigDiffResponse
+	23, // [23:38] is the sub-list for method output_type
+	8,  // [8:23] is the sub-list for method input_type
 	8,  // [8:8] is the sub-list for extension type_name
 	8,  // [8:8] is the sub-list for extension extendee
 	0,  // [0:8] is the sub-list for field type_name
@@ -1874,7 +1980,7 @@ func file_api_proto_bng_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_bng_proto_rawDesc), len(file_api_proto_bng_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   31,
+			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -52,7 +52,7 @@ func (h *BGPASNHandler) Rollback(ctx context.Context, hctx *handlers.HandlerCont
 }
 
 func (h *BGPASNHandler) PathPattern() paths.Path {
-	return "protocols.bgp.asn"
+	return paths.ProtocolsBGPASN
 }
 
 func (h *BGPASNHandler) Dependencies() []paths.Path {

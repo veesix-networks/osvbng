@@ -52,7 +52,7 @@ func (h *EnabledHandler) PathPattern() paths.Path {
 }
 
 func (h *EnabledHandler) Dependencies() []paths.Path {
-	return []paths.Path{"interfaces.*"}
+	return []paths.Path{paths.Interface}
 }
 
 func (h *EnabledHandler) Callbacks() *handlers.Callbacks {

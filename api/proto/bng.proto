@@ -14,6 +14,9 @@ service BNGService {
   // Show operational data (generic handler-based)
   rpc GetOperationalStats(GetOperationalStatsRequest) returns (GetOperationalStatsResponse);
 
+  // Operational commands (generic handler-based)
+  rpc ExecuteOperation(ExecuteOperationRequest) returns (ExecuteOperationResponse);
+
   // Configuration management
   rpc GetRunningConfig(GetRunningConfigRequest) returns (ConfigResponse);
   rpc GetStartupConfig(GetStartupConfigRequest) returns (ConfigResponse);
@@ -176,4 +179,13 @@ message GetOperationalStatsRequest {
 
 message GetOperationalStatsResponse {
   map<string, bytes> metrics = 1;
+}
+
+message ExecuteOperationRequest {
+  string path = 1;
+  bytes body = 2;
+}
+
+message ExecuteOperationResponse {
+  bytes data = 1;
 }

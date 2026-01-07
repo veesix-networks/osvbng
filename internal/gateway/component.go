@@ -14,6 +14,8 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/conf/types"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
+	"github.com/veesix-networks/osvbng/pkg/oper"
+	operhandlers "github.com/veesix-networks/osvbng/pkg/oper/handlers"
 	"github.com/veesix-networks/osvbng/pkg/show"
 	"github.com/veesix-networks/osvbng/pkg/show/handlers"
 	_ "github.com/veesix-networks/osvbng/pkg/show/handlers/aaa"
@@ -32,16 +34,18 @@ type Component struct {
 	logger       *slog.Logger
 	server       *grpc.Server
 	showRegistry *handlers.Registry
+	operRegistry *operhandlers.Registry
 	bindAddr     string
 	subscriber   *subscriber.Component
 	configd      *conf.ConfigDaemon
 }
 
-func New(deps component.Dependencies, showRegistry *handlers.Registry, subscriberComp *subscriber.Component, configd *conf.ConfigDaemon, bindAddr string) (component.Component, error) {
+func New(deps component.Dependencies, showRegistry *handlers.Registry, operRegistry *operhandlers.Registry, subscriberComp *subscriber.Component, configd *conf.ConfigDaemon, bindAddr string) (component.Component, error) {
 	return &Component{
 		Base:         component.NewBase("gateway"),
 		logger:       logger.Component(logger.ComponentGateway),
 		showRegistry: showRegistry,
+		operRegistry: operRegistry,
 		bindAddr:     bindAddr,
 		subscriber:   subscriberComp,
 		configd:      configd,
@@ -104,6 +108,30 @@ func (c *Component) GetOperationalStats(ctx context.Context, req *pb.GetOperatio
 		Metrics: map[string][]byte{
 			req.Path: jsonData,
 		},
+	}, nil
+}
+
+func (c *Component) ExecuteOperation(ctx context.Context, req *pb.ExecuteOperationRequest) (*pb.ExecuteOperationResponse, error) {
+	handler, err := c.operRegistry.GetHandler(req.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := handler.Execute(ctx, &oper.Request{
+		Path: req.Path,
+		Body: req.Body,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return nil, fmt.Errorf("marshal data: %w", err)
+	}
+
+	return &pb.ExecuteOperationResponse{
+		Data: jsonData,
 	}, nil
 }
 
