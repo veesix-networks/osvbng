@@ -3,7 +3,7 @@ package system
 import (
 	"github.com/veesix-networks/osvbng/cmd/osvbngcli/commands"
 	"github.com/veesix-networks/osvbng/pkg/cli"
-	"github.com/veesix-networks/osvbng/pkg/show/paths"
+	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
 )
 
 func init() {

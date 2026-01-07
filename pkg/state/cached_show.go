@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/cache"
-	"github.com/veesix-networks/osvbng/pkg/show"
+	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 )
 
 type CachedShowCollector struct {

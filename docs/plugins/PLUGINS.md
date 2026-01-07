@@ -86,7 +86,7 @@ package myplugin
 
 import (
 	"github.com/veesix-networks/osvbng/pkg/component"
-	"github.com/veesix-networks/osvbng/pkg/conf"
+	"github.com/veesix-networks/osvbng/pkg/configmgr"
 )
 
 const Namespace = "example.myplugin"
@@ -98,7 +98,7 @@ type Config struct {
 
 func init() {
 	// Register plugin config type
-	conf.RegisterPluginConfig(Namespace, Config{})
+	configmgr.RegisterPluginConfig(Namespace, Config{})
 
 	// Register component factory
 	component.Register(Namespace, NewComponent,
@@ -121,7 +121,7 @@ import (
 	"log/slog"
 
 	"github.com/veesix-networks/osvbng/pkg/component"
-	"github.com/veesix-networks/osvbng/pkg/conf"
+	"github.com/veesix-networks/osvbng/pkg/configmgr"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 )
 
@@ -133,7 +133,7 @@ type Component struct {
 
 func NewComponent(deps component.Dependencies) (component.Component, error) {
 	// Get typed config from registry
-	pluginCfgRaw, ok := conf.GetPluginConfig(Namespace)
+	pluginCfgRaw, ok := configmgr.GetPluginConfig(Namespace)
 	if !ok {
 		return nil, nil // Config not present
 	}
@@ -183,8 +183,8 @@ Define all your show, config, and state paths in one place:
 package myplugin
 
 import (
-	confpaths "github.com/veesix-networks/osvbng/pkg/conf/paths"
-	showpaths "github.com/veesix-networks/osvbng/pkg/show/paths"
+	confpaths "github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
+	showpaths "github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
 	statepaths "github.com/veesix-networks/osvbng/pkg/state/paths"
 )
 
@@ -208,16 +208,17 @@ package myplugin
 import (
 	"context"
 
-	"github.com/veesix-networks/osvbng/pkg/show/handlers"
-	"github.com/veesix-networks/osvbng/pkg/show/paths"
+	"github.com/veesix-networks/osvbng/pkg/deps"
+	"github.com/veesix-networks/osvbng/pkg/handlers/show"
+	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
 )
 
 func init() {
-	handlers.RegisterFactory(NewStatusHandler)
+	show.RegisterFactory(NewStatusHandler)
 }
 
 type StatusHandler struct {
-	deps *handlers.ShowDeps
+	deps *deps.ShowDeps
 }
 
 type Status struct {
@@ -225,11 +226,11 @@ type Status struct {
 	Enabled bool   `json:"enabled"`
 }
 
-func NewStatusHandler(deps *handlers.ShowDeps) handlers.ShowHandler {
+func NewStatusHandler(deps *deps.ShowDeps) show.ShowHandler {
 	return &StatusHandler{deps: deps}
 }
 
-func (h *StatusHandler) Collect(ctx context.Context, req *handlers.ShowRequest) (interface{}, error) {
+func (h *StatusHandler) Collect(ctx context.Context, req *show.Request) (interface{}, error) {
 	message := "Default message"
 	enabled := false
 
@@ -262,21 +263,22 @@ package show
 import (
 	"context"
 
-	"github.com/veesix-networks/osvbng/pkg/show/handlers"
-	"github.com/veesix-networks/osvbng/pkg/show/paths"
+	"github.com/veesix-networks/osvbng/pkg/deps"
+	"github.com/veesix-networks/osvbng/pkg/handlers/show"
+	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
 	"github.com/veesix-networks/osvbng/pkg/state"
 	"github.com/veesix-networks/osvbng/plugins/community/myplugin"
 )
 
 func init() {
-	handlers.RegisterFactory(NewStatusHandler)
+	show.RegisterFactory(NewStatusHandler)
 
 	// Register metric collector to periodically cache this data for exporters
 	state.RegisterMetric(myplugin.StateStatusPath, myplugin.ShowStatusPath)
 }
 
 type StatusHandler struct {
-	deps *handlers.ShowDeps
+	deps *deps.ShowDeps
 }
 
 type Status struct {
@@ -284,11 +286,11 @@ type Status struct {
 	Enabled bool   `json:"enabled"`
 }
 
-func NewStatusHandler(deps *handlers.ShowDeps) handlers.ShowHandler {
+func NewStatusHandler(deps *deps.ShowDeps) show.ShowHandler {
 	return &StatusHandler{deps: deps}
 }
 
-func (h *StatusHandler) Collect(ctx context.Context, req *handlers.ShowRequest) (interface{}, error) {
+func (h *StatusHandler) Collect(ctx context.Context, req *show.Request) (interface{}, error) {
 	message := "Default message"
 	enabled := false
 
@@ -327,28 +329,29 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/veesix-networks/osvbng/pkg/conf/handlers"
-	"github.com/veesix-networks/osvbng/pkg/conf/paths"
+	"github.com/veesix-networks/osvbng/pkg/deps"
+	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
+	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 )
 
 func init() {
-	handlers.RegisterFactory(NewMessageHandler)
+	conf.RegisterFactory(NewMessageHandler)
 }
 
 type MessageHandler struct {
-	deps   *handlers.ConfDeps
+	deps   *deps.ConfDeps
 	logger *slog.Logger
 }
 
-func NewMessageHandler(deps *handlers.ConfDeps) handlers.Handler {
+func NewMessageHandler(deps *deps.ConfDeps) conf.Handler {
 	return &MessageHandler{
 		deps:   deps,
 		logger: logger.Component("myplugin.conf"),
 	}
 }
 
-func (h *MessageHandler) Validate(ctx context.Context, hctx *handlers.HandlerContext) error {
+func (h *MessageHandler) Validate(ctx context.Context, hctx *conf.HandlerContext) error {
 	message, ok := hctx.NewValue.(string)
 	if !ok {
 		return fmt.Errorf("message must be a string")
@@ -359,7 +362,7 @@ func (h *MessageHandler) Validate(ctx context.Context, hctx *handlers.HandlerCon
 	return nil
 }
 
-func (h *MessageHandler) Apply(ctx context.Context, hctx *handlers.HandlerContext) error {
+func (h *MessageHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error {
 	message := hctx.NewValue.(string)
 
 	comp, ok := h.deps.PluginComponents[Namespace]
@@ -377,7 +380,7 @@ func (h *MessageHandler) Apply(ctx context.Context, hctx *handlers.HandlerContex
 	return nil
 }
 
-func (h *MessageHandler) Rollback(ctx context.Context, hctx *handlers.HandlerContext) error {
+func (h *MessageHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) error {
 	if hctx.OldValue == nil {
 		return nil
 	}
@@ -405,7 +408,7 @@ func (h *MessageHandler) Dependencies() []paths.Path {
 	return nil
 }
 
-func (h *MessageHandler) Callbacks() *handlers.Callbacks {
+func (h *MessageHandler) Callbacks() *conf.Callbacks {
 	return nil
 }
 ```
@@ -419,29 +422,30 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/veesix-networks/osvbng/pkg/conf/handlers"
-	"github.com/veesix-networks/osvbng/pkg/conf/paths"
+	"github.com/veesix-networks/osvbng/pkg/deps"
+	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
+	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/plugins/community/myplugin"
 )
 
 func init() {
-	handlers.RegisterFactory(NewMessageHandler)
+	conf.RegisterFactory(NewMessageHandler)
 }
 
 type MessageHandler struct {
-	deps   *handlers.ConfDeps
+	deps   *deps.ConfDeps
 	logger *slog.Logger
 }
 
-func NewMessageHandler(deps *handlers.ConfDeps) handlers.Handler {
+func NewMessageHandler(deps *deps.ConfDeps) conf.Handler {
 	return &MessageHandler{
 		deps:   deps,
 		logger: logger.Component("myplugin.conf"),
 	}
 }
 
-func (h *MessageHandler) Validate(ctx context.Context, hctx *handlers.HandlerContext) error {
+func (h *MessageHandler) Validate(ctx context.Context, hctx *conf.HandlerContext) error {
 	message, ok := hctx.NewValue.(string)
 	if !ok {
 		return fmt.Errorf("message must be a string")
@@ -452,7 +456,7 @@ func (h *MessageHandler) Validate(ctx context.Context, hctx *handlers.HandlerCon
 	return nil
 }
 
-func (h *MessageHandler) Apply(ctx context.Context, hctx *handlers.HandlerContext) error {
+func (h *MessageHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error {
 	message := hctx.NewValue.(string)
 
 	comp, ok := h.deps.PluginComponents[myplugin.Namespace]
@@ -470,7 +474,7 @@ func (h *MessageHandler) Apply(ctx context.Context, hctx *handlers.HandlerContex
 	return nil
 }
 
-func (h *MessageHandler) Rollback(ctx context.Context, hctx *handlers.HandlerContext) error {
+func (h *MessageHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) error {
 	if hctx.OldValue == nil {
 		return nil
 	}
@@ -498,7 +502,7 @@ func (h *MessageHandler) Dependencies() []paths.Path {
 	return nil
 }
 
-func (h *MessageHandler) Callbacks() *handlers.Callbacks {
+func (h *MessageHandler) Callbacks() *conf.Callbacks {
 	return nil
 }
 ```
@@ -675,7 +679,7 @@ If you want your plugin's data to be periodically cached for consumption by expo
 import "github.com/veesix-networks/osvbng/pkg/state"
 
 func init() {
-    handlers.RegisterFactory(NewStatusHandler)
+    show.RegisterFactory(NewStatusHandler)
 
     // Enable periodic caching for exporters
     state.RegisterMetric(myplugin.StateStatusPath, myplugin.ShowStatusPath)
@@ -749,6 +753,6 @@ This ensures consistency and makes refactoring easier.
 - Example plugin: `plugins/community/hello`
 - Handler documentation: [HANDLERS.md](../HANDLERS.md)
 - Component interface: `pkg/component/component.go`
-- Config system: `pkg/conf/`
-- Show handlers: `pkg/show/handlers/`
-- Conf handlers: `pkg/conf/handlers/`
+- Config manager: `pkg/configmgr/`
+- Show handlers: `pkg/handlers/show/`
+- Conf handlers: `pkg/handlers/conf/`

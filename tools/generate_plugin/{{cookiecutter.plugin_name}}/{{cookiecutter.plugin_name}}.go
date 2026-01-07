@@ -6,7 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/veesix-networks/osvbng/pkg/component"
-	"github.com/veesix-networks/osvbng/pkg/conf"
+	"github.com/veesix-networks/osvbng/pkg/configmgr"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 )
 
@@ -17,7 +17,7 @@ type Component struct {
 }
 
 func NewComponent(deps component.Dependencies) (component.Component, error) {
-	pluginCfgRaw, ok := conf.GetPluginConfig(Namespace)
+	pluginCfgRaw, ok := configmgr.GetPluginConfig(Namespace)
 	if !ok {
 		return nil, nil
 	}

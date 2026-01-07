@@ -1,8 +1,8 @@
 package hello
 
 import (
-	confpaths "github.com/veesix-networks/osvbng/pkg/conf/paths"
-	showpaths "github.com/veesix-networks/osvbng/pkg/show/paths"
+	confpaths "github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
+	showpaths "github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
 	statepaths "github.com/veesix-networks/osvbng/pkg/state/paths"
 )
 

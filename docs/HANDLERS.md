@@ -134,7 +134,7 @@ This prevents race conditions and ordering issues during commit.
 Handlers self-register via factory functions:
 
 **Core Handlers:**
-Defined in `pkg/conf/handlers/` and `pkg/show/handlers/`
+Defined in `pkg/handlers/conf/` and `pkg/handlers/show/`
 
 **Plugin Handlers:**
 Defined in plugin directories (e.g., `plugins/community/hello/conf/` and `plugins/community/hello/show/`)
@@ -355,7 +355,7 @@ For detailed implementation guidance, see:
 - Example config handler: `plugins/community/hello/conf/message.go`
 - Example show handler: `plugins/community/hello/show/status.go`
 - Example oper handler: `plugins/auth/local/oper/user/create.go`
-- Core handlers: `pkg/conf/handlers/`, `pkg/show/handlers/`, and `pkg/oper/handlers/`
+- Core handlers: `pkg/handlers/conf/`, `pkg/handlers/show/`, and `pkg/handlers/oper/`
 
 ## Related Documentation
 

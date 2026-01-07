@@ -4,24 +4,22 @@ import (
 	"context"
 	"fmt"
 
-	confhandlers "github.com/veesix-networks/osvbng/pkg/conf/handlers"
-	"github.com/veesix-networks/osvbng/pkg/conf/paths"
-	conftypes "github.com/veesix-networks/osvbng/pkg/conf/types"
-	"github.com/veesix-networks/osvbng/pkg/oper"
-	operhandlers "github.com/veesix-networks/osvbng/pkg/oper/handlers"
-	operpaths "github.com/veesix-networks/osvbng/pkg/oper/paths"
-	"github.com/veesix-networks/osvbng/pkg/show"
-	showhandlers "github.com/veesix-networks/osvbng/pkg/show/handlers"
-	showpaths "github.com/veesix-networks/osvbng/pkg/show/paths"
+	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
+	confpaths "github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
+	conftypes "github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
+	"github.com/veesix-networks/osvbng/pkg/handlers/oper"
+	operpaths "github.com/veesix-networks/osvbng/pkg/handlers/oper/paths"
+	"github.com/veesix-networks/osvbng/pkg/handlers/show"
+	showpaths "github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
 )
 
 type Adapter struct {
-	showRegistry *showhandlers.Registry
-	confRegistry *confhandlers.Registry
-	operRegistry *operhandlers.Registry
+	showRegistry *show.Registry
+	confRegistry *conf.Registry
+	operRegistry *oper.Registry
 }
 
-func NewAdapter(showReg *showhandlers.Registry, confReg *confhandlers.Registry, operReg *operhandlers.Registry) *Adapter {
+func NewAdapter(showReg *show.Registry, confReg *conf.Registry, operReg *oper.Registry) *Adapter {
 	return &Adapter{
 		showRegistry: showReg,
 		confRegistry: confReg,
@@ -33,7 +31,7 @@ func (a *Adapter) GetAllShowPaths() []showpaths.Path {
 	return a.showRegistry.GetAllPaths()
 }
 
-func (a *Adapter) GetAllConfPaths() []paths.Path {
+func (a *Adapter) GetAllConfPaths() []confpaths.Path {
 	return a.confRegistry.GetAllPaths()
 }
 
@@ -76,7 +74,7 @@ func (a *Adapter) ValidateConfig(ctx context.Context, sessionID conftypes.Sessio
 		return fmt.Errorf("config handler not found for path %s: %w", path, err)
 	}
 
-	hctx := &confhandlers.HandlerContext{
+	hctx := &conf.HandlerContext{
 		SessionID: sessionID,
 		Path:      path,
 		NewValue:  value,
@@ -91,7 +89,7 @@ func (a *Adapter) ApplyConfig(ctx context.Context, sessionID conftypes.SessionID
 		return fmt.Errorf("config handler not found for path %s: %w", path, err)
 	}
 
-	hctx := &confhandlers.HandlerContext{
+	hctx := &conf.HandlerContext{
 		SessionID: sessionID,
 		Path:      path,
 		OldValue:  oldValue,
@@ -107,7 +105,7 @@ func (a *Adapter) RollbackConfig(ctx context.Context, sessionID conftypes.Sessio
 		return fmt.Errorf("config handler not found for path %s: %w", path, err)
 	}
 
-	hctx := &confhandlers.HandlerContext{
+	hctx := &conf.HandlerContext{
 		SessionID: sessionID,
 		Path:      path,
 		OldValue:  oldValue,

@@ -1,32 +1,33 @@
 package {{cookiecutter.plugin_name}}
 
 import (
+	"github.com/veesix-networks/osvbng/pkg/deps"
 	"context"
 	"fmt"
 	"log/slog"
 
-	"github.com/veesix-networks/osvbng/pkg/conf/handlers"
-	"github.com/veesix-networks/osvbng/pkg/conf/paths"
+	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
+	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 )
 
 func init() {
-	handlers.RegisterFactory(NewMessageHandler)
+	conf.RegisterFactory(NewMessageHandler)
 }
 
 type MessageHandler struct {
-	deps   *handlers.ConfDeps
+	deps   *deps.ConfDeps
 	logger *slog.Logger
 }
 
-func NewMessageHandler(deps *handlers.ConfDeps) handlers.Handler {
+func NewMessageHandler(deps *deps.ConfDeps) conf.Handler {
 	return &MessageHandler{
 		deps:   deps,
 		logger: logger.Component("{{cookiecutter.plugin_namespace}}.conf"),
 	}
 }
 
-func (h *MessageHandler) Validate(ctx context.Context, hctx *handlers.HandlerContext) error {
+func (h *MessageHandler) Validate(ctx context.Context, hctx *conf.HandlerContext) error {
 	message, ok := hctx.NewValue.(string)
 	if !ok {
 		return fmt.Errorf("message must be a string, got %T", hctx.NewValue)
@@ -39,7 +40,7 @@ func (h *MessageHandler) Validate(ctx context.Context, hctx *handlers.HandlerCon
 	return nil
 }
 
-func (h *MessageHandler) Apply(ctx context.Context, hctx *handlers.HandlerContext) error {
+func (h *MessageHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error {
 	message := hctx.NewValue.(string)
 
 	comp, ok := h.deps.PluginComponents[Namespace]
@@ -57,7 +58,7 @@ func (h *MessageHandler) Apply(ctx context.Context, hctx *handlers.HandlerContex
 	return nil
 }
 
-func (h *MessageHandler) Rollback(ctx context.Context, hctx *handlers.HandlerContext) error {
+func (h *MessageHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) error {
 	if hctx.OldValue == nil {
 		return nil
 	}
@@ -86,6 +87,6 @@ func (h *MessageHandler) Dependencies() []paths.Path {
 	return nil
 }
 
-func (h *MessageHandler) Callbacks() *handlers.Callbacks {
+func (h *MessageHandler) Callbacks() *conf.Callbacks {
 	return nil
 }

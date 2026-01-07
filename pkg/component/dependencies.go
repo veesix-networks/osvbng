@@ -6,15 +6,13 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
-	"github.com/veesix-networks/osvbng/pkg/state"
 )
 
 type Dependencies struct {
-	EventBus          events.Bus
-	Cache             cache.Cache
-	VPP               *southbound.VPP
-	Config            *config.Config
-	CollectorRegistry *state.CollectorRegistry
+	EventBus events.Bus
+	Cache    cache.Cache
+	VPP      *southbound.VPP
+	Config   *config.Config
 
 	DHCPChan <-chan *dataplane.ParsedPacket
 	ARPChan  <-chan *dataplane.ParsedPacket

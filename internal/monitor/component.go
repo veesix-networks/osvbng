@@ -7,8 +7,8 @@ import (
 
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
+	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/logger"
-	"github.com/veesix-networks/osvbng/pkg/show"
 	"github.com/veesix-networks/osvbng/pkg/state"
 )
 

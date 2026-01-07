@@ -7,7 +7,7 @@ import (
 
 	"github.com/veesix-networks/osvbng/cmd/osvbngcli/commands"
 	"github.com/veesix-networks/osvbng/pkg/cli"
-	operpaths "github.com/veesix-networks/osvbng/pkg/oper/paths"
+	operpaths "github.com/veesix-networks/osvbng/pkg/handlers/oper/paths"
 )
 
 func init() {

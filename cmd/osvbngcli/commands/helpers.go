@@ -6,9 +6,9 @@ import (
 	"fmt"
 
 	bngpb "github.com/veesix-networks/osvbng/api/proto"
-	confpaths "github.com/veesix-networks/osvbng/pkg/conf/paths"
-	operpaths "github.com/veesix-networks/osvbng/pkg/oper/paths"
-	showpaths "github.com/veesix-networks/osvbng/pkg/show/paths"
+	confpaths "github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
+	operpaths "github.com/veesix-networks/osvbng/pkg/handlers/oper/paths"
+	showpaths "github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
 )
 
 type CLIWrapper interface {

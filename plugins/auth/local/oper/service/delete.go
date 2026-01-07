@@ -1,27 +1,27 @@
 package service
 
 import (
+	"github.com/veesix-networks/osvbng/pkg/deps"
 	"context"
 	"fmt"
 	"log/slog"
 
+	"github.com/veesix-networks/osvbng/pkg/handlers/oper"
+	operpaths "github.com/veesix-networks/osvbng/pkg/handlers/oper/paths"
 	"github.com/veesix-networks/osvbng/pkg/logger"
-	"github.com/veesix-networks/osvbng/pkg/oper"
-	"github.com/veesix-networks/osvbng/pkg/oper/handlers"
-	operpaths "github.com/veesix-networks/osvbng/pkg/oper/paths"
 	"github.com/veesix-networks/osvbng/plugins/auth/local"
 )
 
 func init() {
-	handlers.RegisterFactory(NewDeleteServiceHandler)
+	oper.RegisterFactory(NewDeleteServiceHandler)
 }
 
 type DeleteServiceHandler struct {
-	deps   *handlers.OperDeps
+	deps   *deps.OperDeps
 	logger *slog.Logger
 }
 
-func NewDeleteServiceHandler(deps *handlers.OperDeps) handlers.OperHandler {
+func NewDeleteServiceHandler(deps *deps.OperDeps) oper.OperHandler {
 	return &DeleteServiceHandler{
 		deps:   deps,
 		logger: logger.Component(local.Namespace + ".oper"),

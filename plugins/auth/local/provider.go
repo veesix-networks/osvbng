@@ -7,7 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/veesix-networks/osvbng/pkg/auth"
-	"github.com/veesix-networks/osvbng/pkg/conf"
+	"github.com/veesix-networks/osvbng/pkg/configmgr"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/provider"
 )
@@ -20,7 +20,7 @@ type Provider struct {
 }
 
 func New() (auth.AuthProvider, error) {
-	pluginCfgRaw, ok := conf.GetPluginConfig(Namespace)
+	pluginCfgRaw, ok := configmgr.GetPluginConfig(Namespace)
 	if !ok {
 		return nil, nil
 	}

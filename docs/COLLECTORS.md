@@ -24,11 +24,11 @@ Exporters read from cache and transform data as needed for their target system.
 
 Collectors are registered directly in show handler files using `state.RegisterMetric()`. No separate collector files needed - the collector automatically wraps the show handler.
 
-Example from `pkg/show/handlers/protocols/bgp/statistics.go`:
+Example from `pkg/handlers/show/protocols/bgp/statistics.go`:
 
 ```go
 func init() {
-    handlers.RegisterFactory(NewBGPStatisticsHandler)
+    show.RegisterFactory(NewBGPStatisticsHandler)
 
     state.RegisterMetric(statepaths.ProtocolsBGPStatistics, paths.ProtocolsBGPStatistics)
     state.RegisterMetric(statepaths.ProtocolsBGPIPv6Statistics, paths.ProtocolsBGPIPv6Statistics)

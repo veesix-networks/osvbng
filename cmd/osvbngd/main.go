@@ -21,18 +21,18 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/bootstrap"
 	"github.com/veesix-networks/osvbng/pkg/cache/memory"
 	"github.com/veesix-networks/osvbng/pkg/component"
-	"github.com/veesix-networks/osvbng/pkg/conf"
-	confhandlers "github.com/veesix-networks/osvbng/pkg/conf/handlers"
-	_ "github.com/veesix-networks/osvbng/pkg/conf/handlers/all"
 	"github.com/veesix-networks/osvbng/pkg/config"
+	"github.com/veesix-networks/osvbng/pkg/configmgr"
+	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/dhcp4"
 	"github.com/veesix-networks/osvbng/pkg/events/local"
+	_ "github.com/veesix-networks/osvbng/pkg/handlers/conf/all"
+	"github.com/veesix-networks/osvbng/pkg/handlers/oper"
+	"github.com/veesix-networks/osvbng/pkg/handlers/show"
+	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/all"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/northbound"
 	"github.com/veesix-networks/osvbng/pkg/operations"
-	operhandlers "github.com/veesix-networks/osvbng/pkg/oper/handlers"
-	"github.com/veesix-networks/osvbng/pkg/show/handlers"
-	_ "github.com/veesix-networks/osvbng/pkg/show/handlers/all"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"github.com/veesix-networks/osvbng/pkg/state"
 	_ "github.com/veesix-networks/osvbng/plugins/all"
@@ -65,13 +65,13 @@ func main() {
 
 	vppDataplane := operations.NewVPPDataplane(vppConn)
 
-	configd := conf.NewConfigDaemon()
+	configd := configmgr.NewConfigManager()
 
 	if err := configd.LoadVersions(); err != nil {
 		mainLog.Warn("Failed to load config versions", "error", err)
 	}
 
-	configd.AutoRegisterHandlers(&confhandlers.ConfDeps{
+	configd.AutoRegisterHandlers(&deps.ConfDeps{
 		Dataplane:        vppDataplane,
 		AAA:              nil,
 		Routing:          nil,
@@ -143,7 +143,7 @@ func main() {
 	eventBus := local.NewBus()
 	cache := memory.New()
 
-	deps := component.Dependencies{
+	coreDeps := component.Dependencies{
 		EventBus: eventBus,
 		Cache:    cache,
 		VPP:      vpp,
@@ -160,25 +160,25 @@ func main() {
 		log.Fatalf("Failed to create auth provider '%s': %v", authProviderName, err)
 	}
 
-	aaaComp, err := aaa.New(deps, authProvider)
+	aaaComp, err := aaa.New(coreDeps, authProvider)
 	if err != nil {
 		log.Fatalf("Failed to create AAA component: %v", err)
 	}
 
-	routingComp, err := routing.New(deps)
+	routingComp, err := routing.New(coreDeps)
 	if err != nil {
 		log.Fatalf("Failed to create routing component: %v", err)
 	}
 
-	dataplaneComp, err := dataplane.New(deps)
+	dataplaneComp, err := dataplane.New(coreDeps)
 	if err != nil {
 		log.Fatalf("Failed to create dataplane component: %v", err)
 	}
 
 	dpComp := dataplaneComp.(*dataplane.Component)
-	deps.DHCPChan = dpComp.DHCPChan
-	deps.ARPChan = dpComp.ARPChan
-	deps.PPPChan = dpComp.PPPoEChan
+	coreDeps.DHCPChan = dpComp.DHCPChan
+	coreDeps.ARPChan = dpComp.ARPChan
+	coreDeps.PPPChan = dpComp.PPPoEChan
 
 	dhcp4ProviderName := cfg.DHCP.Provider
 	if dhcp4ProviderName == "" {
@@ -195,35 +195,34 @@ func main() {
 		log.Fatalf("Failed to create DHCP4 provider '%s': %v", dhcp4ProviderName, err)
 	}
 
-	ipoeComp, err := ipoe.New(deps, nil, dhcp4Provider)
+	ipoeComp, err := ipoe.New(coreDeps, nil, dhcp4Provider)
 	if err != nil {
 		log.Fatalf("Failed to create ipoe component: %v", err)
 	}
 
-	subscriberComp, err := subscriber.New(deps, nil)
+	subscriberComp, err := subscriber.New(coreDeps, nil)
 	if err != nil {
 		log.Fatalf("Failed to create subscriber component: %v", err)
 	}
 
-	arpComp, err := arp.New(deps, nil)
+	arpComp, err := arp.New(coreDeps, nil)
 	if err != nil {
 		log.Fatalf("Failed to create arp component: %v", err)
 	}
 
-	showRegistry := handlers.NewRegistry()
-	operRegistry := operhandlers.NewRegistry()
+	showRegistry := show.NewRegistry()
+	operRegistry := oper.NewRegistry()
 
 	gatewayAddr := "0.0.0.0:50050"
 	if cfg.API.Address != "" {
 		gatewayAddr = cfg.API.Address
 	}
-	gatewayComp, err := gateway.New(deps, showRegistry, operRegistry, subscriberComp.(*subscriber.Component), configd, gatewayAddr)
+	gatewayComp, err := gateway.New(coreDeps, showRegistry, operRegistry, subscriberComp.(*subscriber.Component), configd, gatewayAddr)
 	if err != nil {
 		log.Fatalf("Failed to create gateway component: %v", err)
 	}
 
 	collectorRegistry := state.DefaultRegistry()
-	deps.CollectorRegistry = collectorRegistry
 
 	collectInterval := 5 * time.Second
 	if cfg.Monitoring.CollectInterval > 0 {
@@ -239,7 +238,7 @@ func main() {
 			PathPrefix: "osvbng:state:",
 		},
 		DisabledCollectors: cfg.Monitoring.DisabledCollectors,
-		ShowRegistry:      showRegistry,
+		ShowRegistry:      *showRegistry,
 	})
 
 	orch := component.NewOrchestrator()
@@ -252,7 +251,7 @@ func main() {
 	orch.Register(monitorComp)
 	orch.Register(gatewayComp)
 
-	pluginComponents, err := component.LoadAll(deps)
+	pluginComponents, err := component.LoadAll(coreDeps)
 	if err != nil {
 		log.Fatalf("Failed to load plugin components: %v", err)
 	}
@@ -266,22 +265,22 @@ func main() {
 		}
 	}
 
-	configd.AutoRegisterHandlers(&confhandlers.ConfDeps{
+	configd.AutoRegisterHandlers(&deps.ConfDeps{
 		Dataplane:        vppDataplane,
 		AAA:              aaaComp.(*aaa.Component),
 		Routing:          routingComp.(*routing.Component),
 		PluginComponents: pluginComponentsMap,
 	})
 
-	showRegistry.AutoRegisterAll(&handlers.ShowDeps{
+	showRegistry.AutoRegisterAll(&deps.ShowDeps{
 		Subscriber:       subscriberComp.(*subscriber.Component),
-		Southbound:       deps.VPP,
+		Southbound:       coreDeps.VPP,
 		Routing:          routingComp.(*routing.Component),
 		Cache:            cache,
 		PluginComponents: pluginComponentsMap,
 	})
 
-	operRegistry.AutoRegisterAll(&operhandlers.OperDeps{
+	operRegistry.AutoRegisterAll(&deps.OperDeps{
 		PluginComponents: pluginComponentsMap,
 	})
 

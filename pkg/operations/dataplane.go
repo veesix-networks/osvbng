@@ -1,7 +1,7 @@
 package operations
 
 import (
-	"github.com/veesix-networks/osvbng/pkg/conf/types"
+	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
 )
 
 type Dataplane interface {

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"text/template"
 
-	"github.com/veesix-networks/osvbng/pkg/conf/types"
+	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
 )
 
 const (
