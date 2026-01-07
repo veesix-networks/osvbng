@@ -4,22 +4,23 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/veesix-networks/osvbng/pkg/show/handlers"
-	"github.com/veesix-networks/osvbng/pkg/show/paths"
+	"github.com/veesix-networks/osvbng/pkg/deps"
+	"github.com/veesix-networks/osvbng/pkg/handlers/show"
+	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
 	"github.com/veesix-networks/osvbng/plugins/auth/local"
 )
 
 func init() {
-	handlers.RegisterFactory(NewServicesHandler)
-	handlers.RegisterFactory(NewServiceHandler)
+	show.RegisterFactory(NewServicesHandler)
+	show.RegisterFactory(NewServiceHandler)
 }
 
 type ServicesHandler struct {
-	deps *handlers.ShowDeps
+	deps *deps.ShowDeps
 }
 
 type ServiceHandler struct {
-	deps *handlers.ShowDeps
+	deps *deps.ShowDeps
 }
 
 type ServicesResponse struct {
@@ -33,15 +34,15 @@ type ServiceInfo struct {
 	CreatedAt   string            `json:"created_at"`
 }
 
-func NewServicesHandler(deps *handlers.ShowDeps) handlers.ShowHandler {
+func NewServicesHandler(deps *deps.ShowDeps) show.ShowHandler {
 	return &ServicesHandler{deps: deps}
 }
 
-func NewServiceHandler(deps *handlers.ShowDeps) handlers.ShowHandler {
+func NewServiceHandler(deps *deps.ShowDeps) show.ShowHandler {
 	return &ServiceHandler{deps: deps}
 }
 
-func (h *ServicesHandler) Collect(ctx context.Context, req *handlers.ShowRequest) (interface{}, error) {
+func (h *ServicesHandler) Collect(ctx context.Context, req *show.Request) (interface{}, error) {
 	provider := local.GetProvider()
 	if provider == nil {
 		return nil, fmt.Errorf("local auth provider not initialized")
@@ -74,7 +75,7 @@ func (h *ServicesHandler) Dependencies() []paths.Path {
 	return nil
 }
 
-func (h *ServiceHandler) Collect(ctx context.Context, req *handlers.ShowRequest) (interface{}, error) {
+func (h *ServiceHandler) Collect(ctx context.Context, req *show.Request) (interface{}, error) {
 	provider := local.GetProvider()
 	if provider == nil {
 		return nil, fmt.Errorf("local auth provider not initialized")

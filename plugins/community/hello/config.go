@@ -2,7 +2,7 @@ package hello
 
 import (
 	"github.com/veesix-networks/osvbng/pkg/component"
-	"github.com/veesix-networks/osvbng/pkg/conf"
+	"github.com/veesix-networks/osvbng/pkg/configmgr"
 )
 
 const Namespace = "example.hello"
@@ -13,7 +13,7 @@ type Config struct {
 }
 
 func init() {
-	conf.RegisterPluginConfig(Namespace, Config{})
+	configmgr.RegisterPluginConfig(Namespace, Config{})
 	component.Register(Namespace, NewComponent,
 		component.WithAuthor("veesix ::networks"),
 		component.WithVersion("1.0.0"),

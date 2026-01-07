@@ -1,31 +1,31 @@
 package user
 
 import (
+	"github.com/veesix-networks/osvbng/pkg/deps"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strconv"
 
+	"github.com/veesix-networks/osvbng/pkg/handlers/oper"
+	operpaths "github.com/veesix-networks/osvbng/pkg/handlers/oper/paths"
 	"github.com/veesix-networks/osvbng/pkg/logger"
-	"github.com/veesix-networks/osvbng/pkg/oper"
-	"github.com/veesix-networks/osvbng/pkg/oper/handlers"
-	operpaths "github.com/veesix-networks/osvbng/pkg/oper/paths"
 	"github.com/veesix-networks/osvbng/plugins/auth/local"
 )
 
 func init() {
-	handlers.RegisterFactory(NewSetUserPasswordHandler)
+	oper.RegisterFactory(NewSetUserPasswordHandler)
 }
 
 type SetUserPasswordHandler struct {
-	deps   *handlers.OperDeps
+	deps   *deps.OperDeps
 	logger *slog.Logger
 }
 
 
 
-func NewSetUserPasswordHandler(deps *handlers.OperDeps) handlers.OperHandler {
+func NewSetUserPasswordHandler(deps *deps.OperDeps) oper.OperHandler {
 	return &SetUserPasswordHandler{
 		deps:   deps,
 		logger: logger.Component(local.Namespace + ".oper"),

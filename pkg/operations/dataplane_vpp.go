@@ -6,7 +6,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/veesix-networks/osvbng/pkg/conf/types"
+	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/af_packet"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/ethernet_types"

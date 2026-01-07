@@ -1,31 +1,31 @@
 package attribute
 
 import (
+	"github.com/veesix-networks/osvbng/pkg/deps"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strconv"
 
+	"github.com/veesix-networks/osvbng/pkg/handlers/oper"
+	operpaths "github.com/veesix-networks/osvbng/pkg/handlers/oper/paths"
 	"github.com/veesix-networks/osvbng/pkg/logger"
-	"github.com/veesix-networks/osvbng/pkg/oper"
-	"github.com/veesix-networks/osvbng/pkg/oper/handlers"
-	operpaths "github.com/veesix-networks/osvbng/pkg/oper/paths"
 	"github.com/veesix-networks/osvbng/plugins/auth/local"
 )
 
 func init() {
-	handlers.RegisterFactory(NewSetUserAttributeHandler)
+	oper.RegisterFactory(NewSetUserAttributeHandler)
 }
 
 type SetUserAttributeHandler struct {
-	deps   *handlers.OperDeps
+	deps   *deps.OperDeps
 	logger *slog.Logger
 }
 
 
 
-func NewSetUserAttributeHandler(deps *handlers.OperDeps) handlers.OperHandler {
+func NewSetUserAttributeHandler(deps *deps.OperDeps) oper.OperHandler {
 	return &SetUserAttributeHandler{
 		deps:   deps,
 		logger: logger.Component(local.Namespace + ".oper"),

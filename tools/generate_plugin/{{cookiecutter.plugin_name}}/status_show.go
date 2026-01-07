@@ -3,18 +3,19 @@ package {{cookiecutter.plugin_name}}
 import (
 	"context"
 
-	"github.com/veesix-networks/osvbng/pkg/show/handlers"
-	"github.com/veesix-networks/osvbng/pkg/show/paths"
+	"github.com/veesix-networks/osvbng/pkg/deps"
+	"github.com/veesix-networks/osvbng/pkg/handlers/show"
+	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
 	"github.com/veesix-networks/osvbng/pkg/state"
 )
 
 func init() {
-	handlers.RegisterFactory(NewStatusHandler)
+	show.RegisterFactory(NewStatusHandler)
 	state.RegisterMetric(StateStatusPath, ShowStatusPath)
 }
 
 type StatusHandler struct {
-	deps *handlers.ShowDeps
+	deps *deps.ShowDeps
 }
 
 type Status struct {
@@ -22,11 +23,11 @@ type Status struct {
 	Enabled bool   `json:"enabled"`
 }
 
-func NewStatusHandler(deps *handlers.ShowDeps) handlers.ShowHandler {
+func NewStatusHandler(deps *deps.ShowDeps) show.ShowHandler {
 	return &StatusHandler{deps: deps}
 }
 
-func (h *StatusHandler) Collect(ctx context.Context, req *handlers.ShowRequest) (interface{}, error) {
+func (h *StatusHandler) Collect(ctx context.Context, req *show.Request) (interface{}, error) {
 	message := "Hello from {{cookiecutter.plugin_name}}!"
 	enabled := false
 

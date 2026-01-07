@@ -4,19 +4,20 @@ import (
 	"context"
 
 	"github.com/veesix-networks/osvbng/pkg/component"
-	"github.com/veesix-networks/osvbng/pkg/show/handlers"
-	"github.com/veesix-networks/osvbng/pkg/show/paths"
+	"github.com/veesix-networks/osvbng/pkg/deps"
+	"github.com/veesix-networks/osvbng/pkg/handlers/show"
+	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
 )
 
 func init() {
-	handlers.RegisterFactory(NewStatusHandler)
+	show.RegisterFactory(NewStatusHandler)
 }
 
 type StatusHandler struct {
 	pluginComponents map[string]component.Component
 }
 
-func NewStatusHandler(deps *handlers.ShowDeps) handlers.ShowHandler {
+func NewStatusHandler(deps *deps.ShowDeps) show.ShowHandler {
 	return &StatusHandler{
 		pluginComponents: deps.PluginComponents,
 	}
@@ -40,7 +41,7 @@ type PrometheusComponent interface {
 	GetStatus() *Status
 }
 
-func (h *StatusHandler) Collect(ctx context.Context, req *handlers.ShowRequest) (interface{}, error) {
+func (h *StatusHandler) Collect(ctx context.Context, req *show.Request) (interface{}, error) {
 	comp := h.pluginComponents["exporter.prometheus"]
 	if comp == nil {
 		return &Status{

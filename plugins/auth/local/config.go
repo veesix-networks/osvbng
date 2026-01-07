@@ -2,7 +2,7 @@ package local
 
 import (
 	"github.com/veesix-networks/osvbng/pkg/auth"
-	"github.com/veesix-networks/osvbng/pkg/conf"
+	"github.com/veesix-networks/osvbng/pkg/configmgr"
 )
 
 const Namespace = "subscriber.auth.local"
@@ -12,6 +12,6 @@ type Config struct {
 }
 
 func init() {
-	conf.RegisterPluginConfig(Namespace, Config{})
+	configmgr.RegisterPluginConfig(Namespace, Config{})
 	auth.Register("local", New)
 }

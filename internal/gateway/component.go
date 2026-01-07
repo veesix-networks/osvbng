@@ -10,20 +10,18 @@ import (
 	pb "github.com/veesix-networks/osvbng/api/proto"
 	"github.com/veesix-networks/osvbng/internal/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/component"
-	"github.com/veesix-networks/osvbng/pkg/conf"
-	"github.com/veesix-networks/osvbng/pkg/conf/types"
+	"github.com/veesix-networks/osvbng/pkg/configmgr"
+	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
+	"github.com/veesix-networks/osvbng/pkg/handlers/oper"
+	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
-	"github.com/veesix-networks/osvbng/pkg/oper"
-	operhandlers "github.com/veesix-networks/osvbng/pkg/oper/handlers"
-	"github.com/veesix-networks/osvbng/pkg/show"
-	"github.com/veesix-networks/osvbng/pkg/show/handlers"
-	_ "github.com/veesix-networks/osvbng/pkg/show/handlers/aaa"
-	_ "github.com/veesix-networks/osvbng/pkg/show/handlers/ip"
-	_ "github.com/veesix-networks/osvbng/pkg/show/handlers/protocols/bgp"
-	_ "github.com/veesix-networks/osvbng/pkg/show/handlers/subscriber"
-	_ "github.com/veesix-networks/osvbng/pkg/show/handlers/system"
-	_ "github.com/veesix-networks/osvbng/pkg/show/handlers/vrf"
+	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/aaa"
+	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/ip"
+	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/protocols/bgp"
+	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/subscriber"
+	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/system"
+	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/vrf"
 	"google.golang.org/grpc"
 )
 
@@ -33,14 +31,14 @@ type Component struct {
 
 	logger       *slog.Logger
 	server       *grpc.Server
-	showRegistry *handlers.Registry
-	operRegistry *operhandlers.Registry
+	showRegistry *show.Registry
+	operRegistry *oper.Registry
 	bindAddr     string
 	subscriber   *subscriber.Component
-	configd      *conf.ConfigDaemon
+	configd      *configmgr.ConfigManager
 }
 
-func New(deps component.Dependencies, showRegistry *handlers.Registry, operRegistry *operhandlers.Registry, subscriberComp *subscriber.Component, configd *conf.ConfigDaemon, bindAddr string) (component.Component, error) {
+func New(deps component.Dependencies, showRegistry *show.Registry, operRegistry *oper.Registry, subscriberComp *subscriber.Component, configd *configmgr.ConfigManager, bindAddr string) (component.Component, error) {
 	return &Component{
 		Base:         component.NewBase("gateway"),
 		logger:       logger.Component(logger.ComponentGateway),
