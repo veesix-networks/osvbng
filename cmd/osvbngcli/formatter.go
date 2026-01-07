@@ -182,6 +182,13 @@ func (f *GenericFormatter) formatTable(v reflect.Value) (string, error) {
 	}
 
 	if first.Kind() != reflect.Struct {
+		if first.Kind() == reflect.String {
+			firstStr := first.Interface().(string)
+			if strings.Contains(firstStr, ":") {
+				return f.formatPathHierarchy(v)
+			}
+		}
+
 		var sb strings.Builder
 		for i := 0; i < v.Len(); i++ {
 			sb.WriteString(fmt.Sprintf("%v\n", v.Index(i).Interface()))
@@ -419,5 +426,60 @@ func (f *GenericFormatter) formatTree(data interface{}, indent int) (string, err
 		sb.WriteString(fmt.Sprintf("%s%v\n", prefix, v.Interface()))
 	}
 
+	return sb.String(), nil
+}
+
+func (f *GenericFormatter) formatPathHierarchy(v reflect.Value) (string, error) {
+	paths := make([]string, v.Len())
+	for i := 0; i < v.Len(); i++ {
+		paths[i] = fmt.Sprintf("%v", v.Index(i).Interface())
+	}
+
+	sortPaths := func(a, b string) bool {
+		aParts := strings.Split(a, ":")
+		bParts := strings.Split(b, ":")
+
+		minLen := len(aParts)
+		if len(bParts) < minLen {
+			minLen = len(bParts)
+		}
+
+		for i := 0; i < minLen; i++ {
+			if aParts[i] != bParts[i] {
+				return aParts[i] < bParts[i]
+			}
+		}
+		return len(aParts) < len(bParts)
+	}
+
+	for i := 0; i < len(paths)-1; i++ {
+		for j := i + 1; j < len(paths); j++ {
+			if !sortPaths(paths[i], paths[j]) {
+				paths[i], paths[j] = paths[j], paths[i]
+			}
+		}
+	}
+
+	var sb strings.Builder
+	var prevParts []string
+
+	for _, path := range paths {
+		parts := strings.Split(path, ":")
+
+		commonPrefix := 0
+		for i := 0; i < len(prevParts) && i < len(parts); i++ {
+			if prevParts[i] == parts[i] {
+				commonPrefix++
+			} else {
+				break
+			}
+		}
+
+		remaining := strings.Join(parts[commonPrefix:], ":")
+		indent := strings.Repeat("  ", commonPrefix)
+		sb.WriteString(fmt.Sprintf("%s%s\n", indent, remaining))
+
+		prevParts = parts
+	}
 	return sb.String(), nil
 }

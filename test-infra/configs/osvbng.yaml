@@ -131,9 +131,14 @@ monitoring:
     # - example.hello.status
 
 plugins:
+  subscriber.auth.local:
+    database_path: /tmp/osvbng.db
   exporter.prometheus:
     enabled: true
     listen_address: ":9090"
+  northbound.api:
+    enabled: true
+    listen_address: ":8080"
   example.hello:
     enabled: true
     message: "This message is displayed via a `show` handler. It can be changed with a `conf` handler and will persist after a config commit."

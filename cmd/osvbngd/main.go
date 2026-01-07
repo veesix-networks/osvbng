@@ -28,7 +28,9 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/dhcp4"
 	"github.com/veesix-networks/osvbng/pkg/events/local"
 	"github.com/veesix-networks/osvbng/pkg/logger"
+	"github.com/veesix-networks/osvbng/pkg/northbound"
 	"github.com/veesix-networks/osvbng/pkg/operations"
+	operhandlers "github.com/veesix-networks/osvbng/pkg/oper/handlers"
 	"github.com/veesix-networks/osvbng/pkg/show/handlers"
 	_ "github.com/veesix-networks/osvbng/pkg/show/handlers/all"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
@@ -153,16 +155,7 @@ func main() {
 		authProviderName = "local"
 	}
 
-	authFactory, ok := auth.Get(authProviderName)
-	if !ok {
-		log.Fatalf("Auth provider '%s' not found. Available providers: %v", authProviderName, auth.List())
-	}
-
-	authProviderCfg := make(map[string]string)
-	authProviderCfg["nas_identifier"] = cfg.AAA.NASIdentifier
-	authProviderCfg["nas_ip"] = cfg.AAA.NASIP
-
-	authProvider, err := authFactory(authProviderCfg)
+	authProvider, err := auth.New(authProviderName)
 	if err != nil {
 		log.Fatalf("Failed to create auth provider '%s': %v", authProviderName, err)
 	}
@@ -218,12 +211,13 @@ func main() {
 	}
 
 	showRegistry := handlers.NewRegistry()
+	operRegistry := operhandlers.NewRegistry()
 
 	gatewayAddr := "0.0.0.0:50050"
 	if cfg.API.Address != "" {
 		gatewayAddr = cfg.API.Address
 	}
-	gatewayComp, err := gateway.New(deps, showRegistry, subscriberComp.(*subscriber.Component), configd, gatewayAddr)
+	gatewayComp, err := gateway.New(deps, showRegistry, operRegistry, subscriberComp.(*subscriber.Component), configd, gatewayAddr)
 	if err != nil {
 		log.Fatalf("Failed to create gateway component: %v", err)
 	}
@@ -286,6 +280,17 @@ func main() {
 		Cache:            cache,
 		PluginComponents: pluginComponentsMap,
 	})
+
+	operRegistry.AutoRegisterAll(&operhandlers.OperDeps{
+		PluginComponents: pluginComponentsMap,
+	})
+
+	if apiComp, ok := pluginComponentsMap["northbound.api"]; ok {
+		if apiPlugin, ok := apiComp.(interface{ SetRegistries(*northbound.Adapter) }); ok {
+			adapter := northbound.NewAdapter(showRegistry, configd.GetRegistry(), operRegistry)
+			apiPlugin.SetRegistries(adapter)
+		}
+	}
 
 	ctx := context.Background()
 	if err := orch.Start(ctx); err != nil {

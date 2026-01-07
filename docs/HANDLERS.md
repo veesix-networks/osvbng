@@ -4,10 +4,11 @@ Handlers are the mechanism that connects osvbng's configuration and show systems
 
 ## What are Handlers?
 
-When a user runs a command like `set interfaces eth0 enabled true` or `show subscriber sessions`, a handler performs the actual work:
+When a user runs a command like `set interfaces eth0 enabled true`, `show subscriber sessions`, or `exec subscriber auth local user create`, a handler performs the actual work:
 
 - **Config Handlers** - Validate and apply configuration changes to running components
 - **Show Handlers** - Collect and display current system state
+- **Oper Handlers** - Execute operations that modify external state (databases, files, etc.)
 
 Handlers are registered by both core components and plugins, allowing the system to be extended without modifying the core CLI or configuration infrastructure.
 
@@ -69,6 +70,28 @@ User: show subscriber sessions
   → CLI formats and displays
 ```
 
+### Oper Handlers
+
+Oper handlers execute operational commands that modify external state like databases or files.
+
+**Execution Phase**
+When a user runs `exec subscriber auth local user create <username> <password>`:
+- Handler receives request with JSON body containing parameters
+- Handler validates input and executes operation
+- Handler modifies external state (database, file system, etc.)
+- Handler returns result to user
+
+Unlike config handlers, oper handlers:
+- Execute immediately without validation/commit phases
+- Operate on external state (databases, files) not runtime component state
+- Cannot be rolled back automatically
+- Are typically used for CRUD operations on persistent data
+
+**Example Use Cases:**
+- Creating/deleting users in authentication database
+- Managing service assignments and attributes
+- Administrative operations that don't fit the config model
+
 ## Handler Architecture
 
 ### Path-Based Routing
@@ -84,6 +107,11 @@ Handlers register for specific configuration or show paths:
 - `subscriber.sessions` - Shows subscriber sessions
 - `interfaces.statistics` - Shows interface statistics
 - `example.hello.status` - Shows plugin status
+
+**Oper Path Examples:**
+- `subscriber.auth.local.users.create` - Creates a new user
+- `subscriber.auth.local.user.*.delete` - Deletes a user by ID
+- `subscriber.auth.local.user.*.password` - Sets user password
 
 When a user runs a command, the system:
 1. Translates command to path
@@ -235,6 +263,28 @@ Queries components and returns structured data representing current state.
 **Dependencies()**
 Declares which other show handlers must run first (rarely used).
 
+## Oper Handler Lifecycle
+
+An oper command flows through these steps:
+
+1. User runs 'exec' command with arguments
+2. CLI parses arguments and converts to JSON body
+3. System matches path to handler using PathPattern
+4. Handler Execute() method performs operation on external state
+5. Handler returns result (success/error message)
+6. CLI displays result to user
+
+### Key Methods
+
+**PathPattern()**
+Declares which oper path this handler executes.
+
+**Execute()**
+Performs the operation, typically modifying external state like databases or files. Returns structured result.
+
+**Dependencies()**
+Declares which other oper handlers must run first (rarely used).
+
 ## Handler Integration with Components
 
 Handlers connect the configuration system to component runtime state:
@@ -257,10 +307,13 @@ User: show example hello status
     → Returns current state to user
 ```
 
+**Oper Handler → External State:**
+Oper handlers typically work with external state rather than components. For example, the local auth plugin uses oper handlers to manage users in a SQLite database. The handler gets a database connection and executes SQL operations directly.
+
 This separation of concerns means:
 - Components focus on business logic
-- Handlers focus on configuration translation
-- Configuration system stays generic
+- Handlers focus on configuration/operation translation
+- Configuration/oper systems stay generic
 
 ## FRR Callbacks
 
@@ -278,7 +331,7 @@ This ensures routing configuration stays consistent with interface and VRF confi
 
 ## Plugin Handlers
 
-Plugins contribute their own handlers to extend the configuration and show systems:
+Plugins contribute their own handlers to extend the configuration, show, and oper systems:
 
 **Plugin Config Handler:**
 - Handles `plugins.example.hello.message` path
@@ -289,6 +342,11 @@ Plugins contribute their own handlers to extend the configuration and show syste
 - Handles `example.hello.status` path
 - Displays plugin runtime state
 
+**Plugin Oper Handler:**
+- Handles `subscriber.auth.local.users.create` path
+- Executes operations on plugin-managed external state
+- Returns operation results
+
 Plugins use the same handler infrastructure as core components - no special treatment needed.
 
 ## Implementation Details
@@ -296,7 +354,8 @@ Plugins use the same handler infrastructure as core components - no special trea
 For detailed implementation guidance, see:
 - Example config handler: `plugins/community/hello/conf/message.go`
 - Example show handler: `plugins/community/hello/show/status.go`
-- Core handlers: `pkg/conf/handlers/` and `pkg/show/handlers/`
+- Example oper handler: `plugins/auth/local/oper/user/create.go`
+- Core handlers: `pkg/conf/handlers/`, `pkg/show/handlers/`, and `pkg/oper/handlers/`
 
 ## Related Documentation
 

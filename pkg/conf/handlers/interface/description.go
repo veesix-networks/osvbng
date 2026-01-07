@@ -56,7 +56,7 @@ func (h *DescriptionHandler) PathPattern() paths.Path {
 }
 
 func (h *DescriptionHandler) Dependencies() []paths.Path {
-	return []paths.Path{"interfaces.*"}
+	return []paths.Path{paths.Interface}
 }
 
 func (h *DescriptionHandler) Callbacks() *handlers.Callbacks {

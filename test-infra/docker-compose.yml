@@ -50,6 +50,7 @@ services:
     ports:
       - 50050:50050
       - 9090:9090
+      - 8080:8080
 
 volumes:
   vpp-logs:

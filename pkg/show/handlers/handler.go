@@ -96,6 +96,14 @@ func (r *Registry) GetHandler(path string) (show.Handler, error) {
 	return nil, fmt.Errorf("no handler registered for path: %s", path)
 }
 
+func (r *Registry) GetAllPaths() []paths.Path {
+	allPaths := make([]paths.Path, 0, len(r.handlers))
+	for _, handler := range r.handlers {
+		allPaths = append(allPaths, handler.PathPattern())
+	}
+	return allPaths
+}
+
 type handlerAdapter struct {
 	h ShowHandler
 }

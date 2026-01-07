@@ -23,14 +23,14 @@ type RouteHandler struct {
 func NewIPv4RouteHandler(daemons *handlers.ConfDeps) handlers.Handler {
 	return &RouteHandler{
 		dataplane:   daemons.Dataplane,
-		pathPattern: "protocols.static.ipv4.*",
+		pathPattern: paths.ProtocolsStaticIPv4Route,
 	}
 }
 
 func NewIPv6RouteHandler(daemons *handlers.ConfDeps) handlers.Handler {
 	return &RouteHandler{
 		dataplane:   daemons.Dataplane,
-		pathPattern: "protocols.static.ipv6.*",
+		pathPattern: paths.ProtocolsStaticIPv6Route,
 	}
 }
 

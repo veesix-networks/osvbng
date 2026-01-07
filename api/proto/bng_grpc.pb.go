@@ -24,6 +24,7 @@ const (
 	BNGService_GetStats_FullMethodName            = "/openbng.v1.BNGService/GetStats"
 	BNGService_TerminateSession_FullMethodName    = "/openbng.v1.BNGService/TerminateSession"
 	BNGService_GetOperationalStats_FullMethodName = "/openbng.v1.BNGService/GetOperationalStats"
+	BNGService_ExecuteOperation_FullMethodName    = "/openbng.v1.BNGService/ExecuteOperation"
 	BNGService_GetRunningConfig_FullMethodName    = "/openbng.v1.BNGService/GetRunningConfig"
 	BNGService_GetStartupConfig_FullMethodName    = "/openbng.v1.BNGService/GetStartupConfig"
 	BNGService_ListVersions_FullMethodName        = "/openbng.v1.BNGService/ListVersions"
@@ -46,6 +47,8 @@ type BNGServiceClient interface {
 	TerminateSession(ctx context.Context, in *TerminateSessionRequest, opts ...grpc.CallOption) (*TerminateSessionResponse, error)
 	// Show operational data (generic handler-based)
 	GetOperationalStats(ctx context.Context, in *GetOperationalStatsRequest, opts ...grpc.CallOption) (*GetOperationalStatsResponse, error)
+	// Operational commands (generic handler-based)
+	ExecuteOperation(ctx context.Context, in *ExecuteOperationRequest, opts ...grpc.CallOption) (*ExecuteOperationResponse, error)
 	// Configuration management
 	GetRunningConfig(ctx context.Context, in *GetRunningConfigRequest, opts ...grpc.CallOption) (*ConfigResponse, error)
 	GetStartupConfig(ctx context.Context, in *GetStartupConfigRequest, opts ...grpc.CallOption) (*ConfigResponse, error)
@@ -110,6 +113,16 @@ func (c *bNGServiceClient) GetOperationalStats(ctx context.Context, in *GetOpera
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetOperationalStatsResponse)
 	err := c.cc.Invoke(ctx, BNGService_GetOperationalStats_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *bNGServiceClient) ExecuteOperation(ctx context.Context, in *ExecuteOperationRequest, opts ...grpc.CallOption) (*ExecuteOperationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExecuteOperationResponse)
+	err := c.cc.Invoke(ctx, BNGService_ExecuteOperation_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -217,6 +230,8 @@ type BNGServiceServer interface {
 	TerminateSession(context.Context, *TerminateSessionRequest) (*TerminateSessionResponse, error)
 	// Show operational data (generic handler-based)
 	GetOperationalStats(context.Context, *GetOperationalStatsRequest) (*GetOperationalStatsResponse, error)
+	// Operational commands (generic handler-based)
+	ExecuteOperation(context.Context, *ExecuteOperationRequest) (*ExecuteOperationResponse, error)
 	// Configuration management
 	GetRunningConfig(context.Context, *GetRunningConfigRequest) (*ConfigResponse, error)
 	GetStartupConfig(context.Context, *GetStartupConfigRequest) (*ConfigResponse, error)
@@ -251,6 +266,9 @@ func (UnimplementedBNGServiceServer) TerminateSession(context.Context, *Terminat
 }
 func (UnimplementedBNGServiceServer) GetOperationalStats(context.Context, *GetOperationalStatsRequest) (*GetOperationalStatsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetOperationalStats not implemented")
+}
+func (UnimplementedBNGServiceServer) ExecuteOperation(context.Context, *ExecuteOperationRequest) (*ExecuteOperationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ExecuteOperation not implemented")
 }
 func (UnimplementedBNGServiceServer) GetRunningConfig(context.Context, *GetRunningConfigRequest) (*ConfigResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetRunningConfig not implemented")
@@ -386,6 +404,24 @@ func _BNGService_GetOperationalStats_Handler(srv interface{}, ctx context.Contex
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(BNGServiceServer).GetOperationalStats(ctx, req.(*GetOperationalStatsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BNGService_ExecuteOperation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExecuteOperationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BNGServiceServer).ExecuteOperation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BNGService_ExecuteOperation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BNGServiceServer).ExecuteOperation(ctx, req.(*ExecuteOperationRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -578,6 +614,10 @@ var BNGService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetOperationalStats",
 			Handler:    _BNGService_GetOperationalStats_Handler,
+		},
+		{
+			MethodName: "ExecuteOperation",
+			Handler:    _BNGService_ExecuteOperation_Handler,
 		},
 		{
 			MethodName: "GetRunningConfig",

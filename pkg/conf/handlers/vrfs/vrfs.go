@@ -45,7 +45,7 @@ func (h *VRFHandler) Rollback(ctx context.Context, hctx *handlers.HandlerContext
 }
 
 func (h *VRFHandler) PathPattern() paths.Path {
-	return "vrfs.*"
+	return paths.VRFS
 }
 
 func (h *VRFHandler) Dependencies() []paths.Path {
