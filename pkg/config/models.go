@@ -29,14 +29,10 @@ type Logging struct {
 
 type Dataplane struct {
 	AccessInterface   string `yaml:"access_interface"`
-	CoreInterface     string `yaml:"core_interface"`
-	CPEgressInterface string `yaml:"cp_egress_interface,omitempty"`
-	VPPAPISocket      string `yaml:"vpp_api_socket,omitempty"`
-	LinuxInterface    string `yaml:"linux_interface,omitempty"`
+	DPAPISocket       string `yaml:"dp_api_socket,omitempty"`
 	PuntSocketPath    string `yaml:"punt_socket_path,omitempty"`
 	ARPPuntSocketPath string `yaml:"arp_punt_socket_path,omitempty"`
 	MemifSocketPath   string `yaml:"memif_socket_path,omitempty"`
-	GatewayMAC        string `yaml:"gateway_mac,omitempty"`
 }
 
 type Redis struct {

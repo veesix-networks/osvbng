@@ -29,7 +29,7 @@ func NewMemifEgress() *MemifEgress {
 
 func (m *MemifEgress) Init(socketPath string) error {
 	if socketPath == "" {
-		socketPath = "/run/vpp/memif.sock"
+		socketPath = "/run/osvbng/memif.sock"
 	}
 
 	socket, err := memif.NewSocket("osvbng", socketPath)

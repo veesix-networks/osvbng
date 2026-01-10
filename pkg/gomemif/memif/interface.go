@@ -42,7 +42,7 @@ import (
 )
 
 const (
-	DefaultSocketFilename   = "/run/vpp/memif.sock"
+	DefaultSocketFilename   = "/run/osvbng/memif.sock"
 	DefaultNumQueuePairs    = 1
 	DefaultLog2RingSize     = 10
 	DefaultPacketBufferSize = 2048

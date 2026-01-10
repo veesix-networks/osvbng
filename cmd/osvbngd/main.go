@@ -51,11 +51,16 @@ func main() {
 	logger.Configure(cfg.Logging.Format, cfg.Logging.Level, cfg.Logging.Components)
 
 	mainLog := logger.Component(logger.ComponentMain)
-	mainLog.Info("Starting osvbng", "bng_id", cfg.Redundancy.BNGID)
 
-	apiSocket := cfg.Dataplane.VPPAPISocket
+	bngID := cfg.Redundancy.BNGID
+	if bngID == "" {
+		bngID = "osvbng"
+	}
+	mainLog.Info("Starting osvbng", "bng_id", bngID)
+
+	apiSocket := cfg.Dataplane.DPAPISocket
 	if apiSocket == "" {
-		apiSocket = "/run/vpp/api.sock"
+		apiSocket = "/run/osvbng/dataplane_api.sock"
 	}
 
 	vppConn, err := govpp.Connect(apiSocket)
@@ -80,9 +85,14 @@ func main() {
 
 	mainLog.Info("Applying startup configuration")
 	if err := configd.ApplyStartupConfig(*configPath); err != nil {
-		log.Fatalf("Failed to apply startup config: %v", err)
+		if err.Error() == "failed to commit: no changes to commit" {
+			mainLog.Info("No startup configuration changes to apply")
+		} else {
+			log.Fatalf("Failed to apply startup config: %v", err)
+		}
+	} else {
+		mainLog.Info("Startup configuration applied")
 	}
-	mainLog.Info("Startup configuration applied")
 
 	vpp, err := southbound.NewVPP(southbound.VPPConfig{
 		Connection:      vppConn,
@@ -95,20 +105,15 @@ func main() {
 	mainLog.Info("Waiting for VPP LCP to sync interfaces...")
 	time.Sleep(5 * time.Second)
 
-	if err := vpp.SetupMemifDataplane(0, cfg.Dataplane.AccessInterface); err != nil {
+	if err := vpp.SetupMemifDataplane(0, cfg.Dataplane.AccessInterface, cfg.Dataplane.MemifSocketPath); err != nil {
 		log.Fatalf("Failed to setup memif dataplane: %v", err)
 	}
 	mainLog.Info("Memif dataplane configured")
 
-	if err := vpp.SetVirtualMAC(cfg.Redundancy.VirtualMAC); err != nil {
-		log.Fatalf("Failed to set virtual MAC: %v", err)
-	}
-
-	if cfg.Dataplane.CPEgressInterface != "" {
-		if err := vpp.SetupCPEgressInterface(cfg.Dataplane.CPEgressInterface, cfg.Dataplane.AccessInterface); err != nil {
-			log.Fatalf("Failed to setup CP egress interface: %v", err)
+	if cfg.Redundancy.VirtualMAC != "" {
+		if err := vpp.SetVirtualMAC(cfg.Redundancy.VirtualMAC); err != nil {
+			log.Fatalf("Failed to set virtual MAC: %v", err)
 		}
-		mainLog.Info("CP egress interface configured", "interface", cfg.Dataplane.CPEgressInterface)
 	}
 
 	// VPP blackholes 255.255.255.255/32 as per default FIB implementation, this is a temp workaround for now, there are many better solutions but require more time
@@ -125,7 +130,7 @@ func main() {
 
 	socketPath := cfg.Dataplane.PuntSocketPath
 	if socketPath == "" {
-		socketPath = "/run/vpp/osvbng-punt.sock"
+		socketPath = "/run/osvbng/osvbng-punt.sock"
 	}
 
 	if err := vpp.RegisterPuntSocket(socketPath, 67, cfg.Dataplane.AccessInterface); err != nil {

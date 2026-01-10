@@ -63,7 +63,7 @@ func (c *Component) execVtysh(args ...string) ([]byte, error) {
 	cmd := exec.Command("vtysh", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("vtysh command failed: %w, output: %s", err, output)
+		return nil, fmt.Errorf("routing CP api call failed: %w, output: %s", err, output)
 	}
 
 	var warning struct {

@@ -13,7 +13,7 @@ import (
 
 const (
 	DefaultTemplateDir = "/usr/share/osvbng/templates"
-	DefaultConfigPath  = "/etc/frr/frr.conf"
+	DefaultConfigPath  = "/etc/osvbng/routing.conf"
 	DefaultReloadCmd   = "/usr/lib/frr/frr-reload.py"
 )
 
@@ -83,7 +83,7 @@ func (c *Config) GetRunningConfig() (string, error) {
 	cmd := exec.Command("vtysh", "-c", "show running-config")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("vtysh show running-config failed: %w\nOutput: %s", err, string(output))
+		return "", fmt.Errorf("failed to obtain routing CP configuration: %w\nOutput: %s", err, string(output))
 	}
 
 	return string(output), nil

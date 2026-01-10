@@ -112,20 +112,12 @@ func (d *VPPDataplane) SetInterfaceMTU(name string, mtu int) error {
 }
 
 func (d *VPPDataplane) SetInterfaceEnabled(name string, enabled bool) error {
-	hostIfName := "host-" + name
-	vppIfName := ""
-
-	_, err := d.getInterfaceIndex(hostIfName)
-	if err == nil {
-		vppIfName = hostIfName
-	} else {
-		_, err = d.getInterfaceIndex(name)
-		if err == nil {
-			vppIfName = name
-		} else {
-			return fmt.Errorf("VPP interface %s not found", name)
-		}
+	_, err := d.getInterfaceIndex(name)
+	if err != nil {
+		return fmt.Errorf("VPP interface %s not found", name)
 	}
+
+	vppIfName := name
 
 	return d.setInterfaceState(vppIfName, enabled)
 }
@@ -292,7 +284,7 @@ func (d *VPPDataplane) createVPPHostInterface(linuxIface string) (string, error)
 		return "", fmt.Errorf("create host-interface failed: retval=%d", afReply.Retval)
 	}
 
-	vppIfName := "host-" + linuxIface
+	vppIfName := linuxIface
 	d.ifaceCache[vppIfName] = afReply.SwIfIndex
 
 	rxModeReq := &vppinterfaces.SwInterfaceSetRxMode{

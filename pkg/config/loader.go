@@ -30,18 +30,6 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("dataplane.access_interface is required")
 	}
 
-	if c.Dataplane.CoreInterface == "" {
-		return fmt.Errorf("dataplane.core_interface is required")
-	}
-
-	if c.Redundancy.VirtualMAC == "" {
-		return fmt.Errorf("redundancy.virtual_mac is required")
-	}
-
-	if c.Redundancy.BNGID == "" {
-		return fmt.Errorf("redundancy.bng_id is required")
-	}
-
 	for i, vlanRange := range c.SubscriberGroup.VLANs {
 		if _, err := vlanRange.GetSVLANs(); err != nil {
 			return fmt.Errorf("subscriber_group.vlans[%d].svlan: %w", i, err)
@@ -69,22 +57,6 @@ func (c *Config) Validate() error {
 					return fmt.Errorf("subscriber_group.vlans[%d].aaa.radius references unknown radius group '%s'", i, vlanRange.AAA.RADIUS)
 				}
 			}
-		}
-	}
-
-	if c.DHCP.Provider == "" || c.DHCP.Provider == "relay" {
-		if c.DHCP.DefaultServer == "" {
-			return fmt.Errorf("dhcp.default_server is required for relay provider")
-		}
-
-		if c.DHCP.GetServer(c.DHCP.DefaultServer) == nil {
-			return fmt.Errorf("dhcp.default_server references unknown server '%s'", c.DHCP.DefaultServer)
-		}
-	}
-
-	if c.DHCP.Provider == "local" {
-		if len(c.DHCP.Pools) == 0 {
-			return fmt.Errorf("dhcp.pools is required for local provider")
 		}
 	}
 
