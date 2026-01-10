@@ -1,5 +1,5 @@
 dataplane:
-  access_interface: eth0
+  access_interface: host-eth0
   dp_api_socket: /run/osvbng/dataplane_api.sock
   punt_socket_path: /run/osvbng/osvbng-punt.sock
   memif_socket_path: /run/osvbng/memif.sock
@@ -60,7 +60,7 @@ aaa:
   nas_identifier: "osvbng"
   policy:
     - name: dhcp-policy-a
-      format: "$remote-id$.$circuit-id$.S$svlan$.$mac-address$"
+      format: "$remote-id$"
       type: dhcp
 
 logging:
