@@ -109,6 +109,14 @@ func (sg *SubscriberGroup) FindVLANConfig(svlan uint16) *VLANRange {
 	return nil
 }
 
+func (sg *SubscriberGroup) GetPolicyName(svlan uint16) string {
+	vlanCfg := sg.FindVLANConfig(svlan)
+	if vlanCfg != nil && vlanCfg.AAA != nil && vlanCfg.AAA.Policy != "" {
+		return vlanCfg.AAA.Policy
+	}
+	return sg.DefaultPolicy
+}
+
 type VLANAAAs struct {
 	Enabled bool   `yaml:"enabled"`
 	RADIUS  string `yaml:"radius"`

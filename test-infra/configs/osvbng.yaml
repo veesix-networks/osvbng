@@ -60,7 +60,7 @@ aaa:
   nas_identifier: "osvbng"
   policy:
     - name: dhcp-policy-a
-      format: "$remote-id$"
+      format: "$remote-id$.$circuit-id$.S$svlan$.$mac-address$"
       type: dhcp
 
 logging:

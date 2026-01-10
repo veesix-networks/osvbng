@@ -368,12 +368,29 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 
 	c.logger.Info("Session discovering", "session_id", sess.SessionID, "circuit_id", string(circuitID), "remote_id", string(remoteID))
 
-	c.logger.Info("Publishing AAA request for DISCOVER", "session_id", sess.SessionID)
+	username := pkt.MAC.String()
+	if policyName := c.config.SubscriberGroup.GetPolicyName(pkt.OuterVLAN); policyName != "" {
+		if policy := c.config.AAA.GetPolicy(policyName); policy != nil {
+			ctx := &config.PolicyContext{
+				MACAddress: pkt.MAC,
+				SVLAN:      pkt.OuterVLAN,
+				CVLAN:      pkt.InnerVLAN,
+				NASPort:    uint32(pkt.OuterVLAN),
+				RemoteID:   string(remoteID),
+				CircuitID:  string(circuitID),
+				Hostname:   hostname,
+			}
+			username = policy.ExpandFormat(ctx)
+			c.logger.Debug("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
+		}
+	}
+
+	c.logger.Info("Publishing AAA request for DISCOVER", "session_id", sess.SessionID, "username", username)
 	requestID := uuid.New().String()
 
 	aaaPayload := &models.AAARequest{
 		RequestID:     requestID,
-		Username:      hostname,
+		Username:      username,
 		MAC:           pkt.MAC.String(),
 		NASIPAddress:  c.config.AAA.NASIP,
 		NASPort:       uint32(pkt.OuterVLAN),
@@ -484,13 +501,31 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 	c.logger.Info("Session requesting, waiting for AAA approval", "session_id", sess.SessionID)
 
 	hostname := string(getDHCPOption(pkt.DHCPv4.Options, layers.DHCPOptHostname))
+	circuitID, remoteID := parseOption82(getDHCPOption(pkt.DHCPv4.Options, 82))
 
-	c.logger.Info("Publishing AAA request", "session_id", sess.SessionID)
+	username := pkt.MAC.String()
+	if policyName := c.config.SubscriberGroup.GetPolicyName(pkt.OuterVLAN); policyName != "" {
+		if policy := c.config.AAA.GetPolicy(policyName); policy != nil {
+			ctx := &config.PolicyContext{
+				MACAddress: pkt.MAC,
+				SVLAN:      pkt.OuterVLAN,
+				CVLAN:      pkt.InnerVLAN,
+				NASPort:    uint32(pkt.OuterVLAN),
+				RemoteID:   string(remoteID),
+				CircuitID:  string(circuitID),
+				Hostname:   hostname,
+			}
+			username = policy.ExpandFormat(ctx)
+			c.logger.Debug("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
+		}
+	}
+
+	c.logger.Info("Publishing AAA request", "session_id", sess.SessionID, "username", username)
 	requestID := uuid.New().String()
 
 	aaaPayload := &models.AAARequest{
 		RequestID:     requestID,
-		Username:      hostname,
+		Username:      username,
 		MAC:           pkt.MAC.String(),
 		NASIPAddress:  c.config.AAA.NASIP,
 		NASPort:       uint32(pkt.OuterVLAN),
