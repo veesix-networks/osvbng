@@ -44,10 +44,15 @@ type MemifHandler struct {
 	wg         sync.WaitGroup
 }
 
-func NewMemifHandler(gatewayMAC string, arpHandler ARPHandler) (*MemifHandler, error) {
-	gwMAC, err := net.ParseMAC(gatewayMAC)
-	if err != nil {
-		return nil, fmt.Errorf("parse gateway MAC: %w", err)
+func NewMemifHandler(virtualMAC string, arpHandler ARPHandler) (*MemifHandler, error) {
+	var gwMAC net.HardwareAddr
+	var err error
+
+	if virtualMAC != "" {
+		gwMAC, err = net.ParseMAC(virtualMAC)
+		if err != nil {
+			return nil, fmt.Errorf("parse virtual MAC: %w", err)
+		}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -63,7 +68,7 @@ func NewMemifHandler(gatewayMAC string, arpHandler ARPHandler) (*MemifHandler, e
 
 func (m *MemifHandler) Init(socketPath string) error {
 	if socketPath == "" {
-		socketPath = "/run/vpp/memif.sock"
+		socketPath = "/run/osvbng/memif.sock"
 	}
 
 	socket, err := memif.NewSocket("osvbng", socketPath)

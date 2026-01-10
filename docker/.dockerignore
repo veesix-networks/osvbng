@@ -1,0 +1,41 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Build artifacts
+bin/
+*.o
+*.a
+*.so
+osvbngd
+
+# Testing
+*.test
+coverage.*
+
+# Documentation
+*.md
+docs/
+
+# Dev containers
+.devcontainer/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Logs
+*.log

@@ -176,10 +176,7 @@ func (v *VPP) resolveParentInterface() error {
 	}
 	defer ch.Close()
 
-	req := &interfaces.SwInterfaceDump{
-		NameFilterValid: true,
-		NameFilter:      v.parentIface,
-	}
+	req := &interfaces.SwInterfaceDump{}
 
 	reqCtx := ch.SendMultiRequest(req)
 	for {
@@ -192,7 +189,8 @@ func (v *VPP) resolveParentInterface() error {
 			break
 		}
 
-		if msg.InterfaceName == v.parentIface {
+		// Match exact name or with "host-" prefix (linux_nl plugin adds this automatically for AF_PACKET and XDP interfaces, DPDK we don't care)
+		if msg.InterfaceName == v.parentIface || msg.InterfaceName == "host-"+v.parentIface {
 			v.parentIfIdx = msg.SwIfIndex
 			v.ifaceCache[v.parentIface] = msg.SwIfIndex
 			return nil
@@ -1783,17 +1781,37 @@ func (v *VPP) CreateLCPPair(vppIface, linuxIface string) error {
 	return nil
 }
 
-func (v *VPP) SetupMemifDataplane(memifID uint32, accessIface string) error {
+func (v *VPP) SetupMemifDataplane(memifID uint32, accessIface string, socketPath string) error {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
 		return fmt.Errorf("create API channel: %w", err)
 	}
 	defer ch.Close()
 
+	if socketPath == "" {
+		socketPath = "/run/osvbng/memif.sock"
+	}
+	socketID := uint32(1)
+
+	socketReq := &memif.MemifSocketFilenameAddDelV2{
+		IsAdd:          true,
+		SocketID:       socketID,
+		SocketFilename: socketPath,
+	}
+	socketReply := &memif.MemifSocketFilenameAddDelV2Reply{}
+	if err := ch.SendRequest(socketReq).ReceiveReply(socketReply); err != nil {
+		return fmt.Errorf("create memif socket: %w", err)
+	}
+	if socketReply.Retval != 0 {
+		return fmt.Errorf("create memif socket failed: retval=%d", socketReply.Retval)
+	}
+	v.logger.Info("Created memif socket", "path", socketPath, "socket_id", socketID)
+
 	memifReq := &memif.MemifCreateV2{
-		Role: memif.MEMIF_ROLE_API_MASTER,
-		Mode: memif.MEMIF_MODE_API_ETHERNET,
-		ID:   memifID,
+		Role:     memif.MEMIF_ROLE_API_MASTER,
+		Mode:     memif.MEMIF_MODE_API_ETHERNET,
+		ID:       memifID,
+		SocketID: socketID,
 	}
 
 	memifReply := &memif.MemifCreateV2Reply{}

@@ -32,7 +32,7 @@ type Component struct {
 }
 
 func New(deps component.Dependencies) (component.Component, error) {
-	puntSocketPath := "/run/vpp/osvbng-punt.sock"
+	puntSocketPath := "/run/osvbng/osvbng-punt.sock"
 	if deps.Config != nil && deps.Config.Dataplane.PuntSocketPath != "" {
 		puntSocketPath = deps.Config.Dataplane.PuntSocketPath
 	}
@@ -44,19 +44,26 @@ func New(deps component.Dependencies) (component.Component, error) {
 
 	log := logger.Component(logger.ComponentDataplane)
 
-	memifSocketPath := "/run/vpp/memif.sock"
+	memifSocketPath := "/run/osvbng/memif.sock"
 	if deps.Config != nil && deps.Config.Dataplane.MemifSocketPath != "" {
 		memifSocketPath = deps.Config.Dataplane.MemifSocketPath
-	}
-
-	gatewayMAC := ""
-	if deps.Config != nil {
-		gatewayMAC = deps.Config.Dataplane.GatewayMAC
 	}
 
 	virtualMAC := ""
 	if deps.Config != nil {
 		virtualMAC = deps.Config.Redundancy.VirtualMAC
+	}
+
+	if virtualMAC == "" && deps.Config != nil {
+		accessIface := deps.Config.Dataplane.AccessInterface
+		swIfIndex, err := deps.VPP.GetInterfaceIndex(accessIface)
+		if err == nil {
+			mac, err := deps.VPP.GetInterfaceMAC(uint32(swIfIndex))
+			if err == nil {
+				virtualMAC = mac.String()
+				log.Info("Using access interface MAC for ARP replies", "interface", accessIface, "mac", virtualMAC)
+			}
+		}
 	}
 
 	c := &Component{
@@ -71,7 +78,7 @@ func New(deps component.Dependencies) (component.Component, error) {
 		PPPoEChan:  make(chan *dataplane.ParsedPacket, 1000),
 	}
 
-	memifHandler, err := vpp.NewMemifHandler(gatewayMAC, c.handleARPRequest)
+	memifHandler, err := vpp.NewMemifHandler(virtualMAC, c.handleARPRequest)
 	if err != nil {
 		return nil, fmt.Errorf("create memif handler: %w", err)
 	}

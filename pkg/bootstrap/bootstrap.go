@@ -52,7 +52,7 @@ func (b *Bootstrap) ProvisionInfrastructure() error {
 				return fmt.Errorf("set unnumbered %s to %s: %w", subIfName, vlanRange.Interface, err)
 			}
 
-			if err := b.sb.EnableARPPunt(subIfName, "/run/vpp/arp-punt.sock"); err != nil {
+			if err := b.sb.EnableARPPunt(subIfName, "/run/osvbng/arp-punt.sock"); err != nil {
 				return fmt.Errorf("enable arp punt on %s: %w", subIfName, err)
 			}
 

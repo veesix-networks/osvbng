@@ -39,7 +39,7 @@ type Component struct {
 }
 
 func New(deps component.Dependencies, srgMgr *srg.Manager) (component.Component, error) {
-	socketPath := "/run/vpp/arp-punt.sock"
+	socketPath := "/run/osvbng/arp-punt.sock"
 	if deps.Config != nil && deps.Config.Dataplane.ARPPuntSocketPath != "" {
 		socketPath = deps.Config.Dataplane.ARPPuntSocketPath
 	}
