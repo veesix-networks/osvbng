@@ -22,7 +22,7 @@ jobs:
       - uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
-          token: ${{ secrets.DOCKER_TOKEN }}
+          password: ${{ secrets.DOCKER_TOKEN }}
 
       - uses: docker/metadata-action@v5
         id: meta
