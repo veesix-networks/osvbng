@@ -1804,10 +1804,30 @@ func (v *VPP) SetupMemifDataplane(memifID uint32, accessIface string, socketPath
 	}
 	defer ch.Close()
 
+	if socketPath == "" {
+		socketPath = "/run/osvbng/memif.sock"
+	}
+	socketID := uint32(1)
+
+	socketReq := &memif.MemifSocketFilenameAddDelV2{
+		IsAdd:          true,
+		SocketID:       socketID,
+		SocketFilename: socketPath,
+	}
+	socketReply := &memif.MemifSocketFilenameAddDelV2Reply{}
+	if err := ch.SendRequest(socketReq).ReceiveReply(socketReply); err != nil {
+		return fmt.Errorf("create memif socket: %w", err)
+	}
+	if socketReply.Retval != 0 {
+		return fmt.Errorf("create memif socket failed: retval=%d", socketReply.Retval)
+	}
+	v.logger.Info("Created memif socket", "path", socketPath, "socket_id", socketID)
+
 	memifReq := &memif.MemifCreateV2{
-		Role: memif.MEMIF_ROLE_API_MASTER,
-		Mode: memif.MEMIF_MODE_API_ETHERNET,
-		ID:   memifID,
+		Role:     memif.MEMIF_ROLE_API_MASTER,
+		Mode:     memif.MEMIF_MODE_API_ETHERNET,
+		ID:       memifID,
+		SocketID: socketID,
 	}
 
 	memifReply := &memif.MemifCreateV2Reply{}
@@ -1819,7 +1839,7 @@ func (v *VPP) SetupMemifDataplane(memifID uint32, accessIface string, socketPath
 		return fmt.Errorf("create memif failed: retval=%d", memifReply.Retval)
 	}
 
-	memifName := fmt.Sprintf("memif%d/%d", memifID, memifID)
+	memifName := fmt.Sprintf("memif%d/%d", memifID, socketID)
 	v.ifaceCache[memifName] = memifReply.SwIfIndex
 	v.logger.Info("Created memif interface", "id", memifID, "name", memifName, "sw_if_index", memifReply.SwIfIndex)
 
