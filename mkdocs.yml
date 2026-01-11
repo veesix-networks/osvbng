@@ -1,0 +1,47 @@
+site_name: osvbng
+site_url: https://osvbng.veesix-networks.co.uk
+repo_url: https://github.com/veesix-networks/osvbng
+repo_name: veesix-networks/osvbng
+theme:
+  name: material
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+      primary: custom
+    - media: "(prefers-color-scheme: light)"
+      scheme: default 
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+      primary: custom
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+      primary: custom
+  features:
+    - navigation.instant
+    - navigation.tabs
+    - navigation.sections
+    - content.code.copy
+extra_css:
+  - stylesheets/extra.css
+nav:
+  - Get Started: 
+    - Intro: index.md
+  - Architecture:
+    - High Level: architecture/HIGH_LEVEL.md
+    - Low Level:
+      - Collectors: architecture/COLLECTORS.md
+      - Components: architecture/COMPONENTS.md
+      - Configuration: architecture/CONFIGURATION.md
+      - Handlers: architecture/HANDLERS.md
+      - Plugins: architecture/PLUGINS.md
+  - Contributing:
+    - PLEASE READ FIRST: contributing/please_read_first.md
+  - Author: https://github.com/veesix-networks

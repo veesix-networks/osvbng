@@ -11,8 +11,48 @@ if [ -z "$OSVBNG_ACCESS_INTERFACE" ]; then
 fi
 
 if [ -z "$OSVBNG_CORE_INTERFACE" ]; then
-    echo "ERROR: OSVBNG_CORE_INTERFACE environment variable is required"
+    OSVBNG_CORE_INTERFACE=""
+fi
+
+wait_for_interfaces() {
+    local interfaces=("$@")
+    local timeout=300
+    local elapsed=0
+
+    echo "Waiting for interfaces to be provisioned: ${interfaces[*]}"
+
+    while [ $elapsed -lt $timeout ]; do
+        local all_present=true
+
+        for iface in "${interfaces[@]}"; do
+            if [ -z "$iface" ]; then
+                continue
+            fi
+
+            if ! ip link show "$iface" >/dev/null 2>&1; then
+                all_present=false
+                break
+            fi
+        done
+
+        if [ "$all_present" = true ]; then
+            echo "All required interfaces are present"
+            return 0
+        fi
+
+        echo "Waiting for interfaces... ($elapsed seconds elapsed)"
+        sleep 5
+        elapsed=$((elapsed + 5))
+    done
+
+    echo "ERROR: Timeout waiting for interfaces after $timeout seconds"
+    echo "Available interfaces:"
+    ip link show
     exit 1
+}
+
+if [ "$OSVBNG_WAIT_FOR_INTERFACES" = "true" ]; then
+    wait_for_interfaces "$OSVBNG_ACCESS_INTERFACE" "$OSVBNG_CORE_INTERFACE"
 fi
 
 TOTAL_CORES=$(nproc)
