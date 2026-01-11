@@ -33,6 +33,7 @@ if [ -z "$CONTAINER_PID" ] || [ "$CONTAINER_PID" = "0" ]; then
 fi
 
 echo "Setting up network namespace link for container '$CONTAINER_NAME'..."
+sudo mkdir -p /var/run/netns
 sudo ln -sf /proc/$CONTAINER_PID/ns/net "/var/run/netns/$CONTAINER_NAME"
 
 for MAPPING in "$@"; do
