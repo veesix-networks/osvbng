@@ -45,3 +45,7 @@ nav:
   - Contributing:
     - PLEASE READ FIRST: contributing/please_read_first.md
   - Author: https://github.com/veesix-networks
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
