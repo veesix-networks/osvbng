@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os/exec"
+	"strings"
 
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/logger"
@@ -74,6 +75,14 @@ func (c *Component) execVtysh(args ...string) ([]byte, error) {
 	}
 
 	return output, nil
+}
+
+func (c *Component) GetVersion(ctx context.Context) (string, error) {
+	output, err := c.execVtysh("-c", "show version")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
 }
 
 func (c *Component) GetVRFs() ([]vrf.VRF, error) {

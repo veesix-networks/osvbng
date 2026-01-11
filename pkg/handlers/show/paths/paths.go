@@ -23,6 +23,7 @@ const (
 	SystemConfHandlers         Path = "system.conf_handlers"
 	SystemShowHandlers         Path = "system.show_handlers"
 	SystemOperHandlers         Path = "system.oper_handlers"
+	SystemVersion              Path = "system.version"
 
 	VRFS Path = "vrfs"
 )

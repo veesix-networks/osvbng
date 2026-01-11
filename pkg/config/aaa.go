@@ -41,42 +41,6 @@ func (a *AAA) GetPolicy(name string) *AAAPolicy {
 	return nil
 }
 
-func (a *AAA) GetRADIUSGroup(name string) *RADIUSGroup {
-	for i := range a.RADIUS {
-		if a.RADIUS[i].Name == name {
-			return &a.RADIUS[i]
-		}
-	}
-	return nil
-}
-
-func (r *RADIUSGroup) GetAuthServers() []RADIUSServer {
-	servers := make([]RADIUSServer, 0)
-	for _, srv := range r.Servers {
-		if srv.Type == "auth" {
-			servers = append(servers, srv)
-		}
-	}
-	return servers
-}
-
-func (r *RADIUSGroup) GetAcctServers() []RADIUSServer {
-	servers := make([]RADIUSServer, 0)
-	for _, srv := range r.Servers {
-		if srv.Type == "acct" {
-			servers = append(servers, srv)
-		}
-	}
-	return servers
-}
-
-func (r *RADIUSGroup) GetAccountingInterval() int {
-	if r.AccountingInterval > 0 {
-		return r.AccountingInterval
-	}
-	return 300
-}
-
 func (d *DHCP) GetServer(name string) *DHCPServer {
 	for i := range d.Servers {
 		if d.Servers[i].Name == name {
