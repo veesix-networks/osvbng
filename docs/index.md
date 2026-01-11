@@ -22,7 +22,7 @@
 **Prerequisites:**
 
 - Docker installed
-- Two network interfaces (access and core) or testing without physical hardware
+- Minimum of 2 physical network interfaces (access and core) if deploying in a non-test scenario
 
 **Step 1: Start the container**
 
