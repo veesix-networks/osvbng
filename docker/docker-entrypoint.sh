@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+if [ "$1" = "config" ]; then
+    exec /usr/local/bin/osvbngd "$@"
+fi
+
 if [ -z "$OSVBNG_ACCESS_INTERFACE" ]; then
     echo "ERROR: OSVBNG_ACCESS_INTERFACE environment variable is required"
     exit 1
@@ -166,9 +170,13 @@ EOF
     fi
 
     if [ ! -f /etc/osvbng/osvbng.yaml ]; then
-        echo "ERROR: No configuration file found at /etc/osvbng/osvbng.yaml"
-        echo "Please mount a configuration file to /etc/osvbng/osvbng.yaml"
-        exit 1
+        echo "No configuration file found, generating default config..."
+        /usr/local/bin/osvbngd config > /etc/osvbng/osvbng.yaml
+        if [ $? -ne 0 ]; then
+            echo "ERROR: Failed to generate configuration file"
+            exit 1
+        fi
+        echo "Generated default configuration at /etc/osvbng/osvbng.yaml"
     fi
 }
 

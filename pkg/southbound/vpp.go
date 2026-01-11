@@ -35,6 +35,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/punt"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/tapv2"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/vlib"
+	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/vpe"
 )
 
 type VPP struct {
@@ -167,6 +168,21 @@ func (v *VPP) Close() error {
 	}
 	v.conn.Disconnect()
 	return nil
+}
+
+func (v *VPP) GetVersion(ctx context.Context) (string, error) {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return "", err
+	}
+	defer ch.Close()
+
+	reply := &vpe.ShowVersionReply{}
+	if err := ch.SendRequest(&vpe.ShowVersion{}).ReceiveReply(reply); err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("%s %s", reply.Program, reply.Version), nil
 }
 
 func (v *VPP) resolveParentInterface() error {

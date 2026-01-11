@@ -26,14 +26,6 @@ func New(sb *southbound.VPP, cfg *config.Config) *Bootstrap {
 func (b *Bootstrap) ProvisionInfrastructure() error {
 	b.logger.Info("Provisioning infrastructure from config")
 
-	for _, gw := range b.cfg.SubscriberGateways {
-		b.logger.Info("Creating subscriber gateway loopback", "name", gw.Name)
-
-		if err := b.sb.CreateLoopback(gw.Name, gw.IPv4, gw.IPv6); err != nil {
-			return fmt.Errorf("create loopback %s: %w", gw.Name, err)
-		}
-	}
-
 	for _, vlanRange := range b.cfg.SubscriberGroup.VLANs {
 		svlans, err := vlanRange.GetSVLANs()
 		if err != nil {

@@ -3,18 +3,15 @@ package config
 import "time"
 
 type Config struct {
-	Logging            Logging                        `yaml:"logging"`
-	Dataplane          Dataplane                      `yaml:"dataplane"`
-	Redis              Redis                          `yaml:"redis"`
-	Redundancy         Redundancy                     `yaml:"redundancy"`
-	SubscriberGateways []SubscriberGateway            `yaml:"subscriber_gateways"`
-	SubscriberGroup    SubscriberGroup                `yaml:"subscriber_group"`
-	AAA                AAA                            `yaml:"aaa"`
-	DHCP               DHCP                           `yaml:"dhcp"`
-	ZebraSocket        string                         `yaml:"zebra_socket,omitempty"`
-	Monitoring         Monitoring                     `yaml:"monitoring,omitempty"`
-	API                API                            `yaml:"api,omitempty"`
-	Plugins            map[string]map[string]interface{} `yaml:"plugins,omitempty"`
+	Logging         Logging                           `yaml:"logging,omitempty"`
+	Dataplane       Dataplane                         `yaml:"dataplane,omitempty"`
+	SubscriberGroup SubscriberGroup                   `yaml:"subscriber_group,omitempty"`
+	AAA             AAA                               `yaml:"aaa,omitempty"`
+	DHCP            DHCP                              `yaml:"dhcp,omitempty"`
+	ZebraSocket     string                            `yaml:"zebra_socket,omitempty"`
+	Monitoring      Monitoring                        `yaml:"monitoring,omitempty"`
+	API             API                               `yaml:"api,omitempty"`
+	Plugins         map[string]map[string]interface{} `yaml:"plugins,omitempty"`
 }
 
 type API struct {
@@ -35,23 +32,12 @@ type Dataplane struct {
 	MemifSocketPath   string `yaml:"memif_socket_path,omitempty"`
 }
 
-type Redis struct {
-	Address  string `yaml:"address"`
-	Password string `yaml:"password"`
-}
-
 type Redundancy struct {
 	VirtualMAC        string        `yaml:"virtual_mac"`
 	BNGID             string        `yaml:"bng_id"`
 	Priority          int           `yaml:"priority"`
 	HeartbeatInterval time.Duration `yaml:"heartbeat_interval"`
 	MemberTimeout     time.Duration `yaml:"member_timeout"`
-}
-
-type SubscriberGateway struct {
-	Name string   `yaml:"name"`
-	IPv4 []string `yaml:"ipv4"`
-	IPv6 []string `yaml:"ipv6,omitempty"`
 }
 
 type SubscriberGroup struct {
@@ -119,16 +105,14 @@ func (sg *SubscriberGroup) GetPolicyName(svlan uint16) string {
 
 type VLANAAAs struct {
 	Enabled bool   `yaml:"enabled"`
-	RADIUS  string `yaml:"radius"`
 	Policy  string `yaml:"policy"`
 }
 
 type AAA struct {
-	Provider      string        `yaml:"provider"`
-	NASIdentifier string        `yaml:"nas_identifier"`
-	NASIP         string        `yaml:"nas_ip"`
-	Policy        []AAAPolicy   `yaml:"policy"`
-	RADIUS        []RADIUSGroup `yaml:"radius"`
+	Provider      string      `yaml:"provider"`
+	NASIdentifier string      `yaml:"nas_identifier"`
+	NASIP         string      `yaml:"nas_ip"`
+	Policy        []AAAPolicy `yaml:"policy"`
 }
 
 type AAAPolicy struct {
@@ -136,21 +120,6 @@ type AAAPolicy struct {
 	Format                string `yaml:"format"`
 	Type                  string `yaml:"type"`
 	MaxConcurrentSessions int    `yaml:"max_concurrent_sessions"`
-}
-
-type RADIUSGroup struct {
-	Name               string         `yaml:"name"`
-	Enabled            bool           `yaml:"enabled"`
-	Servers            []RADIUSServer `yaml:"servers"`
-	AccountingInterval int            `yaml:"accounting_interval"`
-	SourceAddress      string         `yaml:"source_address"`
-}
-
-type RADIUSServer struct {
-	Address string `yaml:"address"`
-	Port    int    `yaml:"port"`
-	Secret  string `yaml:"secret"`
-	Type    string `yaml:"type"`
 }
 
 type DHCP struct {

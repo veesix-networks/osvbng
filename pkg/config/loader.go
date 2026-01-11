@@ -51,12 +51,6 @@ func (c *Config) Validate() error {
 					return fmt.Errorf("subscriber_group.vlans[%d].aaa.policy references unknown policy '%s'", i, vlanRange.AAA.Policy)
 				}
 			}
-
-			if vlanRange.AAA.RADIUS != "" {
-				if c.AAA.GetRADIUSGroup(vlanRange.AAA.RADIUS) == nil {
-					return fmt.Errorf("subscriber_group.vlans[%d].aaa.radius references unknown radius group '%s'", i, vlanRange.AAA.RADIUS)
-				}
-			}
 		}
 	}
 

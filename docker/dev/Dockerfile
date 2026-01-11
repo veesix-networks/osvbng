@@ -69,6 +69,7 @@ RUN mkdir -p /etc/osvbng /var/log/osvbng /var/lib/osvbng /run/osvbng
 COPY test-infra/vpp-plugins/*.so /usr/lib/x86_64-linux-gnu/vpp_plugins/
 
 COPY --from=builder /build/bin/osvbngd /usr/local/bin/osvbngd
+COPY --from=builder /build/bin/osvbngcli /usr/local/bin/osvbngcli
 COPY --from=builder /build/templates /usr/share/osvbng/templates
 
 COPY docker/dev/docker-entrypoint.sh /docker-entrypoint.sh

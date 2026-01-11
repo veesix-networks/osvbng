@@ -51,10 +51,6 @@ func New(deps component.Dependencies) (component.Component, error) {
 
 	virtualMAC := ""
 	if deps.Config != nil {
-		virtualMAC = deps.Config.Redundancy.VirtualMAC
-	}
-
-	if virtualMAC == "" && deps.Config != nil {
 		accessIface := deps.Config.Dataplane.AccessInterface
 		swIfIndex, err := deps.VPP.GetInterfaceIndex(accessIface)
 		if err == nil {

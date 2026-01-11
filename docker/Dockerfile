@@ -17,7 +17,11 @@ RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest && \
 
 COPY . .
 
-RUN make build
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG DATE=unknown
+
+RUN VERSION=${VERSION} COMMIT=${COMMIT} DATE=${DATE} make build
 
 FROM debian:12-slim
 
@@ -68,6 +72,7 @@ RUN mkdir -p /etc/osvbng /var/log/osvbng /var/lib/osvbng /run/osvbng
 COPY test-infra/vpp-plugins/*.so /usr/lib/x86_64-linux-gnu/vpp_plugins/
 
 COPY --from=builder /build/bin/osvbngd /usr/local/bin/osvbngd
+COPY --from=builder /build/bin/osvbngcli /usr/local/bin/osvbngcli
 COPY --from=builder /build/templates /usr/share/osvbng/templates
 
 COPY docker/docker-entrypoint.sh /docker-entrypoint.sh

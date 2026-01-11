@@ -43,6 +43,24 @@ func main() {
 	configPath := flag.String("config", "configs/config.yaml", "Path to configuration file")
 	flag.Parse()
 
+	if len(flag.Args()) > 0 && flag.Args()[0] == "config" {
+		allDataplane := false
+		args := flag.Args()[1:]
+		for i := 0; i < len(args); i++ {
+			if args[i] == "--all" && i+1 < len(args) && args[i+1] == "dataplane" {
+				allDataplane = true
+				break
+			}
+		}
+
+		output, err := config.Generate(config.GenerateOptions{AllDataplane: allDataplane})
+		if err != nil {
+			log.Fatalf("Failed to generate config: %v", err)
+		}
+		os.Stdout.WriteString(output)
+		return
+	}
+
 	cfg, err := config.Load(*configPath)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
@@ -52,11 +70,7 @@ func main() {
 
 	mainLog := logger.Component(logger.ComponentMain)
 
-	bngID := cfg.Redundancy.BNGID
-	if bngID == "" {
-		bngID = "osvbng"
-	}
-	mainLog.Info("Starting osvbng", "bng_id", bngID)
+	mainLog.Info("Starting osvbng")
 
 	apiSocket := cfg.Dataplane.DPAPISocket
 	if apiSocket == "" {
@@ -109,12 +123,6 @@ func main() {
 		log.Fatalf("Failed to setup memif dataplane: %v", err)
 	}
 	mainLog.Info("Memif dataplane configured")
-
-	if cfg.Redundancy.VirtualMAC != "" {
-		if err := vpp.SetVirtualMAC(cfg.Redundancy.VirtualMAC); err != nil {
-			log.Fatalf("Failed to set virtual MAC: %v", err)
-		}
-	}
 
 	// VPP blackholes 255.255.255.255/32 as per default FIB implementation, this is a temp workaround for now, there are many better solutions but require more time
 	if err := vpp.AddLocalRoute("255.255.255.255/32"); err != nil {
