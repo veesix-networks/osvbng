@@ -1,6 +1,6 @@
 #
 <p align="center">
-  <img src="img/logo.png" alt="Logo" style="max-width: 50%; height: auto;">
+  <img src="docs/img/logo.png" alt="Logo" style="max-width: 50%; height: auto;">
 </p>
 
 <a href="https://github.com/veesix-networks/osvbng" target="_blank">osvbng</a> (Open Source Virtual Broadband Network Gateway) is a high-performance, scalable, open source BNG for ISPs. Built to scale up to multi-hundred gigabit throughput on standard x86 COTS hardware.
