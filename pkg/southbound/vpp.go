@@ -1839,7 +1839,7 @@ func (v *VPP) SetupMemifDataplane(memifID uint32, accessIface string, socketPath
 		return fmt.Errorf("create memif failed: retval=%d", memifReply.Retval)
 	}
 
-	memifName := fmt.Sprintf("memif%d/%d", memifID, memifID)
+	memifName := fmt.Sprintf("memif%d/%d", memifID, socketID)
 	v.ifaceCache[memifName] = memifReply.SwIfIndex
 	v.logger.Info("Created memif interface", "id", memifID, "name", memifName, "sw_if_index", memifReply.SwIfIndex)
 
