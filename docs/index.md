@@ -3,7 +3,7 @@
   <img src="img/logo.png" alt="Logo" style="max-width: 50%; height: auto;">
 </p>
 
-<a href="https://github.com/veesix-networks/osvbng" target="_blank">osvbng</a> (Open Source Virtual Broadband Network Gateway) is a high-performant, scalable, open source BNG for ISPs. Built to scale up to multi-hundred gigabit throughput on standard x86 COT hardware.
+<a href="https://github.com/veesix-networks/osvbng" target="_blank">osvbng</a> (Open Source Virtual Broadband Network Gateway) is a high-performance, scalable, open source BNG for ISPs. Built to scale up to multi-hundred gigabit throughput on standard x86 COTS hardware.
 
 ## Key Features
 
@@ -91,7 +91,7 @@ docker run -d --name osvbng \
 
 ### QEMU / VM
 
-This has only been tested on KVM based hypervisors. We have 2 official supported operating systems:
+This has only been tested on KVM-based hypervisors. We have 2 officially supported operating systems:
 
 - Ubuntu
     - 22.04
@@ -103,8 +103,8 @@ This has only been tested on KVM based hypervisors. We have 2 official supported
 
 What can you expect from the open source version of this project? Below are some key points we want to always achieve in every major release:
 
-- Minimum of 100Gbps out of the box support
-- IPoE access technology with DHCPv4 Support
+- Minimum of 100Gbps out-of-the-box support
+- IPoE access technology with DHCPv4 support
 - Authenticate customers via DHCPv4 Option 82 (Sub-options 1 and 2, Circuit ID and/or Remote ID)
 - BGP, IS-IS and OSPF support
 - Only Default VRF implementation
