@@ -1,0 +1,103 @@
+#cloud-config
+
+users:
+  - name: osvbng
+    groups: sudo
+    shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    ssh_authorized_keys:
+      - __SSH_PUBLIC_KEY__
+
+packages:
+  - vim
+  - htop
+  - tcpdump
+
+runcmd:
+  - echo "1024" > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
+  - mkdir -p /dev/hugepages
+  - mount -t hugetlbfs hugetlbfs /dev/hugepages
+  - echo "hugetlbfs /dev/hugepages hugetlbfs defaults 0 0" >> /etc/fstab
+  - systemctl enable osvbng.service
+  - systemctl start osvbng.service
+
+write_files:
+  - path: /etc/osvbng/osvbng.yaml
+    permissions: '0644'
+    content: |
+      __OSVBNG_CONFIG__
+
+  - path: /etc/osvbng/dataplane.conf
+    permissions: '0644'
+    content: |
+      unix {
+        interactive
+        log /var/log/osvbng/dataplane.log
+        full-coredump
+        cli-listen /run/osvbng/cli.sock
+        cli-prompt osvbng#
+        cli-no-pager
+        poll-sleep-usec 100
+      }
+
+      socksvr {
+        socket-name /run/osvbng/dataplane_api.sock
+      }
+
+      memory {
+        main-heap-size 1G
+        main-heap-page-size 2M
+      }
+
+      cpu {
+        main-core 0
+        corelist-workers 1-3
+      }
+
+      buffers {
+        buffers-per-numa 131072
+        default data-size 2048
+        page-size default-hugepage
+      }
+
+      dpdk {
+        dev __ACCESS_PCI__ {
+          name eth0
+        }
+        dev __CORE_PCI__ {
+          name eth1
+        }
+        uio-driver vfio-pci
+      }
+
+      plugins {
+        plugin default { enable }
+        plugin dpdk_plugin.so { enable }
+        plugin linux_cp_plugin.so { disable }
+        plugin linux_nl_plugin.so { disable }
+        plugin arp_plugin.so { disable }
+        plugin rd_cp_plugin.so { disable }
+        plugin igmp_plugin.so { disable }
+        plugin v6n_osvbng_arp_punt_plugin.so { enable }
+        plugin v6n_osvbng_fib_control_plugin.so { enable }
+        plugin v6n_osvbng_accounting_plugin.so { enable }
+      }
+
+      logging {
+        default-log-level info
+        default-syslog-log-level info
+      }
+
+      punt {
+        socket /run/osvbng/punt.sock
+      }
+
+      statseg {
+        default
+        per-node-counters on
+      }
+
+power_state:
+  mode: reboot
+  timeout: 300
+  condition: True
