@@ -1,4 +1,4 @@
-*.qemu
+*.qcow2
 *.backup
 *.log
 
