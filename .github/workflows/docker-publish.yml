@@ -32,6 +32,13 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
+      - name: Load versions
+        id: versions
+        run: |
+          source versions.env
+          echo "dataplane_version=${DATAPLANE_VERSION}" >> $GITHUB_OUTPUT
+          echo "golang_version=${GOLANG_VERSION}" >> $GITHUB_OUTPUT
+
       - name: Determine version
         id: version
         run: |
@@ -62,5 +69,7 @@ jobs:
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
             COMMIT=${{ github.sha }}
+            GOLANG_VERSION=${{ steps.versions.outputs.golang_version }}
+            DATAPLANE_VERSION=${{ steps.versions.outputs.dataplane_version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

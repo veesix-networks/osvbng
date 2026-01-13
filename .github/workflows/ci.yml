@@ -13,9 +13,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Load versions
+        id: versions
+        run: |
+          source versions.env
+          echo "golang_version=${GOLANG_VERSION}" >> $GITHUB_OUTPUT
+
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: ${{ steps.versions.outputs.golang_version }}
 
       - name: Install dependencies
         run: |

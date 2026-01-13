@@ -1,19 +1,22 @@
 name: Build QEMU Image
 
-# Uncomment when qemu build is stable
-on: []
-
-# on:
-#   push:
-#     tags:
-#       - 'v*'
-#       - 'qemu-v*'
-#   workflow_dispatch:
-#     inputs:
-#       version:
-#         description: 'Version to build (e.g., v1.0.0)'
-#         required: true
-#         type: string
+# NOTE: Building locally with KVM acceleration is much faster and preferred.
+# This workflow uses TCG (software emulation) which is very slow.
+#
+# Local build instructions:
+#   make build
+#   cd scripts/qemu/packer
+#   packer init osvbng.pkr.hcl
+#   packer build -var "dataplane_version=$(grep DATAPLANE_VERSION ../../../versions.env | cut -d= -f2)" osvbng.pkr.hcl
+#   gh release create <version> ./osvbng-debian12.qcow2.gz
+#
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g., v1.0.0)'
+        required: true
+        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -33,10 +36,8 @@ jobs:
         id: versions
         run: |
           source versions.env
-          echo "vpp_version=${VPP_VERSION}" >> $GITHUB_OUTPUT
-          echo "frr_version=${FRR_VERSION}" >> $GITHUB_OUTPUT
+          echo "dataplane_version=${DATAPLANE_VERSION}" >> $GITHUB_OUTPUT
           echo "golang_version=${GOLANG_VERSION}" >> $GITHUB_OUTPUT
-          echo "debian_version=${DEBIAN_VERSION}" >> $GITHUB_OUTPUT
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -46,7 +47,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libnl-3-dev libnl-route-3-dev libmnl-dev
+          sudo apt-get install -y build-essential pkg-config libnl-3-dev libnl-route-3-dev libmnl-dev qemu-system-x86 qemu-utils
 
       - name: Build osvbng binaries
         run: make build
@@ -63,8 +64,7 @@ jobs:
         working-directory: scripts/qemu/packer
         run: |
           packer build \
-            -var "vpp_version=${{ steps.versions.outputs.vpp_version }}" \
-            -var "frr_version=${{ steps.versions.outputs.frr_version }}" \
+            -var "dataplane_version=${{ steps.versions.outputs.dataplane_version }}" \
             -var "accelerator=tcg" \
             osvbng.pkr.hcl
 
@@ -82,7 +82,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.version.outputs.version }}
-          files: scripts/qemu/packer/output/*.qcow2.gz
+          files: scripts/qemu/packer/*.qcow2.gz
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
