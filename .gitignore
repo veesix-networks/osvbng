@@ -1,4 +1,6 @@
+.idea/
 *.qcow2
+*.qcow2.gz
 *.backup
 *.log
 
