@@ -22,5 +22,5 @@ apt-get update && apt-get install -y \
 echo "hugetlbfs /dev/hugepages hugetlbfs defaults 0 0" >> /etc/fstab
 mkdir -p /dev/hugepages
 
-echo 'GRUB_CMDLINE_LINUX="$GRUB_CMDLINE_LINUX default_hugepagesz=2M hugepagesz=2M hugepages=1024 iommu=pt intel_iommu=on"' >> /etc/default/grub
+sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="\([^"]*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1 console=ttyS0,115200 default_hugepagesz=2M hugepagesz=2M hugepages=1024 iommu=pt intel_iommu=on"/' /etc/default/grub
 update-grub

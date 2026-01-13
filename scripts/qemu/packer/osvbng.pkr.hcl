@@ -7,19 +7,14 @@ packer {
   }
 }
 
-variable "os_variant" {
+variable "base_image_url" {
   type    = string
-  default = "debian12"
+  default = "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2"
 }
 
-variable "iso_url" {
-  type = string
-  default = "https://cdimage.debian.org/cdimage/archive/12.9.0/amd64/iso-cd/debian-12.9.0-amd64-netinst.iso"
-}
-
-variable "iso_checksum" {
+variable "base_image_checksum" {
   type    = string
-  default = "sha256:1257373c706d8c07e6917942736a865dfff557d21d76ea3040bb1039eb72a054"
+  default = "file:https://cloud.debian.org/images/cloud/bookworm/latest/SHA512SUMS"
 }
 
 variable "vm_name" {
@@ -27,12 +22,9 @@ variable "vm_name" {
   default = "osvbng-debian12"
 }
 
-variable "vpp_version" {
-  type = string
-}
-
-variable "frr_version" {
-  type = string
+variable "dataplane_version" {
+  type    = string
+  default = env("DATAPLANE_VERSION")
 }
 
 variable "accelerator" {
@@ -41,50 +33,38 @@ variable "accelerator" {
 }
 
 source "qemu" "osvbng" {
-  iso_url      = var.iso_url
-  iso_checksum = var.iso_checksum
+  iso_url      = var.base_image_url
+  iso_checksum = var.base_image_checksum
+  disk_image   = true
 
   output_directory = "output"
   vm_name          = "${var.vm_name}.qcow2"
 
-  disk_size        = "20G"
-  format           = "qcow2"
-  accelerator      = var.accelerator
+  disk_size   = "20G"
+  format      = "qcow2"
+  accelerator = var.accelerator
 
-  memory           = 2048
-  cpus             = 2
+  memory = 2048
+  cpus   = 2
 
-  headless         = true
+  headless = true
 
-  http_directory   = "http"
+  # Cloud-init seed ISO
+  cd_files = ["cloud-init/user-data", "cloud-init/meta-data"]
+  cd_label = "cidata"
 
-  boot_wait        = "5s"
-  boot_command     = [
-    "<down><tab><wait>",
-    "auto=true ",
-    "priority=critical ",
-    "url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/preseed.cfg ",
-    "hostname=osvbng ",
-    "domain=local ",
-    "locale=en_US.UTF-8 ",
-    "keymap=us ",
-    "netcfg/get_hostname=osvbng ",
-    "netcfg/get_domain=local ",
-    "<enter>"
-  ]
+  ssh_username = "root"
+  ssh_password = "osvbng"
+  ssh_timeout  = "30m"
 
-  ssh_username     = "root"
-  ssh_password     = "osvbng"
-  ssh_timeout      = "30m"
-
-  shutdown_command = "echo 'osvbng' | sudo -S shutdown -P now"
+  shutdown_command = "shutdown -P now"
 }
 
 build {
   sources = ["source.qemu.osvbng"]
 
   provisioner "shell" {
-    inline = ["mkdir -p /tmp/vpp-plugins"]
+    inline = ["mkdir -p /tmp/vpp-plugins /tmp/templates"]
   }
 
   provisioner "file" {
@@ -102,10 +82,14 @@ build {
     destination = "/tmp/vpp-plugins/"
   }
 
+  provisioner "file" {
+    source      = "../../../templates/"
+    destination = "/tmp/templates/"
+  }
+
   provisioner "shell" {
     environment_vars = [
-      "VPP_VERSION=${var.vpp_version}",
-      "FRR_VERSION=${var.frr_version}",
+      "DATAPLANE_VERSION=${var.dataplane_version}",
       "DEBIAN_FRONTEND=noninteractive"
     ]
     scripts = [
@@ -119,6 +103,6 @@ build {
   }
 
   post-processor "compress" {
-    output = "output/${var.vm_name}.qcow2.gz"
+    output = "${var.vm_name}.qcow2.gz"
   }
 }
