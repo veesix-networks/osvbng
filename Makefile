@@ -17,8 +17,8 @@ LDFLAGS := -X github.com/veesix-networks/osvbng/pkg/version.Version=$(VERSION) \
            -X github.com/veesix-networks/osvbng/pkg/version.Date=$(DATE)
 
 build: generate
-	go build -ldflags "$(LDFLAGS)" -o bin/osvbngd ./cmd/osvbngd
-	go build -ldflags "$(LDFLAGS)" -o bin/osvbngcli ./cmd/osvbngcli
+	CGO_ENABLED=1 go build -ldflags "$(LDFLAGS)" -o bin/osvbngd ./cmd/osvbngd
+	CGO_ENABLED=1 go build -ldflags "$(LDFLAGS)" -o bin/osvbngcli ./cmd/osvbngcli
 
 clean:
 	rm -rf bin/
