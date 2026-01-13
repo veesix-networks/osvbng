@@ -30,6 +30,35 @@ type Dataplane struct {
 	PuntSocketPath    string `yaml:"punt_socket_path,omitempty"`
 	ARPPuntSocketPath string `yaml:"arp_punt_socket_path,omitempty"`
 	MemifSocketPath   string `yaml:"memif_socket_path,omitempty"`
+	DPDK              *DPDK  `yaml:"dpdk,omitempty"`
+}
+
+type DPDK struct {
+	UIODriver            string             `yaml:"uio_driver,omitempty"`
+	Devices              []DPDKDevice       `yaml:"devices,omitempty"`
+	DevDefaults          *DPDKDeviceOptions `yaml:"dev_defaults,omitempty"`
+	SocketMem            string             `yaml:"socket_mem,omitempty"`
+	NoMultiSeg           bool               `yaml:"no_multi_seg,omitempty"`
+	NoTxChecksumOffload  bool               `yaml:"no_tx_checksum_offload,omitempty"`
+	EnableTcpUdpChecksum bool               `yaml:"enable_tcp_udp_checksum,omitempty"`
+	MaxSimdBitwidth      int                `yaml:"max_simd_bitwidth,omitempty"`
+}
+
+type DPDKDevice struct {
+	PCI     string             `yaml:"pci"`
+	Name    string             `yaml:"name,omitempty"`
+	Options *DPDKDeviceOptions `yaml:"options,omitempty"`
+}
+
+type DPDKDeviceOptions struct {
+	NumRxQueues   int    `yaml:"num_rx_queues,omitempty"`
+	NumTxQueues   int    `yaml:"num_tx_queues,omitempty"`
+	NumRxDesc     int    `yaml:"num_rx_desc,omitempty"`
+	NumTxDesc     int    `yaml:"num_tx_desc,omitempty"`
+	TSO           bool   `yaml:"tso,omitempty"`
+	Devargs       string `yaml:"devargs,omitempty"`
+	RssQueues     string `yaml:"rss_queues,omitempty"`
+	NoRxInterrupt bool   `yaml:"no_rx_interrupt,omitempty"`
 }
 
 type Redundancy struct {
