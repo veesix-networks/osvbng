@@ -1,0 +1,104 @@
+unix {
+  interactive
+  log {{ .LogFile }}
+  full-coredump
+  cli-listen {{ .CLISocket }}
+  cli-prompt osvbng#
+  cli-no-pager
+  poll-sleep-usec 100
+}
+
+socksvr {
+  socket-name {{ .APISocket }}
+}
+
+api-trace {
+  on
+}
+
+memory {
+  main-heap-size 512M
+  main-heap-page-size 4k
+}
+
+api-segment {
+  gid osvbng
+}
+
+cpu {
+  main-core {{ .MainCore }}
+{{ if .WorkerCores }}  corelist-workers {{ .WorkerCores }}
+{{ end }}}
+
+buffers {
+  buffers-per-numa 65536
+  default data-size 2048
+{{ if .UseDPDK }}  page-size default-hugepage
+{{ else }}  page-size 4k
+{{ end }}}
+
+plugins {
+  plugin default { enable }
+{{ if .UseDPDK }}  plugin dpdk_plugin.so { enable }
+{{ else }}  plugin dpdk_plugin.so { disable }
+{{ end }}  plugin linux_cp_plugin.so { enable }
+  plugin linux_nl_plugin.so { enable }
+  plugin arp_plugin.so { disable }
+  plugin rd_cp_plugin.so { disable }
+  plugin igmp_plugin.so { disable }
+  plugin v6n_osvbng_arp_punt_plugin.so { enable }
+  plugin v6n_osvbng_fib_control_plugin.so { enable }
+  plugin v6n_osvbng_accounting_plugin.so { enable }
+}
+
+logging {
+  default-log-level info
+  default-syslog-log-level info
+}
+
+linux-cp {
+  lcp-sync
+  lcp-auto-subint
+  del-static-on-link-down
+  del-dynamic-on-link-down
+}
+
+punt {
+  socket {{ .PuntSocket }}
+}
+
+statseg {
+  default
+  per-node-counters on
+}
+{{ if and .UseDPDK .DPDK }}
+dpdk {
+{{ if .DPDK.UIODriver }}  uio-driver {{ .DPDK.UIODriver }}
+{{ end }}{{ if .DPDK.SocketMem }}  socket-mem {{ .DPDK.SocketMem }}
+{{ end }}{{ if .DPDK.NoMultiSeg }}  no-multi-seg
+{{ end }}{{ if .DPDK.NoTxChecksumOffload }}  no-tx-checksum-offload
+{{ end }}{{ if .DPDK.EnableTcpUdpChecksum }}  enable-tcp-udp-checksum
+{{ end }}{{ if .DPDK.MaxSimdBitwidth }}  max-simd-bitwidth {{ .DPDK.MaxSimdBitwidth }}
+{{ end }}{{ if .DPDK.DevDefaults }}  dev default {
+{{ if .DPDK.DevDefaults.NumRxQueues }}    num-rx-queues {{ .DPDK.DevDefaults.NumRxQueues }}
+{{ end }}{{ if .DPDK.DevDefaults.NumTxQueues }}    num-tx-queues {{ .DPDK.DevDefaults.NumTxQueues }}
+{{ end }}{{ if .DPDK.DevDefaults.NumRxDesc }}    num-rx-desc {{ .DPDK.DevDefaults.NumRxDesc }}
+{{ end }}{{ if .DPDK.DevDefaults.NumTxDesc }}    num-tx-desc {{ .DPDK.DevDefaults.NumTxDesc }}
+{{ end }}{{ if .DPDK.DevDefaults.TSO }}    tso on
+{{ end }}{{ if .DPDK.DevDefaults.Devargs }}    devargs {{ .DPDK.DevDefaults.Devargs }}
+{{ end }}{{ if .DPDK.DevDefaults.RssQueues }}    rss-queues {{ .DPDK.DevDefaults.RssQueues }}
+{{ end }}{{ if .DPDK.DevDefaults.NoRxInterrupt }}    no-rx-interrupts
+{{ end }}  }
+{{ end }}{{ range $i, $dev := .DPDK.Devices }}  dev {{ $dev.PCI }} {
+    name {{ if $dev.Name }}{{ $dev.Name }}{{ else }}eth{{ $i }}{{ end }}
+{{ if $dev.Options }}{{ if $dev.Options.NumRxQueues }}    num-rx-queues {{ $dev.Options.NumRxQueues }}
+{{ end }}{{ if $dev.Options.NumTxQueues }}    num-tx-queues {{ $dev.Options.NumTxQueues }}
+{{ end }}{{ if $dev.Options.NumRxDesc }}    num-rx-desc {{ $dev.Options.NumRxDesc }}
+{{ end }}{{ if $dev.Options.NumTxDesc }}    num-tx-desc {{ $dev.Options.NumTxDesc }}
+{{ end }}{{ if $dev.Options.TSO }}    tso on
+{{ end }}{{ if $dev.Options.Devargs }}    devargs {{ $dev.Options.Devargs }}
+{{ end }}{{ if $dev.Options.RssQueues }}    rss-queues {{ $dev.Options.RssQueues }}
+{{ end }}{{ if $dev.Options.NoRxInterrupt }}    no-rx-interrupts
+{{ end }}{{ end }}  }
+{{ end }}}
+{{ end }}

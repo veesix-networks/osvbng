@@ -1,0 +1,63 @@
+services:
+  bngblaster:
+    build:
+      context: ../../test-infra
+      dockerfile: Dockerfile.bngblaster
+    container_name: bng-blaster
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - ../../test-infra/bngblaster:/config
+    stdin_open: true
+    tty: true
+
+  osvbng:
+    build:
+      context: ../..
+      dockerfile: docker/dev/Dockerfile
+    container_name: osvbng
+    privileged: true
+    cpuset: "0-7"
+    environment:
+      - OSVBNG_ACCESS_INTERFACE=eth0
+      - OSVBNG_CORE_INTERFACE=eth1
+    networks:
+      core:
+        ipv4_address: 172.20.0.2
+      access:
+    volumes:
+      - /sys/kernel/debug:/sys/kernel/debug:ro
+      - /dev/hugepages:/dev/hugepages
+      - ../../test-infra/configs/dataplane.conf:/etc/osvbng/dataplane.conf:ro
+      - ../../test-infra/configs/osvbng.yaml:/etc/osvbng/osvbng.yaml:ro
+      - bng-config-versions:/var/lib/osvbng/config-versions
+    cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+      - IPC_LOCK
+      - SYS_NICE
+      - SYS_RAWIO
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    shm_size: 2g
+    ports:
+      - 50050:50050
+      - 9090:9090
+      - 8080:8080
+
+volumes:
+  bng-config-versions:
+
+networks:
+  core:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+  access:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: bng-access

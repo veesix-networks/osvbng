@@ -1,0 +1,34 @@
+[Unit]
+Description=osvbng Container
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/osvbng
+
+ExecStartPre=-/usr/bin/docker stop osvbng
+ExecStartPre=-/usr/bin/docker rm osvbng
+
+ExecStart=/usr/bin/docker run -d \
+  --name osvbng \
+  --privileged \
+  --network none \
+  -v /opt/osvbng/osvbng.yaml:/etc/osvbng/osvbng.yaml:ro \
+  -e OSVBNG_WAIT_FOR_INTERFACES=true \
+  -e OSVBNG_ACCESS_INTERFACE=eth0 \
+  -e OSVBNG_CORE_INTERFACE=eth1 \
+  veesixnetworks/osvbng:latest
+
+ExecStartPost=/bin/sleep 2
+ExecStartPost=/opt/osvbng/setup-interfaces.sh osvbng eth0:ens19 eth1:ens20
+
+ExecStop=/usr/bin/docker stop osvbng
+ExecStop=/usr/bin/docker rm osvbng
+
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

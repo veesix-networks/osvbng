@@ -1,0 +1,21 @@
+#cloud-config
+users:
+  - name: root
+    lock_passwd: false
+    hashed_passwd: $6$rounds=4096$osvbng$kQvHxmVlJxDxvK0.KL7FVCYMlXnGVqZY5qxVwJMzLxTzQqHvqHcJvKqKGqXvqHvqHcJvKqKGqXvqHvqHcJvKq0
+
+ssh_pwauth: true
+
+disable_root: false
+
+chpasswd:
+  expire: false
+  users:
+    - name: root
+      password: osvbng
+      type: text
+
+runcmd:
+  - sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+  - sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+  - systemctl restart sshd

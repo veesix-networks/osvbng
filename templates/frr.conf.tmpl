@@ -1,0 +1,102 @@
+{{ if .Protocols }}
+{{ if .Protocols.BGP }}
+{{ if .Protocols.BGP.ASN }}
+router bgp {{ .Protocols.BGP.ASN }}
+{{ if .Protocols.BGP.RouterID }}
+ bgp router-id {{ .Protocols.BGP.RouterID }}
+{{ end }}
+!
+{{ if .Protocols.BGP.IPv4Unicast }}
+ address-family ipv4 unicast
+{{ range $addr, $neighbor := .Protocols.BGP.IPv4Unicast.Neighbors }}
+  neighbor {{ $addr }} remote-as {{ $neighbor.RemoteAS }}
+{{ if $neighbor.Description }}
+  neighbor {{ $addr }} description {{ $neighbor.Description }}
+{{ end }}
+{{ end }}
+{{ range $network := .Protocols.BGP.IPv4Unicast.Networks }}
+  network {{ $network }}
+{{ end }}
+ exit-address-family
+!
+{{ end }}
+{{ if .Protocols.BGP.IPv6Unicast }}
+ address-family ipv6 unicast
+{{ range $addr, $neighbor := .Protocols.BGP.IPv6Unicast.Neighbors }}
+  neighbor {{ $addr }} remote-as {{ $neighbor.RemoteAS }}
+{{ if $neighbor.Description }}
+  neighbor {{ $addr }} description {{ $neighbor.Description }}
+{{ end }}
+{{ end }}
+{{ range $network := .Protocols.BGP.IPv6Unicast.Networks }}
+  network {{ $network }}
+{{ end }}
+ exit-address-family
+!
+{{ end }}
+{{ range $vrfName, $vrfConfig := .Protocols.BGP.VRF }}
+router bgp {{ $.Protocols.BGP.ASN }} vrf {{ $vrfName }}
+{{ if $vrfConfig.RouterID }}
+ bgp router-id {{ $vrfConfig.RouterID }}
+{{ end }}
+{{ if $vrfConfig.RD }}
+ rd {{ $vrfConfig.RD }}
+{{ end }}
+!
+{{ if $vrfConfig.IPv4Unicast }}
+ address-family ipv4 unicast
+{{ range $addr, $neighbor := $vrfConfig.IPv4Unicast.Neighbors }}
+  neighbor {{ $addr }} remote-as {{ $neighbor.RemoteAS }}
+{{ if $neighbor.Description }}
+  neighbor {{ $addr }} description {{ $neighbor.Description }}
+{{ end }}
+{{ end }}
+{{ range $network := $vrfConfig.IPv4Unicast.Networks }}
+  network {{ $network }}
+{{ end }}
+ exit-address-family
+!
+{{ end }}
+{{ if $vrfConfig.IPv6Unicast }}
+ address-family ipv6 unicast
+{{ range $addr, $neighbor := $vrfConfig.IPv6Unicast.Neighbors }}
+  neighbor {{ $addr }} remote-as {{ $neighbor.RemoteAS }}
+{{ if $neighbor.Description }}
+  neighbor {{ $addr }} description {{ $neighbor.Description }}
+{{ end }}
+{{ end }}
+{{ range $network := $vrfConfig.IPv6Unicast.Networks }}
+  network {{ $network }}
+{{ end }}
+ exit-address-family
+!
+{{ end }}
+{{ end }}
+{{ end }}
+{{ end }}
+{{ if .Protocols.OSPF }}
+{{ if .Protocols.OSPF.Enabled }}
+router ospf
+{{ range $area, $areaConfig := .Protocols.OSPF.Areas }}
+{{ range $network := $areaConfig.Networks }}
+ network {{ $network }} area {{ $area }}
+{{ end }}
+{{ end }}
+!
+{{ end }}
+{{ end }}
+{{ if .Protocols.Static }}
+{{ if .Protocols.Static.IPv4 }}
+{{ range $route := .Protocols.Static.IPv4 }}
+ip route {{ $route.Destination }}{{ if $route.NextHop }} {{ $route.NextHop }}{{ end }}{{ if $route.Device }} {{ $route.Device }}{{ end }}
+{{ end }}
+{{ end }}
+{{ if .Protocols.Static.IPv6 }}
+{{ range $route := .Protocols.Static.IPv6 }}
+ipv6 route {{ $route.Destination }}{{ if $route.NextHop }} {{ $route.NextHop }}{{ end }}{{ if $route.Device }} {{ $route.Device }}{{ end }}
+{{ end }}
+{{ end }}
+{{ end }}
+{{ end }}
+line vty
+!
