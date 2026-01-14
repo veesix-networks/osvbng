@@ -44,6 +44,17 @@ func (d *VPPDataplane) CreateInterface(cfg *types.InterfaceConfig) error {
 }
 
 func (d *VPPDataplane) createPhysicalInterface(cfg *types.InterfaceConfig) error {
+	// DPDK interface exist already so we don't need to build host
+	if _, err := d.getInterfaceIndex(cfg.Name); err == nil {
+		d.logger.Info("Interface already exists in VPP, skipping creation", "interface", cfg.Name)
+		if cfg.Enabled {
+			if err := d.setInterfaceState(cfg.Name, true); err != nil {
+				d.logger.Warn("Failed to set interface up", "interface", cfg.Name, "error", err)
+			}
+		}
+		return nil
+	}
+
 	vppIfName, err := d.createVPPHostInterface(cfg.Name)
 	if err != nil {
 		return fmt.Errorf("create VPP host-interface: %w", err)
@@ -63,6 +74,17 @@ func (d *VPPDataplane) createPhysicalInterface(cfg *types.InterfaceConfig) error
 }
 
 func (d *VPPDataplane) createLoopback(cfg *types.InterfaceConfig) error {
+	// Check if loopback already exists in VPP
+	if _, err := d.getInterfaceIndex(cfg.Name); err == nil {
+		d.logger.Info("Loopback already exists in VPP, skipping creation", "interface", cfg.Name)
+		if cfg.Enabled {
+			if err := d.setInterfaceState(cfg.Name, true); err != nil {
+				d.logger.Warn("Failed to set interface up", "interface", cfg.Name, "error", err)
+			}
+		}
+		return nil
+	}
+
 	vppIfName, err := d.createVPPLoopback(cfg.Name)
 	if err != nil {
 		return fmt.Errorf("create VPP loopback: %w", err)
@@ -134,6 +156,10 @@ func (d *VPPDataplane) AddIPv4Address(ifName, address string) error {
 	}
 
 	if err := netlink.AddrAdd(link, addr); err != nil {
+		if err.Error() == "file exists" {
+			d.logger.Info("IPv4 address already exists", "interface", ifName, "address", address)
+			return nil
+		}
 		return fmt.Errorf("add address: %w", err)
 	}
 
@@ -172,6 +198,10 @@ func (d *VPPDataplane) AddIPv6Address(ifName, address string) error {
 	}
 
 	if err := netlink.AddrAdd(link, addr); err != nil {
+		if err.Error() == "file exists" {
+			d.logger.Info("IPv6 address already exists", "interface", ifName, "address", address)
+			return nil
+		}
 		return fmt.Errorf("add address: %w", err)
 	}
 
@@ -221,6 +251,10 @@ func (d *VPPDataplane) AddRoute(route *types.StaticRoute) error {
 	}
 
 	if err := netlink.RouteAdd(nlRoute); err != nil {
+		if err.Error() == "file exists" {
+			d.logger.Info("Route already exists", "destination", route.Destination, "next_hop", route.NextHop, "device", route.Device)
+			return nil
+		}
 		return fmt.Errorf("add route: %w", err)
 	}
 

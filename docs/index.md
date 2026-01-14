@@ -40,7 +40,7 @@ docker run -d --name osvbng \
 
 For production with physical NICs (replace `enp0s1` and `enp1s1` with your interface names):
 ```bash
-wget https://raw.githubusercontent.com/veesix-networks/osvbng/main/docker/setup-interfaces.sh
+curl -sLO https://raw.githubusercontent.com/veesix-networks/osvbng/main/docker/setup-interfaces.sh
 chmod +x setup-interfaces.sh
 ./setup-interfaces.sh osvbng eth0:enp0s1 eth1:enp1s1
 ```
@@ -67,13 +67,7 @@ docker logs -f osvbng
 **Step 4: Access the CLI**
 
 ```bash
-docker exec -it osvbng osvbngcli show subscriber sessions
-```
-
-**Step 5: Create a test user (optional)**
-
-```bash
-docker exec -it osvbng osvbngcli oper subscriber.auth.local.users.create '{"username":"testuser","enabled":true}'
+docker exec -it osvbng osvbngcli
 ```
 
 #### "Production" Deployment
@@ -82,8 +76,8 @@ For "production" deployments, you need to ensure the container and its network i
 
 ```bash
 # Download the service file and setup script
-wget https://raw.githubusercontent.com/veesix-networks/osvbng/main/docker/osvbng.service
-wget https://raw.githubusercontent.com/veesix-networks/osvbng/main/docker/setup-interfaces.sh
+curl -sLO https://raw.githubusercontent.com/veesix-networks/osvbng/main/docker/osvbng.service
+curl -sLO https://raw.githubusercontent.com/veesix-networks/osvbng/main/docker/setup-interfaces.sh
 
 # Create working directory
 sudo mkdir -p /opt/osvbng
@@ -112,7 +106,7 @@ Generate and customize the config file:
 
 ```bash
 docker run --rm veesixnetworks/osvbng:latest config > osvbng.yaml
-sudo mv osvbng.yaml /opt/osvbng/
+sudo mv osvbng.yaml /etc/osvbng/
 ```
 
 Mount it into the container:
@@ -130,15 +124,90 @@ docker run -d --name osvbng \
 
 Or update the systemd service file to include the volume mount.
 
-### QEMU / VM
+### QEMU / KVM with DPDK
 
-This has only been tested on KVM-based hypervisors. We have 2 officially supported operating systems:
+For maximum performance with DPDK and PCI passthrough. Requires a dedicated server with:
 
-- Ubuntu
-    - 22.04
-    - 24.04
-- Debian
-    - 12 (Bookworm)
+- KVM/libvirt installed
+- IOMMU enabled (Intel VT-d or AMD-Vi)
+- At least 2 physical NICs for PCI passthrough (access and core)
+- 4GB+ RAM and 4+ CPU cores recommended
+
+**Install Dependencies (Debian/Ubuntu):**
+
+```bash
+sudo apt install -y libvirt-daemon-system qemu-kvm virtinst curl whiptail gzip
+```
+
+**Quick Install:**
+
+```bash
+curl -sLO https://raw.githubusercontent.com/veesix-networks/osvbng/main/scripts/qemu/deploy-vm.sh && chmod +x deploy-vm.sh && sudo ./deploy-vm.sh
+```
+
+**Manual Install:**
+
+```bash
+# Download the deployment script
+curl -sLO https://raw.githubusercontent.com/veesix-networks/osvbng/main/scripts/qemu/deploy-vm.sh
+chmod +x deploy-vm.sh
+
+# Run the interactive installer
+sudo ./deploy-vm.sh
+```
+
+The installer will:
+
+1. Check prerequisites (IOMMU, vfio-pci, etc.)
+2. Let you select NICs for PCI passthrough (access and core)
+3. Download and deploy the osvbng VM image
+4. Configure the VM with your selected interfaces
+
+**Manual Image Download (Optional):**
+
+If you prefer to download the QEMU image separately, you can download the qcow2 images manually from the Releases page or run the following:
+
+```bash
+# Download latest release
+curl -fLO https://github.com/veesix-networks/osvbng/releases/latest/download/osvbng-debian12.qcow2.gz
+
+# Or download a specific version
+curl -fLO https://github.com/veesix-networks/osvbng/releases/download/v1.0.0/osvbng-debian12.qcow2.gz
+
+# Extract the image
+gunzip osvbng-debian12.qcow2.gz
+
+# Move to libvirt images directory
+sudo mv osvbng-debian12.qcow2 /var/lib/libvirt/images/osvbng.qcow2
+```
+
+**Start and Connect:**
+
+```bash
+# Start the VM
+sudo virsh start osvbng
+
+# Connect to console
+sudo virsh console osvbng
+
+# Default login: root / osvbng
+```
+
+**Access the CLI:**
+
+```bash
+# Inside the VM
+osvbngcli
+
+osvbng> show subscriber sessions
+```
+
+The VM auto-generates a default configuration on first boot. To customize, edit `/etc/osvbng/osvbng.yaml` and restart the osvbng service.
+
+#### Tested Host Operating Systems
+
+- Ubuntu 22.04, 24.04
+- Debian 12 (Bookworm)
 
 ## Expectations
 

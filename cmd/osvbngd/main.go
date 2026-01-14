@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -59,6 +61,80 @@ func main() {
 		}
 		os.Stdout.WriteString(output)
 		return
+	}
+
+	if len(flag.Args()) > 0 && flag.Args()[0] == "generate-dataplane" {
+		if _, err := os.Stat(*configPath); os.IsNotExist(err) {
+			log.Printf("Config file not found at %s, generating default config", *configPath)
+			defaultCfg, err := config.Generate(config.GenerateOptions{AllDataplane: true})
+			if err != nil {
+				log.Fatalf("Failed to generate default config: %v", err)
+			}
+			if err := os.WriteFile(*configPath, []byte(defaultCfg), 0644); err != nil {
+				log.Fatalf("Failed to write default config: %v", err)
+			}
+			log.Printf("Default config written to %s", *configPath)
+		}
+
+		cfg, err := config.Load(*configPath)
+		if err != nil {
+			log.Fatalf("Failed to load config: %v", err)
+		}
+
+		totalCores := runtime.NumCPU()
+		mainCore := 0
+		workerCores := ""
+		if totalCores > 1 {
+			workerCores = fmt.Sprintf("1-%d", totalCores-1)
+		}
+
+		dpdk := cfg.Dataplane.DPDK
+		if dpdk == nil || len(dpdk.Devices) == 0 {
+			devices, err := config.DiscoverDPDKDevices()
+			if err != nil {
+				log.Printf("Warning: failed to discover DPDK devices: %v", err)
+			}
+			if len(devices) > 0 {
+				if dpdk == nil {
+					dpdk = &config.DPDK{}
+				}
+				dpdk.Devices = devices
+				log.Printf("Auto-discovered %d DPDK device(s)", len(devices))
+			}
+		}
+
+		useDPDK := dpdk != nil && len(dpdk.Devices) > 0
+
+		data := &config.DataplaneTemplateData{
+			MainCore:    mainCore,
+			WorkerCores: workerCores,
+			LogFile:     "/var/log/osvbng/dataplane.log",
+			CLISocket:   "/run/osvbng/cli.sock",
+			APISocket:   "/run/osvbng/dataplane_api.sock",
+			PuntSocket:  "/run/osvbng/punt.sock",
+			UseDPDK:     useDPDK,
+			DPDK:        dpdk,
+		}
+
+		dc := config.NewDataplaneConf()
+		output, err := dc.Generate(data)
+		if err != nil {
+			log.Fatalf("Failed to generate dataplane config: %v", err)
+		}
+		os.Stdout.WriteString(output)
+		return
+	}
+
+	if _, err := os.Stat(*configPath); os.IsNotExist(err) {
+		log.Printf("Config file not found at %s, generating default config", *configPath)
+		defaultCfg, err := config.Generate(config.GenerateOptions{AllDataplane: true})
+		if err != nil {
+			log.Fatalf("Failed to generate default config: %v", err)
+		}
+		if err := os.WriteFile(*configPath, []byte(defaultCfg), 0644); err != nil {
+			log.Fatalf("Failed to write default config: %v", err)
+		}
+		log.Printf("Default config written to %s", *configPath)
 	}
 
 	cfg, err := config.Load(*configPath)

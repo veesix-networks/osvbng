@@ -1,4 +1,5 @@
-FROM golang:1.24 AS builder
+ARG GOLANG_VERSION=1.24
+FROM golang:${GOLANG_VERSION} AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     make \
@@ -38,12 +39,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -s https://packagecloud.io/install/repositories/fdio/release/script.deb.sh | bash
 
 ARG VPP_INSTALL_SKIP_SYSCTL=true
+ARG DATAPLANE_VERSION=25.10-release
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     numactl \
-    vpp=25.10-release \
-    vpp-plugin-core=25.10-release \
-    libvppinfra=25.10-release \
+    vpp=${DATAPLANE_VERSION} \
+    vpp-plugin-core=${DATAPLANE_VERSION} \
+    libvppinfra=${DATAPLANE_VERSION} \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -s https://deb.frrouting.org/frr/keys.gpg | tee /usr/share/keyrings/frrouting.gpg > /dev/null \
