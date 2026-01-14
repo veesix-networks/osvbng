@@ -1,0 +1,321 @@
+package local
+
+import (
+	"context"
+	"encoding/binary"
+	"fmt"
+	"net"
+	"sync"
+	"time"
+
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
+	"github.com/veesix-networks/osvbng/pkg/config"
+	"github.com/veesix-networks/osvbng/pkg/dhcp4"
+	"github.com/veesix-networks/osvbng/pkg/provider"
+)
+
+func init() {
+	dhcp4.Register("local", New)
+}
+
+type Provider struct {
+	pools       []*IPPool
+	leases      map[string]*Lease
+	leasesByIP  map[string]*Lease
+	mu          sync.RWMutex
+	defaultPool *IPPool
+}
+
+type IPPool struct {
+	Name       string
+	Network    *net.IPNet
+	RangeStart net.IP
+	RangeEnd   net.IP
+	Gateway    net.IP
+	DNSServers []net.IP
+	LeaseTime  uint32
+}
+
+type Lease struct {
+	IP         net.IP
+	MAC        string
+	SessionID  string
+	ExpireTime time.Time
+}
+
+func New(cfg *config.Config) (dhcp4.DHCPProvider, error) {
+	p := &Provider{
+		pools:      make([]*IPPool, 0),
+		leases:     make(map[string]*Lease),
+		leasesByIP: make(map[string]*Lease),
+	}
+
+	for _, poolCfg := range cfg.DHCP.Pools {
+		if err := p.AddPool(poolCfg.Name, poolCfg.Network, poolCfg.RangeStart, poolCfg.RangeEnd, poolCfg.Gateway, poolCfg.DNSServers, poolCfg.LeaseTime); err != nil {
+			return nil, fmt.Errorf("failed to add pool '%s': %w", poolCfg.Name, err)
+		}
+	}
+
+	return p, nil
+}
+
+func (p *Provider) Info() provider.Info {
+	return provider.Info{
+		Name:    "local",
+		Version: "1.0.0",
+		Author:  "OSVBNG Core",
+	}
+}
+
+func (p *Provider) AddPool(name, network, rangeStart, rangeEnd, gateway string, dnsServers []string, leaseTime uint32) error {
+	_, ipnet, err := net.ParseCIDR(network)
+	if err != nil {
+		return fmt.Errorf("invalid network: %w", err)
+	}
+
+	pool := &IPPool{
+		Name:       name,
+		Network:    ipnet,
+		RangeStart: net.ParseIP(rangeStart),
+		RangeEnd:   net.ParseIP(rangeEnd),
+		Gateway:    net.ParseIP(gateway),
+		DNSServers: make([]net.IP, 0),
+		LeaseTime:  leaseTime,
+	}
+
+	for _, dns := range dnsServers {
+		pool.DNSServers = append(pool.DNSServers, net.ParseIP(dns))
+	}
+
+	p.pools = append(p.pools, pool)
+	if p.defaultPool == nil {
+		p.defaultPool = pool
+	}
+
+	return nil
+}
+
+func (p *Provider) HandlePacket(ctx context.Context, pkt *dhcp4.Packet) (*dhcp4.Packet, error) {
+	dhcp := &layers.DHCPv4{}
+	if err := dhcp.DecodeFromBytes(pkt.Raw, gopacket.NilDecodeFeedback); err != nil {
+		return nil, fmt.Errorf("failed to decode DHCP layer: %w", err)
+	}
+
+	msgType := layers.DHCPMsgTypeUnspecified
+	for _, opt := range dhcp.Options {
+		if opt.Type == layers.DHCPOptMessageType && len(opt.Data) == 1 {
+			msgType = layers.DHCPMsgType(opt.Data[0])
+			break
+		}
+	}
+
+	switch msgType {
+	case layers.DHCPMsgTypeDiscover:
+		return p.handleDiscover(pkt, dhcp)
+	case layers.DHCPMsgTypeRequest:
+		return p.handleRequest(pkt, dhcp)
+	case layers.DHCPMsgTypeRelease:
+		return p.handleRelease(pkt, dhcp)
+	default:
+		return nil, fmt.Errorf("unsupported DHCP message type: %v", msgType)
+	}
+}
+
+func (p *Provider) handleDiscover(pkt *dhcp4.Packet, dhcp *layers.DHCPv4) (*dhcp4.Packet, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.defaultPool == nil {
+		return nil, fmt.Errorf("no DHCP pools configured")
+	}
+
+	mac := dhcp.ClientHWAddr.String()
+
+	var offerIP net.IP
+	if existingLease, exists := p.leases[mac]; exists {
+		offerIP = existingLease.IP
+	} else {
+		var err error
+		offerIP, err = p.allocateIP(p.defaultPool, mac, pkt.SessionID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to allocate IP: %w", err)
+		}
+	}
+
+	response := p.buildOffer(dhcp, offerIP, p.defaultPool)
+	return &dhcp4.Packet{
+		SessionID: pkt.SessionID,
+		MAC:       pkt.MAC,
+		SVLAN:     pkt.SVLAN,
+		CVLAN:     pkt.CVLAN,
+		Raw:       response,
+	}, nil
+}
+
+func (p *Provider) handleRequest(pkt *dhcp4.Packet, dhcp *layers.DHCPv4) (*dhcp4.Packet, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.defaultPool == nil {
+		return nil, fmt.Errorf("no DHCP pools configured")
+	}
+
+	mac := dhcp.ClientHWAddr.String()
+
+	var requestedIP net.IP
+	for _, opt := range dhcp.Options {
+		if opt.Type == layers.DHCPOptRequestIP && len(opt.Data) == 4 {
+			requestedIP = net.IP(opt.Data)
+			break
+		}
+	}
+
+	if requestedIP == nil {
+		requestedIP = dhcp.ClientIP
+	}
+
+	lease, exists := p.leases[mac]
+	if !exists || !lease.IP.Equal(requestedIP) {
+		var err error
+		requestedIP, err = p.allocateIP(p.defaultPool, mac, pkt.SessionID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to allocate IP: %w", err)
+		}
+	} else {
+		lease.ExpireTime = time.Now().Add(time.Duration(p.defaultPool.LeaseTime) * time.Second)
+	}
+
+	response := p.buildAck(dhcp, requestedIP, p.defaultPool)
+	return &dhcp4.Packet{
+		SessionID: pkt.SessionID,
+		MAC:       pkt.MAC,
+		SVLAN:     pkt.SVLAN,
+		CVLAN:     pkt.CVLAN,
+		Raw:       response,
+	}, nil
+}
+
+func (p *Provider) handleRelease(pkt *dhcp4.Packet, dhcp *layers.DHCPv4) (*dhcp4.Packet, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	mac := dhcp.ClientHWAddr.String()
+	if lease, exists := p.leases[mac]; exists {
+		delete(p.leasesByIP, lease.IP.String())
+		delete(p.leases, mac)
+	}
+
+	return nil, nil
+}
+
+func (p *Provider) allocateIP(pool *IPPool, mac, sessionID string) (net.IP, error) {
+	start := binary.BigEndian.Uint32(pool.RangeStart.To4())
+	end := binary.BigEndian.Uint32(pool.RangeEnd.To4())
+
+	for i := start; i <= end; i++ {
+		ip := make(net.IP, 4)
+		binary.BigEndian.PutUint32(ip, i)
+
+		if _, used := p.leasesByIP[ip.String()]; !used {
+			lease := &Lease{
+				IP:         ip,
+				MAC:        mac,
+				SessionID:  sessionID,
+				ExpireTime: time.Now().Add(time.Duration(pool.LeaseTime) * time.Second),
+			}
+			p.leases[mac] = lease
+			p.leasesByIP[ip.String()] = lease
+			return ip, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no available IPs in pool")
+}
+
+func (p *Provider) buildOffer(req *layers.DHCPv4, offerIP net.IP, pool *IPPool) []byte {
+	return p.buildResponse(req, offerIP, pool, layers.DHCPMsgTypeOffer)
+}
+
+func (p *Provider) buildAck(req *layers.DHCPv4, ackIP net.IP, pool *IPPool) []byte {
+	return p.buildResponse(req, ackIP, pool, layers.DHCPMsgTypeAck)
+}
+
+func (p *Provider) buildResponse(req *layers.DHCPv4, ip net.IP, pool *IPPool, msgType layers.DHCPMsgType) []byte {
+	options := []layers.DHCPOption{
+		{
+			Type:   layers.DHCPOptMessageType,
+			Data:   []byte{byte(msgType)},
+			Length: 1,
+		},
+		{
+			Type:   layers.DHCPOptServerID,
+			Data:   pool.Gateway.To4(),
+			Length: 4,
+		},
+		{
+			Type:   layers.DHCPOptLeaseTime,
+			Data:   make([]byte, 4),
+			Length: 4,
+		},
+		{
+			Type:   layers.DHCPOptSubnetMask,
+			Data:   pool.Network.Mask,
+			Length: 4,
+		},
+		{
+			Type:   layers.DHCPOptRouter,
+			Data:   pool.Gateway.To4(),
+			Length: 4,
+		},
+	}
+
+	binary.BigEndian.PutUint32(options[2].Data, pool.LeaseTime)
+
+	if len(pool.DNSServers) > 0 {
+		dnsData := make([]byte, 0)
+		for _, dns := range pool.DNSServers {
+			dnsData = append(dnsData, dns.To4()...)
+		}
+		options = append(options, layers.DHCPOption{
+			Type:   layers.DHCPOptDNS,
+			Data:   dnsData,
+			Length: uint8(len(dnsData)),
+		})
+	}
+
+	dhcpReply := &layers.DHCPv4{
+		Operation:    layers.DHCPOpReply,
+		HardwareType: layers.LinkTypeEthernet,
+		HardwareLen:  6,
+		Xid:          req.Xid,
+		ClientIP:     req.ClientIP,
+		YourClientIP: ip,
+		NextServerIP: pool.Gateway,
+		ClientHWAddr: req.ClientHWAddr,
+		Options:      options,
+	}
+
+	buf := gopacket.NewSerializeBuffer()
+	opts := gopacket.SerializeOptions{
+		FixLengths:       true,
+		ComputeChecksums: true,
+	}
+
+	ipv4 := &layers.IPv4{
+		Version:  4,
+		TTL:      64,
+		Protocol: layers.IPProtocolUDP,
+		SrcIP:    pool.Gateway,
+		DstIP:    net.IPv4bcast,
+	}
+
+	udp := &layers.UDP{
+		SrcPort: 67,
+		DstPort: 68,
+	}
+	udp.SetNetworkLayerForChecksum(ipv4)
+
+	gopacket.SerializeLayers(buf, opts, ipv4, udp, dhcpReply)
+	return buf.Bytes()
+}

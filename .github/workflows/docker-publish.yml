@@ -1,0 +1,75 @@
+name: Publish Docker Image
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - 'docker-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g., v1.0.0)'
+        required: true
+        type: string
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: veesixnetworks/osvbng
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Load versions
+        id: versions
+        run: |
+          source versions.env
+          echo "dataplane_version=${DATAPLANE_VERSION}" >> $GITHUB_OUTPUT
+          echo "golang_version=${GOLANG_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          # Strip docker- prefix if present
+          VERSION="${VERSION#docker-}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=latest
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            COMMIT=${{ github.sha }}
+            GOLANG_VERSION=${{ steps.versions.outputs.golang_version }}
+            DATAPLANE_VERSION=${{ steps.versions.outputs.dataplane_version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

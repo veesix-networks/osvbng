@@ -1,0 +1,191 @@
+syntax = "proto3";
+
+package openbng.v1;
+
+option go_package = "github.com/veesix-networks/osvbng/api/proto;bngpb";
+
+service BNGService {
+  // Session management
+  rpc GetSessions(GetSessionsRequest) returns (GetSessionsResponse);
+  rpc GetSession(GetSessionRequest) returns (Session);
+  rpc GetStats(GetStatsRequest) returns (Stats);
+  rpc TerminateSession(TerminateSessionRequest) returns (TerminateSessionResponse);
+
+  // Show operational data (generic handler-based)
+  rpc GetOperationalStats(GetOperationalStatsRequest) returns (GetOperationalStatsResponse);
+
+  // Operational commands (generic handler-based)
+  rpc ExecuteOperation(ExecuteOperationRequest) returns (ExecuteOperationResponse);
+
+  // Configuration management
+  rpc GetRunningConfig(GetRunningConfigRequest) returns (ConfigResponse);
+  rpc GetStartupConfig(GetStartupConfigRequest) returns (ConfigResponse);
+  rpc ListVersions(ListVersionsRequest) returns (ListVersionsResponse);
+  rpc GetVersion(GetVersionRequest) returns (VersionResponse);
+  rpc ConfigEnter(ConfigEnterRequest) returns (ConfigEnterResponse);
+  rpc ConfigSet(ConfigSetRequest) returns (ConfigSetResponse);
+  rpc ConfigCommit(ConfigCommitRequest) returns (ConfigCommitResponse);
+  rpc ConfigDiscard(ConfigDiscardRequest) returns (ConfigDiscardResponse);
+  rpc ConfigDiff(ConfigDiffRequest) returns (ConfigDiffResponse);
+}
+
+message GetSessionsRequest {
+  string access_type = 1;
+  string protocol = 2;
+  uint32 svlan = 3;
+}
+
+message GetSessionsResponse {
+  repeated Session sessions = 1;
+}
+
+message GetSessionRequest {
+  string session_id = 1;
+}
+
+message Session {
+  string session_id = 1;
+  string acct_session_id = 17;
+  string access_type = 2;
+  string protocol = 3;
+  string mac = 4;
+  uint32 outer_vlan = 5;
+  uint32 inner_vlan = 6;
+  string state = 7;
+  string ipv4_address = 8;
+  string ipv6_address = 9;
+  uint32 lease_time = 10;
+  string hostname = 11;
+  bytes circuit_id = 12;
+  bytes remote_id = 13;
+  int64 created_at = 14;
+  int64 last_seen = 15;
+  bool is_df = 16;
+  uint32 sw_if_index = 18;
+  uint32 adj_index = 19;
+  uint32 fib_id = 20;
+}
+
+message GetStatsRequest {}
+
+message Stats {
+  uint32 total_sessions = 1;
+  uint32 ipoe_v4_sessions = 2;
+  uint32 ipoe_v6_sessions = 3;
+  uint32 ppp_sessions = 4;
+  uint32 active_sessions = 5;
+  uint32 released_sessions = 6;
+}
+
+message TerminateSessionRequest {
+  string session_id = 1;
+}
+
+message TerminateSessionResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+
+message GetRunningConfigRequest {}
+
+message GetStartupConfigRequest {}
+
+message ConfigResponse {
+  string config_yaml = 1;
+}
+
+message ListVersionsRequest {}
+
+message ListVersionsResponse {
+  repeated ConfigVersion versions = 1;
+}
+
+message GetVersionRequest {
+  int32 version = 1;
+}
+
+message VersionResponse {
+  ConfigVersion version = 1;
+}
+
+message ConfigVersion {
+  int32 version = 1;
+  int64 timestamp = 2;
+  string commit_msg = 3;
+  repeated ConfigChange changes = 4;
+}
+
+message ConfigChange {
+  string type = 1;
+  string path = 2;
+  string value = 3;
+}
+
+message ConfigEnterRequest {}
+
+message ConfigEnterResponse {
+  string session_id = 1;
+}
+
+message ConfigSetRequest {
+  string session_id = 1;
+  string path = 2;
+  string value = 3;
+}
+
+message ConfigSetResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ConfigCommitRequest {
+  string session_id = 1;
+  string commit_msg = 2;
+}
+
+message ConfigCommitResponse {
+  bool success = 1;
+  string message = 2;
+  int32 version = 3;
+}
+
+message ConfigDiscardRequest {
+  string session_id = 1;
+}
+
+message ConfigDiscardResponse {
+  bool success = 1;
+}
+
+message ConfigDiffRequest {
+  string session_id = 1;
+}
+
+message ConfigDiffResponse {
+  repeated DiffLine added = 1;
+  repeated DiffLine deleted = 2;
+  repeated DiffLine modified = 3;
+}
+
+message DiffLine {
+  string path = 1;
+  string value = 2;
+}
+
+message GetOperationalStatsRequest {
+  string path = 1;
+}
+
+message GetOperationalStatsResponse {
+  map<string, bytes> metrics = 1;
+}
+
+message ExecuteOperationRequest {
+  string path = 1;
+  bytes body = 2;
+}
+
+message ExecuteOperationResponse {
+  bytes data = 1;
+}

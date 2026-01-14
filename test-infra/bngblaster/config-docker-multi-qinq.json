@@ -1,0 +1,35 @@
+{
+  "interfaces": {
+    "access": [
+      {
+        "interface": "bng-access",
+        "type": "ipoe",
+	      "vlan-mode": "1:1",
+        "outer-vlan-min": 100,
+        "outer-vlan-max": 100,
+        "inner-vlan-min": 100,
+        "inner-vlan-max": 109
+      }
+    ]
+  },
+  "sessions": {
+    "count": 10,
+    "max-outstanding": 10,
+    "start-rate": 10,
+    "stop-rate": 10,
+    "autostart": true
+  },
+  "dhcp": {
+    "enable": true
+  },
+  "dhcpv6": {
+    "enable": false
+  },
+  "ipoe": {
+    "ipv6": false
+  },
+  "access-line": {
+    "agent-circuit-id": "eth 0/1/2/3/{session-global}:100.{session-global}",
+    "agent-remote-id": "DSLAM-{session-global}"
+  }
+}
