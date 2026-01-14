@@ -40,7 +40,7 @@ docker run -d --name osvbng \
 
 For production with physical NICs (replace `enp0s1` and `enp1s1` with your interface names):
 ```bash
-curl -sLO https://raw.githubusercontent.com/veesix-networks/osvbng/main/docker/setup-interfaces.sh
+curl -sLO https://raw.githubusercontent.com/veesix-networks/osvbng/dev/docker/setup-interfaces.sh
 chmod +x setup-interfaces.sh
 ./setup-interfaces.sh osvbng eth0:enp0s1 eth1:enp1s1
 ```
@@ -76,8 +76,8 @@ For "production" deployments, you need to ensure the container and its network i
 
 ```bash
 # Download the service file and setup script
-curl -sLO https://raw.githubusercontent.com/veesix-networks/osvbng/main/docker/osvbng.service
-curl -sLO https://raw.githubusercontent.com/veesix-networks/osvbng/main/docker/setup-interfaces.sh
+curl -sLO https://raw.githubusercontent.com/veesix-networks/osvbng/dev/docker/osvbng.service
+curl -sLO https://raw.githubusercontent.com/veesix-networks/osvbng/dev/docker/setup-interfaces.sh
 
 # Create working directory
 sudo mkdir -p /opt/osvbng
@@ -133,23 +133,23 @@ For maximum performance with DPDK and PCI passthrough. Requires a dedicated serv
 - At least 2 physical NICs for PCI passthrough (access and core)
 - 4GB+ RAM and 4+ CPU cores recommended
 
+**Quick Install:**
+
+```bash
+curl -sL https://v6n.io/osvbng | sudo bash
+```
+
 **Install Dependencies (Debian/Ubuntu):**
 
 ```bash
 sudo apt install -y libvirt-daemon-system qemu-kvm virtinst curl whiptail gzip
 ```
 
-**Quick Install:**
-
-```bash
-curl -sLO https://raw.githubusercontent.com/veesix-networks/osvbng/main/scripts/qemu/deploy-vm.sh && chmod +x deploy-vm.sh && sudo ./deploy-vm.sh
-```
-
 **Manual Install:**
 
 ```bash
 # Download the deployment script
-curl -sLO https://raw.githubusercontent.com/veesix-networks/osvbng/main/scripts/qemu/deploy-vm.sh
+curl -sLO https://raw.githubusercontent.com/veesix-networks/osvbng/dev/scripts/qemu/deploy-vm.sh
 chmod +x deploy-vm.sh
 
 # Run the interactive installer
