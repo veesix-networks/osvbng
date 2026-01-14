@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+if [ ! -t 0 ]; then
+    exec < /dev/tty
+fi
+
 VM_NAME="osvbng"
 VM_MEMORY=4096
 VM_VCPUS=4
