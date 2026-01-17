@@ -29,9 +29,12 @@ services:
     volumes:
       - /sys/kernel/debug:/sys/kernel/debug:ro
       - /dev/hugepages:/dev/hugepages
-      - ../../test-infra/configs/dataplane.conf:/etc/osvbng/dataplane.conf:ro
-      - ../../test-infra/configs/osvbng.yaml:/etc/osvbng/osvbng.yaml:ro
+      # - ../../test-infra/configs/dataplane.conf:/etc/osvbng/dataplane.conf:ro
+      # - ../../test-infra/configs/osvbng.yaml:/etc/osvbng/osvbng.yaml:ro
       - bng-config-versions:/var/lib/osvbng/config-versions
+      - ../../bin/osvbngd:/usr/local/bin/osvbngd:ro
+      - ../../bin/osvbngcli:/usr/local/bin/osvbngcli:ro
+      - ../../templates:/usr/share/osvbng/templates:ro
     cap_add:
       - SYS_ADMIN
       - NET_ADMIN

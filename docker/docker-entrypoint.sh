@@ -94,133 +94,8 @@ fi
 
 echo "Core allocation: Total=$TOTAL_CORES DP_MAIN=$OSVBNG_DP_MAIN_CORE DP_WORKERS=$OSVBNG_DP_WORKER_CORES CP=$OSVBNG_CP_CORES"
 
-generate_default_configs() {
-    mkdir -p /etc/osvbng
-    mkdir -p /var/log/osvbng
-
-    if [ ! -f /etc/osvbng/routing-daemons ]; then
-        cat > /etc/osvbng/routing-daemons <<'EOF'
-bgpd=yes
-ospfd=yes
-ospf6d=yes
-bfdd=yes
-ldpd=yes
-
-vtysh_enable=yes
-zebra_options="  -A 127.0.0.1 -s 67108864 -M dplane_fpm_nl"
-bgpd_options="   -A 127.0.0.1"
-ospfd_options="  -A 127.0.0.1"
-ospf6d_options=" -A ::1"
-staticd_options="-A 127.0.0.1"
-bfdd_options="   -A 127.0.0.1"
-ldpd_options="   -A 127.0.0.1"
-
-log_file=/var/log/osvbng/routing.log
-EOF
-    fi
-
-    if [ ! -f /etc/osvbng/routing.conf ]; then
-        cat > /etc/osvbng/routing.conf <<'EOF'
-hostname osvbng
-log syslog informational
-service integrated-vtysh-config
-ip forwarding
-ipv6 forwarding
-!
-line vty
-!
-end
-EOF
-    fi
-
-    if [ ! -f /etc/osvbng/dataplane.conf ]; then
-        cat > /etc/osvbng/dataplane.conf <<EOF
-unix {
-  interactive
-  log /var/log/osvbng/dataplane.log
-  full-coredump
-  cli-listen /run/osvbng/cli.sock
-  cli-prompt osvbng#
-  cli-no-pager
-  poll-sleep-usec 100
-}
-
-socksvr {
-  socket-name /run/osvbng/dataplane_api.sock
-}
-
-api-trace {
-  on
-}
-
-memory {
-  main-heap-size 512M
-  main-heap-page-size 4k
-}
-
-api-segment {
-  gid osvbng
-}
-
-cpu {
-  main-core ${OSVBNG_DP_MAIN_CORE}
-$([ -n "$OSVBNG_DP_WORKER_CORES" ] && echo "  corelist-workers ${OSVBNG_DP_WORKER_CORES}")
-}
-
-buffers {
-  buffers-per-numa 65536
-  default data-size 2048
-  page-size 4k
-}
-
-plugins {
-  plugin default { enable }
-  plugin dpdk_plugin.so { disable }
-  plugin linux_cp_plugin.so { enable }
-  plugin linux_nl_plugin.so { enable }
-  plugin arp_plugin.so { disable }
-  plugin rd_cp_plugin.so { disable }
-  plugin igmp_plugin.so { disable }
-  plugin v6n_osvbng_arp_punt_plugin.so { enable }
-  plugin v6n_osvbng_fib_control_plugin.so { enable }
-  plugin v6n_osvbng_accounting_plugin.so { enable }
-}
-
-logging {
-  default-log-level info
-  default-syslog-log-level info
-}
-
-linux-cp {
-  lcp-sync
-  lcp-auto-subint
-  del-static-on-link-down
-  del-dynamic-on-link-down
-}
-
-punt {
-  socket /run/osvbng/punt.sock
-}
-
-statseg {
-	default
-	per-node-counters on
-}
-EOF
-    fi
-
-    if [ ! -f /etc/osvbng/osvbng.yaml ]; then
-        echo "No configuration file found, generating default config..."
-        /usr/local/bin/osvbngd config > /etc/osvbng/osvbng.yaml
-        if [ $? -ne 0 ]; then
-            echo "ERROR: Failed to generate configuration file"
-            exit 1
-        fi
-        echo "Generated default configuration at /etc/osvbng/osvbng.yaml"
-    fi
-}
-
-generate_default_configs
+mkdir -p /etc/osvbng
+mkdir -p /var/log/osvbng
 
 echo "Configuring hugepages..."
 mkdir -p /dev/hugepages
@@ -241,6 +116,13 @@ chmod 770 /run/osvbng
 echo "====== Linux Interfaces Below ======"
 ip link show
 echo "====== Linux Interfaces Above ======"
+
+echo "Generating external configurations..."
+/usr/local/bin/osvbngd -config /etc/osvbng/osvbng.yaml generate-external
+if [ $? -ne 0 ]; then
+    echo "ERROR: Failed to generate external configurations"
+    exit 1
+fi
 
 echo "Starting dataplane..."
 /usr/bin/vpp -c /etc/osvbng/dataplane.conf &
@@ -269,9 +151,9 @@ echo "Setting dataplane API socket permissions..."
 chmod 660 /run/osvbng/dataplane_api.sock || true
 chown root:osvbng /run/osvbng/dataplane_api.sock || true
 
-echo "Symlinking routing config to FRR directories..."
+echo "Linking FRR configs to osvbng directory..."
 ln -sf /etc/osvbng/routing-daemons /etc/frr/daemons
-ln -sf /etc/osvbng/routing.conf /etc/frr/frr.conf
+ln -sf /etc/osvbng/frr.conf /etc/frr/frr.conf
 
 echo "Starting routing daemons..."
 /usr/lib/frr/frrinit.sh start
