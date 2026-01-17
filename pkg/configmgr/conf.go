@@ -3,6 +3,8 @@ package configmgr
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -11,11 +13,13 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
+	"github.com/veesix-networks/osvbng/pkg/logger"
 )
 
 type ConfigManager struct {
 	registry  *conf.Registry
 	frrConfig *frr.Config
+	logger    *slog.Logger
 
 	runningConfig *types.Config
 	startupConfig *types.Config
@@ -39,6 +43,7 @@ func NewConfigManager() *ConfigManager {
 	return &ConfigManager{
 		registry:          conf.NewRegistry(),
 		frrConfig:         frr.NewConfig(),
+		logger:            logger.Component(logger.ComponentConfig),
 		runningConfig:     &types.Config{Interfaces: make(map[string]*types.InterfaceConfig), Plugins: make(map[string]interface{})},
 		startupConfig:     &types.Config{Interfaces: make(map[string]*types.InterfaceConfig), Plugins: make(map[string]interface{})},
 		sessions:          make(map[types.SessionID]*session),
@@ -73,19 +78,7 @@ func (cd *ConfigManager) CreateCandidateSession() (types.SessionID, error) {
 
 	id := types.SessionID(fmt.Sprintf("session-%d", len(cd.sessions)+1))
 
-	candidateConfig := &types.Config{
-		Interfaces: make(map[string]*types.InterfaceConfig),
-		Plugins:    make(map[string]interface{}),
-	}
-
-	for k, v := range cd.runningConfig.Interfaces {
-		ifCopy := *v
-		candidateConfig.Interfaces[k] = &ifCopy
-	}
-
-	for k, v := range cd.runningConfig.Plugins {
-		candidateConfig.Plugins[k] = v
-	}
+	candidateConfig := cd.deepCopyConfig(cd.runningConfig)
 
 	cd.sessions[id] = &session{
 		id:     id,
@@ -137,7 +130,7 @@ func (cd *ConfigManager) Set(id types.SessionID, path string, value interface{})
 		return fmt.Errorf("validation failed: %w", err)
 	}
 
-	if err := setValueInConfig(sess.config, path, value); err != nil {
+	if err := setValueInConfig(sess.config, path, value, handler.PathPattern()); err != nil {
 		return fmt.Errorf("failed to set value: %w", err)
 	}
 
@@ -236,6 +229,8 @@ func (cd *ConfigManager) Commit(id types.SessionID) error {
 		return fmt.Errorf("no changes to commit")
 	}
 
+	cd.logger.Info("Committing configuration", "session", id, "changes", len(sortedChanges))
+
 	appliedChanges := make([]*conf.HandlerContext, 0)
 	frrReloadNeeded := false
 	for _, change := range sortedChanges {
@@ -258,6 +253,7 @@ func (cd *ConfigManager) Commit(id types.SessionID) error {
 	}
 
 	if frrReloadNeeded {
+		cd.logger.Info("Reloading FRR configuration")
 		if err := cd.frrConfig.Test(sess.config); err != nil {
 			cd.rollbackChanges(appliedChanges)
 			return fmt.Errorf("FRR config validation failed: %w", err)
@@ -267,6 +263,7 @@ func (cd *ConfigManager) Commit(id types.SessionID) error {
 			cd.rollbackChanges(appliedChanges)
 			return fmt.Errorf("FRR reload failed: %w", err)
 		}
+		cd.logger.Info("FRR configuration reloaded successfully")
 	}
 
 	diff := FormatChanges(sess.changes)
@@ -302,6 +299,8 @@ func (cd *ConfigManager) Commit(id types.SessionID) error {
 	if err := SaveYAML(cd.startupConfigPath, cd.startupConfig); err != nil {
 		return fmt.Errorf("failed to save startup config: %w", err)
 	}
+
+	cd.logger.Info("Configuration committed successfully", "version", version.Version, "added", len(diff.Added), "modified", len(diff.Modified), "deleted", len(diff.Deleted))
 
 	return nil
 }
@@ -345,11 +344,21 @@ func (cd *ConfigManager) sortChangesByDependencies(changes []*conf.HandlerContex
 
 		for _, dep := range handler.Dependencies() {
 			depPattern := dep.String()
-			if graph[depPattern] == nil {
-				graph[depPattern] = []int{}
+
+			if _, existsInSession := patternToIndices[depPattern]; existsInSession {
+				if graph[depPattern] == nil {
+					graph[depPattern] = []int{}
+				}
+				graph[depPattern] = append(graph[depPattern], i)
+				inDegree[i]++
+			} else {
+				val, err := getValueFromConfig(cd.runningConfig, depPattern)
+				if err != nil || val == nil {
+					userFriendlyDep := strings.ReplaceAll(depPattern, "<", "")
+					userFriendlyDep = strings.ReplaceAll(userFriendlyDep, ">", "")
+					return nil, fmt.Errorf("missing required configuration: %s", userFriendlyDep)
+				}
 			}
-			graph[depPattern] = append(graph[depPattern], i)
-			inDegree[i]++
 		}
 	}
 
@@ -548,6 +557,13 @@ func (cd *ConfigManager) SaveStartup() error {
 
 	cd.startupConfig = cd.deepCopyConfig(cd.runningConfig)
 	return SaveYAML(cd.startupConfigPath, cd.startupConfig)
+}
+
+func (cd *ConfigManager) ReloadFRR() error {
+	cd.mu.RLock()
+	defer cd.mu.RUnlock()
+
+	return cd.reloadFRR(cd.runningConfig)
 }
 
 func (cd *ConfigManager) LoadConfig(id types.SessionID, config *types.Config) error {

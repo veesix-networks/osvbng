@@ -102,6 +102,8 @@ func (c *Component) GetStatus() *Status {
 func (c *Component) startServer() {
 	mux := http.NewServeMux()
 
+	mux.HandleFunc("GET /api/running-config", c.handleRunningConfig)
+	mux.HandleFunc("GET /api/startup-config", c.handleStartupConfig)
 	mux.HandleFunc("GET /api/{path...}", c.handleShow)
 	mux.HandleFunc("POST /api/{path...}", c.handleConfig)
 	mux.HandleFunc("GET /api", c.handlePaths)

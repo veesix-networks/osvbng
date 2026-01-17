@@ -78,26 +78,29 @@ func (c *Component) handleConfig(w http.ResponseWriter, r *http.Request) {
 
 	path = strings.ReplaceAll(path, "/", ".")
 
-	// Check if there's an oper handler for this path
-	if c.adapter.HasOperHandler(path) {
-		c.handleOper(w, r, path)
+	normalizedPath, err := c.adapter.NormalizePath(path)
+	if err != nil {
+		c.writeError(w, http.StatusBadRequest, "failed to normalize path: "+err.Error())
+		return
+	}
+
+	c.logger.Info("NORMALIZATION", "original", path, "normalized", normalizedPath)
+
+	if c.adapter.HasOperHandler(normalizedPath) {
+		c.handleOper(w, r, normalizedPath)
 		return
 	}
 
 	var value interface{}
-	if err := json.NewDecoder(r.Body).Decode(&value); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil {
 		c.writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 
-	if err := c.adapter.ValidateConfig(r.Context(), "", path, value); err != nil {
-		c.logger.Error("config validation failed", "path", path, "error", err)
-		c.writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	if err := c.adapter.ApplyConfig(r.Context(), "", path, nil, value); err != nil {
-		c.logger.Error("config apply failed", "path", path, "error", err)
+	if err := c.adapter.SetAndCommit(r.Context(), normalizedPath, value); err != nil {
+		c.logger.Error("config set and commit failed", "path", normalizedPath, "error", err)
 		c.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -140,4 +143,26 @@ func (c *Component) writeError(w http.ResponseWriter, status int, message string
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(ErrorResponse{Error: message})
+}
+
+func (c *Component) handleRunningConfig(w http.ResponseWriter, r *http.Request) {
+	cfg, err := c.adapter.GetRunningConfig(r.Context())
+	if err != nil {
+		c.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(cfg)
+}
+
+func (c *Component) handleStartupConfig(w http.ResponseWriter, r *http.Request) {
+	cfg, err := c.adapter.GetStartupConfig(r.Context())
+	if err != nil {
+		c.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(cfg)
 }
