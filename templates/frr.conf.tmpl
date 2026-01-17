@@ -1,9 +1,27 @@
+log syslog informational
+service integrated-vtysh-config
+ip forwarding
+ipv6 forwarding
+!
 {{ if .Protocols }}
 {{ if .Protocols.BGP }}
 {{ if .Protocols.BGP.ASN }}
 router bgp {{ .Protocols.BGP.ASN }}
 {{ if .Protocols.BGP.RouterID }}
  bgp router-id {{ .Protocols.BGP.RouterID }}
+{{ end }}
+!
+{{ range $addr, $neighbor := .Protocols.BGP.Neighbors }}
+ neighbor {{ $addr }} remote-as {{ $neighbor.RemoteAS }}
+{{ if $neighbor.Peer }}
+ neighbor {{ $addr }} update-source {{ $neighbor.Peer }}
+{{ end }}
+{{ if $neighbor.BFD }}
+ neighbor {{ $addr }} bfd
+{{ end }}
+{{ if $neighbor.Description }}
+ neighbor {{ $addr }} description {{ $neighbor.Description }}
+{{ end }}
 {{ end }}
 !
 {{ if .Protocols.BGP.IPv4Unicast }}
