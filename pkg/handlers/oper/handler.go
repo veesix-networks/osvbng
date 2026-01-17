@@ -100,7 +100,7 @@ func matchPattern(pattern, path string) bool {
 	}
 
 	for i := range patternParts {
-		if patternParts[i] == "*" {
+		if isWildcard(patternParts[i]) {
 			continue
 		}
 		if patternParts[i] != pathParts[i] {
@@ -109,6 +109,10 @@ func matchPattern(pattern, path string) bool {
 	}
 
 	return true
+}
+
+func isWildcard(part string) bool {
+	return strings.HasPrefix(part, "<") && strings.HasSuffix(part, ">")
 }
 
 func (r *Registry) GetAllPaths() []paths.Path {

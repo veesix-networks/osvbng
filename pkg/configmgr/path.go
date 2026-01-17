@@ -6,8 +6,38 @@ import (
 	"strconv"
 	"strings"
 
+	confpaths "github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
+	"github.com/veesix-networks/osvbng/pkg/paths"
 )
+
+func decodePathSegments(encodedPath, pattern string) ([]string, error) {
+	wildcardValues, err := paths.Extract(encodedPath, pattern)
+	if err != nil {
+		parts := strings.Split(encodedPath, ".")
+		return parts, nil
+	}
+
+	patternParts := strings.Split(pattern, ".")
+	result := make([]string, len(patternParts))
+	wildcardIdx := 0
+
+	for i, part := range patternParts {
+		if strings.HasPrefix(part, "<") && strings.HasSuffix(part, ">") {
+			if wildcardIdx < len(wildcardValues) {
+				result[i] = wildcardValues[wildcardIdx]
+				wildcardIdx++
+			} else {
+				parts := strings.Split(encodedPath, ".")
+				return parts, nil
+			}
+		} else {
+			result[i] = part
+		}
+	}
+
+	return result, nil
+}
 
 func findFieldByPath(v reflect.Value, pathPart string) reflect.Value {
 	t := v.Type()
@@ -126,8 +156,11 @@ func getValueFromConfig(config *types.Config, path string) (interface{}, error) 
 	return current, nil
 }
 
-func setValueInConfig(config *types.Config, path string, value interface{}) error {
-	parts := strings.Split(path, ".")
+func setValueInConfig(config *types.Config, path string, value interface{}, pattern confpaths.Path) error {
+	parts, err := decodePathSegments(path, pattern.String())
+	if err != nil {
+		return err
+	}
 	if len(parts) == 0 {
 		return fmt.Errorf("empty path")
 	}
@@ -159,6 +192,14 @@ func setValueInConfig(config *types.Config, path string, value interface{}) erro
 
 				for i := len(nsParts); i < len(parts)-1; i++ {
 					part := parts[i]
+
+					if current.Kind() == reflect.Ptr {
+						if current.IsNil() {
+							newVal := reflect.New(current.Type().Elem())
+							current.Set(newVal)
+						}
+						current = current.Elem()
+					}
 
 					switch current.Kind() {
 					case reflect.Struct:
@@ -274,6 +315,10 @@ func setValueInConfig(config *types.Config, path string, value interface{}) erro
 				return fmt.Errorf("field not settable: %s", part)
 			}
 			current = field
+
+			if current.Kind() == reflect.Ptr && current.IsNil() {
+				current.Set(reflect.New(current.Type().Elem()))
+			}
 
 		case reflect.Map:
 			if current.IsNil() {

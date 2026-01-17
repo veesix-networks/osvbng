@@ -3,12 +3,14 @@ package frr
 import (
 	"bytes"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"text/template"
 
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
+	"github.com/veesix-networks/osvbng/pkg/logger"
 )
 
 const (
@@ -21,6 +23,7 @@ type Config struct {
 	TemplateDir string
 	ConfigPath  string
 	ReloadCmd   string
+	logger      *slog.Logger
 }
 
 func NewConfig() *Config {
@@ -28,6 +31,7 @@ func NewConfig() *Config {
 		TemplateDir: DefaultTemplateDir,
 		ConfigPath:  DefaultConfigPath,
 		ReloadCmd:   DefaultReloadCmd,
+		logger:      logger.Component(logger.ComponentRouting),
 	}
 }
 
@@ -110,7 +114,12 @@ func (c *Config) Reload(config *types.Config) error {
 	cmd := exec.Command(c.ReloadCmd, "--reload", candidateFile.Name())
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		c.logger.Error("FRR reload failed", "error", err, "output", string(output))
 		return fmt.Errorf("frr-reload failed: %w\nOutput: %s", err, string(output))
+	}
+
+	if len(output) > 0 {
+		c.logger.Info("FRR reload completed", "output", string(output))
 	}
 
 	return nil
