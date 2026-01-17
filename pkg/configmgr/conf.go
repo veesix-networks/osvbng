@@ -14,6 +14,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
 	"github.com/veesix-networks/osvbng/pkg/logger"
+	pathspkg "github.com/veesix-networks/osvbng/pkg/paths"
 )
 
 type ConfigManager struct {
@@ -320,6 +321,24 @@ func (cd *ConfigManager) rollbackChanges(changes []*conf.HandlerContext) {
 	}
 }
 
+func (cd *ConfigManager) resolveDepPath(currentPath, currentPattern, depPattern string) (string, error) {
+	if !strings.Contains(depPattern, "<") || !strings.Contains(depPattern, ">") {
+		return depPattern, nil
+	}
+
+	wildcardValues, err := pathspkg.Extract(currentPath, currentPattern)
+	if err != nil {
+		return depPattern, nil
+	}
+
+	resolvedPath, err := pathspkg.Build(depPattern, wildcardValues...)
+	if err != nil {
+		return depPattern, nil
+	}
+
+	return resolvedPath, nil
+}
+
 func (cd *ConfigManager) sortChangesByDependencies(changes []*conf.HandlerContext) ([]*conf.HandlerContext, error) {
 	if len(changes) == 0 {
 		return changes, nil
@@ -352,9 +371,14 @@ func (cd *ConfigManager) sortChangesByDependencies(changes []*conf.HandlerContex
 				graph[depPattern] = append(graph[depPattern], i)
 				inDegree[i]++
 			} else {
-				val, err := getValueFromConfig(cd.runningConfig, depPattern)
+				resolvedDepPath, err := cd.resolveDepPath(change.Path, pathPattern, depPattern)
+				if err != nil {
+					return nil, err
+				}
+
+				val, err := getValueFromConfig(cd.runningConfig, resolvedDepPath)
 				if err != nil || val == nil {
-					userFriendlyDep := strings.ReplaceAll(depPattern, "<", "")
+					userFriendlyDep := strings.ReplaceAll(resolvedDepPath, "<", "")
 					userFriendlyDep = strings.ReplaceAll(userFriendlyDep, ">", "")
 					return nil, fmt.Errorf("missing required configuration: %s", userFriendlyDep)
 				}

@@ -62,13 +62,18 @@ func (a *Adapter) ExecuteOper(ctx context.Context, path string, body []byte, opt
 }
 
 func (a *Adapter) ExecuteShow(ctx context.Context, path string, options map[string]string) (interface{}, error) {
-	handler, err := a.showRegistry.GetHandler(path)
+	normalizedPath, err := a.NormalizePath(path, a.showRegistry.GetAllPaths())
+	if err != nil {
+		return nil, fmt.Errorf("failed to normalize show path: %w", err)
+	}
+
+	handler, err := a.showRegistry.GetHandler(normalizedPath)
 	if err != nil {
 		return nil, fmt.Errorf("show handler not found for path %s: %w", path, err)
 	}
 
 	req := &show.Request{
-		Path:    path,
+		Path:    normalizedPath,
 		Options: options,
 	}
 
@@ -171,7 +176,7 @@ func (a *Adapter) SetAndCommit(ctx context.Context, path string, value interface
 
 type pathValue struct {
 	path  string
-	value string
+	value interface{}
 }
 
 func (a *Adapter) flattenValue(basePath string, value interface{}) ([]pathValue, error) {
@@ -189,11 +194,7 @@ func (a *Adapter) flattenValue(basePath string, value interface{}) ([]pathValue,
 		return result, nil
 	}
 
-	valueStr, err := a.valueToString(value)
-	if err != nil {
-		return nil, err
-	}
-	result = append(result, pathValue{path: basePath, value: valueStr})
+	result = append(result, pathValue{path: basePath, value: value})
 	return result, nil
 }
 
@@ -219,12 +220,27 @@ func (a *Adapter) valueToString(value interface{}) (string, error) {
 	}
 }
 
-func (a *Adapter) NormalizePath(userPath string) (string, error) {
-	allPaths := a.confRegistry.GetAllPaths()
+func (a *Adapter) NormalizePath(userPath string, allPaths interface{}) (string, error) {
+	var sortedPaths []string
 
-	sortedPaths := make([]string, len(allPaths))
-	for i, p := range allPaths {
-		sortedPaths[i] = p.String()
+	switch paths := allPaths.(type) {
+	case []confpaths.Path:
+		sortedPaths = make([]string, len(paths))
+		for i, p := range paths {
+			sortedPaths[i] = p.String()
+		}
+	case []showpaths.Path:
+		sortedPaths = make([]string, len(paths))
+		for i, p := range paths {
+			sortedPaths[i] = p.String()
+		}
+	case []operpaths.Path:
+		sortedPaths = make([]string, len(paths))
+		for i, p := range paths {
+			sortedPaths[i] = p.String()
+		}
+	default:
+		return userPath, nil
 	}
 
 	sort.Slice(sortedPaths, func(i, j int) bool {

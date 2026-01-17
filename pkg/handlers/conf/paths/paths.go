@@ -31,9 +31,10 @@ const (
 	ProtocolsBGPASN              Path = "protocols.bgp.asn"
 	ProtocolsBGPRouterID         Path = "protocols.bgp.router-id"
 	ProtocolsBGPEnabled          Path = "protocols.bgp.enabled"
-	ProtocolsBGPNeighborBFD      Path = "protocols.bgp.neighbors.<*:ip>.bfd"
-	ProtocolsBGPNeighborPeer     Path = "protocols.bgp.neighbors.<*:ip>.peer"
-	ProtocolsBGPNeighborRemoteAS Path = "protocols.bgp.neighbors.<*:ip>.remote_as"
+	ProtocolsBGPNeighborBFD         Path = "protocols.bgp.neighbors.<*:ip>.bfd"
+	ProtocolsBGPNeighborDescription Path = "protocols.bgp.neighbors.<*:ip>.description"
+	ProtocolsBGPNeighborPeer        Path = "protocols.bgp.neighbors.<*:ip>.peer"
+	ProtocolsBGPNeighborRemoteAS    Path = "protocols.bgp.neighbors.<*:ip>.remote_as"
 
 	ProtocolsStaticIPv4Route Path = "protocols.static.ipv4.<*>"
 	ProtocolsStaticIPv6Route Path = "protocols.static.ipv6.<*>"

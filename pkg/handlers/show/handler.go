@@ -3,6 +3,7 @@ package show
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
@@ -80,7 +81,38 @@ func (r *Registry) GetHandler(path string) (Handler, error) {
 	if handler, ok := r.handlers[path]; ok {
 		return &handlerAdapter{h: handler}, nil
 	}
+
+	for pattern, handler := range r.handlers {
+		if matchPattern(pattern, path) {
+			return &handlerAdapter{h: handler}, nil
+		}
+	}
+
 	return nil, fmt.Errorf("no handler registered for path: %s", path)
+}
+
+func matchPattern(pattern, path string) bool {
+	patternParts := strings.Split(pattern, ".")
+	pathParts := strings.Split(path, ".")
+
+	if len(patternParts) != len(pathParts) {
+		return false
+	}
+
+	for i := range patternParts {
+		if isWildcard(patternParts[i]) {
+			continue
+		}
+		if patternParts[i] != pathParts[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+func isWildcard(part string) bool {
+	return strings.HasPrefix(part, "<") && strings.HasSuffix(part, ">")
 }
 
 func (r *Registry) GetAllPaths() []paths.Path {

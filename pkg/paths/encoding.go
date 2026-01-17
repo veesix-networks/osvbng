@@ -184,6 +184,20 @@ func Build(pattern string, values ...string) (string, error) {
 	return strings.Join(parts, "."), nil
 }
 
+func DecodeValue(encoded string) (string, error) {
+	decoded, err := DecodeIP(encoded)
+	if err == nil {
+		return decoded, nil
+	}
+
+	decoded, err = DecodeMAC(encoded)
+	if err == nil {
+		return decoded, nil
+	}
+
+	return encoded, fmt.Errorf("not an encoded value")
+}
+
 func Extract(path string, pattern string) ([]string, error) {
 	pathParts := strings.Split(path, ".")
 	patternParts := strings.Split(pattern, ".")

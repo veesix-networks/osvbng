@@ -202,6 +202,24 @@ func (c *Component) GetBGPStatistics(ipv4 bool) (*bgp.Statistics, error) {
 	return result, nil
 }
 
+func (c *Component) GetBGPNeighbor(neighborIP string) (interface{}, error) {
+	output, err := c.execVtysh("-c", fmt.Sprintf("show bgp neighbors %s json", neighborIP))
+	if err != nil {
+		return nil, err
+	}
+
+	var resultMap map[string]interface{}
+	if err := json.Unmarshal(output, &resultMap); err != nil {
+		return nil, fmt.Errorf("parse BGP neighbor: %w", err)
+	}
+
+	if neighbor, ok := resultMap[neighborIP]; ok {
+		return neighbor, nil
+	}
+
+	return resultMap, nil
+}
+
 type bgpStatisticsEntry struct {
 	Instance                string  `json:"instance"`
 	TotalPrefixes           int     `json:"totalPrefixes"`

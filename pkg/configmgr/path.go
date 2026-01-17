@@ -144,7 +144,14 @@ func getValueFromConfig(config *types.Config, path string) (interface{}, error) 
 			key := reflect.ValueOf(part)
 			value := v.MapIndex(key)
 			if !value.IsValid() {
-				return nil, nil
+				decodedKey, err := paths.DecodeValue(part)
+				if err == nil && decodedKey != part {
+					key = reflect.ValueOf(decodedKey)
+					value = v.MapIndex(key)
+				}
+				if !value.IsValid() {
+					return nil, nil
+				}
 			}
 			current = value.Interface()
 
@@ -414,34 +421,69 @@ func convertValue(value interface{}, targetType reflect.Type) (interface{}, erro
 		targetType = targetType.Elem()
 	}
 
-	strValue, ok := value.(string)
-	if !ok {
-		return nil, fmt.Errorf("value must be string for conversion")
+	valueType := reflect.TypeOf(value)
+	if valueType != nil && valueType.AssignableTo(targetType) {
+		return value, nil
 	}
 
 	switch targetType.Kind() {
 	case reflect.String:
-		return strValue, nil
+		if str, ok := value.(string); ok {
+			return str, nil
+		}
+		return fmt.Sprintf("%v", value), nil
+
 	case reflect.Bool:
-		return strconv.ParseBool(strValue)
+		if b, ok := value.(bool); ok {
+			return b, nil
+		}
+		if str, ok := value.(string); ok {
+			return strconv.ParseBool(str)
+		}
+		return nil, fmt.Errorf("cannot convert %T to bool", value)
+
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		intVal, err := strconv.ParseInt(strValue, 10, 64)
-		if err != nil {
-			return nil, err
+		switch v := value.(type) {
+		case float64:
+			return reflect.ValueOf(int64(v)).Convert(targetType).Interface(), nil
+		case string:
+			intVal, err := strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				return nil, err
+			}
+			return reflect.ValueOf(intVal).Convert(targetType).Interface(), nil
+		default:
+			return nil, fmt.Errorf("cannot convert %T to int", value)
 		}
-		return reflect.ValueOf(intVal).Convert(targetType).Interface(), nil
+
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		uintVal, err := strconv.ParseUint(strValue, 10, 64)
-		if err != nil {
-			return nil, err
+		switch v := value.(type) {
+		case float64:
+			return reflect.ValueOf(uint64(v)).Convert(targetType).Interface(), nil
+		case string:
+			uintVal, err := strconv.ParseUint(v, 10, 64)
+			if err != nil {
+				return nil, err
+			}
+			return reflect.ValueOf(uintVal).Convert(targetType).Interface(), nil
+		default:
+			return nil, fmt.Errorf("cannot convert %T to uint", value)
 		}
-		return reflect.ValueOf(uintVal).Convert(targetType).Interface(), nil
+
 	case reflect.Float32, reflect.Float64:
-		floatVal, err := strconv.ParseFloat(strValue, 64)
-		if err != nil {
-			return nil, err
+		switch v := value.(type) {
+		case float64:
+			return reflect.ValueOf(v).Convert(targetType).Interface(), nil
+		case string:
+			floatVal, err := strconv.ParseFloat(v, 64)
+			if err != nil {
+				return nil, err
+			}
+			return reflect.ValueOf(floatVal).Convert(targetType).Interface(), nil
+		default:
+			return nil, fmt.Errorf("cannot convert %T to float", value)
 		}
-		return reflect.ValueOf(floatVal).Convert(targetType).Interface(), nil
+
 	default:
 		return nil, fmt.Errorf("unsupported type conversion to %s", targetType.Kind())
 	}

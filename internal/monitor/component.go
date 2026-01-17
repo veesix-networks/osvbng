@@ -7,6 +7,7 @@ import (
 
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
+	"github.com/veesix-networks/osvbng/pkg/configmgr"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/state"
@@ -23,6 +24,7 @@ type Component struct {
 	collectorConfig    state.CollectorConfig
 	disabledCollectors []string
 	showRegistry       show.Registry
+	configMgr          *configmgr.ConfigManager
 }
 
 type Config struct {
@@ -31,6 +33,7 @@ type Config struct {
 	CollectorConfig    state.CollectorConfig
 	DisabledCollectors []string
 	ShowRegistry       show.Registry
+	ConfigMgr          *configmgr.ConfigManager
 }
 
 func New(cfg Config) *Component {
@@ -42,6 +45,7 @@ func New(cfg Config) *Component {
 		collectorConfig:    cfg.CollectorConfig,
 		disabledCollectors: cfg.DisabledCollectors,
 		showRegistry:       cfg.ShowRegistry,
+		configMgr:          cfg.ConfigMgr,
 	}
 }
 
@@ -55,6 +59,7 @@ func (c *Component) Start(ctx context.Context) error {
 			Config:       c.collectorConfig,
 			Logger:       c.logger,
 			ShowRegistry: c.showRegistry,
+			ConfigMgr:    c.configMgr,
 		}, c.disabledCollectors)
 		if err != nil {
 			return fmt.Errorf("failed to create state collectors: %w", err)

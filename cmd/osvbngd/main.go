@@ -271,6 +271,7 @@ func main() {
 		},
 		DisabledCollectors: cfg.Monitoring.DisabledCollectors,
 		ShowRegistry:      *showRegistry,
+		ConfigMgr:         configd,
 	})
 
 	orch := component.NewOrchestrator()

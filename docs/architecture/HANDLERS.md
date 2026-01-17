@@ -101,11 +101,13 @@ Handlers register for specific configuration or show paths:
 **Config Path Examples:**
 - `interfaces.*` - Handles all interface configuration
 - `protocols.bgp.asn` - Handles BGP ASN changes
+- `protocols.bgp.neighbors.<*:ip>.bfd` - Handles BFD config for any BGP neighbor
 - `plugins.example.hello.message` - Handles plugin-specific config
 
 **Show Path Examples:**
 - `subscriber.sessions` - Shows subscriber sessions
 - `interfaces.statistics` - Shows interface statistics
+- `protocols.bgp.neighbors.<*:ip>` - Shows BGP neighbor state for any IP
 - `example.hello.status` - Shows plugin status
 
 **Oper Path Examples:**
@@ -115,8 +117,19 @@ Handlers register for specific configuration or show paths:
 
 When a user runs a command, the system:
 1. Translates command to path
-2. Looks up handler for that path
-3. Calls the appropriate handler method
+2. Normalizes the path (encoding IPs/MACs as hex if needed)
+3. Looks up handler for that path (with wildcard pattern matching)
+4. Calls the appropriate handler method
+
+**Wildcard Types:**
+Paths support typed wildcards for dynamic segments:
+- `<*>` or `<*:string>` - Generic string
+- `<*:ip>`, `<*:ipv4>`, `<*:ipv6>` - IP addresses (automatically hex-encoded in paths)
+- `<*:mac>` - MAC addresses (automatically hex-encoded in paths)
+- `<*:uint8>`, `<*:uint16>`, `<*:uint32>`, `<*:uint64>` - Unsigned integers
+- `<*:int8>`, `<*:int16>`, `<*:int32>`, `<*:int64>` - Signed integers
+
+Example: `protocols.bgp.neighbors.<*:ip>` matches any IP like `10.4.20.254`, encoding it to hex internally.
 
 ### Dependency Management
 
@@ -126,6 +139,23 @@ Config handlers can declare dependencies to ensure correct application order:
 - Address handler depends on `interfaces.*`
 - Ensures interfaces exist before addresses are configured
 - System applies in dependency order automatically
+
+**Wildcard Dependencies:**
+When a handler with a wildcard path declares dependencies on other wildcard paths, the system automatically resolves wildcards using values from the current path:
+
+```go
+// Handler for protocols.bgp.neighbors.<*:ip>.bfd
+func (h *BGPNeighborBFDHandler) Dependencies() []paths.Path {
+    return []paths.Path{
+        paths.ProtocolsBGPNeighborRemoteAS,  // protocols.bgp.neighbors.<*:ip>.remote_as
+    }
+}
+```
+
+When setting `protocols.bgp.neighbors.10.4.20.254.bfd`, the system:
+1. Extracts wildcard value `10.4.20.254` from current path
+2. Substitutes it into dependency pattern
+3. Checks that `protocols.bgp.neighbors.10.4.20.254.remote_as` exists
 
 This prevents race conditions and ordering issues during commit.
 

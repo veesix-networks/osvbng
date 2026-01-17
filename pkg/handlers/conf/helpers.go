@@ -16,6 +16,11 @@ func ParseUint32(v interface{}) (uint32, error) {
 		return uint32(i), nil
 	case uint32:
 		return val, nil
+	case float64:
+		if val < 0 || val > 4294967295 {
+			return 0, fmt.Errorf("value out of range for uint32")
+		}
+		return uint32(val), nil
 	case json.Number:
 		i, err := val.Int64()
 		if err != nil {
@@ -55,6 +60,11 @@ func ParseUint16(v interface{}) (uint16, error) {
 			return 0, fmt.Errorf("value out of range for uint16")
 		}
 		return uint16(val), nil
+	case float64:
+		if val < 0 || val > 65535 {
+			return 0, fmt.Errorf("value out of range for uint16")
+		}
+		return uint16(val), nil
 	case json.Number:
 		i, err := val.Int64()
 		if err != nil {
@@ -89,6 +99,8 @@ func ParseInt(v interface{}) (int, error) {
 		return i, nil
 	case int:
 		return val, nil
+	case float64:
+		return int(val), nil
 	case json.Number:
 		i, err := val.Int64()
 		if err != nil {

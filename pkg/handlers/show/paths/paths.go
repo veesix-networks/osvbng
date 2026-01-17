@@ -12,6 +12,7 @@ const (
 	PluginsInfo                Path = "plugins.info"
 	ProtocolsBGPStatistics     Path = "protocols.bgp.statistics"
 	ProtocolsBGPIPv6Statistics Path = "protocols.bgp.ipv6.statistics"
+	ProtocolsBGPNeighbors      Path = "protocols.bgp.neighbors.<*:ip>"
 	SubscriberSessions         Path = "subscriber.sessions"
 	SubscriberSession          Path = "subscriber.session"
 	SubscriberStats            Path = "subscriber.stats"

@@ -78,7 +78,7 @@ func (c *Component) handleConfig(w http.ResponseWriter, r *http.Request) {
 
 	path = strings.ReplaceAll(path, "/", ".")
 
-	normalizedPath, err := c.adapter.NormalizePath(path)
+	normalizedPath, err := c.adapter.NormalizePath(path, c.adapter.GetAllConfPaths())
 	if err != nil {
 		c.writeError(w, http.StatusBadRequest, "failed to normalize path: "+err.Error())
 		return
@@ -93,7 +93,6 @@ func (c *Component) handleConfig(w http.ResponseWriter, r *http.Request) {
 
 	var value interface{}
 	decoder := json.NewDecoder(r.Body)
-	decoder.UseNumber()
 	if err := decoder.Decode(&value); err != nil {
 		c.writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return

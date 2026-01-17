@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/cache"
+	"github.com/veesix-networks/osvbng/pkg/configmgr"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 )
 
@@ -30,6 +31,7 @@ type CollectorDeps struct {
 	Config       CollectorConfig
 	Logger       *slog.Logger
 	ShowRegistry show.Registry
+	ConfigMgr    *configmgr.ConfigManager
 }
 
 type CollectorRegistry struct {
