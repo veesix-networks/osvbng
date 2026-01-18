@@ -2,13 +2,35 @@ package configmgr
 
 import (
 	"fmt"
+
+	"github.com/veesix-networks/osvbng/pkg/config"
 )
 
-func (cd *ConfigManager) ApplyStartupConfig(path string) error {
+func (cd *ConfigManager) LoadStartupConfig(path string) (*config.Config, error) {
 	config, err := LoadYAML(path)
 	if err != nil {
-		return fmt.Errorf("failed to load startup config: %w", err)
+		return nil, fmt.Errorf("failed to load startup config: %w", err)
 	}
+
+	cd.mu.Lock()
+	cd.startupConfig = cd.deepCopyConfig(config)
+	cd.mu.Unlock()
+
+	return config, nil
+}
+
+func (cd *ConfigManager) ApplyLoadedConfig() error {
+	cd.mu.RLock()
+	config := cd.startupConfig
+	cd.mu.RUnlock()
+
+	if config == nil {
+		return fmt.Errorf("no config loaded, call LoadStartupConfig first")
+	}
+
+	cd.mu.Lock()
+	cd.runningConfig = config
+	cd.mu.Unlock()
 
 	sessionID, err := cd.CreateCandidateSession()
 	if err != nil {
@@ -24,10 +46,6 @@ func (cd *ConfigManager) ApplyStartupConfig(path string) error {
 		return fmt.Errorf("failed to commit: %w", err)
 	}
 
-	cd.mu.Lock()
-	cd.startupConfig = cd.deepCopyConfig(config)
-	cd.mu.Unlock()
-
 	if !cd.disableVersions && len(cd.versions) > 0 {
 		lastVersion := &cd.versions[len(cd.versions)-1]
 		if len(cd.versions) == 1 {
@@ -41,4 +59,13 @@ func (cd *ConfigManager) ApplyStartupConfig(path string) error {
 	}
 
 	return nil
+}
+
+func (cd *ConfigManager) ApplyStartupConfig(path string) error {
+	_, err := cd.LoadStartupConfig(path)
+	if err != nil {
+		return err
+	}
+
+	return cd.ApplyLoadedConfig()
 }

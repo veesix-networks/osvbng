@@ -5,11 +5,11 @@ import (
 	"os"
 	"reflect"
 
-	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
+	"github.com/veesix-networks/osvbng/pkg/config"
 	"gopkg.in/yaml.v3"
 )
 
-func LoadYAML(path string) (*types.Config, error) {
+func LoadYAML(path string) (*config.Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
@@ -25,23 +25,41 @@ func LoadYAML(path string) (*types.Config, error) {
 		return nil, fmt.Errorf("failed to re-marshal config: %w", err)
 	}
 
-	var config types.Config
-	if err := yaml.Unmarshal(configData, &config); err != nil {
+	var cfg config.Config
+	if err := yaml.Unmarshal(configData, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
-	for name, ifCfg := range config.Interfaces {
+	for name, ifCfg := range cfg.Interfaces {
 		if ifCfg != nil {
 			ifCfg.Name = name
 		}
 	}
 
+	cfg.Plugins = make(map[string]interface{})
+
+	for namespace, defaultCfg := range getAllPluginConfigDefaults() {
+		cfgType := reflect.TypeOf(defaultCfg)
+		if cfgType.Kind() == reflect.Ptr {
+			cfgType = cfgType.Elem()
+		}
+
+		defaultConfig := reflect.New(cfgType).Interface()
+		defaultVal := reflect.ValueOf(defaultCfg)
+		if defaultVal.Kind() == reflect.Ptr {
+			defaultVal = defaultVal.Elem()
+		}
+		reflect.ValueOf(defaultConfig).Elem().Set(defaultVal)
+
+		SetPluginConfig(namespace, defaultConfig)
+		cfg.Plugins[namespace] = defaultConfig
+	}
+
 	if pluginsRaw, ok := rawConfig["plugins"].(map[string]interface{}); ok {
-		config.Plugins = make(map[string]interface{})
 		for namespace, pluginCfgRaw := range pluginsRaw {
 			cfgType, ok := getPluginConfigType(namespace)
 			if !ok {
-				config.Plugins[namespace] = pluginCfgRaw
+				cfg.Plugins[namespace] = pluginCfgRaw
 				continue
 			}
 
@@ -56,14 +74,14 @@ func LoadYAML(path string) (*types.Config, error) {
 			}
 
 			SetPluginConfig(namespace, typedConfig)
-			config.Plugins[namespace] = typedConfig
+			cfg.Plugins[namespace] = typedConfig
 		}
 	}
 
-	return &config, nil
+	return &cfg, nil
 }
 
-func SaveYAML(path string, config *types.Config) error {
+func SaveYAML(path string, config *config.Config) error {
 	data, err := yaml.Marshal(config)
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)

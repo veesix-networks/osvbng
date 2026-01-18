@@ -7,10 +7,10 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	confpaths "github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
-	conftypes "github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
 	"github.com/veesix-networks/osvbng/pkg/handlers/oper"
 	operpaths "github.com/veesix-networks/osvbng/pkg/handlers/oper/paths"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
@@ -80,7 +80,7 @@ func (a *Adapter) ExecuteShow(ctx context.Context, path string, options map[stri
 	return handler.Collect(ctx, req)
 }
 
-func (a *Adapter) ValidateConfig(ctx context.Context, sessionID conftypes.SessionID, path string, value interface{}) error {
+func (a *Adapter) ValidateConfig(ctx context.Context, sessionID conf.SessionID, path string, value interface{}) error {
 	handler, err := a.confRegistry.GetHandler(path)
 	if err != nil {
 		return fmt.Errorf("config handler not found for path %s: %w", path, err)
@@ -95,7 +95,7 @@ func (a *Adapter) ValidateConfig(ctx context.Context, sessionID conftypes.Sessio
 	return a.confRegistry.ValidateWithCallbacks(ctx, handler, hctx)
 }
 
-func (a *Adapter) ApplyConfig(ctx context.Context, sessionID conftypes.SessionID, path string, oldValue, newValue interface{}) error {
+func (a *Adapter) ApplyConfig(ctx context.Context, sessionID conf.SessionID, path string, oldValue, newValue interface{}) error {
 	handler, err := a.confRegistry.GetHandler(path)
 	if err != nil {
 		return fmt.Errorf("config handler not found for path %s: %w", path, err)
@@ -121,7 +121,7 @@ func (a *Adapter) ApplyConfig(ctx context.Context, sessionID conftypes.SessionID
 	return nil
 }
 
-func (a *Adapter) RollbackConfig(ctx context.Context, sessionID conftypes.SessionID, path string, oldValue, newValue interface{}) error {
+func (a *Adapter) RollbackConfig(ctx context.Context, sessionID conf.SessionID, path string, oldValue, newValue interface{}) error {
 	handler, err := a.confRegistry.GetHandler(path)
 	if err != nil {
 		return fmt.Errorf("config handler not found for path %s: %w", path, err)
@@ -142,11 +142,11 @@ func (a *Adapter) HasOperHandler(path string) bool {
 	return err == nil
 }
 
-func (a *Adapter) GetRunningConfig(ctx context.Context) (*conftypes.Config, error) {
+func (a *Adapter) GetRunningConfig(ctx context.Context) (*config.Config, error) {
 	return a.configMgr.GetRunning()
 }
 
-func (a *Adapter) GetStartupConfig(ctx context.Context) (*conftypes.Config, error) {
+func (a *Adapter) GetStartupConfig(ctx context.Context) (*config.Config, error) {
 	return a.configMgr.GetStartup()
 }
 

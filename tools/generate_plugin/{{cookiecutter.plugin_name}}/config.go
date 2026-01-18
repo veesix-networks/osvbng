@@ -13,7 +13,11 @@ type Config struct {
 }
 
 func init() {
-	configmgr.RegisterPluginConfig(Namespace, Config{})
+	// For production plugins, consider Enabled: false to require explicit configuration
+	configmgr.RegisterPluginConfig(Namespace, Config{
+		Enabled: true,
+		Message: "Default message",
+	})
 	component.Register(Namespace, NewComponent,
 		component.WithAuthor("{{cookiecutter.author_name}}"),
 		component.WithVersion("{{cookiecutter.version}}"),

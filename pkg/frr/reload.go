@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"text/template"
 
-	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
+	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 )
 
@@ -35,7 +35,7 @@ func NewConfig() *Config {
 	}
 }
 
-func (c *Config) GenerateConfig(config *types.Config) (string, error) {
+func (c *Config) GenerateConfig(config *config.Config) (string, error) {
 	templatePath := filepath.Join(c.TemplateDir, "frr.conf.tmpl")
 
 	tmplContent, err := os.ReadFile(templatePath)
@@ -56,7 +56,7 @@ func (c *Config) GenerateConfig(config *types.Config) (string, error) {
 	return buf.String(), nil
 }
 
-func (c *Config) Test(config *types.Config) error {
+func (c *Config) Test(config *config.Config) error {
 	candidateConfig, err := c.GenerateConfig(config)
 	if err != nil {
 		return fmt.Errorf("generate config: %w", err)
@@ -93,7 +93,7 @@ func (c *Config) GetRunningConfig() (string, error) {
 	return string(output), nil
 }
 
-func (c *Config) Reload(config *types.Config) error {
+func (c *Config) Reload(config *config.Config) error {
 	candidateConfig, err := c.GenerateConfig(config)
 	if err != nil {
 		return fmt.Errorf("generate config: %w", err)

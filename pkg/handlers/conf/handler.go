@@ -7,11 +7,12 @@ import (
 
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
-	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
 )
 
+type SessionID string
+
 type HandlerContext struct {
-	SessionID types.SessionID
+	SessionID SessionID
 	Path      string
 	OldValue  interface{}
 	NewValue  interface{}

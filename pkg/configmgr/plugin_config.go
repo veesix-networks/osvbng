@@ -7,14 +7,16 @@ import (
 )
 
 type PluginConfigRegistry struct {
-	mu      sync.RWMutex
-	types   map[string]reflect.Type
-	configs map[string]interface{}
+	mu       sync.RWMutex
+	types    map[string]reflect.Type
+	defaults map[string]interface{}
+	configs  map[string]interface{}
 }
 
 var pluginConfigRegistry = &PluginConfigRegistry{
-	types:   make(map[string]reflect.Type),
-	configs: make(map[string]interface{}),
+	types:    make(map[string]reflect.Type),
+	defaults: make(map[string]interface{}),
+	configs:  make(map[string]interface{}),
 }
 
 func RegisterPluginConfig(namespace string, configInstance interface{}) {
@@ -31,6 +33,7 @@ func RegisterPluginConfig(namespace string, configInstance interface{}) {
 	}
 
 	pluginConfigRegistry.types[namespace] = t
+	pluginConfigRegistry.defaults[namespace] = configInstance
 }
 
 func GetPluginConfig(namespace string) (interface{}, bool) {
@@ -76,4 +79,15 @@ func getAllPluginConfigTypes() map[string]reflect.Type {
 		types[k] = v
 	}
 	return types
+}
+
+func getAllPluginConfigDefaults() map[string]interface{} {
+	pluginConfigRegistry.mu.RLock()
+	defer pluginConfigRegistry.mu.RUnlock()
+
+	defaults := make(map[string]interface{})
+	for k, v := range pluginConfigRegistry.defaults {
+		defaults[k] = v
+	}
+	return defaults
 }

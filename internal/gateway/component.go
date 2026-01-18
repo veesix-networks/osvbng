@@ -11,7 +11,7 @@ import (
 	"github.com/veesix-networks/osvbng/internal/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
-	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
+	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/oper"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/logger"
@@ -274,7 +274,7 @@ func (c *Component) ConfigSet(ctx context.Context, req *pb.ConfigSetRequest) (*p
 		return nil, fmt.Errorf("configd not available")
 	}
 
-	sessionID := types.SessionID(req.SessionId)
+	sessionID := conf.SessionID(req.SessionId)
 
 	if err := c.configd.Set(sessionID, req.Path, req.Value); err != nil {
 		return &pb.ConfigSetResponse{
@@ -294,7 +294,7 @@ func (c *Component) ConfigCommit(ctx context.Context, req *pb.ConfigCommitReques
 		return nil, fmt.Errorf("configd not available")
 	}
 
-	sessionID := types.SessionID(req.SessionId)
+	sessionID := conf.SessionID(req.SessionId)
 
 	if err := c.configd.Commit(sessionID); err != nil {
 		return &pb.ConfigCommitResponse{
@@ -321,7 +321,7 @@ func (c *Component) ConfigDiscard(ctx context.Context, req *pb.ConfigDiscardRequ
 		return nil, fmt.Errorf("configd not available")
 	}
 
-	sessionID := types.SessionID(req.SessionId)
+	sessionID := conf.SessionID(req.SessionId)
 
 	if err := c.configd.CloseCandidateSession(sessionID); err != nil {
 		return &pb.ConfigDiscardResponse{
@@ -339,7 +339,7 @@ func (c *Component) ConfigDiff(ctx context.Context, req *pb.ConfigDiffRequest) (
 		return nil, fmt.Errorf("configd not available")
 	}
 
-	sessionID := types.SessionID(req.SessionId)
+	sessionID := conf.SessionID(req.SessionId)
 
 	diff, err := c.configd.DryRun(sessionID)
 	if err != nil {

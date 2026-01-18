@@ -1,13 +1,13 @@
 package static
 
 import (
-	"github.com/veesix-networks/osvbng/pkg/deps"
 	"context"
 	"fmt"
 
+	"github.com/veesix-networks/osvbng/pkg/config/protocols"
+	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
-	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
 	"github.com/veesix-networks/osvbng/pkg/operations"
 )
 
@@ -36,20 +36,20 @@ func NewIPv6RouteHandler(daemons *deps.ConfDeps) conf.Handler {
 }
 
 func (h *RouteHandler) Validate(ctx context.Context, hctx *conf.HandlerContext) error {
-	_, ok := hctx.NewValue.(*types.StaticRoute)
+	_, ok := hctx.NewValue.(*protocols.StaticRoute)
 	if !ok {
-		return fmt.Errorf("expected *types.StaticRoute, got %T", hctx.NewValue)
+		return fmt.Errorf("expected *protocols.StaticRoute, got %T", hctx.NewValue)
 	}
 	return nil
 }
 
 func (h *RouteHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error {
-	route := hctx.NewValue.(*types.StaticRoute)
+	route := hctx.NewValue.(*protocols.StaticRoute)
 	return h.dataplane.AddRoute(route)
 }
 
 func (h *RouteHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) error {
-	route := hctx.NewValue.(*types.StaticRoute)
+	route := hctx.NewValue.(*protocols.StaticRoute)
 	return h.dataplane.DelRoute(route)
 }
 
