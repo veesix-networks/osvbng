@@ -80,7 +80,9 @@ func main() {
 		log.Printf("Default config written to %s", *configPath)
 	}
 
-	cfg, err := config.Load(*configPath)
+	configd := configmgr.NewConfigManager()
+
+	cfg, err := configd.LoadStartupConfig(*configPath)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
@@ -103,8 +105,6 @@ func main() {
 
 	vppDataplane := operations.NewVPPDataplane(vppConn)
 
-	configd := configmgr.NewConfigManager()
-
 	if err := configd.LoadVersions(); err != nil {
 		mainLog.Warn("Failed to load config versions", "error", err)
 	}
@@ -117,7 +117,7 @@ func main() {
 	})
 
 	mainLog.Info("Applying startup configuration")
-	if err := configd.ApplyStartupConfig(*configPath); err != nil {
+	if err := configd.ApplyLoadedConfig(); err != nil {
 		if err.Error() == "failed to commit: no changes to commit" {
 			mainLog.Info("No startup configuration changes to apply")
 		} else {

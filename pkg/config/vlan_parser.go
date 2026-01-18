@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func ParseVLANRange(vlanStr string) ([]uint16, error) {
+func parseVLANRange(vlanStr string) ([]uint16, error) {
 	vlanStr = strings.TrimSpace(vlanStr)
 
 	if strings.Contains(vlanStr, "-") {
@@ -61,7 +61,7 @@ func ParseVLANRange(vlanStr string) ([]uint16, error) {
 	return []uint16{uint16(vlan)}, nil
 }
 
-func ParseCVLAN(cvlanStr string) (bool, uint16, error) {
+func parseCVLAN(cvlanStr string) (bool, uint16, error) {
 	cvlanStr = strings.TrimSpace(cvlanStr)
 
 	if strings.ToLower(cvlanStr) == "any" {

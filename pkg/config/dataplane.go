@@ -25,7 +25,7 @@ type DataplaneTemplateData struct {
 	APISocket   string
 	PuntSocket  string
 	UseDPDK     bool
-	DPDK        *DPDK
+	DPDK        *DPDKConfig
 }
 
 func NewDataplaneTemplateDataWithDefaults(cfg *Config, totalCores int) *DataplaneTemplateData {
@@ -40,7 +40,7 @@ func NewDataplaneTemplateDataWithDefaults(cfg *Config, totalCores int) *Dataplan
 		devices, err := DiscoverDPDKDevices()
 		if err == nil && len(devices) > 0 {
 			if dpdk == nil {
-				dpdk = &DPDK{}
+				dpdk = &DPDKConfig{}
 			}
 			dpdk.Devices = devices
 		}

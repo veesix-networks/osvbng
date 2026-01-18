@@ -20,7 +20,7 @@ func Generate(opts GenerateOptions) (string, error) {
 	}
 
 	cfg := &Config{
-		Logging: Logging{
+		Logging: LoggingConfig{
 			Format: "text",
 			Level:  "debug",
 			Components: map[string]string{
@@ -32,10 +32,10 @@ func Generate(opts GenerateOptions) (string, error) {
 				"arpd":   "debug",
 			},
 		},
-		Dataplane: Dataplane{
+		Dataplane: DataplaneConfig{
 			AccessInterface: accessInterface,
 		},
-		SubscriberGroup: SubscriberGroup{
+		SubscriberGroup: SubscriberGroupConfig{
 			DefaultPolicy: "default-policy",
 			VLANs: []VLANRange{
 				{
@@ -45,7 +45,7 @@ func Generate(opts GenerateOptions) (string, error) {
 				},
 			},
 		},
-		DHCP: DHCP{
+		DHCP: DHCPConfig{
 			Provider: "local",
 			Pools: []DHCPPool{
 				{
@@ -59,7 +59,7 @@ func Generate(opts GenerateOptions) (string, error) {
 				},
 			},
 		},
-		AAA: AAA{
+		AAA: AAAConfig{
 			Provider:      "local",
 			NASIdentifier: "osvbng",
 			Policy: []AAAPolicy{
@@ -71,15 +71,15 @@ func Generate(opts GenerateOptions) (string, error) {
 				},
 			},
 		},
-		Plugins: map[string]map[string]interface{}{
-			"subscriber.auth.local": {
+		Plugins: map[string]interface{}{
+			"subscriber.auth.local": map[string]interface{}{
 				"database_path": "/tmp/osvbng.db",
 			},
-			"exporter.prometheus": {
+			"exporter.prometheus": map[string]interface{}{
 				"enabled":        false,
 				"listen_address": ":9090",
 			},
-			"northbound.api": {
+			"northbound.api": map[string]interface{}{
 				"enabled":        true,
 				"listen_address": ":8080",
 			},

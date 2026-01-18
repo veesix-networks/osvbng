@@ -7,7 +7,7 @@ import (
 
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
-	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
+	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/operations"
 )
 
@@ -24,20 +24,20 @@ func NewInterfaceHandler(daemons *deps.ConfDeps) conf.Handler {
 }
 
 func (h *InterfaceHandler) Validate(ctx context.Context, hctx *conf.HandlerContext) error {
-	_, ok := hctx.NewValue.(*types.InterfaceConfig)
+	_, ok := hctx.NewValue.(*config.InterfaceConfig)
 	if !ok {
-		return fmt.Errorf("expected *types.InterfaceConfig, got %T", hctx.NewValue)
+		return fmt.Errorf("expected *config.InterfaceConfig, got %T", hctx.NewValue)
 	}
 	return nil
 }
 
 func (h *InterfaceHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error {
-	cfg := hctx.NewValue.(*types.InterfaceConfig)
+	cfg := hctx.NewValue.(*config.InterfaceConfig)
 	return h.dataplane.CreateInterface(cfg)
 }
 
 func (h *InterfaceHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) error {
-	cfg := hctx.NewValue.(*types.InterfaceConfig)
+	cfg := hctx.NewValue.(*config.InterfaceConfig)
 	return h.dataplane.DeleteInterface(cfg.Name)
 }
 

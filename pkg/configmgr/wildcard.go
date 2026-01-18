@@ -5,10 +5,10 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
+	"github.com/veesix-networks/osvbng/pkg/config"
 )
 
-func ResolveWildcardKeys(config *types.Config, pattern string) ([][]string, error) {
+func ResolveWildcardKeys(config *config.Config, pattern string) ([][]string, error) {
 	parts := strings.Split(pattern, ".")
 
 	var results [][]string

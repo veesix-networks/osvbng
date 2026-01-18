@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
 	"gopkg.in/yaml.v3"
 )
 
@@ -14,7 +13,7 @@ const (
 	DefaultVersionDir = "/var/lib/osvbng/config-versions"
 )
 
-func (cd *ConfigManager) saveVersion(version types.ConfigVersion) error {
+func (cd *ConfigManager) saveVersion(version ConfigVersion) error {
 	versionDir := cd.versionDir
 	if err := os.MkdirAll(versionDir, 0755); err != nil {
 		return fmt.Errorf("failed to create version directory: %w", err)
@@ -48,7 +47,7 @@ func (cd *ConfigManager) LoadVersions() error {
 		return fmt.Errorf("failed to read version directory: %w", err)
 	}
 
-	var versions []types.ConfigVersion
+	var versions []ConfigVersion
 	for _, file := range files {
 		if file.IsDir() {
 			continue
@@ -64,7 +63,7 @@ func (cd *ConfigManager) LoadVersions() error {
 			return fmt.Errorf("failed to read version file %s: %w", file.Name(), err)
 		}
 
-		var version types.ConfigVersion
+		var version ConfigVersion
 		if err := yaml.Unmarshal(data, &version); err != nil {
 			return fmt.Errorf("failed to parse version file %s: %w", file.Name(), err)
 		}
@@ -81,7 +80,7 @@ func (cd *ConfigManager) LoadVersions() error {
 	return nil
 }
 
-func (cd *ConfigManager) GetVersion(version int) (*types.ConfigVersion, error) {
+func (cd *ConfigManager) GetVersion(version int) (*ConfigVersion, error) {
 	cd.mu.RLock()
 	defer cd.mu.RUnlock()
 
@@ -93,7 +92,7 @@ func (cd *ConfigManager) GetVersion(version int) (*types.ConfigVersion, error) {
 	return &v, nil
 }
 
-func (cd *ConfigManager) GetVersionDiff(fromVersion, toVersion int) (*types.DiffResult, error) {
+func (cd *ConfigManager) GetVersionDiff(fromVersion, toVersion int) (*DiffResult, error) {
 	cd.mu.RLock()
 	defer cd.mu.RUnlock()
 
@@ -105,13 +104,13 @@ func (cd *ConfigManager) GetVersionDiff(fromVersion, toVersion int) (*types.Diff
 		return nil, fmt.Errorf("invalid to version: %d", toVersion)
 	}
 
-	result := &types.DiffResult{}
+	result := &DiffResult{}
 
 	for i := fromVersion; i < toVersion; i++ {
 		v := cd.versions[i]
 		for _, change := range v.Changes {
 			valueStr := fmt.Sprintf("%v", change.Value)
-			line := types.ConfigLine{
+			line := ConfigLine{
 				Path:  change.Path,
 				Value: valueStr,
 			}

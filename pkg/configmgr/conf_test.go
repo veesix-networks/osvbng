@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
+	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/operations"
 )
 
@@ -40,8 +40,8 @@ func TestLoadConfig(t *testing.T) {
 		t.Fatalf("CreateCandidateSession failed: %v", err)
 	}
 
-	config := &types.Config{
-		Interfaces: map[string]*types.InterfaceConfig{
+	config := &config.Config{
+		Interfaces: map[string]*config.InterfaceConfig{
 			"eth0": {
 				Name:        "eth0",
 				Description: "Test Interface",
@@ -83,8 +83,8 @@ func TestCommit(t *testing.T) {
 		t.Fatalf("CreateCandidateSession failed: %v", err)
 	}
 
-	config := &types.Config{
-		Interfaces: map[string]*types.InterfaceConfig{
+	config := &config.Config{
+		Interfaces: map[string]*config.InterfaceConfig{
 			"eth0": {
 				Name:    "eth0",
 				Enabled: true,
@@ -121,8 +121,8 @@ func TestVersionHistory(t *testing.T) {
 		t.Fatalf("CreateCandidateSession failed: %v", err)
 	}
 
-	config := &types.Config{
-		Interfaces: map[string]*types.InterfaceConfig{
+	config := &config.Config{
+		Interfaces: map[string]*config.InterfaceConfig{
 			"eth0": {
 				Name:    "eth0",
 				Enabled: true,
@@ -185,8 +185,8 @@ func TestCandidateVsRunningConfig(t *testing.T) {
 		t.Fatalf("CreateCandidateSession failed: %v", err)
 	}
 
-	config := &types.Config{
-		Interfaces: map[string]*types.InterfaceConfig{
+	config := &config.Config{
+		Interfaces: map[string]*config.InterfaceConfig{
 			"eth0": {
 				Name:    "eth0",
 				Enabled: true,
@@ -229,8 +229,8 @@ func TestStartupConfig(t *testing.T) {
 		t.Fatalf("CreateCandidateSession failed: %v", err)
 	}
 
-	config := &types.Config{
-		Interfaces: map[string]*types.InterfaceConfig{
+	config := &config.Config{
+		Interfaces: map[string]*config.InterfaceConfig{
 			"eth0": {
 				Name:        "eth0",
 				Description: "Test Interface",
@@ -284,8 +284,8 @@ func TestVersionDiff(t *testing.T) {
 		t.Fatalf("CreateCandidateSession failed: %v", err)
 	}
 
-	config1 := &types.Config{
-		Interfaces: map[string]*types.InterfaceConfig{
+	config1 := &config.Config{
+		Interfaces: map[string]*config.InterfaceConfig{
 			"eth0": {
 				Name:    "eth0",
 				Enabled: true,
@@ -312,8 +312,8 @@ func TestVersionDiff(t *testing.T) {
 		t.Fatalf("CreateCandidateSession failed: %v", err)
 	}
 
-	config2 := &types.Config{
-		Interfaces: map[string]*types.InterfaceConfig{
+	config2 := &config.Config{
+		Interfaces: map[string]*config.InterfaceConfig{
 			"eth0": {
 				Name:    "eth0",
 				Enabled: true,
@@ -354,8 +354,8 @@ func TestDryRun(t *testing.T) {
 		t.Fatalf("CreateCandidateSession failed: %v", err)
 	}
 
-	config := &types.Config{
-		Interfaces: map[string]*types.InterfaceConfig{
+	config := &config.Config{
+		Interfaces: map[string]*config.InterfaceConfig{
 			"eth0": {
 				Name:        "eth0",
 				Description: "Test Interface",

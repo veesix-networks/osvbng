@@ -1,11 +1,11 @@
-package {{cookiecutter.plugin_name}}
+package veesixtest
 
 import (
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
 )
 
-const Namespace = "{{cookiecutter.plugin_namespace}}"
+const Namespace = "veesixtest"
 
 type Config struct {
 	Enabled bool   `json:"enabled" yaml:"enabled"`
@@ -19,7 +19,7 @@ func init() {
 		Message: "Default message",
 	})
 	component.Register(Namespace, NewComponent,
-		component.WithAuthor("{{cookiecutter.author_name}}"),
-		component.WithVersion("{{cookiecutter.version}}"),
+		component.WithAuthor("veesix ::networks"),
+		component.WithVersion("1.0.0"),
 	)
 }

@@ -31,21 +31,3 @@ func (p *AAAPolicy) ExpandFormat(ctx *PolicyContext) string {
 
 	return result
 }
-
-func (a *AAA) GetPolicy(name string) *AAAPolicy {
-	for i := range a.Policy {
-		if a.Policy[i].Name == name {
-			return &a.Policy[i]
-		}
-	}
-	return nil
-}
-
-func (d *DHCP) GetServer(name string) *DHCPServer {
-	for i := range d.Servers {
-		if d.Servers[i].Name == name {
-			return &d.Servers[i]
-		}
-	}
-	return nil
-}
