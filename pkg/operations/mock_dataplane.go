@@ -1,7 +1,8 @@
 package operations
 
 import (
-	"github.com/veesix-networks/osvbng/pkg/config"
+	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
+	"github.com/veesix-networks/osvbng/pkg/config/protocols"
 )
 
 // MockDataplane is a no-op dataplane for testing
@@ -10,7 +11,7 @@ type MockDataplane struct {
 	DeletedInterfaces []string
 	AddedIPv4         map[string][]string
 	AddedIPv6         map[string][]string
-	AddedRoutes       []*config.StaticRoute
+	AddedRoutes       []*protocols.StaticRoute
 }
 
 func NewMockDataplane() *MockDataplane {
@@ -19,11 +20,11 @@ func NewMockDataplane() *MockDataplane {
 		DeletedInterfaces: make([]string, 0),
 		AddedIPv4:         make(map[string][]string),
 		AddedIPv6:         make(map[string][]string),
-		AddedRoutes:       make([]*config.StaticRoute, 0),
+		AddedRoutes:       make([]*protocols.StaticRoute, 0),
 	}
 }
 
-func (m *MockDataplane) CreateInterface(cfg *config.InterfaceConfig) error {
+func (m *MockDataplane) CreateInterface(cfg *interfaces.InterfaceConfig) error {
 	m.CreatedInterfaces = append(m.CreatedInterfaces, cfg.Name)
 	return nil
 }
@@ -69,11 +70,11 @@ func (m *MockDataplane) DelIPv6Address(ifName, address string) error {
 	return nil
 }
 
-func (m *MockDataplane) AddRoute(route *config.StaticRoute) error {
+func (m *MockDataplane) AddRoute(route *protocols.StaticRoute) error {
 	m.AddedRoutes = append(m.AddedRoutes, route)
 	return nil
 }
 
-func (m *MockDataplane) DelRoute(route *config.StaticRoute) error {
+func (m *MockDataplane) DelRoute(route *protocols.StaticRoute) error {
 	return nil
 }

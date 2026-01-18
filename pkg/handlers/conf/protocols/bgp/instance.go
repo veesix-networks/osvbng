@@ -1,14 +1,14 @@
 package bgp
 
 import (
-	"github.com/veesix-networks/osvbng/pkg/deps"
 	"context"
 	"fmt"
 
 	routingcomp "github.com/veesix-networks/osvbng/internal/routing"
+	"github.com/veesix-networks/osvbng/pkg/config/protocols"
+	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
-	"github.com/veesix-networks/osvbng/pkg/config"
 )
 
 func init() {
@@ -26,9 +26,9 @@ func NewBGPInstanceHandler(deps *deps.ConfDeps) conf.Handler {
 }
 
 func (h *BGPInstanceHandler) Validate(ctx context.Context, hctx *conf.HandlerContext) error {
-	cfg, ok := hctx.NewValue.(*config.BGPConfig)
+	cfg, ok := hctx.NewValue.(*protocols.BGPConfig)
 	if !ok {
-		return fmt.Errorf("expected *config.BGPConfig, got %T", hctx.NewValue)
+		return fmt.Errorf("expected *protocols.BGPConfig, got %T", hctx.NewValue)
 	}
 
 	if cfg.RouterID == "" {
@@ -39,7 +39,7 @@ func (h *BGPInstanceHandler) Validate(ctx context.Context, hctx *conf.HandlerCon
 }
 
 func (h *BGPInstanceHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error {
-	cfg := hctx.NewValue.(*config.BGPConfig)
+	cfg := hctx.NewValue.(*protocols.BGPConfig)
 	asn, err := extractASNFromPath(hctx.Path)
 	if err != nil {
 		return err

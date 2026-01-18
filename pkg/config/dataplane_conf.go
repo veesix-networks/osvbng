@@ -1,11 +1,9 @@
 package config
 
 import (
-	"bufio"
-	"bytes"
 	"fmt"
-	"os/exec"
-	"strings"
+
+	"github.com/veesix-networks/osvbng/pkg/config/system"
 )
 
 const (
@@ -25,7 +23,7 @@ type DataplaneTemplateData struct {
 	APISocket   string
 	PuntSocket  string
 	UseDPDK     bool
-	DPDK        *DPDKConfig
+	DPDK        *system.DPDKConfig
 }
 
 func NewDataplaneTemplateDataWithDefaults(cfg *Config, totalCores int) *DataplaneTemplateData {
@@ -37,10 +35,10 @@ func NewDataplaneTemplateDataWithDefaults(cfg *Config, totalCores int) *Dataplan
 
 	dpdk := cfg.Dataplane.DPDK
 	if dpdk == nil || len(dpdk.Devices) == 0 {
-		devices, err := DiscoverDPDKDevices()
+		devices, err := system.DiscoverDPDKDevices()
 		if err == nil && len(devices) > 0 {
 			if dpdk == nil {
-				dpdk = &DPDKConfig{}
+				dpdk = &system.DPDKConfig{}
 			}
 			dpdk.Devices = devices
 		}
@@ -65,42 +63,6 @@ func NewDataplaneConf() *DataplaneConf {
 		external:   NewExternalConfig(),
 		ConfigPath: DefaultDataplaneConfigPath,
 	}
-}
-
-func DiscoverDPDKDevices() ([]DPDKDevice, error) {
-	cmd := exec.Command("lspci", "-Dmm")
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("lspci failed: %w", err)
-	}
-
-	var devices []DPDKDevice
-	scanner := bufio.NewScanner(bytes.NewReader(output))
-
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		if !strings.Contains(strings.ToLower(line), "ethernet") {
-			continue
-		}
-
-		if strings.Contains(strings.ToLower(line), "virtio") {
-			continue
-		}
-
-		fields := strings.Fields(line)
-		if len(fields) < 1 {
-			continue
-		}
-
-		pciAddr := strings.TrimSpace(fields[0])
-
-		devices = append(devices, DPDKDevice{
-			PCI: pciAddr,
-		})
-	}
-
-	return devices, nil
 }
 
 func (c *DataplaneConf) Generate(data *DataplaneTemplateData) (string, error) {

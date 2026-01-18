@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/veesix-networks/osvbng/pkg/config"
+	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
+	"github.com/veesix-networks/osvbng/pkg/config/protocols"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 )
 
@@ -73,9 +74,9 @@ func formatValue(v interface{}) string {
 		return fmt.Sprintf("%v", val)
 	case int:
 		return fmt.Sprintf("%d", val)
-	case *config.InterfaceConfig:
+	case *interfaces.InterfaceConfig:
 		return fmt.Sprintf("interface:%s", val.Name)
-	case *config.StaticRoute:
+	case *protocols.StaticRoute:
 		return fmt.Sprintf("%s via %s", val.Destination, val.NextHop)
 	default:
 		return fmt.Sprintf("%v", val)

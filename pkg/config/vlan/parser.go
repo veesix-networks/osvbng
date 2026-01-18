@@ -1,4 +1,4 @@
-package config
+package vlan
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func parseVLANRange(vlanStr string) ([]uint16, error) {
+func ParseVLANRange(vlanStr string) ([]uint16, error) {
 	vlanStr = strings.TrimSpace(vlanStr)
 
 	if strings.Contains(vlanStr, "-") {
@@ -61,7 +61,7 @@ func parseVLANRange(vlanStr string) ([]uint16, error) {
 	return []uint16{uint16(vlan)}, nil
 }
 
-func parseCVLAN(cvlanStr string) (bool, uint16, error) {
+func ParseCVLAN(cvlanStr string) (bool, uint16, error) {
 	cvlanStr = strings.TrimSpace(cvlanStr)
 
 	if strings.ToLower(cvlanStr) == "any" {

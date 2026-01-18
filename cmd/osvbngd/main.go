@@ -130,6 +130,7 @@ func main() {
 	vpp, err := southbound.NewVPP(southbound.VPPConfig{
 		Connection:      vppConn,
 		ParentInterface: cfg.Dataplane.AccessInterface,
+		UseDPDK:         cfg.Dataplane.DPDK != nil && len(cfg.Dataplane.DPDK.Devices) > 0,
 	})
 	if err != nil {
 		log.Fatalf("Failed to create VPP southbound: %v", err)

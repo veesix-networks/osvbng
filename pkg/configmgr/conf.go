@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/config"
+	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/frr"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
@@ -510,7 +511,7 @@ func (cd *ConfigManager) createSessionUnlocked() (conf.SessionID, error) {
 	id := conf.SessionID(fmt.Sprintf("session-%d", len(cd.sessions)+1))
 
 	candidateConfig := &config.Config{
-		Interfaces: make(map[string]*config.InterfaceConfig),
+		Interfaces: make(map[string]*interfaces.InterfaceConfig),
 		Plugins:    make(map[string]interface{}),
 	}
 
