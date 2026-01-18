@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"text/template"
-
-	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
 )
 
 const (
@@ -98,7 +96,7 @@ func GenerateExternalConfigs(configPath string) error {
 	}
 
 	if _, err := os.Stat(rc.ConfigPath); os.IsNotExist(err) {
-		emptyConfig := &types.Config{}
+		emptyConfig := &Config{}
 		if err := rc.WriteConfig(emptyConfig); err != nil {
 			return fmt.Errorf("write routing config: %w", err)
 		}

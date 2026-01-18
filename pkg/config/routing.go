@@ -1,7 +1,5 @@
 package config
 
-import "github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
-
 const (
 	DefaultRoutingDaemonsPath = "/etc/osvbng/routing-daemons"
 	DefaultRoutingConfigPath  = "/etc/osvbng/frr.conf"
@@ -34,10 +32,10 @@ func (r *RoutingConf) WriteDaemons(data *RoutingDaemonsData) error {
 	return r.external.Write("routing-daemons.tmpl", r.DaemonsPath, data)
 }
 
-func (r *RoutingConf) GenerateConfig(cfg *types.Config) (string, error) {
+func (r *RoutingConf) GenerateConfig(cfg *Config) (string, error) {
 	return r.external.Generate("frr.conf.tmpl", cfg)
 }
 
-func (r *RoutingConf) WriteConfig(cfg *types.Config) error {
+func (r *RoutingConf) WriteConfig(cfg *Config) error {
 	return r.external.Write("frr.conf.tmpl", r.ConfigPath, cfg)
 }

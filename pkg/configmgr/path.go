@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	confpaths "github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
-	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
+	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/paths"
 )
 
@@ -58,7 +58,7 @@ func findFieldByPath(v reflect.Value, pathPart string) reflect.Value {
 	})
 }
 
-func getValueFromConfig(config *types.Config, path string) (interface{}, error) {
+func getValueFromConfig(config *config.Config, path string) (interface{}, error) {
 	parts := strings.Split(path, ".")
 	if len(parts) == 0 {
 		return nil, fmt.Errorf("empty path")
@@ -163,7 +163,7 @@ func getValueFromConfig(config *types.Config, path string) (interface{}, error) 
 	return current, nil
 }
 
-func setValueInConfig(config *types.Config, path string, value interface{}, pattern confpaths.Path) error {
+func setValueInConfig(config *config.Config, path string, value interface{}, pattern confpaths.Path) error {
 	parts, err := decodePathSegments(path, pattern.String())
 	if err != nil {
 		return err

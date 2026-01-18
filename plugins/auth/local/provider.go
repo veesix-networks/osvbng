@@ -15,8 +15,9 @@ import (
 var globalProvider *Provider
 
 type Provider struct {
-	db     *sql.DB
-	logger *slog.Logger
+	db       *sql.DB
+	logger   *slog.Logger
+	allowAll bool
 }
 
 func New() (auth.AuthProvider, error) {
@@ -46,13 +47,18 @@ func New() (auth.AuthProvider, error) {
 	}
 
 	p := &Provider{
-		db:     db,
-		logger: logger.Component(Namespace),
+		db:       db,
+		logger:   logger.Component(Namespace),
+		allowAll: pluginCfg.AllowAll,
 	}
 
 	globalProvider = p
 
-	p.logger.Info("Local auth provider initialized", "database", dbPath)
+	if p.allowAll {
+		p.logger.Warn("Local auth provider initialized with allow_all=true - ALL users will be authenticated")
+	} else {
+		p.logger.Info("Local auth provider initialized", "database", dbPath)
+	}
 	return p, nil
 }
 
@@ -65,6 +71,15 @@ func (p *Provider) Info() provider.Info {
 }
 
 func (p *Provider) Authenticate(ctx context.Context, req *auth.AuthRequest) (*auth.AuthResponse, error) {
+	// allowAll should only really be used for testing without returning attributes, mostly for session+arp load testing...
+	if p.allowAll {
+		p.logger.Debug("Allowing all users (allow_all=true)", "username", req.Username)
+		return &auth.AuthResponse{
+			Allowed:    true,
+			Attributes: make(map[string]string),
+		}, nil
+	}
+
 	user, err := getUserByUsername(p.db, req.Username)
 	if err != nil {
 		p.logger.Debug("User not found", "username", req.Username, "error", err)

@@ -2,9 +2,9 @@ package component
 
 import (
 	"github.com/veesix-networks/osvbng/pkg/cache"
-	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
 	"github.com/veesix-networks/osvbng/pkg/events"
+	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
 

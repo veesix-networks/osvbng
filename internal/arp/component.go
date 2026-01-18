@@ -31,8 +31,7 @@ type Component struct {
 	eventBus events.Bus
 	srgMgr   *srg.Manager
 	vpp      interface {
-		GetInterfaceMAC(uint32) (net.HardwareAddr, error)
-		GetParentSwIfIndex() (uint32, error)
+		GetParentInterfaceMAC() net.HardwareAddr
 	}
 	socketPath string
 	socketConn *net.UnixConn
@@ -194,16 +193,7 @@ func (c *Component) handlePacket(swIfIndex uint32, pkt []byte) error {
 		gatewayMAC = c.srgMgr.GetVirtualMAC(0)
 	}
 	if gatewayMAC == nil && c.vpp != nil {
-		parentIfIdx, err := c.vpp.GetParentSwIfIndex()
-		if err == nil {
-			if ifMac, err := c.vpp.GetInterfaceMAC(parentIfIdx); err == nil {
-				gatewayMAC = ifMac
-			} else {
-				c.logger.Warn("Failed to get parent interface MAC for ARP", "error", err)
-			}
-		} else {
-			c.logger.Warn("Failed to get parent interface index for ARP", "error", err)
-		}
+		gatewayMAC = c.vpp.GetParentInterfaceMAC()
 	}
 	if gatewayMAC == nil {
 		return fmt.Errorf("no gateway MAC available for ARP reply")

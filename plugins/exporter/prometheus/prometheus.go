@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
+	"github.com/veesix-networks/osvbng/pkg/configmgr"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/plugins/exporter/prometheus/metrics"
 	"github.com/veesix-networks/osvbng/plugins/exporter/prometheus/show"
@@ -57,24 +58,28 @@ func (c *Component) GetStatus() *show.Status {
 }
 
 func New(deps component.Dependencies) (component.Component, error) {
-	pluginCfg, ok := deps.Config.Plugins["exporter.prometheus"]
+	pluginCfgRaw, ok := configmgr.GetPluginConfig(Namespace)
 	if !ok {
 		return nil, nil
 	}
 
-	enabled, _ := pluginCfg["enabled"].(bool)
-	if !enabled {
+	pluginCfg, ok := pluginCfgRaw.(*Config)
+	if !ok {
+		return nil, nil
+	}
+
+	if !pluginCfg.Enabled {
 		return nil, nil
 	}
 
 	addr := ":9090"
-	if listenAddr, ok := pluginCfg["listen_address"].(string); ok && listenAddr != "" {
-		addr = listenAddr
+	if pluginCfg.ListenAddress != "" {
+		addr = pluginCfg.ListenAddress
 	}
 
 	return &Component{
-		Base:   component.NewBase("exporter.prometheus"),
-		logger: logger.Component("exporter.prometheus"),
+		Base:   component.NewBase(Namespace),
+		logger: logger.Component(Namespace),
 		cache:  deps.Cache,
 		addr:   addr,
 	}, nil
