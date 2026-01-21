@@ -292,7 +292,7 @@ func setValueInConfig(config *config.Config, path string, value interface{}, pat
 						current.SetMapIndex(key, reflect.ValueOf(convertedValue))
 					}
 				} else {
-					return fmt.Errorf("cannot set value on type %s", current.Kind())
+					return fmt.Errorf("cannot set value on type %s at path %s", current.Kind(), path)
 				}
 
 				return nil
@@ -410,7 +410,7 @@ func setValueInConfig(config *config.Config, path string, value interface{}, pat
 		}
 
 	default:
-		return fmt.Errorf("cannot set value on type %s", current.Kind())
+		return fmt.Errorf("cannot set value on type %s at path %s", current.Kind(), path)
 	}
 
 	return nil

@@ -14,6 +14,7 @@ const (
 	WildcardIP      WildcardType = "*:ip"
 	WildcardIPv4    WildcardType = "*:ipv4"
 	WildcardIPv6    WildcardType = "*:ipv6"
+	WildcardPrefix  WildcardType = "*:prefix"
 	WildcardMAC     WildcardType = "*:mac"
 	WildcardString  WildcardType = "*:string"
 	WildcardUint8   WildcardType = "*:uint8"
@@ -110,6 +111,9 @@ func encodeValue(value string, wildcardType WildcardType) (string, error) {
 
 		return EncodeIP(value)
 
+	case WildcardPrefix:
+		return hex.EncodeToString([]byte(value)), nil
+
 	case WildcardMAC:
 		return EncodeMAC(value)
 
@@ -134,6 +138,13 @@ func decodeValue(value string, wildcardType WildcardType) (string, error) {
 			return DecodeIP(value)
 		}
 		return value, nil
+
+	case WildcardPrefix:
+		bytes, err := hex.DecodeString(value)
+		if err != nil {
+			return value, nil
+		}
+		return string(bytes), nil
 
 	case WildcardMAC:
 		if len(value) == 12 {

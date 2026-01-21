@@ -177,10 +177,10 @@ func main() {
 	cache := memory.New()
 
 	coreDeps := component.Dependencies{
-		EventBus: eventBus,
-		Cache:    cache,
-		VPP:      vpp,
-		Config:   cfg,
+		EventBus:      eventBus,
+		Cache:         cache,
+		VPP:           vpp,
+		ConfigManager: configd,
 	}
 
 	authProviderName := cfg.AAA.Provider
@@ -188,7 +188,7 @@ func main() {
 		authProviderName = "local"
 	}
 
-	authProvider, err := auth.New(authProviderName)
+	authProvider, err := auth.New(authProviderName, cfg)
 	if err != nil {
 		log.Fatalf("Failed to create auth provider '%s': %v", authProviderName, err)
 	}

@@ -7,6 +7,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/config/aaa"
 	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
 	"github.com/veesix-networks/osvbng/pkg/config/ip"
+	"github.com/veesix-networks/osvbng/pkg/config/protocols"
 	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/config/system"
 	"github.com/veesix-networks/osvbng/pkg/version"
@@ -39,29 +40,40 @@ func Generate(opts GenerateOptions) (string, error) {
 		Dataplane: system.DataplaneConfig{
 			AccessInterface: accessInterface,
 		},
-		SubscriberGroup: subscriber.SubscriberGroupConfig{
-			DefaultPolicy: "default-policy",
-			VLANs: []subscriber.VLANRange{
-				{
-					SVLAN:     "100",
-					CVLAN:     "any",
-					Interface: "loop100",
+		SubscriberGroups: &subscriber.SubscriberGroupsConfig{
+			Groups: map[string]*subscriber.SubscriberGroup{
+				"default": {
+					VLANs: []subscriber.VLANRange{
+						{
+							SVLAN:     "100",
+							CVLAN:     "any",
+							Interface: "loop100",
+						},
+					},
+					AddressPools: []*subscriber.AddressPool{
+						{
+							Name:     "subscriber-pool",
+							Network:  "10.255.0.0/16",
+							Gateway:  "10.255.0.1",
+							DNS:      []string{"8.8.8.8", "8.8.4.4"},
+							Priority: 1,
+						},
+					},
+					DHCP: &subscriber.SubscriberDHCP{
+						AutoGenerate: true,
+						LeaseTime:    "3600",
+					},
+					BGP: &subscriber.SubscriberBGP{
+						Enabled:               true,
+						AdvertisePools:        true,
+						RedistributeConnected: true,
+					},
+					AAAPolicy: "default-policy",
 				},
 			},
 		},
 		DHCP: ip.DHCPConfig{
 			Provider: "local",
-			Pools: []ip.DHCPPool{
-				{
-					Name:       "subscriber-pool",
-					Network:    "10.255.0.0/16",
-					RangeStart: "10.255.0.10",
-					RangeEnd:   "10.255.255.254",
-					Gateway:    "10.255.0.1",
-					DNSServers: []string{"8.8.8.8", "8.8.4.4"},
-					LeaseTime:  3600,
-				},
-			},
 		},
 		AAA: aaa.AAAConfig{
 			Provider:      "local",
@@ -73,6 +85,12 @@ func Generate(opts GenerateOptions) (string, error) {
 					Type:                  "dhcp",
 					MaxConcurrentSessions: 1,
 				},
+			},
+		},
+		Protocols: protocols.ProtocolConfig{
+			BGP: &protocols.BGPConfig{
+				ASN:      65000,
+				RouterID: "10.255.0.1",
 			},
 		},
 		Interfaces: map[string]*interfaces.InterfaceConfig{

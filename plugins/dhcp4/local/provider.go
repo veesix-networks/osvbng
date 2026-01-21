@@ -5,13 +5,15 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"sort"
 	"sync"
 	"time"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
-	"github.com/veesix-networks/osvbng/pkg/dhcp4"
+	"inet.af/netaddr"
 	"github.com/veesix-networks/osvbng/pkg/config"
+	"github.com/veesix-networks/osvbng/pkg/dhcp4"
 	"github.com/veesix-networks/osvbng/pkg/provider"
 )
 
@@ -20,11 +22,11 @@ func init() {
 }
 
 type Provider struct {
-	pools       []*IPPool
-	leases      map[string]*Lease
-	leasesByIP  map[string]*Lease
-	mu          sync.RWMutex
-	defaultPool *IPPool
+	coreConfig *config.Config
+	pools      map[string]*IPPool
+	leases     map[string]*Lease
+	leasesByIP map[string]*Lease
+	mu         sync.RWMutex
 }
 
 type IPPool struct {
@@ -35,6 +37,7 @@ type IPPool struct {
 	Gateway    net.IP
 	DNSServers []net.IP
 	LeaseTime  uint32
+	Priority   int
 }
 
 type Lease struct {
@@ -46,14 +49,40 @@ type Lease struct {
 
 func New(cfg *config.Config) (dhcp4.DHCPProvider, error) {
 	p := &Provider{
-		pools:      make([]*IPPool, 0),
+		coreConfig: cfg,
+		pools:      make(map[string]*IPPool),
 		leases:     make(map[string]*Lease),
 		leasesByIP: make(map[string]*Lease),
 	}
 
+	if cfg.SubscriberGroups != nil {
+		for groupName, group := range cfg.SubscriberGroups.Groups {
+			if group.DHCP != nil && group.DHCP.AutoGenerate {
+				leaseTime := uint32(3600)
+				if group.DHCP.LeaseTime != "" {
+					fmt.Sscanf(group.DHCP.LeaseTime, "%d", &leaseTime)
+				}
+
+				for _, addrPool := range group.AddressPools {
+					prefix, err := netaddr.ParseIPPrefix(addrPool.Network)
+					if err != nil {
+						return nil, fmt.Errorf("subscriber group %s pool %s: invalid network: %w", groupName, addrPool.Name, err)
+					}
+
+					rangeStart := prefix.Range().From().Next()
+					rangeEnd := prefix.Range().To().Prior()
+
+					if err := p.addPool(addrPool.Name, addrPool.Network, rangeStart.String(), rangeEnd.String(), addrPool.Gateway, addrPool.DNS, leaseTime, addrPool.Priority); err != nil {
+						return nil, fmt.Errorf("subscriber group %s pool %s: %w", groupName, addrPool.Name, err)
+					}
+				}
+			}
+		}
+	}
+
 	for _, poolCfg := range cfg.DHCP.Pools {
-		if err := p.AddPool(poolCfg.Name, poolCfg.Network, poolCfg.RangeStart, poolCfg.RangeEnd, poolCfg.Gateway, poolCfg.DNSServers, poolCfg.LeaseTime); err != nil {
-			return nil, fmt.Errorf("failed to add pool '%s': %w", poolCfg.Name, err)
+		if err := p.addPool(poolCfg.Name, poolCfg.Network, poolCfg.RangeStart, poolCfg.RangeEnd, poolCfg.Gateway, poolCfg.DNSServers, poolCfg.LeaseTime, 999); err != nil {
+			return nil, fmt.Errorf("manual pool %s: %w", poolCfg.Name, err)
 		}
 	}
 
@@ -68,7 +97,7 @@ func (p *Provider) Info() provider.Info {
 	}
 }
 
-func (p *Provider) AddPool(name, network, rangeStart, rangeEnd, gateway string, dnsServers []string, leaseTime uint32) error {
+func (p *Provider) addPool(name, network, rangeStart, rangeEnd, gateway string, dnsServers []string, leaseTime uint32, priority int) error {
 	_, ipnet, err := net.ParseCIDR(network)
 	if err != nil {
 		return fmt.Errorf("invalid network: %w", err)
@@ -82,18 +111,48 @@ func (p *Provider) AddPool(name, network, rangeStart, rangeEnd, gateway string, 
 		Gateway:    net.ParseIP(gateway),
 		DNSServers: make([]net.IP, 0),
 		LeaseTime:  leaseTime,
+		Priority:   priority,
 	}
 
 	for _, dns := range dnsServers {
 		pool.DNSServers = append(pool.DNSServers, net.ParseIP(dns))
 	}
 
-	p.pools = append(p.pools, pool)
-	if p.defaultPool == nil {
-		p.defaultPool = pool
+	p.pools[name] = pool
+	return nil
+}
+
+func (p *Provider) selectPoolForGroup(group string) *IPPool {
+	var candidates []*IPPool
+	for _, pool := range p.pools {
+		candidates = append(candidates, pool)
+	}
+
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].Priority < candidates[j].Priority
+	})
+
+	for _, pool := range candidates {
+		if p.hasAvailableIP(pool) {
+			return pool
+		}
 	}
 
 	return nil
+}
+
+func (p *Provider) hasAvailableIP(pool *IPPool) bool {
+	start := binary.BigEndian.Uint32(pool.RangeStart.To4())
+	end := binary.BigEndian.Uint32(pool.RangeEnd.To4())
+
+	for i := start; i <= end; i++ {
+		ip := make(net.IP, 4)
+		binary.BigEndian.PutUint32(ip, i)
+		if _, used := p.leasesByIP[ip.String()]; !used {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *Provider) HandlePacket(ctx context.Context, pkt *dhcp4.Packet) (*dhcp4.Packet, error) {
@@ -126,24 +185,38 @@ func (p *Provider) handleDiscover(pkt *dhcp4.Packet, dhcp *layers.DHCPv4) (*dhcp
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.defaultPool == nil {
-		return nil, fmt.Errorf("no DHCP pools configured")
+	group, _ := p.coreConfig.SubscriberGroups.FindGroupBySVLAN(pkt.SVLAN)
+	if group == nil {
+		return nil, fmt.Errorf("no subscriber group for SVLAN %d", pkt.SVLAN)
 	}
 
 	mac := dhcp.ClientHWAddr.String()
 
 	var offerIP net.IP
+	var pool *IPPool
+
 	if existingLease, exists := p.leases[mac]; exists {
 		offerIP = existingLease.IP
+		for _, p := range p.pools {
+			if p.Network.Contains(offerIP) {
+				pool = p
+				break
+			}
+		}
 	} else {
+		pool = p.selectPoolForGroup(group.VRF)
+		if pool == nil {
+			return nil, fmt.Errorf("no available pools")
+		}
+
 		var err error
-		offerIP, err = p.allocateIP(p.defaultPool, mac, pkt.SessionID)
+		offerIP, err = p.allocateIP(pool, mac, pkt.SessionID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to allocate IP: %w", err)
 		}
 	}
 
-	response := p.buildOffer(dhcp, offerIP, p.defaultPool)
+	response := p.buildOffer(dhcp, offerIP, pool)
 	return &dhcp4.Packet{
 		SessionID: pkt.SessionID,
 		MAC:       pkt.MAC,
@@ -157,8 +230,9 @@ func (p *Provider) handleRequest(pkt *dhcp4.Packet, dhcp *layers.DHCPv4) (*dhcp4
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.defaultPool == nil {
-		return nil, fmt.Errorf("no DHCP pools configured")
+	group, _ := p.coreConfig.SubscriberGroups.FindGroupBySVLAN(pkt.SVLAN)
+	if group == nil {
+		return nil, fmt.Errorf("no subscriber group for SVLAN %d", pkt.SVLAN)
 	}
 
 	mac := dhcp.ClientHWAddr.String()
@@ -175,18 +249,30 @@ func (p *Provider) handleRequest(pkt *dhcp4.Packet, dhcp *layers.DHCPv4) (*dhcp4
 		requestedIP = dhcp.ClientIP
 	}
 
+	var pool *IPPool
 	lease, exists := p.leases[mac]
 	if !exists || !lease.IP.Equal(requestedIP) {
+		pool = p.selectPoolForGroup(group.VRF)
+		if pool == nil {
+			return nil, fmt.Errorf("no available pools")
+		}
+
 		var err error
-		requestedIP, err = p.allocateIP(p.defaultPool, mac, pkt.SessionID)
+		requestedIP, err = p.allocateIP(pool, mac, pkt.SessionID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to allocate IP: %w", err)
 		}
 	} else {
-		lease.ExpireTime = time.Now().Add(time.Duration(p.defaultPool.LeaseTime) * time.Second)
+		for _, p := range p.pools {
+			if p.Network.Contains(requestedIP) {
+				pool = p
+				break
+			}
+		}
+		lease.ExpireTime = time.Now().Add(time.Duration(pool.LeaseTime) * time.Second)
 	}
 
-	response := p.buildAck(dhcp, requestedIP, p.defaultPool)
+	response := p.buildAck(dhcp, requestedIP, pool)
 	return &dhcp4.Packet{
 		SessionID: pkt.SessionID,
 		MAC:       pkt.MAC,

@@ -1,8 +1,12 @@
 package auth
 
-import "fmt"
+import (
+	"fmt"
 
-type Factory func() (AuthProvider, error)
+	"github.com/veesix-networks/osvbng/pkg/config"
+)
+
+type Factory func(*config.Config) (AuthProvider, error)
 
 var registry = make(map[string]Factory)
 
@@ -15,12 +19,12 @@ func Get(name string) (Factory, bool) {
 	return factory, exists
 }
 
-func New(name string) (AuthProvider, error) {
+func New(name string, cfg *config.Config) (AuthProvider, error) {
 	factory, exists := registry[name]
 	if !exists {
 		return nil, fmt.Errorf("auth provider %s not registered", name)
 	}
-	return factory()
+	return factory(cfg)
 }
 
 func List() []string {

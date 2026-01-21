@@ -40,30 +40,12 @@ func (h *BGPInstanceHandler) Validate(ctx context.Context, hctx *conf.HandlerCon
 
 func (h *BGPInstanceHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error {
 	cfg := hctx.NewValue.(*protocols.BGPConfig)
-	asn, err := extractASNFromPath(hctx.Path)
-	if err != nil {
-		return err
-	}
-
-	return h.routing.ConfigureBGP(asn, cfg.RouterID)
+	return h.routing.ConfigureBGP(cfg.ASN, cfg.RouterID)
 }
 
 func (h *BGPInstanceHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) error {
-	asn, err := extractASNFromPath(hctx.Path)
-	if err != nil {
-		return err
-	}
-
-	return h.routing.RemoveBGP(asn)
-}
-
-func extractASNFromPath(path string) (uint32, error) {
-	var asn uint32
-	_, err := fmt.Sscanf(path, "protocols.bgp.%d", &asn)
-	if err != nil {
-		return 0, fmt.Errorf("failed to extract ASN from path %s: %w", path, err)
-	}
-	return asn, nil
+	cfg := hctx.OldValue.(*protocols.BGPConfig)
+	return h.routing.RemoveBGP(cfg.ASN)
 }
 
 func (h *BGPInstanceHandler) PathPattern() paths.Path {

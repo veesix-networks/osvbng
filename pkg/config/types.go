@@ -10,17 +10,17 @@ import (
 )
 
 type Config struct {
-	Logging         system.LoggingConfig               `json:"logging,omitempty" yaml:"logging,omitempty"`
-	Dataplane       system.DataplaneConfig             `json:"dataplane,omitempty" yaml:"dataplane,omitempty"`
-	SubscriberGroup subscriber.SubscriberGroupConfig   `json:"subscriber_group,omitempty" yaml:"subscriber_group,omitempty"`
-	DHCP            ip.DHCPConfig                      `json:"dhcp,omitempty" yaml:"dhcp,omitempty"`
-	Monitoring      system.MonitoringConfig            `json:"monitoring,omitempty" yaml:"monitoring,omitempty"`
-	API             system.APIConfig                   `json:"api,omitempty" yaml:"api,omitempty"`
-	Interfaces      map[string]*interfaces.InterfaceConfig `json:"interfaces,omitempty" yaml:"interfaces,omitempty"`
-	Protocols       protocols.ProtocolConfig           `json:"protocols,omitempty" yaml:"protocols,omitempty"`
-	AAA             aaa.AAAConfig                      `json:"aaa,omitempty" yaml:"aaa,omitempty"`
-	VRFS            []ip.VRFSConfig                    `json:"vrfs,omitempty" yaml:"vrfs,omitempty"`
-	Plugins         map[string]interface{}             `json:"plugins,omitempty" yaml:"plugins,omitempty"`
+	Logging          system.LoggingConfig                   `json:"logging,omitempty" yaml:"logging,omitempty"`
+	Dataplane        system.DataplaneConfig                 `json:"dataplane,omitempty" yaml:"dataplane,omitempty"`
+	SubscriberGroups *subscriber.SubscriberGroupsConfig     `json:"subscriber-groups,omitempty" yaml:"subscriber-groups,omitempty"`
+	DHCP             ip.DHCPConfig                          `json:"dhcp,omitempty" yaml:"dhcp,omitempty"`
+	Monitoring       system.MonitoringConfig                `json:"monitoring,omitempty" yaml:"monitoring,omitempty"`
+	API              system.APIConfig                       `json:"api,omitempty" yaml:"api,omitempty"`
+	Interfaces       map[string]*interfaces.InterfaceConfig `json:"interfaces,omitempty" yaml:"interfaces,omitempty"`
+	Protocols        protocols.ProtocolConfig               `json:"protocols,omitempty" yaml:"protocols,omitempty"`
+	AAA              aaa.AAAConfig                          `json:"aaa,omitempty" yaml:"aaa,omitempty"`
+	VRFS             []ip.VRFSConfig                        `json:"vrfs,omitempty" yaml:"vrfs,omitempty"`
+	Plugins          map[string]interface{}                 `json:"plugins,omitempty" yaml:"plugins,omitempty"`
 }
 
 type DiffResult struct {

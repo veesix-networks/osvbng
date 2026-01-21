@@ -10,7 +10,6 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/events"
-	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/models/subscribers"
@@ -27,7 +26,7 @@ type Component struct {
 	srgMgr    *srg.Manager
 	vpp       *southbound.VPP
 	expiryMgr *session.ExpiryManager
-	cfg       *config.Config
+	cfgMgr    component.ConfigManager
 	cache     cache.Cache
 }
 
@@ -40,7 +39,7 @@ func New(deps component.Dependencies, srgMgr *srg.Manager) (component.Component,
 		eventBus: deps.EventBus,
 		srgMgr:   srgMgr,
 		vpp:      deps.VPP,
-		cfg:      deps.Config,
+		cfgMgr:   deps.ConfigManager,
 		cache:    deps.Cache,
 	}
 

@@ -42,6 +42,10 @@ func (cd *ConfigManager) ApplyLoadedConfig() error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
+	if err := cd.ProcessSubscriberGroups(sessionID, config); err != nil {
+		return fmt.Errorf("failed to process subscriber groups: %w", err)
+	}
+
 	if err := cd.Commit(sessionID); err != nil {
 		return fmt.Errorf("failed to commit: %w", err)
 	}
