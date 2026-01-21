@@ -370,7 +370,13 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 	c.logger.Info("Session discovering", "session_id", sess.SessionID, "circuit_id", string(circuitID), "remote_id", string(remoteID))
 
 	username := pkt.MAC.String()
-	if policyName := c.config.SubscriberGroup.GetPolicyName(pkt.OuterVLAN); policyName != "" {
+	var policyName string
+	if c.config.SubscriberGroups != nil {
+		if group, _ := c.config.SubscriberGroups.FindGroupBySVLAN(pkt.OuterVLAN); group != nil {
+			policyName = group.AAAPolicy
+		}
+	}
+	if policyName != "" {
 		if policy := c.config.AAA.GetPolicy(policyName); policy != nil {
 			ctx := &aaa.PolicyContext{
 				MACAddress: pkt.MAC,
@@ -505,7 +511,13 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 	circuitID, remoteID := parseOption82(getDHCPOption(pkt.DHCPv4.Options, 82))
 
 	username := pkt.MAC.String()
-	if policyName := c.config.SubscriberGroup.GetPolicyName(pkt.OuterVLAN); policyName != "" {
+	var policyName string
+	if c.config.SubscriberGroups != nil {
+		if group, _ := c.config.SubscriberGroups.FindGroupBySVLAN(pkt.OuterVLAN); group != nil {
+			policyName = group.AAAPolicy
+		}
+	}
+	if policyName != "" {
 		if policy := c.config.AAA.GetPolicy(policyName); policy != nil {
 			ctx := &aaa.PolicyContext{
 				MACAddress: pkt.MAC,
@@ -920,14 +932,19 @@ func (c *Component) checkSessionLimit(mac net.HardwareAddr, svlan, cvlan uint16)
 		return nil
 	}
 
-	vlanCfg := c.config.SubscriberGroup.FindVLANConfig(svlan)
-	if vlanCfg == nil || vlanCfg.AAA == nil {
-		return nil
+	var policyName string
+	if c.config.SubscriberGroups != nil {
+		if group, vlanCfg := c.config.SubscriberGroups.FindGroupBySVLAN(svlan); group != nil {
+			if vlanCfg != nil && vlanCfg.AAA != nil && vlanCfg.AAA.Policy != "" {
+				policyName = vlanCfg.AAA.Policy
+			} else {
+				policyName = group.AAAPolicy
+			}
+		}
 	}
 
-	policyName := vlanCfg.AAA.Policy
 	if policyName == "" {
-		policyName = c.config.SubscriberGroup.DefaultPolicy
+		return nil
 	}
 
 	policy := c.config.AAA.GetPolicy(policyName)

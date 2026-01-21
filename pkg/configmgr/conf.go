@@ -381,7 +381,7 @@ func (cd *ConfigManager) sortChangesByDependencies(changes []*conf.HandlerContex
 				if err != nil || val == nil {
 					userFriendlyDep := strings.ReplaceAll(resolvedDepPath, "<", "")
 					userFriendlyDep = strings.ReplaceAll(userFriendlyDep, ">", "")
-					return nil, fmt.Errorf("missing required configuration: %s", userFriendlyDep)
+					return nil, fmt.Errorf("configuration '%s' requires '%s' to be configured first", change.Path, userFriendlyDep)
 				}
 			}
 		}

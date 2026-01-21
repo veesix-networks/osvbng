@@ -26,34 +26,38 @@ func New(sb *southbound.VPP, cfg *config.Config) *Bootstrap {
 func (b *Bootstrap) ProvisionInfrastructure() error {
 	b.logger.Info("Provisioning infrastructure from config")
 
-	for _, vlanRange := range b.cfg.SubscriberGroup.VLANs {
-		svlans, err := vlanRange.GetSVLANs()
-		if err != nil {
-			return fmt.Errorf("parse svlan range: %w", err)
-		}
+	if b.cfg.SubscriberGroups != nil {
+		for _, group := range b.cfg.SubscriberGroups.Groups {
+			for _, vlanRange := range group.VLANs {
+				svlans, err := vlanRange.GetSVLANs()
+				if err != nil {
+					return fmt.Errorf("parse svlan range: %w", err)
+				}
 
-		for _, svlan := range svlans {
-			b.logger.Info("Creating S-VLAN subinterface", "svlan", svlan, "interface", vlanRange.Interface)
+				for _, svlan := range svlans {
+					b.logger.Info("Creating S-VLAN subinterface", "svlan", svlan, "interface", vlanRange.Interface)
 
-			if err := b.sb.CreateSVLAN(svlan, nil, nil); err != nil {
-				return fmt.Errorf("create svlan %d: %w", svlan, err)
-			}
+					if err := b.sb.CreateSVLAN(svlan, nil, nil); err != nil {
+						return fmt.Errorf("create svlan %d: %w", svlan, err)
+					}
 
-			subIfName := fmt.Sprintf("%s.%d", b.sb.GetParentInterface(), svlan)
-			if err := b.sb.SetUnnumbered(subIfName, vlanRange.Interface); err != nil {
-				return fmt.Errorf("set unnumbered %s to %s: %w", subIfName, vlanRange.Interface, err)
-			}
+					subIfName := fmt.Sprintf("%s.%d", b.sb.GetParentInterface(), svlan)
+					if err := b.sb.SetUnnumbered(subIfName, vlanRange.Interface); err != nil {
+						return fmt.Errorf("set unnumbered %s to %s: %w", subIfName, vlanRange.Interface, err)
+					}
 
-			if err := b.sb.EnableARPPunt(subIfName, "/run/osvbng/arp-punt.sock"); err != nil {
-				return fmt.Errorf("enable arp punt on %s: %w", subIfName, err)
-			}
+					if err := b.sb.EnableARPPunt(subIfName, "/run/osvbng/arp-punt.sock"); err != nil {
+						return fmt.Errorf("enable arp punt on %s: %w", subIfName, err)
+					}
 
-			if err := b.sb.DisableARPReply(subIfName); err != nil {
-				return fmt.Errorf("disable arp reply on %s: %w", subIfName, err)
-			}
+					if err := b.sb.DisableARPReply(subIfName); err != nil {
+						return fmt.Errorf("disable arp reply on %s: %w", subIfName, err)
+					}
 
-			if err := b.sb.EnableAccounting(subIfName); err != nil {
-				return fmt.Errorf("enable accounting on %s: %w", subIfName, err)
+					if err := b.sb.EnableAccounting(subIfName); err != nil {
+						return fmt.Errorf("enable accounting on %s: %w", subIfName, err)
+					}
+				}
 			}
 		}
 	}
@@ -71,16 +75,20 @@ func (b *Bootstrap) ProvisionInfrastructure() error {
 func (b *Bootstrap) Cleanup() error {
 	b.logger.Info("Cleaning up provisioned infrastructure")
 
-	for _, vlanRange := range b.cfg.SubscriberGroup.VLANs {
-		svlans, err := vlanRange.GetSVLANs()
-		if err != nil {
-			return fmt.Errorf("parse svlan range: %w", err)
-		}
+	if b.cfg.SubscriberGroups != nil {
+		for _, group := range b.cfg.SubscriberGroups.Groups {
+			for _, vlanRange := range group.VLANs {
+				svlans, err := vlanRange.GetSVLANs()
+				if err != nil {
+					return fmt.Errorf("parse svlan range: %w", err)
+				}
 
-		for _, svlan := range svlans {
-			vlanName := fmt.Sprintf("vbng.%d", svlan)
-			if err := b.sb.DeleteInterface(vlanName); err != nil {
-				b.logger.Warn("Failed to delete interface", "interface", vlanName, "error", err)
+				for _, svlan := range svlans {
+					vlanName := fmt.Sprintf("vbng.%d", svlan)
+					if err := b.sb.DeleteInterface(vlanName); err != nil {
+						b.logger.Warn("Failed to delete interface", "interface", vlanName, "error", err)
+					}
+				}
 			}
 		}
 	}

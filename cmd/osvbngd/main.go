@@ -188,7 +188,7 @@ func main() {
 		authProviderName = "local"
 	}
 
-	authProvider, err := auth.New(authProviderName)
+	authProvider, err := auth.New(authProviderName, cfg)
 	if err != nil {
 		log.Fatalf("Failed to create auth provider '%s': %v", authProviderName, err)
 	}

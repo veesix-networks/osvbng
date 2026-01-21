@@ -27,7 +27,7 @@ const (
 	OSPFAreaBFD     Path = "protocols.ospf.areas.<*>.bfd"
 	OSPFAreaNetwork Path = "protocols.ospf.areas.<*>.networks.<*>"
 
-	ProtocolsBGPInstance         Path = "protocols.bgp.<*>"
+	ProtocolsBGPInstance         Path = "protocols.bgp"
 	ProtocolsBGPASN              Path = "protocols.bgp.asn"
 	ProtocolsBGPRouterID         Path = "protocols.bgp.router-id"
 	ProtocolsBGPEnabled          Path = "protocols.bgp.enabled"
@@ -35,9 +35,18 @@ const (
 	ProtocolsBGPNeighborDescription Path = "protocols.bgp.neighbors.<*:ip>.description"
 	ProtocolsBGPNeighborPeer        Path = "protocols.bgp.neighbors.<*:ip>.peer"
 	ProtocolsBGPNeighborRemoteAS    Path = "protocols.bgp.neighbors.<*:ip>.remote_as"
+	ProtocolsBGPPeerGroup                Path = "protocols.bgp.peer-groups.<*>"
+	ProtocolsBGPIPv4UnicastNetwork       Path = "protocols.bgp.ipv4-unicast.networks.<*:prefix>"
+	ProtocolsBGPIPv4UnicastRedistribute  Path = "protocols.bgp.ipv4-unicast.redistribute"
+	ProtocolsBGPIPv6UnicastNetwork       Path = "protocols.bgp.ipv6-unicast.networks.<*:prefix>"
+	ProtocolsBGPIPv6UnicastRedistribute  Path = "protocols.bgp.ipv6-unicast.redistribute"
+	ProtocolsBGPVRFIPv4UnicastNetwork    Path = "protocols.bgp.vrf.<*>.ipv4-unicast.networks.<*:prefix>"
+	ProtocolsBGPVRFIPv4UnicastRedistribute Path = "protocols.bgp.vrf.<*>.ipv4-unicast.redistribute"
+	ProtocolsBGPVRFIPv6UnicastNetwork    Path = "protocols.bgp.vrf.<*>.ipv6-unicast.networks.<*:prefix>"
+	ProtocolsBGPVRFIPv6UnicastRedistribute Path = "protocols.bgp.vrf.<*>.ipv6-unicast.redistribute"
 
-	ProtocolsStaticIPv4Route Path = "protocols.static.ipv4.<*>"
-	ProtocolsStaticIPv6Route Path = "protocols.static.ipv6.<*>"
+	ProtocolsStaticIPv4Route Path = "protocols.static.ipv4.<*:prefix>"
+	ProtocolsStaticIPv6Route Path = "protocols.static.ipv6.<*:prefix>"
 
 	AAARADIUSServer  Path = "aaa.radius.servers.<*>"
 	AAARADIUSGroup   Path = "aaa.radius.groups.<*>"
@@ -47,6 +56,10 @@ const (
 
 func (p Path) String() string {
 	return string(p)
+}
+
+func (p Path) Build(values ...string) (string, error) {
+	return paths.Build(string(p), values...)
 }
 
 func (p Path) ExtractWildcards(path string, expectedCount int) ([]string, error) {
