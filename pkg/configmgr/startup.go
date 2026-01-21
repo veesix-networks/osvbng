@@ -4,13 +4,37 @@ import (
 	"fmt"
 
 	"github.com/veesix-networks/osvbng/pkg/config"
+	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
 )
+
+func ensureManagementInterface(cfg *config.Config) {
+	const managementInterface = "eth0"
+
+	if cfg.Interfaces == nil {
+		cfg.Interfaces = make(map[string]*interfaces.InterfaceConfig)
+	}
+
+	if existing, ok := cfg.Interfaces[managementInterface]; ok {
+		existing.Name = managementInterface
+		existing.Enabled = true
+		existing.LCP = true
+	} else {
+		cfg.Interfaces[managementInterface] = &interfaces.InterfaceConfig{
+			Name:        managementInterface,
+			Description: "Management Interface",
+			Enabled:     true,
+			LCP:         true,
+		}
+	}
+}
 
 func (cd *ConfigManager) LoadStartupConfig(path string) (*config.Config, error) {
 	config, err := LoadYAML(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load startup config: %w", err)
 	}
+
+	ensureManagementInterface(config)
 
 	cd.mu.Lock()
 	cd.startupConfig = cd.deepCopyConfig(config)
