@@ -45,7 +45,9 @@ func New(deps component.Dependencies) (component.Component, error) {
 			if cfg.Dataplane.MemifSocketPath != "" {
 				memifSocketPath = cfg.Dataplane.MemifSocketPath
 			}
-			accessIface = cfg.Dataplane.AccessInterface
+			if iface, err := cfg.GetAccessInterface(); err == nil {
+				accessIface = iface
+			}
 		}
 	}
 

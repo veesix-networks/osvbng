@@ -127,9 +127,14 @@ func main() {
 		mainLog.Info("Startup configuration applied")
 	}
 
+	accessInterface, err := cfg.GetAccessInterface()
+	if err != nil {
+		log.Fatalf("Invalid access interface configuration: %v", err)
+	}
+
 	vpp, err := southbound.NewVPP(southbound.VPPConfig{
 		Connection:      vppConn,
-		ParentInterface: cfg.Dataplane.AccessInterface,
+		ParentInterface: accessInterface,
 		UseDPDK:         cfg.Dataplane.DPDK != nil && len(cfg.Dataplane.DPDK.Devices) > 0,
 	})
 	if err != nil {
@@ -139,7 +144,7 @@ func main() {
 	mainLog.Info("Waiting for VPP LCP to sync interfaces...")
 	time.Sleep(5 * time.Second)
 
-	if err := vpp.SetupMemifDataplane(0, cfg.Dataplane.AccessInterface, cfg.Dataplane.MemifSocketPath); err != nil {
+	if err := vpp.SetupMemifDataplane(0, accessInterface, cfg.Dataplane.MemifSocketPath); err != nil {
 		log.Fatalf("Failed to setup memif dataplane: %v", err)
 	}
 	mainLog.Info("Memif dataplane configured")
@@ -161,16 +166,12 @@ func main() {
 		socketPath = "/run/osvbng/osvbng-punt.sock"
 	}
 
-	if err := vpp.RegisterPuntSocket(socketPath, 67, cfg.Dataplane.AccessInterface); err != nil {
-		mainLog.Warn("Failed to register punt socket for UDP 67", "error", err)
+	if err := vpp.RegisterPuntSocket(socketPath, 67, accessInterface); err != nil {
+		mainLog.Warn("Failed to register punt socket for UDP 67 (DHCP server port)", "error", err)
 	}
 
-	if err := vpp.RegisterPuntSocket(socketPath, 68, cfg.Dataplane.AccessInterface); err != nil {
-		mainLog.Warn("Failed to register punt socket for UDP 68", "error", err)
-	}
-
-	if err := vpp.EnableDirectedBroadcast(cfg.Dataplane.AccessInterface); err != nil {
-		mainLog.Warn("Failed to enable directed broadcast", "interface", cfg.Dataplane.AccessInterface, "error", err)
+	if err := vpp.EnableDirectedBroadcast(accessInterface); err != nil {
+		mainLog.Warn("Failed to enable directed broadcast", "interface", accessInterface, "error", err)
 	}
 
 	eventBus := local.NewBus()
