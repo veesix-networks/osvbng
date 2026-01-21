@@ -9,7 +9,6 @@ import (
 )
 
 type DataplaneConfig struct {
-	AccessInterface   string      `json:"access_interface,omitempty" yaml:"access_interface,omitempty"`
 	DPAPISocket       string      `json:"dp_api_socket,omitempty" yaml:"dp_api_socket,omitempty"`
 	PuntSocketPath    string      `json:"punt_socket_path,omitempty" yaml:"punt_socket_path,omitempty"`
 	ARPPuntSocketPath string      `json:"arp_punt_socket_path,omitempty" yaml:"arp_punt_socket_path,omitempty"`

@@ -20,12 +20,11 @@ services:
     privileged: true
     cpuset: "0-7"
     environment:
-      - OSVBNG_ACCESS_INTERFACE=eth0
-      - OSVBNG_CORE_INTERFACE=eth1
+      - OSVBNG_ACCESS_INTERFACE=eth1
     networks:
-      core:
-        ipv4_address: 172.20.0.2
-      access:
+      a-mgmt:
+      b-access:
+      c-core:
     volumes:
       - /sys/kernel/debug:/sys/kernel/debug:ro
       - /dev/hugepages:/dev/hugepages
@@ -55,12 +54,11 @@ volumes:
   bng-config-versions:
 
 networks:
-  core:
+  a-mgmt:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/24
-  access:
+  b-access:
     driver: bridge
     driver_opts:
       com.docker.network.bridge.name: bng-access
+  c-core:
+    driver: bridge

@@ -2,13 +2,7 @@
 set -e
 
 if [ -z "$OSVBNG_ACCESS_INTERFACE" ]; then
-    echo "ERROR: OSVBNG_ACCESS_INTERFACE environment variable is required"
-    exit 1
-fi
-
-if [ -z "$OSVBNG_CORE_INTERFACE" ]; then
-    echo "ERROR: OSVBNG_CORE_INTERFACE environment variable is required"
-    exit 1
+    OSVBNG_ACCESS_INTERFACE="eth1"
 fi
 
 TOTAL_CORES=$(nproc)

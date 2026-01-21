@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+
 	"github.com/veesix-networks/osvbng/pkg/config/aaa"
 	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
 	"github.com/veesix-networks/osvbng/pkg/config/ip"
@@ -32,4 +34,33 @@ type DiffResult struct {
 type ConfigLine struct {
 	Path  string
 	Value string
+}
+
+func (c *Config) GetAccessInterface() (string, error) {
+	var accessInterfaces []string
+
+	for name, iface := range c.Interfaces {
+		if iface.BNGMode == "access" {
+			accessInterfaces = append(accessInterfaces, name)
+		}
+	}
+
+	if len(accessInterfaces) == 0 {
+		return "", fmt.Errorf("no interface configured with bng_mode: access")
+	}
+
+	if len(accessInterfaces) > 1 {
+		return "", fmt.Errorf("multiple interfaces configured with bng_mode: access (only 1 allowed): %v", accessInterfaces)
+	}
+
+	return accessInterfaces[0], nil
+}
+
+func (c *Config) GetCoreInterface() string {
+	for name, iface := range c.Interfaces {
+		if iface.BNGMode == "core" {
+			return name
+		}
+	}
+	return ""
 }

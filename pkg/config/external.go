@@ -32,7 +32,9 @@ func (e *ExternalConfig) Generate(templateName string, data interface{}) (string
 		return "", fmt.Errorf("read template %s: %w", templateName, err)
 	}
 
-	tmpl, err := template.New(templateName).Parse(string(tmplContent))
+	tmpl, err := template.New(templateName).Funcs(template.FuncMap{
+		"add": func(a, b int) int { return a + b },
+	}).Parse(string(tmplContent))
 	if err != nil {
 		return "", fmt.Errorf("parse template %s: %w", templateName, err)
 	}
