@@ -33,8 +33,20 @@ type Component struct {
 
 func New(deps component.Dependencies) (component.Component, error) {
 	puntSocketPath := "/run/osvbng/osvbng-punt.sock"
-	if deps.Config != nil && deps.Config.Dataplane.PuntSocketPath != "" {
-		puntSocketPath = deps.Config.Dataplane.PuntSocketPath
+	memifSocketPath := "/run/osvbng/memif.sock"
+	var accessIface string
+
+	if deps.ConfigManager != nil {
+		cfg, _ := deps.ConfigManager.GetStartup()
+		if cfg != nil {
+			if cfg.Dataplane.PuntSocketPath != "" {
+				puntSocketPath = cfg.Dataplane.PuntSocketPath
+			}
+			if cfg.Dataplane.MemifSocketPath != "" {
+				memifSocketPath = cfg.Dataplane.MemifSocketPath
+			}
+			accessIface = cfg.Dataplane.AccessInterface
+		}
 	}
 
 	ingress := vpp.NewPuntSocketIngress(puntSocketPath)
@@ -44,14 +56,8 @@ func New(deps component.Dependencies) (component.Component, error) {
 
 	log := logger.Component(logger.ComponentDataplane)
 
-	memifSocketPath := "/run/osvbng/memif.sock"
-	if deps.Config != nil && deps.Config.Dataplane.MemifSocketPath != "" {
-		memifSocketPath = deps.Config.Dataplane.MemifSocketPath
-	}
-
 	virtualMAC := ""
-	if deps.Config != nil {
-		accessIface := deps.Config.Dataplane.AccessInterface
+	if accessIface != "" {
 		swIfIndex, err := deps.VPP.GetInterfaceIndex(accessIface)
 		if err == nil {
 			mac, err := deps.VPP.GetInterfaceMAC(uint32(swIfIndex))

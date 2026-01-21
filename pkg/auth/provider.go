@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 
+	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/provider"
 )
 
@@ -19,6 +20,12 @@ type AuthRequest struct {
 	MAC           string
 	AcctSessionID string
 	Attributes    map[string]string
+
+	SVLAN     uint16
+	CVLAN     uint16
+	Interface string
+
+	SubscriberGroup *subscriber.SubscriberGroup
 }
 
 type AuthResponse struct {

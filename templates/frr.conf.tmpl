@@ -11,8 +11,20 @@ router bgp {{ .Protocols.BGP.ASN }}
  bgp router-id {{ .Protocols.BGP.RouterID }}
 {{ end }}
 !
+{{ range $name, $peerGroup := .Protocols.BGP.PeerGroups }}
+ neighbor {{ $name }} peer-group
+{{ if $peerGroup.RemoteAS }}
+ neighbor {{ $name }} remote-as {{ $peerGroup.RemoteAS }}
+{{ end }}
+{{ end }}
+!
 {{ range $addr, $neighbor := .Protocols.BGP.Neighbors }}
+{{ if $neighbor.PeerGroup }}
+ neighbor {{ $addr }} peer-group {{ $neighbor.PeerGroup }}
+{{ end }}
+{{ if $neighbor.RemoteAS }}
  neighbor {{ $addr }} remote-as {{ $neighbor.RemoteAS }}
+{{ end }}
 {{ if $neighbor.Peer }}
  neighbor {{ $addr }} update-source {{ $neighbor.Peer }}
 {{ end }}
@@ -26,28 +38,100 @@ router bgp {{ .Protocols.BGP.ASN }}
 !
 {{ if .Protocols.BGP.IPv4Unicast }}
  address-family ipv4 unicast
-{{ range $addr, $neighbor := .Protocols.BGP.IPv4Unicast.Neighbors }}
-  neighbor {{ $addr }} remote-as {{ $neighbor.RemoteAS }}
-{{ if $neighbor.Description }}
-  neighbor {{ $addr }} description {{ $neighbor.Description }}
+{{ range $name, $peerGroup := $.Protocols.BGP.PeerGroups }}
+{{ if $peerGroup.IPv4Unicast }}
+  neighbor {{ $name }} activate
+{{ if $peerGroup.IPv4Unicast.NextHopSelf }}
+  neighbor {{ $name }} next-hop-self
+{{ end }}
+{{ if $peerGroup.IPv4Unicast.SendCommunity }}
+  neighbor {{ $name }} send-community {{ $peerGroup.IPv4Unicast.SendCommunity }}
+{{ end }}
+{{ if $peerGroup.IPv4Unicast.RouteMapIn }}
+  neighbor {{ $name }} route-map {{ $peerGroup.IPv4Unicast.RouteMapIn }} in
+{{ end }}
+{{ if $peerGroup.IPv4Unicast.RouteMapOut }}
+  neighbor {{ $name }} route-map {{ $peerGroup.IPv4Unicast.RouteMapOut }} out
 {{ end }}
 {{ end }}
-{{ range $network := .Protocols.BGP.IPv4Unicast.Networks }}
-  network {{ $network }}
+{{ end }}
+{{ range $addr, $neighbor := $.Protocols.BGP.Neighbors }}
+{{ if $neighbor.IPv4Unicast }}
+  neighbor {{ $addr }} activate
+{{ if $neighbor.IPv4Unicast.NextHopSelf }}
+  neighbor {{ $addr }} next-hop-self
+{{ end }}
+{{ if $neighbor.IPv4Unicast.SendCommunity }}
+  neighbor {{ $addr }} send-community {{ $neighbor.IPv4Unicast.SendCommunity }}
+{{ end }}
+{{ if $neighbor.IPv4Unicast.RouteMapIn }}
+  neighbor {{ $addr }} route-map {{ $neighbor.IPv4Unicast.RouteMapIn }} in
+{{ end }}
+{{ if $neighbor.IPv4Unicast.RouteMapOut }}
+  neighbor {{ $addr }} route-map {{ $neighbor.IPv4Unicast.RouteMapOut }} out
+{{ end }}
+{{ end }}
+{{ end }}
+{{ range $network, $config := .Protocols.BGP.IPv4Unicast.Networks }}
+  network {{ $network }}{{ if $config.RouteMap }} route-map {{ $config.RouteMap }}{{ end }}
+{{ end }}
+{{ if .Protocols.BGP.IPv4Unicast.Redistribute }}
+{{ if .Protocols.BGP.IPv4Unicast.Redistribute.Connected }}
+  redistribute connected
+{{ end }}
+{{ if .Protocols.BGP.IPv4Unicast.Redistribute.Static }}
+  redistribute static
+{{ end }}
 {{ end }}
  exit-address-family
 !
 {{ end }}
 {{ if .Protocols.BGP.IPv6Unicast }}
  address-family ipv6 unicast
-{{ range $addr, $neighbor := .Protocols.BGP.IPv6Unicast.Neighbors }}
-  neighbor {{ $addr }} remote-as {{ $neighbor.RemoteAS }}
-{{ if $neighbor.Description }}
-  neighbor {{ $addr }} description {{ $neighbor.Description }}
+{{ range $name, $peerGroup := $.Protocols.BGP.PeerGroups }}
+{{ if $peerGroup.IPv6Unicast }}
+  neighbor {{ $name }} activate
+{{ if $peerGroup.IPv6Unicast.NextHopSelf }}
+  neighbor {{ $name }} next-hop-self
+{{ end }}
+{{ if $peerGroup.IPv6Unicast.SendCommunity }}
+  neighbor {{ $name }} send-community {{ $peerGroup.IPv6Unicast.SendCommunity }}
+{{ end }}
+{{ if $peerGroup.IPv6Unicast.RouteMapIn }}
+  neighbor {{ $name }} route-map {{ $peerGroup.IPv6Unicast.RouteMapIn }} in
+{{ end }}
+{{ if $peerGroup.IPv6Unicast.RouteMapOut }}
+  neighbor {{ $name }} route-map {{ $peerGroup.IPv6Unicast.RouteMapOut }} out
 {{ end }}
 {{ end }}
-{{ range $network := .Protocols.BGP.IPv6Unicast.Networks }}
-  network {{ $network }}
+{{ end }}
+{{ range $addr, $neighbor := $.Protocols.BGP.Neighbors }}
+{{ if $neighbor.IPv6Unicast }}
+  neighbor {{ $addr }} activate
+{{ if $neighbor.IPv6Unicast.NextHopSelf }}
+  neighbor {{ $addr }} next-hop-self
+{{ end }}
+{{ if $neighbor.IPv6Unicast.SendCommunity }}
+  neighbor {{ $addr }} send-community {{ $neighbor.IPv6Unicast.SendCommunity }}
+{{ end }}
+{{ if $neighbor.IPv6Unicast.RouteMapIn }}
+  neighbor {{ $addr }} route-map {{ $neighbor.IPv6Unicast.RouteMapIn }} in
+{{ end }}
+{{ if $neighbor.IPv6Unicast.RouteMapOut }}
+  neighbor {{ $addr }} route-map {{ $neighbor.IPv6Unicast.RouteMapOut }} out
+{{ end }}
+{{ end }}
+{{ end }}
+{{ range $network, $config := .Protocols.BGP.IPv6Unicast.Networks }}
+  network {{ $network }}{{ if $config.RouteMap }} route-map {{ $config.RouteMap }}{{ end }}
+{{ end }}
+{{ if .Protocols.BGP.IPv6Unicast.Redistribute }}
+{{ if .Protocols.BGP.IPv6Unicast.Redistribute.Connected }}
+  redistribute connected
+{{ end }}
+{{ if .Protocols.BGP.IPv6Unicast.Redistribute.Static }}
+  redistribute static
+{{ end }}
 {{ end }}
  exit-address-family
 !
@@ -69,8 +153,8 @@ router bgp {{ $.Protocols.BGP.ASN }} vrf {{ $vrfName }}
   neighbor {{ $addr }} description {{ $neighbor.Description }}
 {{ end }}
 {{ end }}
-{{ range $network := $vrfConfig.IPv4Unicast.Networks }}
-  network {{ $network }}
+{{ range $network, $config := $vrfConfig.IPv4Unicast.Networks }}
+  network {{ $network }}{{ if $config.RouteMap }} route-map {{ $config.RouteMap }}{{ end }}
 {{ end }}
  exit-address-family
 !
@@ -83,8 +167,8 @@ router bgp {{ $.Protocols.BGP.ASN }} vrf {{ $vrfName }}
   neighbor {{ $addr }} description {{ $neighbor.Description }}
 {{ end }}
 {{ end }}
-{{ range $network := $vrfConfig.IPv6Unicast.Networks }}
-  network {{ $network }}
+{{ range $network, $config := $vrfConfig.IPv6Unicast.Networks }}
+  network {{ $network }}{{ if $config.RouteMap }} route-map {{ $config.RouteMap }}{{ end }}
 {{ end }}
  exit-address-family
 !
