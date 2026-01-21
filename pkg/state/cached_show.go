@@ -79,7 +79,7 @@ func (c *CachedShowCollector) Start(ctx context.Context) error {
 				return
 			case <-ticker.C:
 				if err := c.collectNow(ctx); err != nil {
-					c.logger.Error("Collection failed", "collector", c.cachePath, "error", err)
+					c.logger.Debug("Collection failed", "collector", c.cachePath, "error", err)
 				}
 			}
 		}
