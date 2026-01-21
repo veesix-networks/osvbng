@@ -36,7 +36,7 @@ function install_deps() {
 
     echo "Installing dependencies..."
     apt-get update -y
-    apt-get install -y libvirt-daemon-system qemu-kvm virtinst curl whiptail gzip
+    apt-get install -y libvirt-daemon-system qemu-kvm virtinst curl whiptail gzip bridge-utils
 
     systemctl enable libvirtd
     systemctl start libvirtd

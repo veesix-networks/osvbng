@@ -10,6 +10,7 @@ VM_MEMORY=4096
 VM_VCPUS=4
 QCOW2_URL="https://github.com/veesix-networks/osvbng/releases/latest/download/osvbng-debian12.qcow2.gz"
 INSTALL_DIR="/var/lib/libvirt/images"
+MGMT_BRIDGE="br-mgmt"
 
 declare -a ACCESS_INTERFACES
 declare -a CORE_INTERFACES
@@ -49,11 +50,12 @@ show_banner() {
 
 Requirements:
 - KVM/libvirt installed
+- bridge-utils installed (for management bridge)
 - IOMMU enabled in BIOS and kernel
 - At least 2 network interfaces for PCI passthrough
 - 4GB RAM and 4 vCPUs recommended
 
-Press OK to continue." 16 70
+Press OK to continue." 17 70
 }
 
 check_requirements() {
@@ -198,6 +200,21 @@ configure_vm_settings() {
     VM_NAME=$($TUI_TOOL --inputbox "Enter VM name:" 8 60 "$VM_NAME" 3>&1 1>&2 2>&3)
     VM_MEMORY=$($TUI_TOOL --inputbox "Enter memory (MB):" 8 60 "$VM_MEMORY" 3>&1 1>&2 2>&3)
     VM_VCPUS=$($TUI_TOOL --inputbox "Enter number of vCPUs:" 8 60 "$VM_VCPUS" 3>&1 1>&2 2>&3)
+
+    while true; do
+        MGMT_BRIDGE=$($TUI_TOOL --inputbox "Enter management bridge name:" 10 70 "$MGMT_BRIDGE" 3>&1 1>&2 2>&3)
+
+        if brctl show "$MGMT_BRIDGE" &>/dev/null; then
+            break
+        else
+            if $TUI_TOOL --title "Bridge Not Found" --yesno \
+"Bridge '$MGMT_BRIDGE' does not exist.
+
+Do you want to continue anyway? (VM creation may fail)" 10 60; then
+                break
+            fi
+        fi
+    done
 }
 
 download_image() {
@@ -259,7 +276,7 @@ create_vm() {
     cmd="$cmd --os-variant linux2022"
     cmd="$cmd --import"
     cmd="$cmd --disk path=$QCOW2_PATH,format=qcow2,bus=virtio"
-    cmd="$cmd --network network=default,model=virtio"
+    cmd="$cmd --network bridge=$MGMT_BRIDGE,model=virtio"
     cmd="$cmd --graphics none"
     cmd="$cmd --console pty,target_type=serial"
     cmd="$cmd --memorybacking hugepages=yes"
@@ -314,6 +331,7 @@ show_summary() {
 VM Name: $VM_NAME
 Memory: $VM_MEMORY MB
 vCPUs: $VM_VCPUS
+Management Bridge: $MGMT_BRIDGE (virtio eth0)
 Access Interface(s): $access_list (${#ACCESS_INTERFACES[@]} total)
 Core Interface(s): $core_list (${#CORE_INTERFACES[@]} total)
 
@@ -327,7 +345,7 @@ Access CLI:
   sudo virsh console $VM_NAME
 
   Default Login: root / osvbng
-  # Then inside VM: osvbngcli" 22 78
+  # Then inside VM: osvbngcli" 24 78
 }
 
 main() {
