@@ -5,13 +5,12 @@ if [ "$1" = "config" ]; then
     exec /usr/local/bin/osvbngd "$@"
 fi
 
-if [ -z "$OSVBNG_ACCESS_INTERFACE" ]; then
-    echo "ERROR: OSVBNG_ACCESS_INTERFACE environment variable is required"
-    exit 1
+if [ -z "$OSVBNG_MGMT_INTERFACE" ]; then
+    OSVBNG_MGMT_INTERFACE="eth0"
 fi
 
-if [ -z "$OSVBNG_CORE_INTERFACE" ]; then
-    OSVBNG_CORE_INTERFACE=""
+if [ -z "$OSVBNG_ACCESS_INTERFACE" ]; then
+    OSVBNG_ACCESS_INTERFACE="eth1"
 fi
 
 wait_for_interfaces() {
@@ -52,7 +51,7 @@ wait_for_interfaces() {
 }
 
 if [ "$OSVBNG_WAIT_FOR_INTERFACES" = "true" ]; then
-    wait_for_interfaces "$OSVBNG_ACCESS_INTERFACE" "$OSVBNG_CORE_INTERFACE"
+    wait_for_interfaces "$OSVBNG_MGMT_INTERFACE"
 fi
 
 TOTAL_CORES=$(nproc)
@@ -102,11 +101,8 @@ mkdir -p /dev/hugepages
 mount -t hugetlbfs -o pagesize=2M none /dev/hugepages || true
 echo 512 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages || true
 
-echo "Using Docker-provided interface: $OSVBNG_ACCESS_INTERFACE"
-ip link show $OSVBNG_ACCESS_INTERFACE
-
-echo "Setting virtual MAC on $OSVBNG_ACCESS_INTERFACE..."
-ip link set $OSVBNG_ACCESS_INTERFACE address 00:00:5e:00:01:01
+echo "Management interface: $OSVBNG_MGMT_INTERFACE"
+ip link show $OSVBNG_MGMT_INTERFACE
 
 echo "Creating runtime directories..."
 mkdir -p /run/osvbng

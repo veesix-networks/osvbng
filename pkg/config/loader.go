@@ -26,8 +26,8 @@ func Load(path string) (*Config, error) {
 }
 
 func (c *Config) Validate() error {
-	if c.Dataplane.AccessInterface == "" {
-		return fmt.Errorf("dataplane.access_interface is required")
+	if _, err := c.GetAccessInterface(); err != nil {
+		return fmt.Errorf("access interface validation: %w", err)
 	}
 
 	if c.SubscriberGroups != nil {

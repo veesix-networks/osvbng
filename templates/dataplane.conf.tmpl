@@ -90,7 +90,7 @@ dpdk {
 {{ end }}{{ if .DPDK.DevDefaults.NoRxInterrupt }}    no-rx-interrupts
 {{ end }}  }
 {{ end }}{{ range $i, $dev := .DPDK.Devices }}  dev {{ $dev.PCI }} {
-    name {{ if $dev.Name }}{{ $dev.Name }}{{ else }}eth{{ $i }}{{ end }}
+    name {{ if $dev.Name }}{{ $dev.Name }}{{ else }}eth{{ add $i 1 }}{{ end }}
 {{ if $dev.Options }}{{ if $dev.Options.NumRxQueues }}    num-rx-queues {{ $dev.Options.NumRxQueues }}
 {{ end }}{{ if $dev.Options.NumTxQueues }}    num-tx-queues {{ $dev.Options.NumTxQueues }}
 {{ end }}{{ if $dev.Options.NumRxDesc }}    num-rx-desc {{ $dev.Options.NumRxDesc }}

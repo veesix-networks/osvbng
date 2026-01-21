@@ -7,11 +7,12 @@ type InterfaceConfig struct {
 	MTU         int            `json:"mtu,omitempty" yaml:"mtu,omitempty"`
 	Address     *AddressConfig `json:"address,omitempty" yaml:"address,omitempty"`
 
-	Type   string      `json:"type,omitempty" yaml:"type,omitempty"`
-	Parent string      `json:"parent,omitempty" yaml:"parent,omitempty"`
-	VLANID int         `json:"vlan-id,omitempty" yaml:"vlan-id,omitempty"`
-	Bond   *BondConfig `json:"bond,omitempty" yaml:"bond,omitempty"`
-	LCP    bool        `json:"lcp,omitempty" yaml:"lcp,omitempty"`
+	Type    string      `json:"type,omitempty" yaml:"type,omitempty"`
+	Parent  string      `json:"parent,omitempty" yaml:"parent,omitempty"`
+	VLANID  int         `json:"vlan-id,omitempty" yaml:"vlan-id,omitempty"`
+	Bond    *BondConfig `json:"bond,omitempty" yaml:"bond,omitempty"`
+	LCP     bool        `json:"lcp,omitempty" yaml:"lcp,omitempty"`
+	BNGMode string      `json:"bng_mode,omitempty" yaml:"bng_mode,omitempty"`
 }
 
 type AddressConfig struct {
