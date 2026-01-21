@@ -177,10 +177,10 @@ func main() {
 	cache := memory.New()
 
 	coreDeps := component.Dependencies{
-		EventBus: eventBus,
-		Cache:    cache,
-		VPP:      vpp,
-		Config:   cfg,
+		EventBus:      eventBus,
+		Cache:         cache,
+		VPP:           vpp,
+		ConfigManager: configd,
 	}
 
 	authProviderName := cfg.AAA.Provider
