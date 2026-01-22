@@ -25,6 +25,19 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
+func Save(path string, cfg *Config) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
+	}
+
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("write config file: %w", err)
+	}
+
+	return nil
+}
+
 func (c *Config) Validate() error {
 	if _, err := c.GetAccessInterface(); err != nil {
 		return fmt.Errorf("access interface validation: %w", err)
