@@ -45,7 +45,7 @@ function install_deps() {
 }
 
 function download_and_run() {
-    local deploy_script_url="https://raw.githubusercontent.com/veesix-networks/osvbng/dev/scripts/qemu/deploy-vm.sh"
+    local deploy_script_url="https://raw.githubusercontent.com/veesix-networks/osvbng/main/scripts/qemu/deploy-vm.sh"
     local deploy_script_path="/tmp/osvbng-deploy-vm.sh"
 
     echo "Downloading deployment script..."
