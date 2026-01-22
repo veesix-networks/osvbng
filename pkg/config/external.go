@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"text/template"
+
+	"github.com/veesix-networks/osvbng/pkg/config/system"
 )
 
 const (
@@ -72,6 +74,37 @@ func GenerateExternalConfigs(configPath string) error {
 	cfg, err := Load(configPath)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
+	}
+
+	configUpdated := false
+	if cfg.Dataplane.DPDK == nil || len(cfg.Dataplane.DPDK.Devices) == 0 {
+		devices, err := system.DiscoverDPDKDevices()
+		if err != nil {
+			log.Printf("Warning: DPDK device discovery failed: %v", err)
+		} else if len(devices) > 0 {
+			for i := range devices {
+				devices[i].Name = fmt.Sprintf("eth%d", i+1)
+			}
+			if cfg.Dataplane.DPDK == nil {
+				cfg.Dataplane.DPDK = &system.DPDKConfig{}
+			}
+			cfg.Dataplane.DPDK.Devices = devices
+			configUpdated = true
+			log.Printf("Discovered %d DPDK devices", len(devices))
+		}
+	}
+
+	if configUpdated {
+		if err := Save(configPath, cfg); err != nil {
+			return fmt.Errorf("save config with discovered DPDK devices: %w", err)
+		}
+		log.Printf("Updated %s with discovered DPDK devices", configPath)
+	}
+
+	if cfg.Dataplane.DPDK != nil && len(cfg.Dataplane.DPDK.Devices) > 0 {
+		if err := system.BindDPDKDevices(cfg.Dataplane.DPDK.Devices); err != nil {
+			log.Printf("Warning: DPDK device binding failed: %v", err)
+		}
 	}
 
 	dc := NewDataplaneConf()

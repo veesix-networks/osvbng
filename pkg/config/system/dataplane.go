@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/veesix-networks/osvbng/pkg/config/system/nic"
 )
 
 type DataplaneConfig struct {
@@ -78,4 +80,15 @@ func DiscoverDPDKDevices() ([]DPDKDevice, error) {
 	}
 
 	return devices, nil
+}
+
+func BindDPDKDevices(devices []DPDKDevice) error {
+	nicDevices := make([]nic.Device, len(devices))
+	for i, dev := range devices {
+		nicDevices[i] = nic.Device{
+			PCI:  dev.PCI,
+			Name: dev.Name,
+		}
+	}
+	return nic.BindDevices(nicDevices)
 }
