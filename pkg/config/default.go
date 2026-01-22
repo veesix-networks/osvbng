@@ -94,12 +94,6 @@ func Generate(opts GenerateOptions) (string, error) {
 			},
 		},
 		Interfaces: map[string]*interfaces.InterfaceConfig{
-			"eth0": {
-				Name:        "eth0",
-				Description: "Management Interface",
-				Enabled:     true,
-				LCP:         true,
-			},
 			accessInterface: {
 				Name:        accessInterface,
 				Description: "Access Interface",
