@@ -58,7 +58,13 @@ func (d *VPPDataplane) createPhysicalInterface(cfg *interfaces.InterfaceConfig) 
 
 	vppIfName, err := d.createVPPHostInterface(cfg.Name)
 	if err != nil {
-		return fmt.Errorf("create VPP host-interface: %w", err)
+		if idx, lookupErr := d.getInterfaceIndex("host-" + cfg.Name); lookupErr == nil {
+			d.logger.Info("Host-interface already exists in VPP, skipping creation", "interface", cfg.Name)
+			d.ifaceCache[cfg.Name] = idx
+			vppIfName = cfg.Name
+		} else {
+			return fmt.Errorf("create VPP host-interface: %w", err)
+		}
 	}
 
 	if cfg.Enabled {
