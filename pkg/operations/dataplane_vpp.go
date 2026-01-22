@@ -6,7 +6,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
+	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
+	"github.com/veesix-networks/osvbng/pkg/config/protocols"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/af_packet"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/ethernet_types"
@@ -31,7 +32,7 @@ func NewVPPDataplane(conn *core.Connection) *VPPDataplane {
 	}
 }
 
-func (d *VPPDataplane) CreateInterface(cfg *types.InterfaceConfig) error {
+func (d *VPPDataplane) CreateInterface(cfg *interfaces.InterfaceConfig) error {
 	ifType := inferInterfaceType(cfg)
 
 	if ifType == "loopback" {
@@ -43,7 +44,7 @@ func (d *VPPDataplane) CreateInterface(cfg *types.InterfaceConfig) error {
 	return fmt.Errorf("unknown interface type for %s", cfg.Name)
 }
 
-func (d *VPPDataplane) createPhysicalInterface(cfg *types.InterfaceConfig) error {
+func (d *VPPDataplane) createPhysicalInterface(cfg *interfaces.InterfaceConfig) error {
 	// DPDK interface exist already so we don't need to build host
 	if _, err := d.getInterfaceIndex(cfg.Name); err == nil {
 		d.logger.Info("Interface already exists in VPP, skipping creation", "interface", cfg.Name)
@@ -57,7 +58,13 @@ func (d *VPPDataplane) createPhysicalInterface(cfg *types.InterfaceConfig) error
 
 	vppIfName, err := d.createVPPHostInterface(cfg.Name)
 	if err != nil {
-		return fmt.Errorf("create VPP host-interface: %w", err)
+		if idx, lookupErr := d.getInterfaceIndex("host-" + cfg.Name); lookupErr == nil {
+			d.logger.Info("Host-interface already exists in VPP, skipping creation", "interface", cfg.Name)
+			d.ifaceCache[cfg.Name] = idx
+			vppIfName = cfg.Name
+		} else {
+			return fmt.Errorf("create VPP host-interface: %w", err)
+		}
 	}
 
 	if cfg.Enabled {
@@ -73,7 +80,7 @@ func (d *VPPDataplane) createPhysicalInterface(cfg *types.InterfaceConfig) error
 	return nil
 }
 
-func (d *VPPDataplane) createLoopback(cfg *types.InterfaceConfig) error {
+func (d *VPPDataplane) createLoopback(cfg *interfaces.InterfaceConfig) error {
 	// Check if loopback already exists in VPP
 	if _, err := d.getInterfaceIndex(cfg.Name); err == nil {
 		d.logger.Info("Loopback already exists in VPP, skipping creation", "interface", cfg.Name)
@@ -228,7 +235,7 @@ func (d *VPPDataplane) DelIPv6Address(ifName, address string) error {
 	return nil
 }
 
-func (d *VPPDataplane) AddRoute(route *types.StaticRoute) error {
+func (d *VPPDataplane) AddRoute(route *protocols.StaticRoute) error {
 	_, dst, err := net.ParseCIDR(route.Destination)
 	if err != nil {
 		return fmt.Errorf("parse destination: %w", err)
@@ -263,7 +270,7 @@ func (d *VPPDataplane) AddRoute(route *types.StaticRoute) error {
 }
 
 // DelRoute removes a static route from Linux routing table
-func (d *VPPDataplane) DelRoute(route *types.StaticRoute) error {
+func (d *VPPDataplane) DelRoute(route *protocols.StaticRoute) error {
 	_, dst, err := net.ParseCIDR(route.Destination)
 	if err != nil {
 		return fmt.Errorf("parse destination: %w", err)
@@ -490,7 +497,7 @@ func (d *VPPDataplane) setInterfaceState(name string, enabled bool) error {
 	return nil
 }
 
-func inferInterfaceType(cfg *types.InterfaceConfig) string {
+func inferInterfaceType(cfg *interfaces.InterfaceConfig) string {
 	if cfg.Type != "" {
 		return cfg.Type
 	}

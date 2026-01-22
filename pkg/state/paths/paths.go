@@ -6,6 +6,7 @@ const (
 	AAARadiusServers           Path = "aaa.radius.servers"
 	ProtocolsBGPStatistics     Path = "protocols.bgp.statistics"
 	ProtocolsBGPIPv6Statistics Path = "protocols.bgp.ipv6.statistics"
+	ProtocolsBGPNeighbors      Path = "protocols.bgp.neighbors.<*:ip>"
 	SubscriberSessions         Path = "subscriber.sessions"
 )
 

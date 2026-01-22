@@ -4,15 +4,16 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
+	"github.com/veesix-networks/osvbng/pkg/config/protocols"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
-	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
 )
 
-func FormatChanges(changes []*conf.HandlerContext) *types.DiffResult {
-	result := &types.DiffResult{}
+func FormatChanges(changes []*conf.HandlerContext) *DiffResult {
+	result := &DiffResult{}
 
 	for _, change := range changes {
-		line := types.ConfigLine{
+		line := ConfigLine{
 			Path:  change.Path,
 			Value: formatValue(change.NewValue),
 		}
@@ -30,7 +31,7 @@ func FormatChanges(changes []*conf.HandlerContext) *types.DiffResult {
 	return result
 }
 
-func FormatDiff(result *types.DiffResult) string {
+func FormatDiff(result *DiffResult) string {
 	var sb strings.Builder
 
 	if len(result.Added) > 0 {
@@ -73,9 +74,9 @@ func formatValue(v interface{}) string {
 		return fmt.Sprintf("%v", val)
 	case int:
 		return fmt.Sprintf("%d", val)
-	case *types.InterfaceConfig:
+	case *interfaces.InterfaceConfig:
 		return fmt.Sprintf("interface:%s", val.Name)
-	case *types.StaticRoute:
+	case *protocols.StaticRoute:
 		return fmt.Sprintf("%s via %s", val.Destination, val.NextHop)
 	default:
 		return fmt.Sprintf("%v", val)

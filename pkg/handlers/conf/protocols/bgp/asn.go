@@ -1,10 +1,10 @@
 package bgp
 
 import (
-	"github.com/veesix-networks/osvbng/pkg/deps"
 	"context"
 	"fmt"
 
+	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
 )
@@ -32,9 +32,9 @@ func NewBGPASNHandler(deps *deps.ConfDeps) conf.Handler {
 }
 
 func (h *BGPASNHandler) Validate(ctx context.Context, hctx *conf.HandlerContext) error {
-	asn, ok := hctx.NewValue.(uint32)
-	if !ok {
-		return fmt.Errorf("expected uint32 for ASN, got %T", hctx.NewValue)
+	asn, err := conf.ParseUint32(hctx.NewValue)
+	if err != nil {
+		return fmt.Errorf("invalid ASN: %w", err)
 	}
 
 	if asn == 0 {

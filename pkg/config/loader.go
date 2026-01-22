@@ -25,30 +25,53 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-func (c *Config) Validate() error {
-	if c.Dataplane.AccessInterface == "" {
-		return fmt.Errorf("dataplane.access_interface is required")
+func Save(path string, cfg *Config) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
 	}
 
-	for i, vlanRange := range c.SubscriberGroup.VLANs {
-		if _, err := vlanRange.GetSVLANs(); err != nil {
-			return fmt.Errorf("subscriber_group.vlans[%d].svlan: %w", i, err)
-		}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("write config file: %w", err)
+	}
 
-		if _, _, err := vlanRange.GetCVLAN(); err != nil {
-			return fmt.Errorf("subscriber_group.vlans[%d].cvlan: %w", i, err)
-		}
+	return nil
+}
 
-		if vlanRange.DHCP != "" {
-			if c.DHCP.GetServer(vlanRange.DHCP) == nil {
-				return fmt.Errorf("subscriber_group.vlans[%d].dhcp references unknown server '%s'", i, vlanRange.DHCP)
+func (c *Config) Validate() error {
+	if _, err := c.GetAccessInterface(); err != nil {
+		return fmt.Errorf("access interface validation: %w", err)
+	}
+
+	if c.SubscriberGroups != nil {
+		for groupName, group := range c.SubscriberGroups.Groups {
+			for i, vlanRange := range group.VLANs {
+				if _, err := vlanRange.GetSVLANs(); err != nil {
+					return fmt.Errorf("subscriber_groups.%s.vlans[%d].svlan: %w", groupName, i, err)
+				}
+
+				if _, _, err := vlanRange.GetCVLAN(); err != nil {
+					return fmt.Errorf("subscriber_groups.%s.vlans[%d].cvlan: %w", groupName, i, err)
+				}
+
+				if vlanRange.DHCP != "" {
+					if c.DHCP.GetServer(vlanRange.DHCP) == nil {
+						return fmt.Errorf("subscriber_groups.%s.vlans[%d].dhcp references unknown server '%s'", groupName, i, vlanRange.DHCP)
+					}
+				}
+
+				if vlanRange.AAA != nil {
+					if vlanRange.AAA.Policy != "" {
+						if c.AAA.GetPolicy(vlanRange.AAA.Policy) == nil {
+							return fmt.Errorf("subscriber_groups.%s.vlans[%d].aaa.policy references unknown policy '%s'", groupName, i, vlanRange.AAA.Policy)
+						}
+					}
+				}
 			}
-		}
 
-		if vlanRange.AAA != nil {
-			if vlanRange.AAA.Policy != "" {
-				if c.AAA.GetPolicy(vlanRange.AAA.Policy) == nil {
-					return fmt.Errorf("subscriber_group.vlans[%d].aaa.policy references unknown policy '%s'", i, vlanRange.AAA.Policy)
+			if group.AAAPolicy != "" {
+				if c.AAA.GetPolicy(group.AAAPolicy) == nil {
+					return fmt.Errorf("subscriber_groups.%s.aaa_policy references unknown policy '%s'", groupName, group.AAAPolicy)
 				}
 			}
 		}

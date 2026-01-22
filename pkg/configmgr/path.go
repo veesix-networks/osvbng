@@ -6,8 +6,38 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
+	confpaths "github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
+	"github.com/veesix-networks/osvbng/pkg/config"
+	"github.com/veesix-networks/osvbng/pkg/paths"
 )
+
+func decodePathSegments(encodedPath, pattern string) ([]string, error) {
+	wildcardValues, err := paths.Extract(encodedPath, pattern)
+	if err != nil {
+		parts := strings.Split(encodedPath, ".")
+		return parts, nil
+	}
+
+	patternParts := strings.Split(pattern, ".")
+	result := make([]string, len(patternParts))
+	wildcardIdx := 0
+
+	for i, part := range patternParts {
+		if strings.HasPrefix(part, "<") && strings.HasSuffix(part, ">") {
+			if wildcardIdx < len(wildcardValues) {
+				result[i] = wildcardValues[wildcardIdx]
+				wildcardIdx++
+			} else {
+				parts := strings.Split(encodedPath, ".")
+				return parts, nil
+			}
+		} else {
+			result[i] = part
+		}
+	}
+
+	return result, nil
+}
 
 func findFieldByPath(v reflect.Value, pathPart string) reflect.Value {
 	t := v.Type()
@@ -28,7 +58,7 @@ func findFieldByPath(v reflect.Value, pathPart string) reflect.Value {
 	})
 }
 
-func getValueFromConfig(config *types.Config, path string) (interface{}, error) {
+func getValueFromConfig(config *config.Config, path string) (interface{}, error) {
 	parts := strings.Split(path, ".")
 	if len(parts) == 0 {
 		return nil, fmt.Errorf("empty path")
@@ -114,7 +144,14 @@ func getValueFromConfig(config *types.Config, path string) (interface{}, error) 
 			key := reflect.ValueOf(part)
 			value := v.MapIndex(key)
 			if !value.IsValid() {
-				return nil, nil
+				decodedKey, err := paths.DecodeValue(part)
+				if err == nil && decodedKey != part {
+					key = reflect.ValueOf(decodedKey)
+					value = v.MapIndex(key)
+				}
+				if !value.IsValid() {
+					return nil, nil
+				}
 			}
 			current = value.Interface()
 
@@ -126,8 +163,11 @@ func getValueFromConfig(config *types.Config, path string) (interface{}, error) 
 	return current, nil
 }
 
-func setValueInConfig(config *types.Config, path string, value interface{}) error {
-	parts := strings.Split(path, ".")
+func setValueInConfig(config *config.Config, path string, value interface{}, pattern confpaths.Path) error {
+	parts, err := decodePathSegments(path, pattern.String())
+	if err != nil {
+		return err
+	}
 	if len(parts) == 0 {
 		return fmt.Errorf("empty path")
 	}
@@ -159,6 +199,14 @@ func setValueInConfig(config *types.Config, path string, value interface{}) erro
 
 				for i := len(nsParts); i < len(parts)-1; i++ {
 					part := parts[i]
+
+					if current.Kind() == reflect.Ptr {
+						if current.IsNil() {
+							newVal := reflect.New(current.Type().Elem())
+							current.Set(newVal)
+						}
+						current = current.Elem()
+					}
 
 					switch current.Kind() {
 					case reflect.Struct:
@@ -244,7 +292,7 @@ func setValueInConfig(config *types.Config, path string, value interface{}) erro
 						current.SetMapIndex(key, reflect.ValueOf(convertedValue))
 					}
 				} else {
-					return fmt.Errorf("cannot set value on type %s", current.Kind())
+					return fmt.Errorf("cannot set value on type %s at path %s", current.Kind(), path)
 				}
 
 				return nil
@@ -274,6 +322,10 @@ func setValueInConfig(config *types.Config, path string, value interface{}) erro
 				return fmt.Errorf("field not settable: %s", part)
 			}
 			current = field
+
+			if current.Kind() == reflect.Ptr && current.IsNil() {
+				current.Set(reflect.New(current.Type().Elem()))
+			}
 
 		case reflect.Map:
 			if current.IsNil() {
@@ -358,7 +410,7 @@ func setValueInConfig(config *types.Config, path string, value interface{}) erro
 		}
 
 	default:
-		return fmt.Errorf("cannot set value on type %s", current.Kind())
+		return fmt.Errorf("cannot set value on type %s at path %s", current.Kind(), path)
 	}
 
 	return nil
@@ -369,34 +421,69 @@ func convertValue(value interface{}, targetType reflect.Type) (interface{}, erro
 		targetType = targetType.Elem()
 	}
 
-	strValue, ok := value.(string)
-	if !ok {
-		return nil, fmt.Errorf("value must be string for conversion")
+	valueType := reflect.TypeOf(value)
+	if valueType != nil && valueType.AssignableTo(targetType) {
+		return value, nil
 	}
 
 	switch targetType.Kind() {
 	case reflect.String:
-		return strValue, nil
+		if str, ok := value.(string); ok {
+			return str, nil
+		}
+		return fmt.Sprintf("%v", value), nil
+
 	case reflect.Bool:
-		return strconv.ParseBool(strValue)
+		if b, ok := value.(bool); ok {
+			return b, nil
+		}
+		if str, ok := value.(string); ok {
+			return strconv.ParseBool(str)
+		}
+		return nil, fmt.Errorf("cannot convert %T to bool", value)
+
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		intVal, err := strconv.ParseInt(strValue, 10, 64)
-		if err != nil {
-			return nil, err
+		switch v := value.(type) {
+		case float64:
+			return reflect.ValueOf(int64(v)).Convert(targetType).Interface(), nil
+		case string:
+			intVal, err := strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				return nil, err
+			}
+			return reflect.ValueOf(intVal).Convert(targetType).Interface(), nil
+		default:
+			return nil, fmt.Errorf("cannot convert %T to int", value)
 		}
-		return reflect.ValueOf(intVal).Convert(targetType).Interface(), nil
+
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		uintVal, err := strconv.ParseUint(strValue, 10, 64)
-		if err != nil {
-			return nil, err
+		switch v := value.(type) {
+		case float64:
+			return reflect.ValueOf(uint64(v)).Convert(targetType).Interface(), nil
+		case string:
+			uintVal, err := strconv.ParseUint(v, 10, 64)
+			if err != nil {
+				return nil, err
+			}
+			return reflect.ValueOf(uintVal).Convert(targetType).Interface(), nil
+		default:
+			return nil, fmt.Errorf("cannot convert %T to uint", value)
 		}
-		return reflect.ValueOf(uintVal).Convert(targetType).Interface(), nil
+
 	case reflect.Float32, reflect.Float64:
-		floatVal, err := strconv.ParseFloat(strValue, 64)
-		if err != nil {
-			return nil, err
+		switch v := value.(type) {
+		case float64:
+			return reflect.ValueOf(v).Convert(targetType).Interface(), nil
+		case string:
+			floatVal, err := strconv.ParseFloat(v, 64)
+			if err != nil {
+				return nil, err
+			}
+			return reflect.ValueOf(floatVal).Convert(targetType).Interface(), nil
+		default:
+			return nil, fmt.Errorf("cannot convert %T to float", value)
 		}
-		return reflect.ValueOf(floatVal).Convert(targetType).Interface(), nil
+
 	default:
 		return nil, fmt.Errorf("unsupported type conversion to %s", targetType.Kind())
 	}

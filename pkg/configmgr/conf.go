@@ -3,24 +3,30 @@ package configmgr
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/veesix-networks/osvbng/pkg/config"
+	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/frr"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
-	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
+	"github.com/veesix-networks/osvbng/pkg/logger"
+	pathspkg "github.com/veesix-networks/osvbng/pkg/paths"
 )
 
 type ConfigManager struct {
 	registry  *conf.Registry
 	frrConfig *frr.Config
+	logger    *slog.Logger
 
-	runningConfig *types.Config
-	startupConfig *types.Config
-	sessions      map[types.SessionID]*session
-	versions      []types.ConfigVersion
+	runningConfig *config.Config
+	startupConfig *config.Config
+	sessions      map[conf.SessionID]*session
+	versions      []ConfigVersion
 
 	versionDir        string
 	startupConfigPath string
@@ -30,8 +36,8 @@ type ConfigManager struct {
 }
 
 type session struct {
-	id      types.SessionID
-	config  *types.Config
+	id      conf.SessionID
+	config  *config.Config
 	changes []*conf.HandlerContext
 }
 
@@ -39,10 +45,11 @@ func NewConfigManager() *ConfigManager {
 	return &ConfigManager{
 		registry:          conf.NewRegistry(),
 		frrConfig:         frr.NewConfig(),
-		runningConfig:     &types.Config{Interfaces: make(map[string]*types.InterfaceConfig), Plugins: make(map[string]interface{})},
-		startupConfig:     &types.Config{Interfaces: make(map[string]*types.InterfaceConfig), Plugins: make(map[string]interface{})},
-		sessions:          make(map[types.SessionID]*session),
-		versions:          []types.ConfigVersion{},
+		logger:            logger.Component(logger.ComponentConfig),
+		runningConfig:     &config.Config{},
+		startupConfig:     &config.Config{},
+		sessions:          make(map[conf.SessionID]*session),
+		versions:          []ConfigVersion{},
 		versionDir:        DefaultVersionDir,
 		startupConfigPath: "/etc/osvbng/startup-config.yaml",
 		disableVersions:   false,
@@ -67,25 +74,13 @@ func (cd *ConfigManager) GetAllConfPaths() []paths.Path {
 	return cd.registry.GetAllPaths()
 }
 
-func (cd *ConfigManager) CreateCandidateSession() (types.SessionID, error) {
+func (cd *ConfigManager) CreateCandidateSession() (conf.SessionID, error) {
 	cd.mu.Lock()
 	defer cd.mu.Unlock()
 
-	id := types.SessionID(fmt.Sprintf("session-%d", len(cd.sessions)+1))
+	id := conf.SessionID(fmt.Sprintf("session-%d", len(cd.sessions)+1))
 
-	candidateConfig := &types.Config{
-		Interfaces: make(map[string]*types.InterfaceConfig),
-		Plugins:    make(map[string]interface{}),
-	}
-
-	for k, v := range cd.runningConfig.Interfaces {
-		ifCopy := *v
-		candidateConfig.Interfaces[k] = &ifCopy
-	}
-
-	for k, v := range cd.runningConfig.Plugins {
-		candidateConfig.Plugins[k] = v
-	}
+	candidateConfig := cd.deepCopyConfig(cd.runningConfig)
 
 	cd.sessions[id] = &session{
 		id:     id,
@@ -95,7 +90,7 @@ func (cd *ConfigManager) CreateCandidateSession() (types.SessionID, error) {
 	return id, nil
 }
 
-func (cd *ConfigManager) CloseCandidateSession(id types.SessionID) error {
+func (cd *ConfigManager) CloseCandidateSession(id conf.SessionID) error {
 	cd.mu.Lock()
 	defer cd.mu.Unlock()
 
@@ -107,7 +102,7 @@ func (cd *ConfigManager) CloseCandidateSession(id types.SessionID) error {
 	return nil
 }
 
-func (cd *ConfigManager) Set(id types.SessionID, path string, value interface{}) error {
+func (cd *ConfigManager) Set(id conf.SessionID, path string, value interface{}) error {
 	cd.mu.Lock()
 	defer cd.mu.Unlock()
 
@@ -137,7 +132,7 @@ func (cd *ConfigManager) Set(id types.SessionID, path string, value interface{})
 		return fmt.Errorf("validation failed: %w", err)
 	}
 
-	if err := setValueInConfig(sess.config, path, value); err != nil {
+	if err := setValueInConfig(sess.config, path, value, handler.PathPattern()); err != nil {
 		return fmt.Errorf("failed to set value: %w", err)
 	}
 
@@ -146,7 +141,7 @@ func (cd *ConfigManager) Set(id types.SessionID, path string, value interface{})
 	return nil
 }
 
-func (cd *ConfigManager) Delete(id types.SessionID, path string) error {
+func (cd *ConfigManager) Delete(id conf.SessionID, path string) error {
 	cd.mu.Lock()
 	defer cd.mu.Unlock()
 
@@ -160,7 +155,7 @@ func (cd *ConfigManager) Delete(id types.SessionID, path string) error {
 	return fmt.Errorf("Delete not yet implemented")
 }
 
-func (cd *ConfigManager) Modify(id types.SessionID, path string, value interface{}) error {
+func (cd *ConfigManager) Modify(id conf.SessionID, path string, value interface{}) error {
 	cd.mu.Lock()
 	defer cd.mu.Unlock()
 
@@ -174,7 +169,7 @@ func (cd *ConfigManager) Modify(id types.SessionID, path string, value interface
 	return fmt.Errorf("Modify not yet implemented")
 }
 
-func (cd *ConfigManager) Verify(id types.SessionID) ([]types.ValidationError, error) {
+func (cd *ConfigManager) Verify(id conf.SessionID) ([]ValidationError, error) {
 	cd.mu.RLock()
 	defer cd.mu.RUnlock()
 
@@ -183,12 +178,12 @@ func (cd *ConfigManager) Verify(id types.SessionID) ([]types.ValidationError, er
 		return nil, fmt.Errorf("session %s not found", id)
 	}
 
-	var allErrors []types.ValidationError
+	var allErrors []ValidationError
 
 	for _, change := range sess.changes {
 		handler, err := cd.registry.GetHandler(change.Path)
 		if err != nil {
-			allErrors = append(allErrors, types.ValidationError{
+			allErrors = append(allErrors, ValidationError{
 				Path:    change.Path,
 				Message: fmt.Sprintf("no handler for path: %v", err),
 			})
@@ -196,7 +191,7 @@ func (cd *ConfigManager) Verify(id types.SessionID) ([]types.ValidationError, er
 		}
 
 		if err := handler.Validate(context.Background(), change); err != nil {
-			allErrors = append(allErrors, types.ValidationError{
+			allErrors = append(allErrors, ValidationError{
 				Path:    change.Path,
 				Message: err.Error(),
 			})
@@ -206,7 +201,7 @@ func (cd *ConfigManager) Verify(id types.SessionID) ([]types.ValidationError, er
 	return allErrors, nil
 }
 
-func (cd *ConfigManager) DryRun(id types.SessionID) (*types.DiffResult, error) {
+func (cd *ConfigManager) DryRun(id conf.SessionID) (*DiffResult, error) {
 	cd.mu.RLock()
 	defer cd.mu.RUnlock()
 
@@ -218,7 +213,7 @@ func (cd *ConfigManager) DryRun(id types.SessionID) (*types.DiffResult, error) {
 	return FormatChanges(sess.changes), nil
 }
 
-func (cd *ConfigManager) Commit(id types.SessionID) error {
+func (cd *ConfigManager) Commit(id conf.SessionID) error {
 	cd.mu.Lock()
 	defer cd.mu.Unlock()
 
@@ -235,6 +230,8 @@ func (cd *ConfigManager) Commit(id types.SessionID) error {
 	if len(sortedChanges) == 0 {
 		return fmt.Errorf("no changes to commit")
 	}
+
+	cd.logger.Info("Committing configuration", "session", id, "changes", len(sortedChanges))
 
 	appliedChanges := make([]*conf.HandlerContext, 0)
 	frrReloadNeeded := false
@@ -258,6 +255,7 @@ func (cd *ConfigManager) Commit(id types.SessionID) error {
 	}
 
 	if frrReloadNeeded {
+		cd.logger.Info("Reloading FRR configuration")
 		if err := cd.frrConfig.Test(sess.config); err != nil {
 			cd.rollbackChanges(appliedChanges)
 			return fmt.Errorf("FRR config validation failed: %w", err)
@@ -267,22 +265,23 @@ func (cd *ConfigManager) Commit(id types.SessionID) error {
 			cd.rollbackChanges(appliedChanges)
 			return fmt.Errorf("FRR reload failed: %w", err)
 		}
+		cd.logger.Info("FRR configuration reloaded successfully")
 	}
 
 	diff := FormatChanges(sess.changes)
 
-	changes := make([]types.Change, 0)
+	changes := make([]Change, 0)
 	for _, line := range diff.Added {
-		changes = append(changes, types.Change{Type: "add", Path: line.Path, Value: line.Value})
+		changes = append(changes, Change{Type: "add", Path: line.Path, Value: line.Value})
 	}
 	for _, line := range diff.Modified {
-		changes = append(changes, types.Change{Type: "modify", Path: line.Path, Value: line.Value})
+		changes = append(changes, Change{Type: "modify", Path: line.Path, Value: line.Value})
 	}
 	for _, line := range diff.Deleted {
-		changes = append(changes, types.Change{Type: "delete", Path: line.Path, Value: line.Value})
+		changes = append(changes, Change{Type: "delete", Path: line.Path, Value: line.Value})
 	}
 
-	version := types.ConfigVersion{
+	version := ConfigVersion{
 		Version:   len(cd.versions) + 1,
 		Timestamp: time.Now(),
 		Config:    nil,
@@ -303,10 +302,12 @@ func (cd *ConfigManager) Commit(id types.SessionID) error {
 		return fmt.Errorf("failed to save startup config: %w", err)
 	}
 
+	cd.logger.Info("Configuration committed successfully", "version", version.Version, "added", len(diff.Added), "modified", len(diff.Modified), "deleted", len(diff.Deleted))
+
 	return nil
 }
 
-func (cd *ConfigManager) reloadFRR(config *types.Config) error {
+func (cd *ConfigManager) reloadFRR(config *config.Config) error {
 	return cd.frrConfig.Reload(config)
 }
 
@@ -319,6 +320,24 @@ func (cd *ConfigManager) rollbackChanges(changes []*conf.HandlerContext) {
 		}
 		handler.Rollback(context.Background(), change)
 	}
+}
+
+func (cd *ConfigManager) resolveDepPath(currentPath, currentPattern, depPattern string) (string, error) {
+	if !strings.Contains(depPattern, "<") || !strings.Contains(depPattern, ">") {
+		return depPattern, nil
+	}
+
+	wildcardValues, err := pathspkg.Extract(currentPath, currentPattern)
+	if err != nil {
+		return depPattern, nil
+	}
+
+	resolvedPath, err := pathspkg.Build(depPattern, wildcardValues...)
+	if err != nil {
+		return depPattern, nil
+	}
+
+	return resolvedPath, nil
 }
 
 func (cd *ConfigManager) sortChangesByDependencies(changes []*conf.HandlerContext) ([]*conf.HandlerContext, error) {
@@ -345,11 +364,26 @@ func (cd *ConfigManager) sortChangesByDependencies(changes []*conf.HandlerContex
 
 		for _, dep := range handler.Dependencies() {
 			depPattern := dep.String()
-			if graph[depPattern] == nil {
-				graph[depPattern] = []int{}
+
+			if _, existsInSession := patternToIndices[depPattern]; existsInSession {
+				if graph[depPattern] == nil {
+					graph[depPattern] = []int{}
+				}
+				graph[depPattern] = append(graph[depPattern], i)
+				inDegree[i]++
+			} else {
+				resolvedDepPath, err := cd.resolveDepPath(change.Path, pathPattern, depPattern)
+				if err != nil {
+					return nil, err
+				}
+
+				val, err := getValueFromConfig(cd.runningConfig, resolvedDepPath)
+				if err != nil || val == nil {
+					userFriendlyDep := strings.ReplaceAll(resolvedDepPath, "<", "")
+					userFriendlyDep = strings.ReplaceAll(userFriendlyDep, ">", "")
+					return nil, fmt.Errorf("configuration '%s' requires '%s' to be configured first", change.Path, userFriendlyDep)
+				}
 			}
-			graph[depPattern] = append(graph[depPattern], i)
-			inDegree[i]++
 		}
 	}
 
@@ -401,7 +435,13 @@ func (cd *ConfigManager) Rollback(toVersion int) error {
 		return fmt.Errorf("failed to create rollback session: %w", err)
 	}
 
-	cd.sessions[sessionID].config = cd.deepCopyConfig(targetVersion.Config)
+	versionConfig, ok := targetVersion.Config.(*config.Config)
+	if !ok {
+		delete(cd.sessions, sessionID)
+		return fmt.Errorf("invalid config type in version %d", toVersion)
+	}
+
+	cd.sessions[sessionID].config = cd.deepCopyConfig(versionConfig)
 
 	verifyErrs, err := cd.verifyUnlocked(sessionID)
 	if err != nil {
@@ -435,18 +475,18 @@ func (cd *ConfigManager) Rollback(toVersion int) error {
 	cd.runningConfig = cd.sessions[sessionID].config
 
 	diff := FormatChanges(sess.changes)
-	changes := make([]types.Change, 0)
+	changes := make([]Change, 0)
 	for _, line := range diff.Added {
-		changes = append(changes, types.Change{Type: "add", Path: line.Path, Value: line.Value})
+		changes = append(changes, Change{Type: "add", Path: line.Path, Value: line.Value})
 	}
 	for _, line := range diff.Modified {
-		changes = append(changes, types.Change{Type: "modify", Path: line.Path, Value: line.Value})
+		changes = append(changes, Change{Type: "modify", Path: line.Path, Value: line.Value})
 	}
 	for _, line := range diff.Deleted {
-		changes = append(changes, types.Change{Type: "delete", Path: line.Path, Value: line.Value})
+		changes = append(changes, Change{Type: "delete", Path: line.Path, Value: line.Value})
 	}
 
-	version := types.ConfigVersion{
+	version := ConfigVersion{
 		Version:   len(cd.versions) + 1,
 		Timestamp: time.Now(),
 		Config:    nil,
@@ -467,11 +507,11 @@ func (cd *ConfigManager) Rollback(toVersion int) error {
 	return nil
 }
 
-func (cd *ConfigManager) createSessionUnlocked() (types.SessionID, error) {
-	id := types.SessionID(fmt.Sprintf("session-%d", len(cd.sessions)+1))
+func (cd *ConfigManager) createSessionUnlocked() (conf.SessionID, error) {
+	id := conf.SessionID(fmt.Sprintf("session-%d", len(cd.sessions)+1))
 
-	candidateConfig := &types.Config{
-		Interfaces: make(map[string]*types.InterfaceConfig),
+	candidateConfig := &config.Config{
+		Interfaces: make(map[string]*interfaces.InterfaceConfig),
 		Plugins:    make(map[string]interface{}),
 	}
 
@@ -492,18 +532,18 @@ func (cd *ConfigManager) createSessionUnlocked() (types.SessionID, error) {
 	return id, nil
 }
 
-func (cd *ConfigManager) verifyUnlocked(id types.SessionID) ([]types.ValidationError, error) {
+func (cd *ConfigManager) verifyUnlocked(id conf.SessionID) ([]ValidationError, error) {
 	sess, exists := cd.sessions[id]
 	if !exists {
 		return nil, fmt.Errorf("session %s not found", id)
 	}
 
-	var allErrors []types.ValidationError
+	var allErrors []ValidationError
 
 	for _, change := range sess.changes {
 		handler, err := cd.registry.GetHandler(change.Path)
 		if err != nil {
-			allErrors = append(allErrors, types.ValidationError{
+			allErrors = append(allErrors, ValidationError{
 				Path:    change.Path,
 				Message: fmt.Sprintf("no handler for path: %v", err),
 			})
@@ -511,7 +551,7 @@ func (cd *ConfigManager) verifyUnlocked(id types.SessionID) ([]types.ValidationE
 		}
 
 		if err := handler.Validate(context.Background(), change); err != nil {
-			allErrors = append(allErrors, types.ValidationError{
+			allErrors = append(allErrors, ValidationError{
 				Path:    change.Path,
 				Message: err.Error(),
 			})
@@ -521,21 +561,21 @@ func (cd *ConfigManager) verifyUnlocked(id types.SessionID) ([]types.ValidationE
 	return allErrors, nil
 }
 
-func (cd *ConfigManager) ListVersions() ([]types.ConfigVersion, error) {
+func (cd *ConfigManager) ListVersions() ([]ConfigVersion, error) {
 	cd.mu.RLock()
 	defer cd.mu.RUnlock()
 
 	return cd.versions, nil
 }
 
-func (cd *ConfigManager) GetRunning() (*types.Config, error) {
+func (cd *ConfigManager) GetRunning() (*config.Config, error) {
 	cd.mu.RLock()
 	defer cd.mu.RUnlock()
 
 	return cd.runningConfig, nil
 }
 
-func (cd *ConfigManager) GetStartup() (*types.Config, error) {
+func (cd *ConfigManager) GetStartup() (*config.Config, error) {
 	cd.mu.RLock()
 	defer cd.mu.RUnlock()
 
@@ -550,7 +590,14 @@ func (cd *ConfigManager) SaveStartup() error {
 	return SaveYAML(cd.startupConfigPath, cd.startupConfig)
 }
 
-func (cd *ConfigManager) LoadConfig(id types.SessionID, config *types.Config) error {
+func (cd *ConfigManager) ReloadFRR() error {
+	cd.mu.RLock()
+	defer cd.mu.RUnlock()
+
+	return cd.reloadFRR(cd.runningConfig)
+}
+
+func (cd *ConfigManager) LoadConfig(id conf.SessionID, config *config.Config) error {
 	cd.mu.Lock()
 	defer cd.mu.Unlock()
 
@@ -593,38 +640,36 @@ func (cd *ConfigManager) LoadConfig(id types.SessionID, config *types.Config) er
 		}
 	}
 
-	if config.Protocols != nil {
-		if config.Protocols.BGP != nil && config.Protocols.BGP.ASN != 0 {
+	if config.Protocols.BGP != nil && config.Protocols.BGP.ASN != 0 {
+		hctx := &conf.HandlerContext{
+			SessionID: id,
+			Path:      "protocols.bgp.asn",
+			OldValue:  nil,
+			NewValue:  config.Protocols.BGP.ASN,
+		}
+		sess.changes = append(sess.changes, hctx)
+	}
+
+	if config.Protocols.Static != nil {
+		for i := range config.Protocols.Static.IPv4 {
+			route := &config.Protocols.Static.IPv4[i]
 			hctx := &conf.HandlerContext{
 				SessionID: id,
-				Path:      "protocols.bgp.asn",
+				Path:      fmt.Sprintf("protocols.static.ipv4.%d", i),
 				OldValue:  nil,
-				NewValue:  config.Protocols.BGP.ASN,
+				NewValue:  route,
 			}
 			sess.changes = append(sess.changes, hctx)
 		}
-
-		if config.Protocols.Static != nil {
-			for i := range config.Protocols.Static.IPv4 {
-				route := &config.Protocols.Static.IPv4[i]
-				hctx := &conf.HandlerContext{
-					SessionID: id,
-					Path:      fmt.Sprintf("protocols.static.ipv4.%d", i),
-					OldValue:  nil,
-					NewValue:  route,
-				}
-				sess.changes = append(sess.changes, hctx)
+		for i := range config.Protocols.Static.IPv6 {
+			route := &config.Protocols.Static.IPv6[i]
+			hctx := &conf.HandlerContext{
+				SessionID: id,
+				Path:      fmt.Sprintf("protocols.static.ipv6.%d", i),
+				OldValue:  nil,
+				NewValue:  route,
 			}
-			for i := range config.Protocols.Static.IPv6 {
-				route := &config.Protocols.Static.IPv6[i]
-				hctx := &conf.HandlerContext{
-					SessionID: id,
-					Path:      fmt.Sprintf("protocols.static.ipv6.%d", i),
-					OldValue:  nil,
-					NewValue:  route,
-				}
-				sess.changes = append(sess.changes, hctx)
-			}
+			sess.changes = append(sess.changes, hctx)
 		}
 	}
 

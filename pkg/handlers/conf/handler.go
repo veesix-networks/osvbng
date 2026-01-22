@@ -7,11 +7,12 @@ import (
 
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
-	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
 )
 
+type SessionID string
+
 type HandlerContext struct {
-	SessionID types.SessionID
+	SessionID SessionID
 	Path      string
 	OldValue  interface{}
 	NewValue  interface{}
@@ -126,7 +127,7 @@ func matchPattern(pattern, path string) bool {
 	}
 
 	for i := range patternParts {
-		if patternParts[i] == "*" {
+		if isWildcard(patternParts[i]) {
 			continue
 		}
 		if patternParts[i] != pathParts[i] {
@@ -135,6 +136,10 @@ func matchPattern(pattern, path string) bool {
 	}
 
 	return true
+}
+
+func isWildcard(part string) bool {
+	return strings.HasPrefix(part, "<") && strings.HasSuffix(part, ">")
 }
 
 func (r *Registry) ValidateWithCallbacks(ctx context.Context, handler Handler, hctx *HandlerContext) error {

@@ -15,7 +15,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/arp"
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
-	"github.com/veesix-networks/osvbng/pkg/config"
+	"github.com/veesix-networks/osvbng/pkg/config/aaa"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
 	"github.com/veesix-networks/osvbng/pkg/dhcp"
 	"github.com/veesix-networks/osvbng/pkg/dhcp4"
@@ -33,7 +33,7 @@ type Component struct {
 	logger        *slog.Logger
 	eventBus      events.Bus
 	srgMgr        *srg.Manager
-	config        *config.Config
+	cfgMgr        component.ConfigManager
 	vpp           *southbound.VPP
 	cache         cache.Cache
 	dhcp4Provider dhcp4.DHCPProvider
@@ -75,7 +75,7 @@ func New(deps component.Dependencies, srgMgr *srg.Manager, dhcp4Provider dhcp4.D
 		logger:        log,
 		eventBus:      deps.EventBus,
 		srgMgr:        srgMgr,
-		config:        deps.Config,
+		cfgMgr:        deps.ConfigManager,
 		vpp:           deps.VPP,
 		cache:         deps.Cache,
 		dhcp4Provider: dhcp4Provider,
@@ -368,10 +368,17 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 
 	c.logger.Info("Session discovering", "session_id", sess.SessionID, "circuit_id", string(circuitID), "remote_id", string(remoteID))
 
+	cfg, _ := c.cfgMgr.GetRunning()
 	username := pkt.MAC.String()
-	if policyName := c.config.SubscriberGroup.GetPolicyName(pkt.OuterVLAN); policyName != "" {
-		if policy := c.config.AAA.GetPolicy(policyName); policy != nil {
-			ctx := &config.PolicyContext{
+	var policyName string
+	if cfg != nil && cfg.SubscriberGroups != nil {
+		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(pkt.OuterVLAN); group != nil {
+			policyName = group.AAAPolicy
+		}
+	}
+	if policyName != "" {
+		if policy := cfg.AAA.GetPolicy(policyName); policy != nil {
+			ctx := &aaa.PolicyContext{
 				MACAddress: pkt.MAC,
 				SVLAN:      pkt.OuterVLAN,
 				CVLAN:      pkt.InnerVLAN,
@@ -392,7 +399,7 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 		RequestID:     requestID,
 		Username:      username,
 		MAC:           pkt.MAC.String(),
-		NASIPAddress:  c.config.AAA.NASIP,
+		NASIPAddress:  cfg.AAA.NASIP,
 		NASPort:       uint32(pkt.OuterVLAN),
 		AcctSessionID: sess.AcctSessionID,
 	}
@@ -503,10 +510,17 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 	hostname := string(getDHCPOption(pkt.DHCPv4.Options, layers.DHCPOptHostname))
 	circuitID, remoteID := parseOption82(getDHCPOption(pkt.DHCPv4.Options, 82))
 
+	cfg, _ := c.cfgMgr.GetRunning()
 	username := pkt.MAC.String()
-	if policyName := c.config.SubscriberGroup.GetPolicyName(pkt.OuterVLAN); policyName != "" {
-		if policy := c.config.AAA.GetPolicy(policyName); policy != nil {
-			ctx := &config.PolicyContext{
+	var policyName string
+	if cfg != nil && cfg.SubscriberGroups != nil {
+		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(pkt.OuterVLAN); group != nil {
+			policyName = group.AAAPolicy
+		}
+	}
+	if policyName != "" {
+		if policy := cfg.AAA.GetPolicy(policyName); policy != nil {
+			ctx := &aaa.PolicyContext{
 				MACAddress: pkt.MAC,
 				SVLAN:      pkt.OuterVLAN,
 				CVLAN:      pkt.InnerVLAN,
@@ -527,7 +541,7 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 		RequestID:     requestID,
 		Username:      username,
 		MAC:           pkt.MAC.String(),
-		NASIPAddress:  c.config.AAA.NASIP,
+		NASIPAddress:  cfg.AAA.NASIP,
 		NASPort:       uint32(pkt.OuterVLAN),
 		AcctSessionID: sess.AcctSessionID,
 	}
@@ -915,21 +929,27 @@ func (c *Component) getVLANCount(svlan, cvlan uint16) int {
 }
 
 func (c *Component) checkSessionLimit(mac net.HardwareAddr, svlan, cvlan uint16) error {
-	if c.config == nil {
+	cfg, _ := c.cfgMgr.GetRunning()
+	if cfg == nil {
 		return nil
 	}
 
-	vlanCfg := c.config.SubscriberGroup.FindVLANConfig(svlan)
-	if vlanCfg == nil || vlanCfg.AAA == nil {
-		return nil
+	var policyName string
+	if cfg.SubscriberGroups != nil {
+		if group, vlanCfg := cfg.SubscriberGroups.FindGroupBySVLAN(svlan); group != nil {
+			if vlanCfg != nil && vlanCfg.AAA != nil && vlanCfg.AAA.Policy != "" {
+				policyName = vlanCfg.AAA.Policy
+			} else {
+				policyName = group.AAAPolicy
+			}
+		}
 	}
 
-	policyName := vlanCfg.AAA.Policy
 	if policyName == "" {
-		policyName = c.config.SubscriberGroup.DefaultPolicy
+		return nil
 	}
 
-	policy := c.config.AAA.GetPolicy(policyName)
+	policy := cfg.AAA.GetPolicy(policyName)
 	if policy == nil {
 		return nil
 	}
@@ -973,23 +993,23 @@ func (c *Component) countExistingSessions(mac net.HardwareAddr, svlan, cvlan uin
 
 func (c *Component) sendDHCPResponse(sessID string, svlan, cvlan uint16, mac net.HardwareAddr, rawData []byte, msgType string) error {
 	var srcMAC string
+	c.logger.Info("Getting source MAC for DHCP response", "has_srg_mgr", c.srgMgr != nil, "has_vpp", c.vpp != nil, "svlan", svlan)
+
 	if c.srgMgr != nil {
 		if vmac := c.srgMgr.GetVirtualMAC(svlan); vmac != nil {
 			srcMAC = vmac.String()
+			c.logger.Info("Got source MAC from SRG", "src_mac", srcMAC, "svlan", svlan)
+		} else {
+			c.logger.Info("No virtual MAC from SRG for SVLAN", "svlan", svlan)
 		}
 	}
 	if srcMAC == "" && c.vpp != nil {
-		parentIfIdx, err := c.vpp.GetParentSwIfIndex()
-		if err == nil {
-			if ifMac, err := c.vpp.GetInterfaceMAC(parentIfIdx); err == nil {
-				srcMAC = ifMac.String()
-			} else {
-				c.logger.Warn("Failed to get parent interface MAC", "error", err, "parent_sw_if_index", parentIfIdx)
-			}
-		} else {
-			c.logger.Warn("Failed to get parent interface index", "error", err)
+		if ifMac := c.vpp.GetParentInterfaceMAC(); ifMac != nil {
+			srcMAC = ifMac.String()
 		}
 	}
+
+	c.logger.Info("Final source MAC for DHCP response", "src_mac", srcMAC, "is_empty", srcMAC == "")
 
 	egressPayload := &models.EgressPacketPayload{
 		DstMAC:    mac.String(),

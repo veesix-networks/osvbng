@@ -27,21 +27,24 @@ type puntHeader struct {
 type Component struct {
 	*component.Base
 
-	logger   *slog.Logger
-	eventBus events.Bus
-	srgMgr   *srg.Manager
-	vpp      interface {
-		GetInterfaceMAC(uint32) (net.HardwareAddr, error)
-		GetParentSwIfIndex() (uint32, error)
+	logger     *slog.Logger
+	eventBus   events.Bus
+	srgMgr     *srg.Manager
+	vpp        interface {
+		GetParentInterfaceMAC() net.HardwareAddr
 	}
+	configMgr  component.ConfigManager
 	socketPath string
 	socketConn *net.UnixConn
 }
 
 func New(deps component.Dependencies, srgMgr *srg.Manager) (component.Component, error) {
 	socketPath := "/run/osvbng/arp-punt.sock"
-	if deps.Config != nil && deps.Config.Dataplane.ARPPuntSocketPath != "" {
-		socketPath = deps.Config.Dataplane.ARPPuntSocketPath
+	if deps.ConfigManager != nil {
+		cfg, _ := deps.ConfigManager.GetStartup()
+		if cfg != nil && cfg.Dataplane.ARPPuntSocketPath != "" {
+			socketPath = cfg.Dataplane.ARPPuntSocketPath
+		}
 	}
 
 	log := logger.Component(logger.ComponentARP)
@@ -52,6 +55,7 @@ func New(deps component.Dependencies, srgMgr *srg.Manager) (component.Component,
 		eventBus:   deps.EventBus,
 		srgMgr:     srgMgr,
 		vpp:        deps.VPP,
+		configMgr:  deps.ConfigManager,
 		socketPath: socketPath,
 	}, nil
 }
@@ -189,21 +193,17 @@ func (c *Component) handlePacket(swIfIndex uint32, pkt []byte) error {
 		"dst_ip", dstIP.String(),
 	)
 
+	if !c.isOwnedIP(dstIP) {
+		c.logger.Debug("Ignoring ARP request for non-owned IP", "dst_ip", dstIP.String())
+		return nil
+	}
+
 	var gatewayMAC net.HardwareAddr
 	if c.srgMgr != nil {
 		gatewayMAC = c.srgMgr.GetVirtualMAC(0)
 	}
 	if gatewayMAC == nil && c.vpp != nil {
-		parentIfIdx, err := c.vpp.GetParentSwIfIndex()
-		if err == nil {
-			if ifMac, err := c.vpp.GetInterfaceMAC(parentIfIdx); err == nil {
-				gatewayMAC = ifMac
-			} else {
-				c.logger.Warn("Failed to get parent interface MAC for ARP", "error", err)
-			}
-		} else {
-			c.logger.Warn("Failed to get parent interface index for ARP", "error", err)
-		}
+		gatewayMAC = c.vpp.GetParentInterfaceMAC()
 	}
 	if gatewayMAC == nil {
 		return fmt.Errorf("no gateway MAC available for ARP reply")
@@ -235,6 +235,32 @@ func (c *Component) handlePacket(swIfIndex uint32, pkt []byte) error {
 
 	c.logger.Debug("Sent ARP reply", "target_ip", dstIP.String(), "gateway_mac", gatewayMAC.String())
 	return nil
+}
+
+func (c *Component) isOwnedIP(ip net.IP) bool {
+	if c.configMgr == nil {
+		return false
+	}
+
+	cfg, err := c.configMgr.GetRunning()
+	if err != nil || cfg == nil || cfg.Interfaces == nil {
+		return false
+	}
+
+	ipStr := ip.String()
+	for _, iface := range cfg.Interfaces {
+		if iface.Address == nil {
+			continue
+		}
+		for _, addr := range iface.Address.IPv4 {
+			ip, _, err := net.ParseCIDR(addr)
+			if err == nil && ip.String() == ipStr {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func (c *Component) buildARPReply(req *layers.ARP, targetIP net.IP, gatewayMAC net.HardwareAddr) []byte {

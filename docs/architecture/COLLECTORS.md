@@ -35,6 +35,33 @@ func init() {
 }
 ```
 
+### Wildcard Collectors
+
+Collectors support wildcard paths to automatically collect metrics for all instances of a dynamic resource. When a collector is registered with a wildcard path like `protocols.bgp.neighbors.<*:ip>`, the system:
+
+1. Examines the running configuration
+2. Resolves all instances matching the wildcard pattern
+3. Calls the show handler once for each instance
+4. Caches each result separately
+
+Example from `pkg/handlers/show/protocols/bgp/neighbors.go`:
+
+```go
+func init() {
+    show.RegisterFactory(NewBGPNeighborsHandler)
+
+    // This automatically collects metrics for ALL configured BGP neighbors
+    state.RegisterMetric(statepaths.ProtocolsBGPNeighbors, paths.ProtocolsBGPNeighbors)
+}
+```
+
+If you have neighbors `10.4.20.254` and `10.5.30.1` configured, the collector will:
+- Call handler for `protocols.bgp.neighbors.10.4.20.254`
+- Call handler for `protocols.bgp.neighbors.10.5.30.1`
+- Cache both results separately
+
+This enables per-instance metrics export (e.g., separate Prometheus metrics for each BGP neighbor).
+
 ## For Plugin Developers
 
 To enable periodic caching of your plugin's data for exporters, register a collector using `state.RegisterMetric(cachePath, handlerPath)` in your show handler's init() function.
@@ -49,7 +76,7 @@ All registered collectors run by default. To disable specific collectors:
 monitoring:
   collect_interval: 5s
   disabled_collectors:
-    - aaa.radius.servers
+    - memory
 ```
 
 If `disabled_collectors` is empty or omitted, all registered collectors run.

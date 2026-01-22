@@ -13,3 +13,6 @@ apt-get update && apt-get install -y --no-install-recommends \
 
 systemctl disable frr
 systemctl stop frr || true
+
+ln -sf /etc/osvbng/routing-daemons /etc/frr/daemons
+ln -sf /etc/osvbng/frr.conf /etc/frr/frr.conf

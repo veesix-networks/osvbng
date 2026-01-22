@@ -3,11 +3,9 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
-	"runtime"
 	"syscall"
 	"time"
 
@@ -63,65 +61,10 @@ func main() {
 		return
 	}
 
-	if len(flag.Args()) > 0 && flag.Args()[0] == "generate-dataplane" {
-		if _, err := os.Stat(*configPath); os.IsNotExist(err) {
-			log.Printf("Config file not found at %s, generating default config", *configPath)
-			defaultCfg, err := config.Generate(config.GenerateOptions{AllDataplane: true})
-			if err != nil {
-				log.Fatalf("Failed to generate default config: %v", err)
-			}
-			if err := os.WriteFile(*configPath, []byte(defaultCfg), 0644); err != nil {
-				log.Fatalf("Failed to write default config: %v", err)
-			}
-			log.Printf("Default config written to %s", *configPath)
+	if len(flag.Args()) > 0 && flag.Args()[0] == "generate-external" {
+		if err := config.GenerateExternalConfigs(*configPath); err != nil {
+			log.Fatalf("Failed to generate external configs: %v", err)
 		}
-
-		cfg, err := config.Load(*configPath)
-		if err != nil {
-			log.Fatalf("Failed to load config: %v", err)
-		}
-
-		totalCores := runtime.NumCPU()
-		mainCore := 0
-		workerCores := ""
-		if totalCores > 1 {
-			workerCores = fmt.Sprintf("1-%d", totalCores-1)
-		}
-
-		dpdk := cfg.Dataplane.DPDK
-		if dpdk == nil || len(dpdk.Devices) == 0 {
-			devices, err := config.DiscoverDPDKDevices()
-			if err != nil {
-				log.Printf("Warning: failed to discover DPDK devices: %v", err)
-			}
-			if len(devices) > 0 {
-				if dpdk == nil {
-					dpdk = &config.DPDK{}
-				}
-				dpdk.Devices = devices
-				log.Printf("Auto-discovered %d DPDK device(s)", len(devices))
-			}
-		}
-
-		useDPDK := dpdk != nil && len(dpdk.Devices) > 0
-
-		data := &config.DataplaneTemplateData{
-			MainCore:    mainCore,
-			WorkerCores: workerCores,
-			LogFile:     "/var/log/osvbng/dataplane.log",
-			CLISocket:   "/run/osvbng/cli.sock",
-			APISocket:   "/run/osvbng/dataplane_api.sock",
-			PuntSocket:  "/run/osvbng/punt.sock",
-			UseDPDK:     useDPDK,
-			DPDK:        dpdk,
-		}
-
-		dc := config.NewDataplaneConf()
-		output, err := dc.Generate(data)
-		if err != nil {
-			log.Fatalf("Failed to generate dataplane config: %v", err)
-		}
-		os.Stdout.WriteString(output)
 		return
 	}
 
@@ -137,7 +80,9 @@ func main() {
 		log.Printf("Default config written to %s", *configPath)
 	}
 
-	cfg, err := config.Load(*configPath)
+	configd := configmgr.NewConfigManager()
+
+	cfg, err := configd.LoadStartupConfig(*configPath)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
@@ -160,8 +105,6 @@ func main() {
 
 	vppDataplane := operations.NewVPPDataplane(vppConn)
 
-	configd := configmgr.NewConfigManager()
-
 	if err := configd.LoadVersions(); err != nil {
 		mainLog.Warn("Failed to load config versions", "error", err)
 	}
@@ -174,7 +117,7 @@ func main() {
 	})
 
 	mainLog.Info("Applying startup configuration")
-	if err := configd.ApplyStartupConfig(*configPath); err != nil {
+	if err := configd.ApplyLoadedConfig(); err != nil {
 		if err.Error() == "failed to commit: no changes to commit" {
 			mainLog.Info("No startup configuration changes to apply")
 		} else {
@@ -184,9 +127,15 @@ func main() {
 		mainLog.Info("Startup configuration applied")
 	}
 
+	accessInterface, err := cfg.GetAccessInterface()
+	if err != nil {
+		log.Fatalf("Invalid access interface configuration: %v", err)
+	}
+
 	vpp, err := southbound.NewVPP(southbound.VPPConfig{
 		Connection:      vppConn,
-		ParentInterface: cfg.Dataplane.AccessInterface,
+		ParentInterface: accessInterface,
+		UseDPDK:         cfg.Dataplane.DPDK != nil && len(cfg.Dataplane.DPDK.Devices) > 0,
 	})
 	if err != nil {
 		log.Fatalf("Failed to create VPP southbound: %v", err)
@@ -195,7 +144,7 @@ func main() {
 	mainLog.Info("Waiting for VPP LCP to sync interfaces...")
 	time.Sleep(5 * time.Second)
 
-	if err := vpp.SetupMemifDataplane(0, cfg.Dataplane.AccessInterface, cfg.Dataplane.MemifSocketPath); err != nil {
+	if err := vpp.SetupMemifDataplane(0, accessInterface, cfg.Dataplane.MemifSocketPath); err != nil {
 		log.Fatalf("Failed to setup memif dataplane: %v", err)
 	}
 	mainLog.Info("Memif dataplane configured")
@@ -217,26 +166,22 @@ func main() {
 		socketPath = "/run/osvbng/osvbng-punt.sock"
 	}
 
-	if err := vpp.RegisterPuntSocket(socketPath, 67, cfg.Dataplane.AccessInterface); err != nil {
-		mainLog.Warn("Failed to register punt socket for UDP 67", "error", err)
+	if err := vpp.RegisterPuntSocket(socketPath, 67, accessInterface); err != nil {
+		mainLog.Warn("Failed to register punt socket for UDP 67 (DHCP server port)", "error", err)
 	}
 
-	if err := vpp.RegisterPuntSocket(socketPath, 68, cfg.Dataplane.AccessInterface); err != nil {
-		mainLog.Warn("Failed to register punt socket for UDP 68", "error", err)
-	}
-
-	if err := vpp.EnableDirectedBroadcast(cfg.Dataplane.AccessInterface); err != nil {
-		mainLog.Warn("Failed to enable directed broadcast", "interface", cfg.Dataplane.AccessInterface, "error", err)
+	if err := vpp.EnableDirectedBroadcast(accessInterface); err != nil {
+		mainLog.Warn("Failed to enable directed broadcast", "interface", accessInterface, "error", err)
 	}
 
 	eventBus := local.NewBus()
 	cache := memory.New()
 
 	coreDeps := component.Dependencies{
-		EventBus: eventBus,
-		Cache:    cache,
-		VPP:      vpp,
-		Config:   cfg,
+		EventBus:      eventBus,
+		Cache:         cache,
+		VPP:           vpp,
+		ConfigManager: configd,
 	}
 
 	authProviderName := cfg.AAA.Provider
@@ -244,7 +189,7 @@ func main() {
 		authProviderName = "local"
 	}
 
-	authProvider, err := auth.New(authProviderName)
+	authProvider, err := auth.New(authProviderName, cfg)
 	if err != nil {
 		log.Fatalf("Failed to create auth provider '%s': %v", authProviderName, err)
 	}
@@ -328,6 +273,7 @@ func main() {
 		},
 		DisabledCollectors: cfg.Monitoring.DisabledCollectors,
 		ShowRegistry:      *showRegistry,
+		ConfigMgr:         configd,
 	})
 
 	orch := component.NewOrchestrator()
@@ -375,7 +321,7 @@ func main() {
 
 	if apiComp, ok := pluginComponentsMap["northbound.api"]; ok {
 		if apiPlugin, ok := apiComp.(interface{ SetRegistries(*northbound.Adapter) }); ok {
-			adapter := northbound.NewAdapter(showRegistry, configd.GetRegistry(), operRegistry)
+			adapter := northbound.NewAdapter(showRegistry, configd.GetRegistry(), operRegistry, configd)
 			apiPlugin.SetRegistries(adapter)
 		}
 	}

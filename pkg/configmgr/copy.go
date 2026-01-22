@@ -3,10 +3,10 @@ package configmgr
 import (
 	"encoding/json"
 
-	"github.com/veesix-networks/osvbng/pkg/handlers/conf/types"
+	"github.com/veesix-networks/osvbng/pkg/config"
 )
 
-func (cd *ConfigManager) deepCopyConfig(src *types.Config) *types.Config {
+func (cd *ConfigManager) deepCopyConfig(src *config.Config) *config.Config {
 	if src == nil {
 		return nil
 	}
@@ -16,7 +16,7 @@ func (cd *ConfigManager) deepCopyConfig(src *types.Config) *types.Config {
 		panic(err)
 	}
 
-	dst := &types.Config{}
+	dst := &config.Config{}
 	if err := json.Unmarshal(data, dst); err != nil {
 		panic(err)
 	}

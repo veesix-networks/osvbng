@@ -3,12 +3,12 @@ set -e
 
 cat > /etc/systemd/system/osvbng-config.service <<'EOF'
 [Unit]
-Description=Generate OSVBNG dataplane configuration
-Before=vpp.service
+Description=Generate OSVBNG external configurations
+Before=vpp.service frr.service
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash -c '/usr/local/bin/osvbngd -config /etc/osvbng/osvbng.yaml generate-dataplane > /etc/osvbng/dataplane.conf'
+ExecStart=/usr/local/bin/osvbngd -config /etc/osvbng/osvbng.yaml generate-external
 RemainAfterExit=yes
 
 [Install]

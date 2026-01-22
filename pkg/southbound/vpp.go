@@ -39,19 +39,22 @@ import (
 )
 
 type VPP struct {
-	conn        *core.Connection
-	parentIface string
-	ifaceCache  map[string]interface_types.InterfaceIndex
-	parentIfIdx interface_types.InterfaceIndex
-	virtualMAC  net.HardwareAddr
-	logger      *slog.Logger
-	fibChan     api.Channel
-	fibMux      sync.Mutex
+	conn         *core.Connection
+	parentIface  string
+	ifaceCache   map[string]interface_types.InterfaceIndex
+	parentIfIdx  interface_types.InterfaceIndex
+	parentIfMAC  net.HardwareAddr
+	virtualMAC   net.HardwareAddr
+	logger       *slog.Logger
+	fibChan      api.Channel
+	fibMux       sync.Mutex
+	useDPDK      bool
 }
 
 type VPPConfig struct {
 	Connection      *core.Connection
 	ParentInterface string
+	UseDPDK         bool
 }
 
 func NewVPP(cfg VPPConfig) (*VPP, error) {
@@ -72,6 +75,7 @@ func NewVPP(cfg VPPConfig) (*VPP, error) {
 		ifaceCache:  make(map[string]interface_types.InterfaceIndex),
 		logger:      logger.Component(logger.ComponentSouthbound),
 		fibChan:     fibChan,
+		useDPDK:     cfg.UseDPDK,
 	}
 
 	if err := v.resolveParentInterface(); err != nil {
@@ -205,10 +209,33 @@ func (v *VPP) resolveParentInterface() error {
 			break
 		}
 
+		v.logger.Info("Scanning VPP interface during parent resolution", "interface_name", msg.InterfaceName, "sw_if_index", msg.SwIfIndex, "mac", net.HardwareAddr(msg.L2Address[:6]).String())
+
 		// Match exact name or with "host-" prefix (linux_nl plugin adds this automatically for AF_PACKET and XDP interfaces, DPDK we don't care)
 		if msg.InterfaceName == v.parentIface || msg.InterfaceName == "host-"+v.parentIface {
+			v.logger.Info("Resolved parent interface", "requested_name", v.parentIface, "matched_name", msg.InterfaceName, "sw_if_index", msg.SwIfIndex, "mac", net.HardwareAddr(msg.L2Address[:6]).String())
 			v.parentIfIdx = msg.SwIfIndex
 			v.ifaceCache[v.parentIface] = msg.SwIfIndex
+
+			// If not using DPDK and VPP interface has null MAC, set it from Linux interface
+			vppMAC := net.HardwareAddr(msg.L2Address[:6])
+			if !v.useDPDK && vppMAC.String() == "00:00:00:00:00:00" {
+				v.logger.Info("AF_PACKET interface has null MAC, setting from Linux interface", "interface", v.parentIface)
+				if linuxIface, err := net.InterfaceByName(v.parentIface); err == nil {
+					if err := v.SetInterfaceMAC(msg.SwIfIndex, linuxIface.HardwareAddr); err == nil {
+						v.logger.Info("Set VPP interface MAC from Linux", "interface", v.parentIface, "mac", linuxIface.HardwareAddr.String())
+						v.parentIfMAC = linuxIface.HardwareAddr
+					} else {
+						v.logger.Warn("Failed to set VPP interface MAC", "error", err, "interface", v.parentIface)
+					}
+				} else {
+					v.logger.Warn("Failed to get Linux interface for MAC", "error", err, "interface", v.parentIface)
+				}
+			} else {
+				// Cache the existing MAC
+				v.parentIfMAC = vppMAC
+			}
+
 			return nil
 		}
 	}
@@ -627,6 +654,7 @@ func (v *VPP) GetInterfaceIndex(name string) (int, error) {
 			NameFilter:      name,
 		}
 
+		v.logger.Info("Looking up interface index", "name", name)
 		stream := ch.SendMultiRequest(req)
 		for {
 			reply := &interfaces.SwInterfaceDetails{}
@@ -638,7 +666,10 @@ func (v *VPP) GetInterfaceIndex(name string) (int, error) {
 				return 0, fmt.Errorf("dump interface: %w", err)
 			}
 
-			if reply.InterfaceName == name {
+			v.logger.Info("Checking interface from VPP", "requested_name", name, "vpp_interface_name", reply.InterfaceName, "sw_if_index", reply.SwIfIndex)
+			// Match exact name or with "host-" prefix (linux_nl plugin adds this automatically for AF_PACKET and XDP interfaces)
+			if reply.InterfaceName == name || reply.InterfaceName == "host-"+name {
+				v.logger.Info("Found matching interface", "requested_name", name, "matched_name", reply.InterfaceName, "sw_if_index", reply.SwIfIndex)
 				v.ifaceCache[name] = reply.SwIfIndex
 				return int(reply.SwIfIndex), nil
 			}
@@ -646,6 +677,7 @@ func (v *VPP) GetInterfaceIndex(name string) (int, error) {
 
 		return 0, fmt.Errorf("interface %s not found", name)
 	}
+	v.logger.Info("Using cached interface index", "name", name, "sw_if_index", idx)
 	return int(idx), nil
 }
 
@@ -653,11 +685,17 @@ func (v *VPP) GetParentInterface() string {
 	return v.parentIface
 }
 
+func (v *VPP) GetParentInterfaceMAC() net.HardwareAddr {
+	return v.parentIfMAC
+}
+
 func (v *VPP) GetParentSwIfIndex() (uint32, error) {
+	v.logger.Info("Getting parent interface index", "parent_interface_name", v.parentIface)
 	idx, err := v.GetInterfaceIndex(v.parentIface)
 	if err != nil {
 		return 0, err
 	}
+	v.logger.Info("Got parent interface index", "parent_interface_name", v.parentIface, "sw_if_index", idx)
 	return uint32(idx), nil
 }
 
@@ -682,7 +720,32 @@ func (v *VPP) GetInterfaceMAC(swIfIndex uint32) (net.HardwareAddr, error) {
 		return nil, fmt.Errorf("interface %d not found", swIfIndex)
 	}
 
-	return net.HardwareAddr(reply.L2Address[:6]), nil
+	mac := net.HardwareAddr(reply.L2Address[:6])
+	v.logger.Info("Got interface MAC from VPP", "sw_if_index", swIfIndex, "interface_name", reply.InterfaceName, "mac", mac.String())
+	return mac, nil
+}
+
+func (v *VPP) SetInterfaceMAC(swIfIndex interface_types.InterfaceIndex, mac net.HardwareAddr) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	var macAddr ethernet_types.MacAddress
+	copy(macAddr[:], mac)
+
+	req := &interfaces.SwInterfaceSetMacAddress{
+		SwIfIndex:  swIfIndex,
+		MacAddress: macAddr,
+	}
+
+	reply := &interfaces.SwInterfaceSetMacAddressReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("set interface MAC: %w", err)
+	}
+
+	return nil
 }
 
 func (v *VPP) GetLCPHostInterface(vppIface string) (string, error) {
