@@ -32,8 +32,21 @@ theme:
 extra_css:
   - stylesheets/extra.css
 nav:
-  - Get Started: 
+  - Get Started:
     - Intro: index.md
+    - Supported NICs: getting-started/supported-nics.md
+    - API: getting-started/api.md
+  - Configuration:
+    - Overview: configuration/index.md
+    - Logging: configuration/logging.md
+    - Dataplane: configuration/dataplane.md
+    - Interfaces: configuration/interfaces.md
+    - Subscriber Groups: configuration/subscriber-groups.md
+    - DHCP: configuration/dhcp.md
+    - AAA: configuration/aaa.md
+    - Protocols: configuration/protocols.md
+    - Monitoring: configuration/monitoring.md
+    - Plugins: configuration/plugins.md
   - Architecture:
     - High Level: architecture/HIGH_LEVEL.md
     - Low Level:
@@ -42,6 +55,7 @@ nav:
       - Configuration: architecture/CONFIGURATION.md
       - Handlers: architecture/HANDLERS.md
       - Plugins: architecture/PLUGINS.md
+      - Supported NICs: architecture/SUPPORTED_NICS.md
   - Contributing:
     - PLEASE READ FIRST: contributing/please_read_first.md
   - Author: https://github.com/veesix-networks
