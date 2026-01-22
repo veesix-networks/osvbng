@@ -34,7 +34,7 @@ func (c *Component) handlePaths(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	c.writeJSON(w, resp)
 }
 
 func (c *Component) handleShow(w http.ResponseWriter, r *http.Request) {
@@ -66,7 +66,7 @@ func (c *Component) handleShow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	c.writeJSON(w, resp)
 }
 
 func (c *Component) handleConfig(w http.ResponseWriter, r *http.Request) {
@@ -106,7 +106,7 @@ func (c *Component) handleConfig(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	c.writeJSON(w, map[string]string{"status": "ok"})
 }
 
 func (c *Component) handleOper(w http.ResponseWriter, r *http.Request, operPath string) {
@@ -135,13 +135,19 @@ func (c *Component) handleOper(w http.ResponseWriter, r *http.Request, operPath 
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(data)
+	c.writeJSON(w, data)
 }
 
 func (c *Component) writeError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(ErrorResponse{Error: message})
+	c.writeJSON(w, ErrorResponse{Error: message})
+}
+
+func (c *Component) writeJSON(w http.ResponseWriter, v interface{}) {
+	encoder := json.NewEncoder(w)
+	encoder.SetEscapeHTML(false)
+	encoder.Encode(v)
 }
 
 func (c *Component) handleRunningConfig(w http.ResponseWriter, r *http.Request) {
@@ -152,7 +158,7 @@ func (c *Component) handleRunningConfig(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(cfg)
+	c.writeJSON(w, cfg)
 }
 
 func (c *Component) handleStartupConfig(w http.ResponseWriter, r *http.Request) {
@@ -163,5 +169,5 @@ func (c *Component) handleStartupConfig(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(cfg)
+	c.writeJSON(w, cfg)
 }
