@@ -230,11 +230,15 @@ download_image() {
         rm -f "$dest"
     fi
 
-    $TUI_TOOL --title "Downloading" --infobox "Downloading osvbng image (~1GB)..." 8 60
+    if [ -f "$dest_gz" ]; then
+        $TUI_TOOL --title "Compressed Image Found" --infobox "Found existing $dest_gz, extracting..." 8 60
+    else
+        $TUI_TOOL --title "Downloading" --infobox "Downloading osvbng image (~1GB)..." 8 60
 
-    if ! curl -fL -o "$dest_gz" "$QCOW2_URL"; then
-        $TUI_TOOL --title "Error" --msgbox "Failed to download image from $QCOW2_URL" 8 60
-        exit 1
+        if ! curl -fL -o "$dest_gz" "$QCOW2_URL"; then
+            $TUI_TOOL --title "Error" --msgbox "Failed to download image from $QCOW2_URL" 8 60
+            exit 1
+        fi
     fi
 
     $TUI_TOOL --title "Extracting" --infobox "Extracting image..." 8 60
