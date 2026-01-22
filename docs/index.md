@@ -1,6 +1,6 @@
 #
 <p align="center">
-  <img src="docs/img/logo.png" alt="Logo" style="max-width: 25%; height: auto;">
+  <img src="https://raw.githubusercontent.com/veesix-networks/osvbng/main/docs/img/logo.png" alt="Logo" style="max-width: 50%; height: auto;">
 </p>
 
 <a href="https://github.com/veesix-networks/osvbng" target="_blank">osvbng</a> (Open Source Virtual Broadband Network Gateway) is a high-performance, scalable, open source BNG for ISPs. Built to scale up to multi-hundred gigabit throughput on standard x86 COTS hardware.
@@ -17,7 +17,142 @@
 
 ## Get Started
 
-### Quick Start with Docker
+### QEMU / KVM with DPDK
+
+For maximum performance with DPDK and PCI passthrough. Requires a dedicated server with:
+
+- KVM/libvirt installed
+- IOMMU enabled (Intel VT-d or AMD-Vi)
+- At least 2 physical NICs for PCI passthrough (access and core)
+- 4GB+ RAM and 4+ CPU cores recommended
+
+**Quick Install:**
+
+```bash
+curl -sL https://v6n.io/osvbng | sudo bash
+```
+
+**Install Dependencies (Debian/Ubuntu):**
+
+```bash
+sudo apt install -y libvirt-daemon-system qemu-kvm virtinst curl whiptail gzip bridge-utils
+```
+
+**Create Management Bridge:**
+
+The VM requires a management bridge for out-of-band access (SSH, monitoring, etc.). This bridge connects the VM's virtio management interface to your network.
+
+```bash
+# Create bridge
+sudo brctl addbr br-mgmt
+
+# Attach your management NIC (replace eno1 with your interface)
+sudo brctl addif br-mgmt eno1
+
+# Bring up the bridge
+sudo ip link set br-mgmt up
+
+# Optional: Configure IP on the bridge instead of the physical interface
+sudo ip addr add 192.168.1.10/24 dev br-mgmt
+```
+
+To make this persistent, add to `/etc/network/interfaces`:
+
+```
+auto br-mgmt
+iface br-mgmt inet static
+    address 192.168.1.10
+    netmask 255.255.255.0
+    gateway 192.168.1.1
+    bridge_ports eno1
+    bridge_stp off
+    bridge_fd 0
+```
+
+Or with Netplan (`/etc/netplan/01-bridge.yaml`):
+
+```yaml
+network:
+  version: 2
+  ethernets:
+    eno1:
+      dhcp4: false
+  bridges:
+    br-mgmt:
+      interfaces: [eno1]
+      dhcp4: true
+      # Or static:
+      # addresses: [192.168.1.10/24]
+      # routes:
+      #   - to: default
+      #     via: 192.168.1.1
+```
+
+**Manual Install:**
+
+```bash
+# Download the deployment script
+curl -sLO https://raw.githubusercontent.com/veesix-networks/osvbng/dev/scripts/qemu/deploy-vm.sh
+chmod +x deploy-vm.sh
+
+# Run the interactive installer
+sudo ./deploy-vm.sh
+```
+
+The installer will:
+
+1. Check prerequisites (IOMMU, vfio-pci, etc.)
+2. Let you select NICs for PCI passthrough (access and core)
+3. Download and deploy the osvbng VM image
+4. Configure the VM with your selected interfaces
+
+**Manual Image Download (Optional):**
+
+If you prefer to download the QEMU image separately, you can download the qcow2 images manually from the Releases page or run the following:
+
+```bash
+# Download latest release
+curl -fLO https://github.com/veesix-networks/osvbng/releases/latest/download/osvbng-debian12.qcow2.gz
+
+# Or download a specific version
+curl -fLO https://github.com/veesix-networks/osvbng/releases/download/v1.0.0/osvbng-debian12.qcow2.gz
+
+# Extract the image
+gunzip osvbng-debian12.qcow2.gz
+
+# Move to libvirt images directory
+sudo mv osvbng-debian12.qcow2 /var/lib/libvirt/images/osvbng.qcow2
+```
+
+**Start and Connect:**
+
+```bash
+# Start the VM
+sudo virsh start osvbng
+
+# Connect to console
+sudo virsh console osvbng
+
+# Default login: root / osvbng
+```
+
+**Access the CLI:**
+
+```bash
+# Inside the VM
+osvbngcli
+
+osvbng> show subscriber sessions
+```
+
+The VM auto-generates a default configuration on first boot. To customize, edit `/etc/osvbng/osvbng.yaml` and restart the osvbng service.
+
+#### Tested Host Operating Systems
+
+- Ubuntu 22.04, 24.04
+- Debian 12 (Bookworm)
+
+### Docker
 
 **Prerequisites:**
 
@@ -123,91 +258,6 @@ docker run -d --name osvbng \
 ```
 
 Or update the systemd service file to include the volume mount.
-
-### QEMU / KVM with DPDK
-
-For maximum performance with DPDK and PCI passthrough. Requires a dedicated server with:
-
-- KVM/libvirt installed
-- IOMMU enabled (Intel VT-d or AMD-Vi)
-- At least 2 physical NICs for PCI passthrough (access and core)
-- 4GB+ RAM and 4+ CPU cores recommended
-
-**Quick Install:**
-
-```bash
-curl -sL https://v6n.io/osvbng | sudo bash
-```
-
-**Install Dependencies (Debian/Ubuntu):**
-
-```bash
-sudo apt install -y libvirt-daemon-system qemu-kvm virtinst curl whiptail gzip
-```
-
-**Manual Install:**
-
-```bash
-# Download the deployment script
-curl -sLO https://raw.githubusercontent.com/veesix-networks/osvbng/dev/scripts/qemu/deploy-vm.sh
-chmod +x deploy-vm.sh
-
-# Run the interactive installer
-sudo ./deploy-vm.sh
-```
-
-The installer will:
-
-1. Check prerequisites (IOMMU, vfio-pci, etc.)
-2. Let you select NICs for PCI passthrough (access and core)
-3. Download and deploy the osvbng VM image
-4. Configure the VM with your selected interfaces
-
-**Manual Image Download (Optional):**
-
-If you prefer to download the QEMU image separately, you can download the qcow2 images manually from the Releases page or run the following:
-
-```bash
-# Download latest release
-curl -fLO https://github.com/veesix-networks/osvbng/releases/latest/download/osvbng-debian12.qcow2.gz
-
-# Or download a specific version
-curl -fLO https://github.com/veesix-networks/osvbng/releases/download/v1.0.0/osvbng-debian12.qcow2.gz
-
-# Extract the image
-gunzip osvbng-debian12.qcow2.gz
-
-# Move to libvirt images directory
-sudo mv osvbng-debian12.qcow2 /var/lib/libvirt/images/osvbng.qcow2
-```
-
-**Start and Connect:**
-
-```bash
-# Start the VM
-sudo virsh start osvbng
-
-# Connect to console
-sudo virsh console osvbng
-
-# Default login: root / osvbng
-```
-
-**Access the CLI:**
-
-```bash
-# Inside the VM
-osvbngcli
-
-osvbng> show subscriber sessions
-```
-
-The VM auto-generates a default configuration on first boot. To customize, edit `/etc/osvbng/osvbng.yaml` and restart the osvbng service.
-
-#### Tested Host Operating Systems
-
-- Ubuntu 22.04, 24.04
-- Debian 12 (Bookworm)
 
 ## Expectations
 

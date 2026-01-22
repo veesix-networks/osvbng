@@ -76,7 +76,7 @@ All registered collectors run by default. To disable specific collectors:
 monitoring:
   collect_interval: 5s
   disabled_collectors:
-    - aaa.radius.servers
+    - memory
 ```
 
 If `disabled_collectors` is empty or omitted, all registered collectors run.
