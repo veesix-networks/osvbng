@@ -1,9 +1,8 @@
 dataplane:
   access_interface: host-eth0
   dp_api_socket: /run/osvbng/dataplane_api.sock
-  punt_socket_path: /run/osvbng/osvbng-punt.sock
+  punt_socket_path: /run/osvbng/punt.sock
   memif_socket_path: /run/osvbng/memif.sock
-  arp_punt_socket_path: /run/osvbng/arp-punt.sock
 
 subscriber_group:
   default_policy: dhcp-policy-a

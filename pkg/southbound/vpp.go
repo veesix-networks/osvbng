@@ -18,7 +18,6 @@ import (
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
-	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/arp_punt"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/ethernet_types"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/fib_control"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/fib_types"
@@ -31,7 +30,8 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/lcp"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/memif"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/mpls"
-	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/openbng_accounting"
+	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/osvbng_accounting"
+	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/osvbng_punt"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/punt"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/tapv2"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/vlib"
@@ -1622,13 +1622,14 @@ func (v *VPP) EnableARPPunt(ifaceName, socketPath string) error {
 		return fmt.Errorf("get interface index: %w", err)
 	}
 
-	req := &arp_punt.ArpPuntEnableDisable{
+	req := &osvbng_punt.OsvbngPuntEnableDisable{
 		SwIfIndex:  interface_types.InterfaceIndex(idx),
-		SocketPath: socketPath,
+		Protocol:   2,
 		Enable:     true,
+		SocketPath: socketPath,
 	}
 
-	reply := &arp_punt.ArpPuntEnableDisableReply{}
+	reply := &osvbng_punt.OsvbngPuntEnableDisableReply{}
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
 		return fmt.Errorf("enable arp punt: %w", err)
 	}
@@ -1638,6 +1639,38 @@ func (v *VPP) EnableARPPunt(ifaceName, socketPath string) error {
 	}
 
 	v.logger.Info("Enabled ARP punt", "interface", ifaceName, "sw_if_index", idx, "socket", socketPath)
+	return nil
+}
+
+func (v *VPP) EnableDHCPv4Punt(ifaceName, socketPath string) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	idx, err := v.GetInterfaceIndex(ifaceName)
+	if err != nil {
+		return fmt.Errorf("get interface index: %w", err)
+	}
+
+	req := &osvbng_punt.OsvbngPuntEnableDisable{
+		SwIfIndex:  interface_types.InterfaceIndex(idx),
+		Protocol:   0,
+		Enable:     true,
+		SocketPath: socketPath,
+	}
+
+	reply := &osvbng_punt.OsvbngPuntEnableDisableReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("enable dhcp punt: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return fmt.Errorf("enable dhcp punt failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Info("Enabled DHCP punt", "interface", ifaceName, "sw_if_index", idx, "socket", socketPath)
 	return nil
 }
 
@@ -1684,12 +1717,12 @@ func (v *VPP) EnableAccounting(ifaceName string) error {
 		return fmt.Errorf("get interface index: %w", err)
 	}
 
-	req := &openbng_accounting.OpenbngAcctInterfaceEnableDisable{
+	req := &osvbng_accounting.OsvbngAcctInterfaceEnableDisable{
 		SwIfIndex: interface_types.InterfaceIndex(idx),
 		Enable:    true,
 	}
 
-	reply := &openbng_accounting.OpenbngAcctInterfaceEnableDisableReply{}
+	reply := &osvbng_accounting.OsvbngAcctInterfaceEnableDisableReply{}
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
 		return fmt.Errorf("enable accounting: %w", err)
 	}
@@ -1727,14 +1760,14 @@ func (v *VPP) AddAccountingSubscriber(ipAddr string, fibIndex uint32, swIfIndex 
 	var sessionIDBytes [8]byte
 	copy(sessionIDBytes[:], sessionID)
 
-	req := &openbng_accounting.OpenbngAcctSubscriberAdd{
+	req := &osvbng_accounting.OsvbngAcctSubscriberAdd{
 		IP4Address: ip4Addr,
 		FibIndex:   fibIndex,
 		SwIfIndex:  interface_types.InterfaceIndex(swIfIndex),
 		SessionID:  sessionIDBytes[:],
 	}
 
-	reply := &openbng_accounting.OpenbngAcctSubscriberAddReply{}
+	reply := &osvbng_accounting.OsvbngAcctSubscriberAddReply{}
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
 		return fmt.Errorf("add subscriber: %w", err)
 	}
@@ -1766,12 +1799,12 @@ func (v *VPP) DeleteAccountingSubscriber(ipAddr string, fibIndex uint32) error {
 	var ip4Addr ip_types.IP4Address
 	copy(ip4Addr[:], ip4)
 
-	req := &openbng_accounting.OpenbngAcctSubscriberDel{
+	req := &osvbng_accounting.OsvbngAcctSubscriberDel{
 		IP4Address: ip4Addr,
 		FibIndex:   fibIndex,
 	}
 
-	reply := &openbng_accounting.OpenbngAcctSubscriberDelReply{}
+	reply := &osvbng_accounting.OsvbngAcctSubscriberDelReply{}
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
 		return fmt.Errorf("delete subscriber: %w", err)
 	}
@@ -1791,13 +1824,13 @@ func (v *VPP) GetSubscriberStats(ctx context.Context) ([]subscribers.Statistics,
 	}
 	defer ch.Close()
 
-	stream := ch.SendMultiRequest(&openbng_accounting.OpenbngAcctSubscriberDump{})
+	stream := ch.SendMultiRequest(&osvbng_accounting.OsvbngAcctSubscriberDump{})
 
 	var stats []subscribers.Statistics
 	receivedCount := 0
 
 	for {
-		details := &openbng_accounting.OpenbngAcctSubscriberDetails{}
+		details := &osvbng_accounting.OsvbngAcctSubscriberDetails{}
 		stop, err := stream.ReceiveReply(details)
 		if err != nil || stop {
 			break
