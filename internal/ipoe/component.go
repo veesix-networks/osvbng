@@ -173,16 +173,23 @@ func (c *Component) processARPPacket(pkt *dataplane.ParsedPacket) error {
 		"svlan", pkt.OuterVLAN,
 		"cvlan", pkt.InnerVLAN)
 
-	isDF := c.srgMgr.IsDF(pkt.OuterVLAN, pkt.MAC.String(), pkt.InnerVLAN)
-	if !isDF {
-		c.logger.Debug("ARP request not from DF, ignoring",
-			"mac", pkt.MAC.String(),
-			"svlan", pkt.OuterVLAN,
-			"cvlan", pkt.InnerVLAN)
-		return nil
+	if c.srgMgr != nil {
+		isDF := c.srgMgr.IsDF(pkt.OuterVLAN, pkt.MAC.String(), pkt.InnerVLAN)
+		if !isDF {
+			c.logger.Debug("ARP request not from DF, ignoring",
+				"mac", pkt.MAC.String(),
+				"svlan", pkt.OuterVLAN,
+				"cvlan", pkt.InnerVLAN)
+			return nil
+		}
 	}
 
-	gatewayMAC := c.srgMgr.GetVirtualMAC(pkt.OuterVLAN)
+	var gatewayMAC net.HardwareAddr
+	if c.srgMgr != nil {
+		gatewayMAC = c.srgMgr.GetVirtualMAC(pkt.OuterVLAN)
+	} else {
+		gatewayMAC = c.vpp.GetParentInterfaceMAC()
+	}
 	replyData := arp.BuildReply(&arp.Packet{
 		SenderMAC: pkt.ARP.SourceHwAddress,
 		SenderIP:  pkt.ARP.SourceProtAddress,
@@ -228,7 +235,7 @@ func (c *Component) processDHCPPacket(pkt *dataplane.ParsedPacket) error {
 		return fmt.Errorf("no DHCPv4 layer")
 	}
 
-	if pkt.Direction == dataplane.DirectionRX && pkt.OuterVLAN == 0 {
+	if pkt.OuterVLAN == 0 {
 		return fmt.Errorf("packet rejected: S-VLAN required (untagged not supported)")
 	}
 
@@ -640,7 +647,12 @@ func (c *Component) handleServerResponse(pkt *dataplane.ParsedPacket) error {
 	msgType := getDHCPMessageType(pkt.DHCPv4.Options)
 	c.logger.Info("Forwarding DHCP to client", "message_type", msgType.String(), "mac", sess.MAC.String(), "session_id", sess.SessionID, "xid", fmt.Sprintf("0x%x", pkt.DHCPv4.Xid))
 
-	vmac := c.srgMgr.GetVirtualMAC(sess.OuterVLAN)
+	var vmac net.HardwareAddr
+	if c.srgMgr != nil {
+		vmac = c.srgMgr.GetVirtualMAC(sess.OuterVLAN)
+	} else {
+		vmac = c.vpp.GetParentInterfaceMAC()
+	}
 	if vmac == nil {
 		return fmt.Errorf("no virtual MAC for S-VLAN %d", sess.OuterVLAN)
 	}
