@@ -2,88 +2,51 @@ package arp
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"log/slog"
 	"net"
-	"os"
 	"time"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/veesix-networks/osvbng/pkg/component"
+	"github.com/veesix-networks/osvbng/pkg/dataplane"
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/srg"
 )
 
-type puntHeader struct {
-	SwIfIndex uint32
-	Protocol  uint16
-	DataLen   uint16
-}
-
 type Component struct {
 	*component.Base
 
-	logger     *slog.Logger
-	eventBus   events.Bus
-	srgMgr     *srg.Manager
-	vpp        interface {
+	logger   *slog.Logger
+	eventBus events.Bus
+	srgMgr   *srg.Manager
+	vpp      interface {
 		GetParentInterfaceMAC() net.HardwareAddr
 	}
-	configMgr  component.ConfigManager
-	socketPath string
-	socketConn *net.UnixConn
+	configMgr component.ConfigManager
+	arpChan   <-chan *dataplane.ParsedPacket
 }
 
 func New(deps component.Dependencies, srgMgr *srg.Manager) (component.Component, error) {
-	socketPath := "/run/osvbng/arp-punt.sock"
-	if deps.ConfigManager != nil {
-		cfg, _ := deps.ConfigManager.GetStartup()
-		if cfg != nil && cfg.Dataplane.ARPPuntSocketPath != "" {
-			socketPath = cfg.Dataplane.ARPPuntSocketPath
-		}
-	}
-
 	log := logger.Component(logger.ComponentARP)
 
 	return &Component{
-		Base:       component.NewBase("arp"),
-		logger:     log,
-		eventBus:   deps.EventBus,
-		srgMgr:     srgMgr,
-		vpp:        deps.VPP,
-		configMgr:  deps.ConfigManager,
-		socketPath: socketPath,
+		Base:      component.NewBase("arp"),
+		logger:    log,
+		eventBus:  deps.EventBus,
+		srgMgr:    srgMgr,
+		vpp:       deps.VPP,
+		configMgr: deps.ConfigManager,
+		arpChan:   deps.ARPChan,
 	}, nil
 }
 
 func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
-	c.logger.Info("Starting ARP component", "socket", c.socketPath)
-
-	if err := os.Remove(c.socketPath); err != nil && !os.IsNotExist(err) {
-		c.logger.Warn("Failed to remove existing socket", "error", err)
-	}
-
-	addr, err := net.ResolveUnixAddr("unixgram", c.socketPath)
-	if err != nil {
-		return fmt.Errorf("resolve unix addr: %w", err)
-	}
-
-	conn, err := net.ListenUnixgram("unixgram", addr)
-	if err != nil {
-		return fmt.Errorf("listen on unix socket: %w", err)
-	}
-
-	if err := os.Chmod(c.socketPath, 0666); err != nil {
-		conn.Close()
-		return fmt.Errorf("chmod socket: %w", err)
-	}
-
-	c.socketConn = conn
+	c.logger.Info("Starting ARP component")
 
 	c.Go(c.readLoop)
 
@@ -92,91 +55,37 @@ func (c *Component) Start(ctx context.Context) error {
 
 func (c *Component) Stop(ctx context.Context) error {
 	c.logger.Info("Stopping ARP component")
-
-	if c.socketConn != nil {
-		c.socketConn.Close()
-	}
-
 	c.StopContext()
-
-	os.Remove(c.socketPath)
-
 	return nil
 }
 
 func (c *Component) readLoop() {
-	buf := make([]byte, 8+1500)
-
 	for {
 		select {
 		case <-c.Ctx.Done():
 			return
-		default:
-		}
-
-		c.socketConn.SetReadDeadline(time.Now().Add(1 * time.Second))
-
-		n, err := c.socketConn.Read(buf)
-		if err != nil {
-			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				continue
+		case pkt := <-c.arpChan:
+			if err := c.handlePacket(pkt); err != nil {
+				c.logger.Debug("Error handling packet", "error", err, "sw_if_index", pkt.SwIfIndex)
 			}
-			select {
-			case <-c.Ctx.Done():
-				return
-			default:
-				c.logger.Warn("Error reading from socket", "error", err)
-				continue
-			}
-		}
-
-		if n < 8 {
-			c.logger.Debug("Packet too small", "size", n)
-			continue
-		}
-
-		hdr := puntHeader{
-			SwIfIndex: binary.BigEndian.Uint32(buf[0:4]),
-			Protocol:  binary.BigEndian.Uint16(buf[4:6]),
-			DataLen:   binary.BigEndian.Uint16(buf[6:8]),
-		}
-
-		if hdr.Protocol != 0x0806 {
-			c.logger.Debug("Non-ARP packet", "protocol", hdr.Protocol)
-			continue
-		}
-
-		if n < int(8+hdr.DataLen) {
-			c.logger.Debug("Incomplete packet", "expected", 8+hdr.DataLen, "got", n)
-			continue
-		}
-
-		pktData := make([]byte, hdr.DataLen)
-		copy(pktData, buf[8:8+hdr.DataLen])
-
-		if err := c.handlePacket(hdr.SwIfIndex, pktData); err != nil {
-			c.logger.Debug("Error handling packet", "error", err, "sw_if_index", hdr.SwIfIndex)
 		}
 	}
 }
 
-func (c *Component) handlePacket(swIfIndex uint32, pkt []byte) error {
+func (c *Component) handlePacket(pkt *dataplane.ParsedPacket) error {
 	start := time.Now()
 	defer func() {
 		duration := time.Since(start)
 		c.logger.Warn("ARP packet processing time",
 			"duration_us", duration.Microseconds(),
-			"sw_if_index", swIfIndex)
+			"sw_if_index", pkt.SwIfIndex)
 	}()
 
-	packet := gopacket.NewPacket(pkt, layers.LayerTypeARP, gopacket.Default)
-
-	arpLayer := packet.Layer(layers.LayerTypeARP)
-	if arpLayer == nil {
+	if pkt.ARP == nil {
 		return fmt.Errorf("no ARP layer")
 	}
 
-	arp := arpLayer.(*layers.ARP)
+	arp := pkt.ARP
 
 	if arp.Operation != 1 {
 		return nil
@@ -187,7 +96,7 @@ func (c *Component) handlePacket(swIfIndex uint32, pkt []byte) error {
 	dstIP := net.IP(arp.DstProtAddress)
 
 	c.logger.Debug("ARP request",
-		"sw_if_index", swIfIndex,
+		"sw_if_index", pkt.SwIfIndex,
 		"src_mac", srcMAC.String(),
 		"src_ip", srcIP.String(),
 		"dst_ip", dstIP.String(),
@@ -217,8 +126,8 @@ func (c *Component) handlePacket(swIfIndex uint32, pkt []byte) error {
 	egressPayload := &models.EgressPacketPayload{
 		DstMAC:    srcMAC.String(),
 		SrcMAC:    gatewayMAC.String(),
-		OuterVLAN: 0,
-		InnerVLAN: 0,
+		OuterVLAN: pkt.OuterVLAN,
+		InnerVLAN: pkt.InnerVLAN,
 		RawData:   arpReply,
 	}
 
