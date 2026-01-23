@@ -7,13 +7,11 @@ import (
 )
 
 type ParsedPacket struct {
-	Direction string
-	Protocol  string
+	ProtocolType Protocol
 
 	MAC       net.HardwareAddr
 	OuterVLAN uint16
 	InnerVLAN uint16
-	VLANCount int
 	SwIfIndex uint32
 
 	Ethernet *layers.Ethernet
@@ -29,5 +27,4 @@ type ParsedPacket struct {
 	PPP      *layers.PPP
 
 	RawPacket []byte
-	Metadata  map[string]interface{}
 }

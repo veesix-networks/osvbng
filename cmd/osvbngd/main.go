@@ -155,25 +155,6 @@ func main() {
 	}
 	mainLog.Info("Added broadcast route for DHCP")
 
-	// We will move bootstrap under config handlers at some point, or abstract the config into a generic subscriber template language?
-	bootstrapper := bootstrap.New(vpp, cfg)
-	if err := bootstrapper.ProvisionInfrastructure(); err != nil {
-		log.Fatalf("Failed to provision infrastructure: %v", err)
-	}
-
-	socketPath := cfg.Dataplane.PuntSocketPath
-	if socketPath == "" {
-		socketPath = "/run/osvbng/osvbng-punt.sock"
-	}
-
-	if err := vpp.RegisterPuntSocket(socketPath, 67, accessInterface); err != nil {
-		mainLog.Warn("Failed to register punt socket for UDP 67 (DHCP server port)", "error", err)
-	}
-
-	if err := vpp.EnableDirectedBroadcast(accessInterface); err != nil {
-		mainLog.Warn("Failed to enable directed broadcast", "interface", accessInterface, "error", err)
-	}
-
 	eventBus := local.NewBus()
 	cache := memory.New()
 
@@ -182,6 +163,26 @@ func main() {
 		Cache:         cache,
 		VPP:           vpp,
 		ConfigManager: configd,
+	}
+
+	dataplaneComp, err := dataplane.New(coreDeps)
+	if err != nil {
+		log.Fatalf("Failed to create dataplane component: %v", err)
+	}
+
+	dpComp := dataplaneComp.(*dataplane.Component)
+	coreDeps.DHCPChan = dpComp.DHCPChan
+	coreDeps.ARPChan = dpComp.ARPChan
+	coreDeps.PPPChan = dpComp.PPPoEChan
+
+	// We will move bootstrap under config handlers at some point, or abstract the config into a generic subscriber template language?
+	bootstrapper := bootstrap.New(vpp, cfg)
+	if err := bootstrapper.ProvisionInfrastructure(); err != nil {
+		log.Fatalf("Failed to provision infrastructure: %v", err)
+	}
+
+	if err := vpp.EnableDirectedBroadcast(accessInterface); err != nil {
+		mainLog.Warn("Failed to enable directed broadcast", "interface", accessInterface, "error", err)
 	}
 
 	authProviderName := cfg.AAA.Provider
@@ -203,16 +204,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create routing component: %v", err)
 	}
-
-	dataplaneComp, err := dataplane.New(coreDeps)
-	if err != nil {
-		log.Fatalf("Failed to create dataplane component: %v", err)
-	}
-
-	dpComp := dataplaneComp.(*dataplane.Component)
-	coreDeps.DHCPChan = dpComp.DHCPChan
-	coreDeps.ARPChan = dpComp.ARPChan
-	coreDeps.PPPChan = dpComp.PPPoEChan
 
 	dhcp4ProviderName := cfg.DHCP.Provider
 	if dhcp4ProviderName == "" {
@@ -272,8 +263,8 @@ func main() {
 			PathPrefix: "osvbng:state:",
 		},
 		DisabledCollectors: cfg.Monitoring.DisabledCollectors,
-		ShowRegistry:      *showRegistry,
-		ConfigMgr:         configd,
+		ShowRegistry:       *showRegistry,
+		ConfigMgr:          configd,
 	})
 
 	orch := component.NewOrchestrator()

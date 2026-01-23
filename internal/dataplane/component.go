@@ -21,8 +21,8 @@ type Component struct {
 
 	logger       *slog.Logger
 	eventBus     events.Bus
-	ingress      dataplane.Ingress
 	memifHandler *vpp.MemifHandler
+	ingress      *vpp.PuntSocketIngress
 	vpp          *southbound.VPP
 	virtualMAC   string
 
@@ -32,28 +32,23 @@ type Component struct {
 }
 
 func New(deps component.Dependencies) (component.Component, error) {
-	puntSocketPath := "/run/osvbng/osvbng-punt.sock"
 	memifSocketPath := "/run/osvbng/memif.sock"
+	puntSocketPath := "/run/osvbng/punt.sock"
 	var accessIface string
 
 	if deps.ConfigManager != nil {
 		cfg, _ := deps.ConfigManager.GetStartup()
 		if cfg != nil {
-			if cfg.Dataplane.PuntSocketPath != "" {
-				puntSocketPath = cfg.Dataplane.PuntSocketPath
-			}
 			if cfg.Dataplane.MemifSocketPath != "" {
 				memifSocketPath = cfg.Dataplane.MemifSocketPath
+			}
+			if cfg.Dataplane.PuntSocketPath != "" {
+				puntSocketPath = cfg.Dataplane.PuntSocketPath
 			}
 			if iface, err := cfg.GetAccessInterface(); err == nil {
 				accessIface = iface
 			}
 		}
-	}
-
-	ingress := vpp.NewPuntSocketIngress(puntSocketPath)
-	if err := ingress.Init(""); err != nil {
-		return nil, fmt.Errorf("init punt socket: %w", err)
 	}
 
 	log := logger.Component(logger.ComponentDataplane)
@@ -74,7 +69,6 @@ func New(deps component.Dependencies) (component.Component, error) {
 		Base:       component.NewBase("dataplane"),
 		logger:     log,
 		eventBus:   deps.EventBus,
-		ingress:    ingress,
 		vpp:        deps.VPP,
 		virtualMAC: virtualMAC,
 		DHCPChan:   make(chan *dataplane.ParsedPacket, 1000),
@@ -91,6 +85,12 @@ func New(deps component.Dependencies) (component.Component, error) {
 	}
 	c.memifHandler = memifHandler
 
+	ingress := vpp.NewPuntSocketIngress(puntSocketPath)
+	if err := ingress.Init(""); err != nil {
+		return nil, fmt.Errorf("init punt socket ingress: %w", err)
+	}
+	c.ingress = ingress
+
 	return c, nil
 }
 
@@ -106,20 +106,69 @@ func (c *Component) Start(ctx context.Context) error {
 		return fmt.Errorf("subscribe to session lifecycle: %w", err)
 	}
 
-	c.Go(c.readLoop)
+	go c.readLoop()
 
 	return nil
+}
+
+func (c *Component) readLoop() {
+	c.logger.Info("Starting dataplane readLoop")
+	ctx := c.Ctx
+	for {
+		select {
+		case <-ctx.Done():
+			c.logger.Info("Stopping dataplane readLoop")
+			return
+		default:
+			pkt, err := c.ingress.ReadPacket(ctx)
+			if err != nil {
+				c.logger.Error("Failed to read packet", "error", err)
+				continue
+			}
+
+			if pkt == nil {
+				continue
+			}
+
+			switch pkt.ProtocolType {
+			case dataplane.ProtocolDHCPv4Type:
+				select {
+				case c.DHCPChan <- pkt:
+				default:
+					c.logger.Warn("DHCP channel full, dropping packet")
+				}
+			case dataplane.ProtocolARPType:
+				select {
+				case c.ARPChan <- pkt:
+				default:
+					c.logger.Warn("ARP channel full, dropping packet")
+				}
+			case dataplane.ProtocolDHCPv6Type:
+				c.logger.Info("Received DHCPv6 packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
+			case dataplane.ProtocolPPPoEDiscoveryType:
+				c.logger.Info("Received PPPoE Discovery packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
+			case dataplane.ProtocolPPPoESessionType:
+				c.logger.Info("Received PPPoE Session packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
+			case dataplane.ProtocolIPv6NDType:
+				c.logger.Info("Received IPv6 ND packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
+			case dataplane.ProtocolL2TPType:
+				c.logger.Info("Received L2TP packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
+			default:
+				c.logger.Warn("Unknown protocol", "protocol", pkt.ProtocolType)
+			}
+		}
+	}
 }
 
 func (c *Component) Stop(ctx context.Context) error {
 	c.logger.Info("Stopping dataplane component")
 
-	if err := c.ingress.Close(); err != nil {
-		c.logger.Error("Error closing ingress", "error", err)
-	}
-
 	if err := c.memifHandler.Close(); err != nil {
 		c.logger.Error("Error closing memif handler", "error", err)
+	}
+
+	if err := c.ingress.Close(); err != nil {
+		c.logger.Error("Error closing ingress", "error", err)
 	}
 
 	c.StopContext()
@@ -133,88 +182,6 @@ func (c *Component) handleARPRequest(arp *vpp.ARPPacket) {
 			c.logger.Error("Failed to send ARP reply", "error", err)
 		}
 	}
-}
-
-func (c *Component) readLoop() {
-	c.logger.Info("Started packet read loop")
-
-	for {
-		select {
-		case <-c.Ctx.Done():
-			return
-		default:
-			pkt, err := c.ingress.ReadPacket(c.Ctx)
-			if err != nil {
-				select {
-				case <-c.Ctx.Done():
-					return
-				default:
-					c.logger.Error("Error reading packet", "error", err)
-					continue
-				}
-			}
-
-			if pkt == nil {
-				continue
-			}
-
-			if err := c.handlePacket(pkt); err != nil {
-				c.logger.Error("Error handling packet", "error", err)
-			}
-		}
-	}
-}
-
-func (c *Component) handlePacket(pkt *dataplane.ParsedPacket) error {
-	if pkt.Direction == dataplane.DirectionRX && pkt.OuterVLAN == 0 {
-		return fmt.Errorf("packet rejected: S-VLAN required (untagged not supported)")
-	}
-
-	switch pkt.Protocol {
-	case dataplane.ProtocolDHCP:
-		if pkt.DHCPv4 != nil {
-			c.logger.Info("Received DHCP packet",
-				"operation", pkt.DHCPv4.Operation,
-				"direction", pkt.Direction,
-				"mac", pkt.MAC.String(),
-				"svlan", pkt.OuterVLAN,
-				"cvlan", pkt.InnerVLAN)
-		}
-		select {
-		case c.DHCPChan <- pkt:
-		default:
-			c.logger.Warn("DHCP channel full, dropping packet")
-		}
-
-	case dataplane.ProtocolARP:
-		if pkt.ARP != nil {
-			c.logger.Info("Received ARP packet",
-				"operation", pkt.ARP.Operation,
-				"direction", pkt.Direction,
-				"mac", pkt.MAC.String(),
-				"svlan", pkt.OuterVLAN,
-				"cvlan", pkt.InnerVLAN,
-				"src_ip", net.IP(pkt.ARP.SourceProtAddress).String(),
-				"dst_ip", net.IP(pkt.ARP.DstProtAddress).String())
-		}
-		select {
-		case c.ARPChan <- pkt:
-		default:
-			c.logger.Warn("ARP channel full, dropping packet")
-		}
-
-	case dataplane.ProtocolPPP:
-		select {
-		case c.PPPoEChan <- pkt:
-		default:
-			c.logger.Warn("PPPoE channel full, dropping packet")
-		}
-
-	default:
-		return fmt.Errorf("unknown protocol: %s", pkt.Protocol)
-	}
-
-	return nil
 }
 
 func (c *Component) handleEgress(event models.Event) error {
