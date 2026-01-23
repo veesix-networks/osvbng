@@ -26,6 +26,11 @@ func New(sb *southbound.VPP, cfg *config.Config) *Bootstrap {
 func (b *Bootstrap) ProvisionInfrastructure() error {
 	b.logger.Info("Provisioning infrastructure from config")
 
+	puntSocketPath := "/run/osvbng/punt.sock"
+	if b.cfg.Dataplane.PuntSocketPath != "" {
+		puntSocketPath = b.cfg.Dataplane.PuntSocketPath
+	}
+
 	if b.cfg.SubscriberGroups != nil {
 		for _, group := range b.cfg.SubscriberGroups.Groups {
 			for _, vlanRange := range group.VLANs {
@@ -46,8 +51,12 @@ func (b *Bootstrap) ProvisionInfrastructure() error {
 						return fmt.Errorf("set unnumbered %s to %s: %w", subIfName, vlanRange.Interface, err)
 					}
 
-					if err := b.sb.EnableARPPunt(subIfName, "/run/osvbng/arp-punt.sock"); err != nil {
+					if err := b.sb.EnableARPPunt(subIfName, puntSocketPath); err != nil {
 						return fmt.Errorf("enable arp punt on %s: %w", subIfName, err)
+					}
+
+					if err := b.sb.EnableDHCPv4Punt(subIfName, puntSocketPath); err != nil {
+						return fmt.Errorf("enable dhcp punt on %s: %w", subIfName, err)
 					}
 
 					if err := b.sb.DisableARPReply(subIfName); err != nil {
