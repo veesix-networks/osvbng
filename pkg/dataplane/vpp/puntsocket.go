@@ -2,6 +2,7 @@ package vpp
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"log/slog"
 	"net"
@@ -62,6 +63,7 @@ func (p *PuntSocketIngress) Init(_ string) error {
 
 func (p *PuntSocketIngress) ReadPacket(ctx context.Context) (*dataplane.ParsedPacket, error) {
 	if p.conn == nil {
+		p.logger.Error("ReadPacket called but connection is nil!")
 		return nil, fmt.Errorf("punt socket not connected")
 	}
 
@@ -74,22 +76,28 @@ func (p *PuntSocketIngress) ReadPacket(ctx context.Context) (*dataplane.ParsedPa
 		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 			return nil, nil
 		}
+		p.logger.Error("Failed to read from punt socket", "error", err)
 		return nil, fmt.Errorf("read packet: %w", err)
 	}
+
+	p.logger.Info("Read data from punt socket", "bytes", n)
 
 	buf := make([]byte, n)
 	copy(buf, p.readBuf[:n])
 
-	if n < 8 {
+	if n < 16 {
 		return nil, fmt.Errorf("packet too short: %d bytes", n)
 	}
 
-	swIfIndex := uint32(buf[0]) | uint32(buf[1])<<8 | uint32(buf[2])<<16 | uint32(buf[3])<<24
-	action := uint32(buf[4]) | uint32(buf[5])<<8 | uint32(buf[6])<<16 | uint32(buf[7])<<24
+	swIfIndex := binary.BigEndian.Uint32(buf[0:4])
+	protocol := buf[4]
+	direction := buf[5]
+	dataLen := binary.BigEndian.Uint16(buf[6:8])
+	timestampNs := binary.BigEndian.Uint64(buf[8:16])
 
-	p.logger.Info("Received punted packet from VPP", "sw_if_index", swIfIndex, "action", action, "size", n-8)
+	puntData := buf[16:]
 
-	puntData := buf[8:]
+	p.logger.Info("Received punted packet from VPP", "sw_if_index", swIfIndex, "protocol", protocol, "direction", direction, "data_len", dataLen, "timestamp_ns", timestampNs, "size", n-16)
 
 	packet := gopacket.NewPacket(puntData, layers.LayerTypeEthernet, gopacket.Default)
 
@@ -99,14 +107,6 @@ func (p *PuntSocketIngress) ReadPacket(ctx context.Context) (*dataplane.ParsedPa
 	}
 	eth := ethLayer.(*layers.Ethernet)
 
-	parsedPkt := &dataplane.ParsedPacket{
-		SwIfIndex: swIfIndex,
-		Ethernet:  eth,
-		MAC:       eth.SrcMAC,
-		RawPacket: puntData,
-		Metadata:  make(map[string]interface{}),
-	}
-
 	var vlanLayers []*layers.Dot1Q
 	for _, layer := range packet.Layers() {
 		if dot1q, ok := layer.(*layers.Dot1Q); ok {
@@ -114,51 +114,57 @@ func (p *PuntSocketIngress) ReadPacket(ctx context.Context) (*dataplane.ParsedPa
 		}
 	}
 
+	outerVLAN := uint16(0)
+	innerVLAN := uint16(0)
 	if len(vlanLayers) > 0 {
-		parsedPkt.OuterVLAN = vlanLayers[0].VLANIdentifier
-		parsedPkt.VLANCount = 1
+		outerVLAN = vlanLayers[0].VLANIdentifier
 		if len(vlanLayers) > 1 {
-			parsedPkt.InnerVLAN = vlanLayers[1].VLANIdentifier
-			parsedPkt.VLANCount = 2
-		}
-	}
-	parsedPkt.Dot1Q = vlanLayers
-
-	if ipv4Layer := packet.Layer(layers.LayerTypeIPv4); ipv4Layer != nil {
-		parsedPkt.IPv4 = ipv4Layer.(*layers.IPv4)
-	}
-
-	if ipv6Layer := packet.Layer(layers.LayerTypeIPv6); ipv6Layer != nil {
-		parsedPkt.IPv6 = ipv6Layer.(*layers.IPv6)
-	}
-
-	if udpLayer := packet.Layer(layers.LayerTypeUDP); udpLayer != nil {
-		parsedPkt.UDP = udpLayer.(*layers.UDP)
-
-		if parsedPkt.UDP.DstPort == 67 || parsedPkt.UDP.DstPort == 68 {
-			parsedPkt.Protocol = dataplane.ProtocolDHCP
-			if dhcpv4Layer := packet.Layer(layers.LayerTypeDHCPv4); dhcpv4Layer != nil {
-				parsedPkt.DHCPv4 = dhcpv4Layer.(*layers.DHCPv4)
-				if parsedPkt.DHCPv4.Operation == layers.DHCPOpReply {
-					parsedPkt.Direction = dataplane.DirectionTX
-				} else {
-					parsedPkt.Direction = dataplane.DirectionRX
-				}
-			}
+			innerVLAN = vlanLayers[1].VLANIdentifier
 		}
 	}
 
-	if arpLayer := packet.Layer(layers.LayerTypeARP); arpLayer != nil {
-		parsedPkt.ARP = arpLayer.(*layers.ARP)
-		parsedPkt.Protocol = dataplane.ProtocolARP
-		parsedPkt.Direction = dataplane.DirectionRX
+	parsedPkt := &dataplane.ParsedPacket{
+		SwIfIndex: swIfIndex,
+		Ethernet:  eth,
+		MAC:       eth.SrcMAC,
+		OuterVLAN: outerVLAN,
+		InnerVLAN: innerVLAN,
+		RawPacket: puntData,
+		Dot1Q:     vlanLayers,
 	}
 
-	if parsedPkt.Protocol == "" {
-		return nil, fmt.Errorf("unknown protocol")
+	switch protocol {
+	case 0:
+		parsedPkt.ProtocolType = dataplane.ProtocolDHCPv4Type
+		if ipv4Layer := packet.Layer(layers.LayerTypeIPv4); ipv4Layer != nil {
+			parsedPkt.IPv4 = ipv4Layer.(*layers.IPv4)
+		}
+		if udpLayer := packet.Layer(layers.LayerTypeUDP); udpLayer != nil {
+			parsedPkt.UDP = udpLayer.(*layers.UDP)
+		}
+		if dhcpv4Layer := packet.Layer(layers.LayerTypeDHCPv4); dhcpv4Layer != nil {
+			parsedPkt.DHCPv4 = dhcpv4Layer.(*layers.DHCPv4)
+		}
+	case 1:
+		parsedPkt.ProtocolType = dataplane.ProtocolDHCPv6Type
+	case 2:
+		parsedPkt.ProtocolType = dataplane.ProtocolARPType
+		if arpLayer := packet.Layer(layers.LayerTypeARP); arpLayer != nil {
+			parsedPkt.ARP = arpLayer.(*layers.ARP)
+		}
+	case 3:
+		parsedPkt.ProtocolType = dataplane.ProtocolPPPoEDiscoveryType
+	case 4:
+		parsedPkt.ProtocolType = dataplane.ProtocolPPPoESessionType
+	case 5:
+		parsedPkt.ProtocolType = dataplane.ProtocolIPv6NDType
+	case 6:
+		parsedPkt.ProtocolType = dataplane.ProtocolL2TPType
+	default:
+		return nil, fmt.Errorf("unsupported protocol: %d", protocol)
 	}
 
-	p.logger.Info("Received packet", "protocol", parsedPkt.Protocol, "mac", eth.SrcMAC.String(), "svlan", parsedPkt.OuterVLAN, "cvlan", parsedPkt.InnerVLAN)
+	p.logger.Info("Received packet", "protocol", parsedPkt.ProtocolType, "mac", eth.SrcMAC.String(), "svlan", parsedPkt.OuterVLAN, "cvlan", parsedPkt.InnerVLAN)
 
 	return parsedPkt, nil
 }
