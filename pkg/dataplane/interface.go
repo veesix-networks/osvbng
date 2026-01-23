@@ -39,11 +39,13 @@ type EgressPacket struct {
 }
 
 const (
-	ProtocolDHCP = "dhcp"
-	ProtocolARP  = "arp"
-	ProtocolPPP  = "ppp"
-	ProtocolL2TP = "l2tp"
-
-	DirectionRX = "rx"
-	DirectionTX = "tx"
+	ProtocolDHCPv4         = "dhcpv4"
+	ProtocolDHCPv6         = "dhcpv6"
+	ProtocolARP            = "arp"
+	ProtocolPPPoEDiscovery = "pppoe_discovery"
+	ProtocolPPPoESession   = "pppoe_session"
+	ProtocolIPv6ND         = "ipv6_nd"
+	ProtocolL2TP           = "l2tp"
+	ProtocolDHCP           = "dhcp"
+	ProtocolPPP            = "ppp"
 )
