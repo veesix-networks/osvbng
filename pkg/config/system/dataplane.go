@@ -11,11 +11,10 @@ import (
 )
 
 type DataplaneConfig struct {
-	DPAPISocket       string      `json:"dp_api_socket,omitempty" yaml:"dp_api_socket,omitempty"`
-	PuntSocketPath    string      `json:"punt_socket_path,omitempty" yaml:"punt_socket_path,omitempty"`
-	ARPPuntSocketPath string      `json:"arp_punt_socket_path,omitempty" yaml:"arp_punt_socket_path,omitempty"`
-	MemifSocketPath   string      `json:"memif_socket_path,omitempty" yaml:"memif_socket_path,omitempty"`
-	DPDK              *DPDKConfig `json:"dpdk,omitempty" yaml:"dpdk,omitempty"`
+	DPAPISocket     string      `json:"dp_api_socket,omitempty" yaml:"dp_api_socket,omitempty"`
+	PuntSocketPath  string      `json:"punt_socket_path,omitempty" yaml:"punt_socket_path,omitempty"`
+	MemifSocketPath string      `json:"memif_socket_path,omitempty" yaml:"memif_socket_path,omitempty"`
+	DPDK            *DPDKConfig `json:"dpdk,omitempty" yaml:"dpdk,omitempty"`
 }
 
 type DPDKConfig struct {
