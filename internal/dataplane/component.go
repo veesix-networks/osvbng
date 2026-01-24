@@ -130,31 +130,31 @@ func (c *Component) readLoop() {
 				continue
 			}
 
-			switch pkt.ProtocolType {
-			case dataplane.ProtocolDHCPv4Type:
+			switch pkt.Protocol {
+			case models.ProtocolDHCPv4:
 				select {
 				case c.DHCPChan <- pkt:
 				default:
 					c.logger.Warn("DHCP channel full, dropping packet")
 				}
-			case dataplane.ProtocolARPType:
+			case models.ProtocolARP:
 				select {
 				case c.ARPChan <- pkt:
 				default:
 					c.logger.Warn("ARP channel full, dropping packet")
 				}
-			case dataplane.ProtocolDHCPv6Type:
+			case models.ProtocolDHCPv6:
 				c.logger.Info("Received DHCPv6 packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
-			case dataplane.ProtocolPPPoEDiscoveryType:
+			case models.ProtocolPPPoEDiscovery:
 				c.logger.Info("Received PPPoE Discovery packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
-			case dataplane.ProtocolPPPoESessionType:
+			case models.ProtocolPPPoESession:
 				c.logger.Info("Received PPPoE Session packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
-			case dataplane.ProtocolIPv6NDType:
+			case models.ProtocolIPv6ND:
 				c.logger.Info("Received IPv6 ND packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
-			case dataplane.ProtocolL2TPType:
+			case models.ProtocolL2TP:
 				c.logger.Info("Received L2TP packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
 			default:
-				c.logger.Warn("Unknown protocol", "protocol", pkt.ProtocolType)
+				c.logger.Warn("Unknown protocol", "protocol", pkt.Protocol)
 			}
 		}
 	}

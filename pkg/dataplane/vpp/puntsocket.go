@@ -13,6 +13,7 @@ import (
 	"github.com/google/gopacket/layers"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
 	"github.com/veesix-networks/osvbng/pkg/logger"
+	"github.com/veesix-networks/osvbng/pkg/models"
 )
 
 type PuntSocketIngress struct {
@@ -135,7 +136,7 @@ func (p *PuntSocketIngress) ReadPacket(ctx context.Context) (*dataplane.ParsedPa
 
 	switch protocol {
 	case 0:
-		parsedPkt.ProtocolType = dataplane.ProtocolDHCPv4Type
+		parsedPkt.Protocol = models.ProtocolDHCPv4
 		if ipv4Layer := packet.Layer(layers.LayerTypeIPv4); ipv4Layer != nil {
 			parsedPkt.IPv4 = ipv4Layer.(*layers.IPv4)
 		}
@@ -146,25 +147,25 @@ func (p *PuntSocketIngress) ReadPacket(ctx context.Context) (*dataplane.ParsedPa
 			parsedPkt.DHCPv4 = dhcpv4Layer.(*layers.DHCPv4)
 		}
 	case 1:
-		parsedPkt.ProtocolType = dataplane.ProtocolDHCPv6Type
+		parsedPkt.Protocol = models.ProtocolDHCPv6
 	case 2:
-		parsedPkt.ProtocolType = dataplane.ProtocolARPType
+		parsedPkt.Protocol = models.ProtocolARP
 		if arpLayer := packet.Layer(layers.LayerTypeARP); arpLayer != nil {
 			parsedPkt.ARP = arpLayer.(*layers.ARP)
 		}
 	case 3:
-		parsedPkt.ProtocolType = dataplane.ProtocolPPPoEDiscoveryType
+		parsedPkt.Protocol = models.ProtocolPPPoEDiscovery
 	case 4:
-		parsedPkt.ProtocolType = dataplane.ProtocolPPPoESessionType
+		parsedPkt.Protocol = models.ProtocolPPPoESession
 	case 5:
-		parsedPkt.ProtocolType = dataplane.ProtocolIPv6NDType
+		parsedPkt.Protocol = models.ProtocolIPv6ND
 	case 6:
-		parsedPkt.ProtocolType = dataplane.ProtocolL2TPType
+		parsedPkt.Protocol = models.ProtocolL2TP
 	default:
 		return nil, fmt.Errorf("unsupported protocol: %d", protocol)
 	}
 
-	p.logger.Info("Received packet", "protocol", parsedPkt.ProtocolType, "mac", eth.SrcMAC.String(), "svlan", parsedPkt.OuterVLAN, "cvlan", parsedPkt.InnerVLAN)
+	p.logger.Info("Received packet", "protocol", parsedPkt.Protocol, "mac", eth.SrcMAC.String(), "svlan", parsedPkt.OuterVLAN, "cvlan", parsedPkt.InnerVLAN)
 
 	return parsedPkt, nil
 }
