@@ -12,7 +12,6 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/uuid"
-	"github.com/veesix-networks/osvbng/pkg/arp"
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/config/aaa"
@@ -42,7 +41,6 @@ type Component struct {
 	sessionMu     sync.RWMutex
 
 	dhcpChan <-chan *dataplane.ParsedPacket
-	arpChan  <-chan *dataplane.ParsedPacket
 }
 
 type SessionState struct {
@@ -82,7 +80,6 @@ func New(deps component.Dependencies, srgMgr *srg.Manager, dhcp4Provider dhcp4.D
 		xidIndex:      make(map[uint32]*SessionState),
 		sessionIndex:  make(map[string]*SessionState),
 		dhcpChan:      deps.DHCPChan,
-		arpChan:       deps.ARPChan,
 	}
 
 	return c, nil
@@ -98,7 +95,6 @@ func (c *Component) Start(ctx context.Context) error {
 
 	c.Go(c.cleanupSessions)
 	c.Go(c.consumeDHCPPackets)
-	c.Go(c.consumeARPPackets)
 
 	return nil
 }
@@ -126,94 +122,6 @@ func (c *Component) consumeDHCPPackets() {
 			}(pkt)
 		}
 	}
-}
-
-func (c *Component) consumeARPPackets() {
-	for {
-		select {
-		case <-c.Ctx.Done():
-			return
-		case pkt := <-c.arpChan:
-			go func(pkt *dataplane.ParsedPacket) {
-				if err := c.processARPPacket(pkt); err != nil {
-					c.logger.Error("Error processing ARP packet", "error", err)
-				}
-			}(pkt)
-		}
-	}
-}
-
-func (c *Component) processARPPacket(pkt *dataplane.ParsedPacket) error {
-	start := time.Now()
-	defer func() {
-		duration := time.Since(start)
-		c.logger.Warn("ARP packet processing time",
-			"duration_us", duration.Microseconds(),
-			"src_mac", pkt.MAC.String())
-	}()
-
-	if pkt.ARP == nil {
-		return fmt.Errorf("no ARP layer")
-	}
-
-	if pkt.ARP.Operation != layers.ARPRequest {
-		return nil
-	}
-
-	c.logger.Debug("Processing ARP request",
-		"src_mac", net.HardwareAddr(pkt.ARP.SourceHwAddress).String(),
-		"src_ip", net.IP(pkt.ARP.SourceProtAddress).String(),
-		"target_ip", net.IP(pkt.ARP.DstProtAddress).String(),
-		"svlan", pkt.OuterVLAN,
-		"cvlan", pkt.InnerVLAN)
-
-	if c.srgMgr != nil {
-		isDF := c.srgMgr.IsDF(pkt.OuterVLAN, pkt.MAC.String(), pkt.InnerVLAN)
-		if !isDF {
-			c.logger.Debug("ARP request not from DF, ignoring",
-				"mac", pkt.MAC.String(),
-				"svlan", pkt.OuterVLAN,
-				"cvlan", pkt.InnerVLAN)
-			return nil
-		}
-	}
-
-	var gatewayMAC net.HardwareAddr
-	if c.srgMgr != nil {
-		gatewayMAC = c.srgMgr.GetVirtualMAC(pkt.OuterVLAN)
-	} else {
-		gatewayMAC = c.vpp.GetParentInterfaceMAC()
-	}
-	replyData := arp.BuildReply(&arp.Packet{
-		SenderMAC: pkt.ARP.SourceHwAddress,
-		SenderIP:  pkt.ARP.SourceProtAddress,
-		TargetMAC: pkt.ARP.DstHwAddress,
-		TargetIP:  pkt.ARP.DstProtAddress,
-		Operation: arp.OpRequest,
-	}, gatewayMAC)
-
-	c.logger.Debug("Sending ARP reply",
-		"target_ip", net.IP(pkt.ARP.DstProtAddress).String(),
-		"gateway_mac", gatewayMAC.String(),
-		"svlan", pkt.OuterVLAN,
-		"cvlan", pkt.InnerVLAN)
-
-	egressPayload := &models.EgressPacketPayload{
-		DstMAC:    net.HardwareAddr(pkt.ARP.SourceHwAddress).String(),
-		SrcMAC:    gatewayMAC.String(),
-		OuterVLAN: pkt.OuterVLAN,
-		InnerVLAN: pkt.InnerVLAN,
-		RawData:   replyData,
-	}
-
-	egressEvent := models.Event{
-		Type:       models.EventTypeEgress,
-		AccessType: models.AccessTypeIPoE,
-		Protocol:   models.ProtocolARP,
-	}
-	egressEvent.SetPayload(egressPayload)
-
-	return c.eventBus.Publish(events.TopicEgress, egressEvent)
 }
 
 func (c *Component) processDHCPPacket(pkt *dataplane.ParsedPacket) error {
