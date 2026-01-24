@@ -4,10 +4,11 @@ import (
 	"net"
 
 	"github.com/google/gopacket/layers"
+	"github.com/veesix-networks/osvbng/pkg/models"
 )
 
 type ParsedPacket struct {
-	ProtocolType Protocol
+	Protocol models.Protocol
 
 	MAC       net.HardwareAddr
 	OuterVLAN uint16
