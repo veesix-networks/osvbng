@@ -48,28 +48,6 @@ type AAAResponse struct {
 	Error      string                 `json:"error,omitempty"`
 }
 
-type DHCPRelayPayload struct {
-	RawData   []byte `json:"raw_data"`
-	MAC       string `json:"mac"`
-	OuterVLAN uint16 `json:"outer_vlan"`
-	InnerVLAN uint16 `json:"inner_vlan"`
-}
-
-type DHCPResponsePayload struct {
-	RawData   []byte `json:"raw_data"`
-	MAC       string `json:"mac"`
-	OuterVLAN uint16 `json:"outer_vlan"`
-	InnerVLAN uint16 `json:"inner_vlan"`
-	XID       uint32 `json:"xid"`
-}
-
-type ARPPacketPayload struct {
-	RawData   []byte `json:"raw_data"`
-	TargetIP  string `json:"target_ip"`
-	OuterVLAN uint16 `json:"outer_vlan"`
-	InnerVLAN uint16 `json:"inner_vlan"`
-}
-
 type EgressPacketPayload struct {
 	RawData   []byte `json:"raw_data"`
 	DstMAC    string `json:"dst_mac"`
@@ -85,10 +63,6 @@ const (
 	EventTypeSessionLifecycle EventType = "session_lifecycle"
 	EventTypeAAARequest       EventType = "aaa_request"
 	EventTypeAAAResponse      EventType = "aaa_response"
-	EventTypeDHCPRelay        EventType = "dhcp_relay"
-	EventTypeDHCPResponse     EventType = "dhcp_response"
-	EventTypeARPRequest       EventType = "arp_request"
-	EventTypeSubscriberState  EventType = "subscriber_state"
 	EventTypeEgress           EventType = "egress"
 )
 
@@ -104,12 +78,15 @@ const (
 type Protocol string
 
 const (
-	ProtocolDHCPv4  Protocol = "dhcpv4"
-	ProtocolDHCPv6  Protocol = "dhcpv6"
-	ProtocolARP     Protocol = "arp"
-	ProtocolPPP     Protocol = "ppp"
-	ProtocolL2TP    Protocol = "l2tp"
-	ProtocolUnknown Protocol = "unknown"
+	ProtocolDHCPv4         Protocol = "dhcpv4"
+	ProtocolDHCPv6         Protocol = "dhcpv6"
+	ProtocolARP            Protocol = "arp"
+	ProtocolPPPoEDiscovery Protocol = "pppoe_discovery"
+	ProtocolPPPoESession   Protocol = "pppoe_session"
+	ProtocolIPv6ND         Protocol = "ipv6_nd"
+	ProtocolPPP            Protocol = "ppp"
+	ProtocolL2TP           Protocol = "l2tp"
+	ProtocolUnknown        Protocol = "unknown"
 )
 
 type SessionState string
