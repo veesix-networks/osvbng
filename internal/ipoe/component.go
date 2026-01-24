@@ -17,7 +17,6 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/config/aaa"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
-	"github.com/veesix-networks/osvbng/pkg/dhcp"
 	"github.com/veesix-networks/osvbng/pkg/dhcp4"
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/logger"
@@ -93,10 +92,6 @@ func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
 	c.logger.Info("Starting IPoE component")
 
-	if err := c.eventBus.Subscribe(events.TopicDHCPResponse, c.handleDHCPResponse); err != nil {
-		return fmt.Errorf("subscribe to dhcp responses: %w", err)
-	}
-
 	if err := c.eventBus.Subscribe(events.TopicAAAResponse, c.handleAAAResponse); err != nil {
 		return fmt.Errorf("subscribe to aaa responses: %w", err)
 	}
@@ -111,7 +106,6 @@ func (c *Component) Start(ctx context.Context) error {
 func (c *Component) Stop(ctx context.Context) error {
 	c.logger.Info("Stopping IPoE component")
 
-	c.eventBus.Unsubscribe(events.TopicDHCPResponse, c.handleDHCPResponse)
 	c.eventBus.Unsubscribe(events.TopicAAAResponse, c.handleAAAResponse)
 
 	c.StopContext()
@@ -592,25 +586,6 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 		c.cache.Delete(c.Ctx, counterKey)
 	}
 
-	relayPayload := &models.DHCPRelayPayload{
-		MAC:       pkt.MAC.String(),
-		OuterVLAN: pkt.OuterVLAN,
-		InnerVLAN: pkt.InnerVLAN,
-		RawData:   pkt.RawPacket,
-	}
-
-	relayEvent := models.Event{
-		Type:       models.EventTypeDHCPRelay,
-		AccessType: models.AccessTypeIPoE,
-		Protocol:   models.ProtocolDHCPv4,
-		SessionID:  sessID,
-	}
-	relayEvent.SetPayload(relayPayload)
-
-	if err := c.eventBus.Publish(events.TopicDHCPRelay, relayEvent); err != nil {
-		c.logger.Warn("Failed to relay DHCPRELEASE", "session_id", sessID, "error", err)
-	}
-
 	mac, _ := net.ParseMAC(pkt.MAC.String())
 	lifecyclePayload := &models.DHCPv4Session{
 		SessionID:        sessID,
@@ -727,56 +702,6 @@ func (c *Component) handleServerResponse(pkt *dataplane.ParsedPacket) error {
 
 	if msgType == layers.DHCPMsgTypeAck {
 		return c.handleAck(sess, pkt)
-	}
-
-	return nil
-}
-
-func (c *Component) handleDHCPResponse(event models.Event) error {
-	var payload models.DHCPResponsePayload
-	if err := event.GetPayload(&payload); err != nil {
-		return fmt.Errorf("failed to decode DHCP response payload: %w", err)
-	}
-
-	pkt, err := dhcp.Parse(payload.RawData)
-	if err != nil {
-		return fmt.Errorf("parse dhcp: %w", err)
-	}
-
-	if payload.OuterVLAN == 0 {
-		return fmt.Errorf("response rejected: S-VLAN required")
-	}
-
-	c.sessionMu.RLock()
-	sess := c.xidIndex[pkt.XID]
-	c.sessionMu.RUnlock()
-
-	if sess == nil {
-		return nil
-	}
-
-	if sess.MAC.String() != payload.MAC || sess.OuterVLAN != payload.OuterVLAN || sess.InnerVLAN != payload.InnerVLAN {
-		c.logger.Warn("DHCP response XID matches but MAC/VLAN mismatch",
-			"xid", fmt.Sprintf("0x%x", pkt.XID),
-			"expected_mac", sess.MAC.String(), "got_mac", payload.MAC,
-			"expected_vlan", fmt.Sprintf("%d.%d", sess.OuterVLAN, sess.InnerVLAN),
-			"got_vlan", fmt.Sprintf("%d.%d", payload.OuterVLAN, payload.InnerVLAN))
-		return nil
-	}
-
-	c.logger.Info("Received DHCP for session", "message_type", pkt.MessageType.String(), "session_id", sess.SessionID)
-
-	if pkt.MessageType == dhcp.DHCPAck {
-		parsedPkt := &dataplane.ParsedPacket{
-			DHCPv4: &layers.DHCPv4{
-				YourClientIP: pkt.YIAddr,
-				Options: layers.DHCPOptions{
-					{Type: 51, Data: make([]byte, 4)},
-				},
-			},
-		}
-		binary.BigEndian.PutUint32(parsedPkt.DHCPv4.Options[0].Data, pkt.LeaseTime)
-		return c.handleAck(sess, parsedPkt)
 	}
 
 	return nil
