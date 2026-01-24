@@ -6,7 +6,7 @@ if [ ! -t 0 ]; then
 fi
 
 VM_NAME="osvbng"
-VM_MEMORY=4096
+VM_MEMORY=4
 VM_VCPUS=4
 QCOW2_URL="https://github.com/veesix-networks/osvbng/releases/latest/download/osvbng-debian12.qcow2.gz"
 INSTALL_DIR="/var/lib/libvirt/images"
@@ -14,6 +14,8 @@ MGMT_BRIDGE="br-mgmt"
 
 declare -a ACCESS_INTERFACES
 declare -a CORE_INTERFACES
+declare -a VCPU_PINS
+declare -a VM_NUMA_NODES
 
 # PCI NIC detection functions
 check_iommu_enabled() {
@@ -196,10 +198,79 @@ select_pci_devices() {
     done
 }
 
+detect_numa_from_pci() {
+    local -A numa_nodes_seen
+
+    for pci_addr in "${ACCESS_INTERFACES[@]}" "${CORE_INTERFACES[@]}"; do
+        local full_addr="0000:$pci_addr"
+        local numa_node=$(cat "/sys/bus/pci/devices/$full_addr/numa_node" 2>/dev/null || echo "-1")
+        [ "$numa_node" = "-1" ] && numa_node="0"
+        numa_nodes_seen[$numa_node]=1
+    done
+
+    VM_NUMA_NODES=(${!numa_nodes_seen[@]})
+
+    if [ ${#VM_NUMA_NODES[@]} -eq 0 ]; then
+        VM_NUMA_NODES=(0)
+    fi
+}
+
+get_cpus_for_numa_node() {
+    local node=$1
+    local cpu_list_path="/sys/devices/system/node/node${node}/cpulist"
+
+    if [ -f "$cpu_list_path" ]; then
+        cat "$cpu_list_path"
+    else
+        echo "0-$(($(nproc) - 1))"
+    fi
+}
+
+expand_cpu_range() {
+    local range=$1
+    local result=()
+
+    IFS=',' read -ra parts <<< "$range"
+    for part in "${parts[@]}"; do
+        if [[ "$part" == *-* ]]; then
+            local start=${part%-*}
+            local end=${part#*-}
+            for ((i=start; i<=end; i++)); do
+                result+=($i)
+            done
+        else
+            result+=($part)
+        fi
+    done
+
+    echo "${result[@]}"
+}
+
+auto_configure_cpu_pinning() {
+    detect_numa_from_pci
+
+    local all_cpus=()
+    for node in "${VM_NUMA_NODES[@]}"; do
+        local node_cpus=$(get_cpus_for_numa_node $node)
+        local expanded=($(expand_cpu_range "$node_cpus"))
+        all_cpus+=("${expanded[@]}")
+    done
+
+    local total_cpus=${#all_cpus[@]}
+    local host_reserve=2
+
+    VCPU_PINS=()
+    for ((i=host_reserve; i<host_reserve+VM_VCPUS && i<total_cpus; i++)); do
+        VCPU_PINS+=("${all_cpus[$i]}")
+    done
+}
+
 configure_vm_settings() {
     VM_NAME=$($TUI_TOOL --inputbox "Enter VM name:" 8 60 "$VM_NAME" 3>&1 1>&2 2>&3)
-    VM_MEMORY=$($TUI_TOOL --inputbox "Enter memory (MB):" 8 60 "$VM_MEMORY" 3>&1 1>&2 2>&3)
+    VM_MEMORY=$($TUI_TOOL --inputbox "Enter memory (GB):" 8 60 "$VM_MEMORY" 3>&1 1>&2 2>&3)
     VM_VCPUS=$($TUI_TOOL --inputbox "Enter number of vCPUs:" 8 60 "$VM_VCPUS" 3>&1 1>&2 2>&3)
+
+    auto_configure_cpu_pinning
 
     while true; do
         MGMT_BRIDGE=$($TUI_TOOL --inputbox "Enter management bridge name:" 10 70 "$MGMT_BRIDGE" 3>&1 1>&2 2>&3)
@@ -271,9 +342,11 @@ create_vm() {
         fi
     fi
 
+    local memory_mb=$((VM_MEMORY * 1024))
+
     local cmd="virt-install"
     cmd="$cmd --name $VM_NAME"
-    cmd="$cmd --memory $VM_MEMORY"
+    cmd="$cmd --memory $memory_mb"
     cmd="$cmd --vcpus $VM_VCPUS"
     cmd="$cmd --cpu host-passthrough"
     cmd="$cmd --machine q35"
@@ -283,8 +356,22 @@ create_vm() {
     cmd="$cmd --network bridge=$MGMT_BRIDGE,model=virtio"
     cmd="$cmd --graphics none"
     cmd="$cmd --console pty,target_type=serial"
-    cmd="$cmd --memorybacking hugepages=yes"
+    cmd="$cmd --memorybacking hugepages=yes,hugepages.page.size=1,hugepages.page.unit=G,nosharepages=yes,locked=yes,access.mode=private"
     cmd="$cmd --noautoconsole"
+
+    if [ ${#VCPU_PINS[@]} -gt 0 ]; then
+        local cputune=""
+        for i in "${!VCPU_PINS[@]}"; do
+            [ -n "$cputune" ] && cputune="$cputune,"
+            cputune="${cputune}vcpupin${i}.vcpu=${i},vcpupin${i}.cpuset=${VCPU_PINS[$i]}"
+        done
+        cmd="$cmd --cputune $cputune"
+    fi
+
+    if [ ${#VM_NUMA_NODES[@]} -gt 0 ]; then
+        local nodeset=$(IFS=,; echo "${VM_NUMA_NODES[*]}")
+        cmd="$cmd --numatune $nodeset"
+    fi
 
     for pci_addr in "${ACCESS_INTERFACES[@]}"; do
         local hostdev=$(pci_to_hostdev "$pci_addr")
@@ -311,14 +398,24 @@ create_vm() {
 }
 
 configure_hugepages() {
-    local nr_hugepages=$((VM_MEMORY / 2))
+    # Allocate 1GB hugepages (VM_MEMORY is in GB)
+    local nr_hugepages=$VM_MEMORY
 
     if [ ! -d "/dev/hugepages" ]; then
         mkdir -p /dev/hugepages
         mount -t hugetlbfs hugetlbfs /dev/hugepages
     fi
 
-    echo $nr_hugepages > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
+    # Allocate 1GB hugepages per NUMA node if detected
+    if [ ${#VM_NUMA_NODES[@]} -gt 0 ]; then
+        local pages_per_node=$((nr_hugepages / ${#VM_NUMA_NODES[@]}))
+        for node in "${VM_NUMA_NODES[@]}"; do
+            echo $pages_per_node > /sys/devices/system/node/node${node}/hugepages/hugepages-1048576kB/nr_hugepages 2>/dev/null || \
+            echo $pages_per_node > /sys/kernel/mm/hugepages/hugepages-1048576kB/nr_hugepages 2>/dev/null || true
+        done
+    else
+        echo $nr_hugepages > /sys/kernel/mm/hugepages/hugepages-1048576kB/nr_hugepages 2>/dev/null || true
+    fi
 
     if ! grep -q "hugetlbfs" /etc/fstab; then
         echo "hugetlbfs /dev/hugepages hugetlbfs defaults 0 0" >> /etc/fstab
@@ -328,16 +425,19 @@ configure_hugepages() {
 show_summary() {
     local access_list=$(printf '%s\n' "${ACCESS_INTERFACES[@]}" | tr '\n' ', ' | sed 's/,$//')
     local core_list=$(printf '%s\n' "${CORE_INTERFACES[@]}" | tr '\n' ', ' | sed 's/,$//')
+    local cpu_pins_str=$(IFS=,; echo "${VCPU_PINS[*]}")
+    local numa_str=$(IFS=,; echo "${VM_NUMA_NODES[*]}")
 
     $TUI_TOOL --title "Deployment Complete" --msgbox \
 "osvbng VM has been created successfully!
 
 VM Name: $VM_NAME
-Memory: $VM_MEMORY MB
-vCPUs: $VM_VCPUS
+Memory: ${VM_MEMORY}GB (1GB hugepages)
+vCPUs: $VM_VCPUS (pinned to CPUs: $cpu_pins_str)
+NUMA Node(s): $numa_str
 Management Bridge: $MGMT_BRIDGE (virtio eth0)
-Access Interface(s): $access_list (${#ACCESS_INTERFACES[@]} total)
-Core Interface(s): $core_list (${#CORE_INTERFACES[@]} total)
+Access Interface(s): $access_list
+Core Interface(s): $core_list
 
 Start the VM with:
   sudo virsh start $VM_NAME
@@ -345,11 +445,7 @@ Start the VM with:
 Connect to console:
   sudo virsh console $VM_NAME
 
-Access CLI:
-  sudo virsh console $VM_NAME
-
-  Default Login: root / osvbng
-  # Then inside VM: osvbngcli" 24 78
+Default Login: root / osvbng" 22 78
 }
 
 main() {
