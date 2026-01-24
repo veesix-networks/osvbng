@@ -1,11 +1,10 @@
 package logger
 
 const (
-	ComponentMain        = "main"
-	ComponentAAA         = "aaad"
-	ComponentIPoE        = "ipoed"
-	ComponentDHCPRelay   = "dhcprd"
-	ComponentARP         = "arpd"
+	ComponentMain       = "main"
+	ComponentAAA        = "aaad"
+	ComponentIPoE       = "ipoed"
+	ComponentARP        = "arpd"
 	ComponentDataplane   = "dpd"
 	ComponentSubscriber  = "subd"
 	ComponentRouting     = "routerd"

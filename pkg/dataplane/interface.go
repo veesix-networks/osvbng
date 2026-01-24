@@ -17,18 +17,6 @@ type Egress interface {
 	Close() error
 }
 
-type ControlPacket struct {
-	Protocol  string
-	Direction string
-	MAC       net.HardwareAddr
-	OuterVLAN uint16
-	InnerVLAN uint16
-	VLANCount int
-	SwIfIndex uint32
-	RawData   []byte
-	Metadata  map[string]interface{}
-}
-
 type EgressPacket struct {
 	DstMAC    net.HardwareAddr
 	SrcMAC    net.HardwareAddr
@@ -37,15 +25,3 @@ type EgressPacket struct {
 	EtherType uint16
 	Payload   []byte
 }
-
-const (
-	ProtocolDHCPv4         = "dhcpv4"
-	ProtocolDHCPv6         = "dhcpv6"
-	ProtocolARP            = "arp"
-	ProtocolPPPoEDiscovery = "pppoe_discovery"
-	ProtocolPPPoESession   = "pppoe_session"
-	ProtocolIPv6ND         = "ipv6_nd"
-	ProtocolL2TP           = "l2tp"
-	ProtocolDHCP           = "dhcp"
-	ProtocolPPP            = "ppp"
-)
