@@ -2,7 +2,7 @@
   "interfaces": {
     "access": [
       {
-        "interface": "bng-access",
+        "interface": "eth0",
         "type": "ipoe",
 	      "vlan-mode": "1:1",
         "outer-vlan-min": 100,

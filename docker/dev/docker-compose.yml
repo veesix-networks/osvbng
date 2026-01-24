@@ -4,9 +4,10 @@ services:
       context: ../../test-infra
       dockerfile: Dockerfile.bngblaster
     container_name: bng-blaster
-    network_mode: host
     cap_add:
       - NET_ADMIN
+    networks:
+      b-access:
     volumes:
       - ../../test-infra/bngblaster:/config
     stdin_open: true
@@ -23,8 +24,11 @@ services:
       - OSVBNG_ACCESS_INTERFACE=eth1
     networks:
       a-mgmt:
+        priority: 1000
       b-access:
+        priority: 900
       c-core:
+        priority: 800
     volumes:
       - /sys/kernel/debug:/sys/kernel/debug:ro
       - /dev/hugepages:/dev/hugepages
