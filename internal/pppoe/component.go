@@ -41,8 +41,9 @@ type Component struct {
 	vpp      *southbound.VPP
 	cache    cache.Cache
 
-	acName    string
-	cookieMgr *pppoe.CookieManager
+	acName        string
+	cookieMgr     *pppoe.CookieManager
+	poolAllocator *PoolAllocator
 
 	sessions  map[string]*SessionState
 	sidIndex  map[uint16]*SessionState
@@ -116,6 +117,7 @@ func New(deps component.Dependencies, srgMgr *srg.Manager) (component.Component,
 		cache:         deps.Cache,
 		acName:        defaultACName,
 		cookieMgr:     cookieMgr,
+		poolAllocator: NewPoolAllocator(),
 		sessions:      make(map[string]*SessionState),
 		sidIndex:      make(map[uint16]*SessionState),
 		pppoeChan:     deps.PPPChan,
@@ -306,6 +308,8 @@ func (c *Component) handlePADT(pkt *dataplane.ParsedPacket) error {
 		c.logger.Debug("Received PADT for unknown session", "pppoe_session_id", sid)
 		return nil
 	}
+
+	c.poolAllocator.Release(sess.SessionID)
 
 	c.logger.Info("Session terminated by PADT",
 		"session_id", sess.SessionID,

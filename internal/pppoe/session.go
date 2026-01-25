@@ -259,6 +259,8 @@ func (s *SessionState) onAuthResult(allowed bool, attributes map[string]interfac
 			}
 		}
 
+		s.extractIPFromAttributes()
+
 		if s.pendingAuthType == "pap" {
 			s.sendPAPAck(s.pendingPAPID)
 		} else if s.pendingAuthType == "chap" {
@@ -281,6 +283,36 @@ func (s *SessionState) onAuthResult(allowed bool, attributes map[string]interfac
 
 	s.pendingAuthType = ""
 	s.pendingAuthRequestID = ""
+}
+
+func (s *SessionState) extractIPFromAttributes() {
+	// we need to normalize these attributes (and the map itself) at some point when we refactor the aaa internals to not be so "radius-y"...
+	// ideally we then have a translation layer for radius, radius would be a plugin implementing the AuthProvider interface
+	if ip, ok := s.Attributes["ipv4_address"]; ok {
+		if parsed := net.ParseIP(ip); parsed != nil {
+			s.IPv4Address = parsed
+			s.component.logger.Debug("Got IPv4 from AAA", "ip", ip)
+		}
+	}
+
+	if dns, ok := s.Attributes["dns_primary"]; ok {
+		if parsed := net.ParseIP(dns); parsed != nil {
+			s.DNS1 = parsed
+		}
+	}
+
+	if dns, ok := s.Attributes["dns_secondary"]; ok {
+		if parsed := net.ParseIP(dns); parsed != nil {
+			s.DNS2 = parsed
+		}
+	}
+
+	if prefix, ok := s.Attributes["ipv6_prefix"]; ok {
+		if _, ipnet, err := net.ParseCIDR(prefix); err == nil {
+			s.IPv6Prefix = ipnet
+			s.component.logger.Debug("Got IPv6 prefix from AAA", "prefix", prefix)
+		}
+	}
 }
 
 func (s *SessionState) sendPAPAck(id uint8) {
@@ -322,7 +354,10 @@ func (s *SessionState) startNCP() {
 	s.component.logger.Info("Starting NCP",
 		"session_id", s.SessionID)
 
-	// TODO: get IP from pool or AAA
+	if s.IPv4Address == nil {
+		s.allocateFromPool()
+	}
+
 	if s.IPv4Address == nil {
 		s.IPv4Address = net.ParseIP("100.64.0.1")
 	}
@@ -341,6 +376,38 @@ func (s *SessionState) startNCP() {
 
 	s.ipv6cp.FSM().Up()
 	s.ipv6cp.FSM().Open()
+}
+
+func (s *SessionState) allocateFromPool() {
+	cfg, err := s.component.cfgMgr.GetRunning()
+	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+		return
+	}
+
+	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(s.OuterVLAN)
+	if group == nil || len(group.AddressPools) == 0 {
+		return
+	}
+
+	ip, dns1, dns2, err := s.component.poolAllocator.Allocate(s.SessionID, group)
+	if err != nil {
+		s.component.logger.Warn("Pool allocation failed",
+			"session_id", s.SessionID,
+			"error", err)
+		return
+	}
+
+	s.IPv4Address = ip
+	if dns1 != nil {
+		s.DNS1 = dns1
+	}
+	if dns2 != nil {
+		s.DNS2 = dns2
+	}
+
+	s.component.logger.Info("Allocated IP from pool",
+		"session_id", s.SessionID,
+		"ip", ip.String())
 }
 
 func (s *SessionState) onIPCPUp() {
@@ -495,4 +562,5 @@ func (s *SessionState) terminate() {
 	}
 	s.lcp.FSM().Close()
 	s.Phase = ppp.PhaseTerminate
+	s.component.poolAllocator.Release(s.SessionID)
 }
