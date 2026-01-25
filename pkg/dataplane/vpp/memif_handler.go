@@ -11,6 +11,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
+	"github.com/veesix-networks/osvbng/pkg/ethernet"
 	"github.com/veesix-networks/osvbng/pkg/gomemif/memif"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 )
@@ -222,7 +223,7 @@ func (m *MemifHandler) handleRxPacket(frame []byte) {
 		}
 	}
 
-	if etherType != 0x0806 {
+	if etherType != ethernet.EtherTypeARP {
 		return
 	}
 
@@ -255,7 +256,7 @@ func (m *MemifHandler) parseARP(data []byte, srcMAC, dstMAC net.HardwareAddr, ou
 	protoLen := data[5]
 	operation := binary.BigEndian.Uint16(data[6:8])
 
-	if hwType != 1 || protoType != 0x0800 || hwLen != 6 || protoLen != 4 {
+	if hwType != 1 || protoType != ethernet.EtherTypeIPv4 || hwLen != 6 || protoLen != 4 {
 		return nil
 	}
 
@@ -317,11 +318,11 @@ func (m *MemifHandler) buildARPReply(req *ARPPacket) []byte {
 		}
 	}
 
-	frame = append(frame, 0x08, 0x06)
+	frame = append(frame, byte(ethernet.EtherTypeARP>>8), byte(ethernet.EtherTypeARP&0xFF))
 
 	arpReply := make([]byte, 28)
 	binary.BigEndian.PutUint16(arpReply[0:2], 1)
-	binary.BigEndian.PutUint16(arpReply[2:4], 0x0800)
+	binary.BigEndian.PutUint16(arpReply[2:4], ethernet.EtherTypeIPv4)
 	arpReply[4] = 6
 	arpReply[5] = 4
 	binary.BigEndian.PutUint16(arpReply[6:8], 2)
