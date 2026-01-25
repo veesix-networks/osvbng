@@ -179,7 +179,7 @@ func (c *Component) handleAAARequest(event models.Event) error {
 			"mac", req.MAC,
 			"acct_session_id", req.AcctSessionID,
 			"error", err)
-		return c.publishResponse(req.RequestID, event.SessionID, false, nil, err)
+		return c.publishResponse(req.RequestID, event.SessionID, event.AccessType, false, nil, err)
 	}
 
 	c.logger.Info("Authentication response",
@@ -192,10 +192,10 @@ func (c *Component) handleAAARequest(event models.Event) error {
 		respAttrs[k] = v
 	}
 
-	return c.publishResponse(req.RequestID, event.SessionID, authResp.Allowed, respAttrs, nil)
+	return c.publishResponse(req.RequestID, event.SessionID, event.AccessType, authResp.Allowed, respAttrs, nil)
 }
 
-func (c *Component) publishResponse(requestID, sessionID string, allowed bool, attributes map[string]interface{}, authErr error) error {
+func (c *Component) publishResponse(requestID, sessionID string, accessType models.AccessType, allowed bool, attributes map[string]interface{}, authErr error) error {
 	resp := &models.AAAResponse{
 		RequestID:  requestID,
 		Allowed:    allowed,
@@ -207,15 +207,26 @@ func (c *Component) publishResponse(requestID, sessionID string, allowed bool, a
 	}
 
 	responseEvent := models.Event{
-		Type:      models.EventTypeAAAResponse,
-		SessionID: sessionID,
+		Type:       models.EventTypeAAAResponse,
+		AccessType: accessType,
+		SessionID:  sessionID,
 	}
 
 	if err := responseEvent.SetPayload(resp); err != nil {
 		return fmt.Errorf("failed to set payload: %w", err)
 	}
 
-	return c.eventBus.Publish(events.TopicAAAResponse, responseEvent)
+	var topic string
+	switch accessType {
+	case models.AccessTypeIPoE:
+		topic = events.TopicAAAResponseIPoE
+	case models.AccessTypePPPoE:
+		topic = events.TopicAAAResponsePPPoE
+	default:
+		topic = events.TopicAAAResponse
+	}
+
+	return c.eventBus.Publish(topic, responseEvent)
 }
 
 func calculateBucket(authTime time.Time, bucketSize time.Duration) int {

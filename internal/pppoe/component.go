@@ -65,9 +65,11 @@ type SessionState struct {
 	InnerVLAN uint16
 	SwIfIndex uint32
 
-	Phase       ppp.Phase
-	ServiceName string
-	HostUniq    []byte
+	Phase          ppp.Phase
+	ServiceName    string
+	HostUniq       []byte
+	AgentCircuitID string
+	AgentRemoteID  string
 
 	IPv4Address net.IP
 	IPv6Address net.IP
@@ -131,7 +133,7 @@ func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
 	c.logger.Info("Starting PPPoE component", "ac_name", c.acName)
 
-	if err := c.eventBus.Subscribe(events.TopicAAAResponse, c.handleAAAResponse); err != nil {
+	if err := c.eventBus.Subscribe(events.TopicAAAResponsePPPoE, c.handleAAAResponse); err != nil {
 		return fmt.Errorf("subscribe to aaa responses: %w", err)
 	}
 
@@ -261,6 +263,8 @@ func (c *Component) handlePADR(pkt *dataplane.ParsedPacket) error {
 		Phase:          ppp.PhaseDead,
 		ServiceName:    tags.ServiceName,
 		HostUniq:       tags.HostUniq,
+		AgentCircuitID: tags.AgentCircuitID,
+		AgentRemoteID:  tags.AgentRemoteID,
 		Attributes:     make(map[string]string),
 		CreatedAt:      time.Now(),
 		LastSeen:       time.Now(),
