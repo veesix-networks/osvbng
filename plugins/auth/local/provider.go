@@ -2,7 +2,9 @@ package local
 
 import (
 	"context"
+	"crypto/md5"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 
@@ -72,7 +74,6 @@ func (p *Provider) Info() provider.Info {
 }
 
 func (p *Provider) Authenticate(ctx context.Context, req *auth.AuthRequest) (*auth.AuthResponse, error) {
-	// allowAll should only really be used for testing without returning attributes, mostly for session+arp load testing...
 	if p.allowAll {
 		p.logger.Debug("Allowing all users (allow_all=true)", "username", req.Username)
 		return &auth.AuthResponse{
@@ -92,7 +93,20 @@ func (p *Provider) Authenticate(ctx context.Context, req *auth.AuthRequest) (*au
 		return &auth.AuthResponse{Allowed: false}, nil
 	}
 
-	if user.Password != nil {
+	if chapResponse, ok := req.Attributes["chap-response"]; ok {
+		if user.Password == nil {
+			p.logger.Debug("CHAP auth but user has no password", "username", req.Username)
+			return &auth.AuthResponse{Allowed: false}, nil
+		}
+
+		chapID := req.Attributes["chap-id"]
+		chapChallenge := req.Attributes["chap-challenge"]
+
+		if !p.validateCHAP(chapID, chapChallenge, chapResponse, *user.Password) {
+			p.logger.Debug("CHAP validation failed", "username", req.Username)
+			return &auth.AuthResponse{Allowed: false}, nil
+		}
+	} else if user.Password != nil {
 		reqPassword, ok := req.Attributes["password"]
 		if !ok || reqPassword != *user.Password {
 			p.logger.Debug("Password mismatch", "username", req.Username)
@@ -110,6 +124,39 @@ func (p *Provider) Authenticate(ctx context.Context, req *auth.AuthRequest) (*au
 		Allowed:    true,
 		Attributes: attrs,
 	}, nil
+}
+
+func (p *Provider) validateCHAP(idHex, challengeHex, responseHex, secret string) bool {
+	id, err := hex.DecodeString(idHex)
+	if err != nil || len(id) != 1 {
+		return false
+	}
+
+	challenge, err := hex.DecodeString(challengeHex)
+	if err != nil {
+		return false
+	}
+
+	response, err := hex.DecodeString(responseHex)
+	if err != nil {
+		return false
+	}
+
+	h := md5.New()
+	h.Write(id)
+	h.Write([]byte(secret))
+	h.Write(challenge)
+	expected := h.Sum(nil)
+
+	if len(response) != len(expected) {
+		return false
+	}
+	for i := range response {
+		if response[i] != expected[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (p *Provider) StartAccounting(ctx context.Context, session *auth.Session) error {
