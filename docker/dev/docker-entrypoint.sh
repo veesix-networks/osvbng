@@ -2,7 +2,13 @@
 set -e
 
 if [ -z "$OSVBNG_ACCESS_INTERFACE" ]; then
-    OSVBNG_ACCESS_INTERFACE="eth1"
+    for iface in $(ls /sys/class/net/ | grep eth); do
+        if ip link show "$iface" 2>/dev/null | grep -q "bng-access"; then
+            OSVBNG_ACCESS_INTERFACE="$iface"
+            break
+        fi
+    done
+    OSVBNG_ACCESS_INTERFACE="${OSVBNG_ACCESS_INTERFACE:-eth1}"
 fi
 
 TOTAL_CORES=$(nproc)
