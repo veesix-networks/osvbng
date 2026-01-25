@@ -1700,6 +1700,40 @@ func (v *VPP) EnableDHCPv4Punt(ifaceName, socketPath string) error {
 	return nil
 }
 
+func (v *VPP) EnablePPPoEPunt(ifaceName, socketPath string) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	idx, err := v.GetInterfaceIndex(ifaceName)
+	if err != nil {
+		return fmt.Errorf("get interface index: %w", err)
+	}
+
+	for _, protocol := range []uint8{3, 4} {
+		req := &osvbng_punt.OsvbngPuntEnableDisable{
+			SwIfIndex:  interface_types.InterfaceIndex(idx),
+			Protocol:   protocol,
+			Enable:     true,
+			SocketPath: socketPath,
+		}
+
+		reply := &osvbng_punt.OsvbngPuntEnableDisableReply{}
+		if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+			return fmt.Errorf("enable pppoe punt (protocol %d): %w", protocol, err)
+		}
+
+		if reply.Retval != 0 {
+			return fmt.Errorf("enable pppoe punt (protocol %d) failed: retval=%d", protocol, reply.Retval)
+		}
+	}
+
+	v.logger.Info("Enabled PPPoE punt", "interface", ifaceName, "sw_if_index", idx, "socket", socketPath)
+	return nil
+}
+
 func (v *VPP) DisableARPReply(ifaceName string) error {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
