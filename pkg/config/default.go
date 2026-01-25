@@ -80,8 +80,7 @@ func Generate(opts GenerateOptions) (string, error) {
 			Policy: []aaa.AAAPolicy{
 				{
 					Name:                  "default-policy",
-					Format:                "$mac-address$",
-					Type:                  "dhcp",
+					Format:                "$remote-id$",
 					MaxConcurrentSessions: 1,
 				},
 			},
@@ -125,7 +124,7 @@ func Generate(opts GenerateOptions) (string, error) {
 	cfg.Plugins = map[string]interface{}{
 		"subscriber.auth.local": map[string]interface{}{
 			"database_path": "/tmp/osvbng.db",
-			"allow_all":     true,
+			"allow_all":     false,
 		},
 		"exporter.prometheus": map[string]interface{}{
 			"enabled":        false,

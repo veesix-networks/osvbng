@@ -16,6 +16,12 @@ const (
 	TagServiceNameErr uint16 = 0x0201
 	TagACSystemErr    uint16 = 0x0202
 	TagGenericErr     uint16 = 0x0203
+
+	VendorIDBBF   uint32 = 0x00000DE9
+	VendorIDCisco uint32 = 0x00000009
+
+	BBFSubOptCircuitID uint8 = 0x01
+	BBFSubOptRemoteID  uint8 = 0x02
 )
 
 type Tag struct {
@@ -30,6 +36,8 @@ type Tags struct {
 	ACCookie       []byte
 	RelaySessionID []byte
 	VendorSpecific []byte
+	AgentCircuitID string
+	AgentRemoteID  string
 	Errors         []string
 	Raw            []Tag
 }
@@ -73,6 +81,7 @@ func ParseTags(payload []byte) (*Tags, error) {
 		case TagVendorSpecific:
 			tags.VendorSpecific = make([]byte, len(value))
 			copy(tags.VendorSpecific, value)
+			tags.parseVendorSpecific(value)
 		case TagServiceNameErr:
 			tags.Errors = append(tags.Errors, "service-name-error: "+string(value))
 		case TagACSystemErr:
@@ -83,6 +92,38 @@ func ParseTags(payload []byte) (*Tags, error) {
 	}
 
 	return tags, nil
+}
+
+func (t *Tags) parseVendorSpecific(data []byte) {
+	if len(data) < 6 {
+		return
+	}
+
+	vendorID := binary.BigEndian.Uint32(data[0:4])
+	if vendorID != VendorIDBBF && vendorID != VendorIDCisco {
+		return
+	}
+
+	offset := 4
+	for offset+2 <= len(data) {
+		subType := data[offset]
+		subLen := int(data[offset+1])
+		offset += 2
+
+		if offset+subLen > len(data) {
+			break
+		}
+
+		subValue := data[offset : offset+subLen]
+		offset += subLen
+
+		switch subType {
+		case BBFSubOptCircuitID:
+			t.AgentCircuitID = string(subValue)
+		case BBFSubOptRemoteID:
+			t.AgentRemoteID = string(subValue)
+		}
+	}
 }
 
 type TagBuilder struct {

@@ -10,6 +10,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/uuid"
+	"github.com/veesix-networks/osvbng/pkg/config/aaa"
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/ppp"
@@ -182,17 +183,36 @@ func (s *SessionState) publishAAARequest(attrs map[string]string) {
 	requestID := uuid.New().String()
 	s.pendingAuthRequestID = requestID
 
-	var nasIP string
-	if cfg, err := s.component.cfgMgr.GetRunning(); err == nil && cfg != nil {
-		nasIP = cfg.AAA.NASIP
+	cfg, _ := s.component.cfgMgr.GetRunning()
+
+	username := s.Username
+	var policyName string
+	if cfg != nil && cfg.SubscriberGroups != nil {
+		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(s.OuterVLAN); group != nil {
+			policyName = group.AAAPolicy
+		}
+	}
+	if policyName != "" && cfg != nil {
+		if policy := cfg.AAA.GetPolicyByType(policyName, aaa.PolicyTypePPP); policy != nil {
+			ctx := &aaa.PolicyContext{
+				MACAddress:     s.MAC,
+				SVLAN:          s.OuterVLAN,
+				CVLAN:          s.InnerVLAN,
+				AgentCircuitID: s.AgentCircuitID,
+				AgentRemoteID:  s.AgentRemoteID,
+			}
+			username = policy.ExpandFormat(ctx)
+			s.component.logger.Info("Built username from policy",
+				"policy", policyName,
+				"format", policy.Format,
+				"username", username)
+		}
 	}
 
 	aaaPayload := &models.AAARequest{
 		RequestID:     requestID,
-		Username:      s.Username,
+		Username:      username,
 		MAC:           s.MAC.String(),
-		NASIPAddress:  nasIP,
-		NASPort:       uint32(s.OuterVLAN),
 		AcctSessionID: s.AcctSessionID,
 		Attributes:    attrs,
 	}
@@ -207,7 +227,7 @@ func (s *SessionState) publishAAARequest(attrs map[string]string) {
 
 	s.component.logger.Info("Publishing AAA request",
 		"session_id", s.SessionID,
-		"username", s.Username,
+		"username", username,
 		"auth_type", s.pendingAuthType)
 
 	if err := s.component.eventBus.Publish(events.TopicAAARequest, aaaEvent); err != nil {
@@ -271,7 +291,6 @@ func (s *SessionState) onAuthResult(allowed bool, attributes map[string]interfac
 	} else {
 		s.component.logger.Warn("Authentication failed",
 			"session_id", s.SessionID,
-			"username", s.Username,
 			"auth_type", s.pendingAuthType)
 
 		if s.pendingAuthType == "pap" {
@@ -279,6 +298,8 @@ func (s *SessionState) onAuthResult(allowed bool, attributes map[string]interfac
 		} else if s.pendingAuthType == "chap" {
 			s.sendCHAPFailure(s.pendingCHAPID)
 		}
+
+		s.lcp.FSM().Close()
 	}
 
 	s.pendingAuthType = ""
