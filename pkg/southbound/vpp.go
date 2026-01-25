@@ -142,12 +142,20 @@ func (v *VPP) SetL2CrossConnect(iface1, iface2 string) error {
 
 	idx1, ok := v.ifaceCache[iface1]
 	if !ok {
-		return fmt.Errorf("interface %s not found", iface1)
+		i, err := v.GetInterfaceIndex(iface1)
+		if err != nil {
+			return fmt.Errorf("interface %s not found: %w", iface1, err)
+		}
+		idx1 = interface_types.InterfaceIndex(i)
 	}
 
 	idx2, ok := v.ifaceCache[iface2]
 	if !ok {
-		return fmt.Errorf("interface %s not found", iface2)
+		i, err := v.GetInterfaceIndex(iface2)
+		if err != nil {
+			return fmt.Errorf("interface %s not found: %w", iface2, err)
+		}
+		idx2 = interface_types.InterfaceIndex(i)
 	}
 
 	req1 := &l2.SwInterfaceSetL2Xconnect{
@@ -253,7 +261,13 @@ func (v *VPP) CreateSVLAN(vlan uint16, ipv4 []string, ipv6 []string) error {
 	subIfName := fmt.Sprintf("%s.%d", v.parentIface, vlan)
 
 	if idx, exists := v.ifaceCache[subIfName]; exists {
-		v.logger.Info("S-VLAN sub-interface already exists", "interface", subIfName, "sw_if_index", idx)
+		v.logger.Info("S-VLAN sub-interface already in cache", "interface", subIfName, "sw_if_index", idx)
+		return nil
+	}
+
+	if idx, err := v.GetInterfaceIndex(subIfName); err == nil {
+		v.logger.Info("S-VLAN sub-interface already exists in VPP", "interface", subIfName, "sw_if_index", idx)
+		v.ifaceCache[subIfName] = interface_types.InterfaceIndex(idx)
 		return nil
 	}
 
@@ -1085,7 +1099,11 @@ func (v *VPP) SetUnnumbered(ifaceName, loopbackName string) error {
 
 	ifaceIdx, ok := v.ifaceCache[ifaceName]
 	if !ok {
-		return fmt.Errorf("interface %s not found", ifaceName)
+		idx, err := v.GetInterfaceIndex(ifaceName)
+		if err != nil {
+			return fmt.Errorf("interface %s not found: %w", ifaceName, err)
+		}
+		ifaceIdx = interface_types.InterfaceIndex(idx)
 	}
 
 	loopbackIdx, ok := v.ifaceCache[loopbackName]
@@ -1121,7 +1139,11 @@ func (v *VPP) RegisterPuntSocket(socketPath string, port uint16, iface string) e
 
 	ifIdx, ok := v.ifaceCache[iface]
 	if !ok {
-		return fmt.Errorf("interface %s not found in cache", iface)
+		idx, err := v.GetInterfaceIndex(iface)
+		if err != nil {
+			return fmt.Errorf("interface %s not found: %w", iface, err)
+		}
+		ifIdx = interface_types.InterfaceIndex(idx)
 	}
 
 	puntL4 := punt.PuntL4{
@@ -1213,7 +1235,11 @@ func (v *VPP) EnableDirectedBroadcast(ifaceName string) error {
 
 	swIfIndex, ok := v.ifaceCache[ifaceName]
 	if !ok {
-		return fmt.Errorf("interface %s not found in cache", ifaceName)
+		idx, err := v.GetInterfaceIndex(ifaceName)
+		if err != nil {
+			return fmt.Errorf("interface %s not found: %w", ifaceName, err)
+		}
+		swIfIndex = interface_types.InterfaceIndex(idx)
 	}
 
 	req := &interfaces.SwInterfaceSetIPDirectedBroadcast{
@@ -1904,6 +1930,13 @@ func (v *VPP) SetupMemifDataplane(memifID uint32, accessIface string, socketPath
 		socketPath = "/run/osvbng/memif.sock"
 	}
 	socketID := uint32(1)
+	memifName := fmt.Sprintf("memif%d/%d", socketID, memifID)
+
+	if idx, err := v.GetInterfaceIndex(memifName); err == nil {
+		v.logger.Info("Memif already exists in VPP", "name", memifName, "sw_if_index", idx)
+		v.ifaceCache[memifName] = interface_types.InterfaceIndex(idx)
+		return nil
+	}
 
 	socketReq := &memif.MemifSocketFilenameAddDelV2{
 		IsAdd:          true,
@@ -1935,7 +1968,6 @@ func (v *VPP) SetupMemifDataplane(memifID uint32, accessIface string, socketPath
 		return fmt.Errorf("create memif failed: retval=%d", memifReply.Retval)
 	}
 
-	memifName := fmt.Sprintf("memif%d/%d", memifID, socketID)
 	v.ifaceCache[memifName] = memifReply.SwIfIndex
 	v.logger.Info("Created memif interface", "id", memifID, "name", memifName, "sw_if_index", memifReply.SwIfIndex)
 
