@@ -44,6 +44,7 @@ type Component struct {
 	acName        string
 	cookieMgr     *pppoe.CookieManager
 	poolAllocator *PoolAllocator
+	echoGen       *EchoGenerator
 
 	sessions  map[string]*SessionState
 	sidIndex  map[uint16]*SessionState
@@ -129,6 +130,8 @@ func New(deps component.Dependencies, srgMgr *srg.Manager) (component.Component,
 		nextSessionID: 1,
 	}
 
+	c.echoGen = NewEchoGenerator(DefaultEchoConfig(), c.sendEchoRequest, c.handleDeadPeer)
+
 	return c, nil
 }
 
@@ -140,6 +143,7 @@ func (c *Component) Start(ctx context.Context) error {
 		return fmt.Errorf("subscribe to aaa responses: %w", err)
 	}
 
+	c.echoGen.Start()
 	c.Go(c.consumePPPoEPackets)
 
 	return nil
@@ -147,6 +151,7 @@ func (c *Component) Start(ctx context.Context) error {
 
 func (c *Component) Stop(ctx context.Context) error {
 	c.logger.Info("Stopping PPPoE component")
+	c.echoGen.Stop()
 	c.StopContext()
 	return nil
 }
@@ -500,4 +505,38 @@ func (c *Component) allocateSessionID() uint16 {
 
 func (c *Component) sessionKey(mac net.HardwareAddr, svlan, cvlan uint16) string {
 	return fmt.Sprintf("%s:%d:%d", mac.String(), svlan, cvlan)
+}
+
+func (c *Component) sendEchoRequest(sessionID uint16, echoID uint8) {
+	c.sessionMu.RLock()
+	sess, exists := c.sidIndex[sessionID]
+	c.sessionMu.RUnlock()
+
+	if !exists {
+		return
+	}
+
+	sess.sendLCPEchoRequest(echoID)
+}
+
+func (c *Component) handleDeadPeer(sessionID uint16) {
+	c.sessionMu.Lock()
+	sess, exists := c.sidIndex[sessionID]
+	if exists {
+		key := c.sessionKey(sess.MAC, sess.OuterVLAN, sess.InnerVLAN)
+		delete(c.sessions, key)
+		delete(c.sidIndex, sessionID)
+	}
+	c.sessionMu.Unlock()
+
+	if !exists {
+		return
+	}
+
+	c.logger.Info("Terminating session due to dead peer",
+		"session_id", sess.SessionID,
+		"pppoe_session_id", sessionID)
+
+	c.sendPADT(sess)
+	sess.terminate()
 }

@@ -112,7 +112,9 @@ func (s *SessionState) handleLCP(code, id uint8, data []byte) error {
 			s.sendLCPEchoReply(id, data)
 		}
 	case ppp.EchoRep:
-		// handled by echo generator
+		if s.component.echoGen != nil {
+			s.component.echoGen.HandleEchoReply(s.PPPoESessionID, id)
+		}
 	default:
 		s.lcp.FSM().Input(code, id, data)
 	}
@@ -504,6 +506,11 @@ func (s *SessionState) checkOpen() {
 					}
 				}
 			}
+
+			if s.component.echoGen != nil {
+				magic := s.lcp.LocalConfig().Magic
+				s.component.echoGen.AddSession(s.PPPoESessionID, magic)
+			}
 		}
 	}
 }
@@ -536,6 +543,13 @@ func (s *SessionState) sendLCPEchoReply(id uint8, data []byte) {
 		resp = append(resp, data[4:]...)
 	}
 	s.sendPPPPacket(ppp.ProtoLCP, ppp.EchoRep, id, resp)
+}
+
+func (s *SessionState) sendLCPEchoRequest(id uint8) {
+	magic := s.lcp.LocalConfig().Magic
+	data := make([]byte, 4)
+	binary.BigEndian.PutUint32(data, magic)
+	s.sendPPPPacket(ppp.ProtoLCP, ppp.EchoReq, id, data)
 }
 
 func (s *SessionState) sendProtocolReject(proto uint16, data []byte) {
@@ -614,6 +628,10 @@ func (s *SessionState) sendPPPPacket(proto uint16, code, id uint8, data []byte) 
 func (s *SessionState) terminate() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if s.component.echoGen != nil {
+		s.component.echoGen.RemoveSession(s.PPPoESessionID)
+	}
 
 	if s.Phase == ppp.PhaseOpen || s.Phase == ppp.PhaseNetwork {
 		s.ipcp.FSM().Close()

@@ -1,6 +1,7 @@
 package ppp
 
 import (
+	"hash/fnv"
 	"sync"
 	"time"
 )
@@ -29,6 +30,12 @@ type TimeWheel struct {
 	stopped    bool
 }
 
+func hashSessionID(sessionID uint16, numBuckets int) int {
+	h := fnv.New32a()
+	h.Write([]byte{byte(sessionID), byte(sessionID >> 8)})
+	return int(h.Sum32()) % numBuckets
+}
+
 func NewTimeWheel(numBuckets int, interval time.Duration, onExpire func(sessions []*EchoState)) *TimeWheel {
 	buckets := make([]map[uint16]*EchoState, numBuckets)
 	for i := range buckets {
@@ -48,7 +55,7 @@ func (tw *TimeWheel) Add(sessionID uint16, state *EchoState) {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
 
-	bucket := int(sessionID) % tw.numBuckets
+	bucket := hashSessionID(sessionID, tw.numBuckets)
 	tw.buckets[bucket][sessionID] = state
 }
 
@@ -66,7 +73,7 @@ func (tw *TimeWheel) Remove(sessionID uint16) {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
 
-	bucket := int(sessionID) % tw.numBuckets
+	bucket := hashSessionID(sessionID, tw.numBuckets)
 	delete(tw.buckets[bucket], sessionID)
 }
 
@@ -74,7 +81,7 @@ func (tw *TimeWheel) Get(sessionID uint16) *EchoState {
 	tw.mu.RLock()
 	defer tw.mu.RUnlock()
 
-	bucket := int(sessionID) % tw.numBuckets
+	bucket := hashSessionID(sessionID, tw.numBuckets)
 	return tw.buckets[bucket][sessionID]
 }
 
@@ -82,7 +89,7 @@ func (tw *TimeWheel) UpdateLastSeen(sessionID uint16) {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
 
-	bucket := int(sessionID) % tw.numBuckets
+	bucket := hashSessionID(sessionID, tw.numBuckets)
 	if state, ok := tw.buckets[bucket][sessionID]; ok {
 		state.LastSeen = time.Now()
 		state.MissCount = 0
@@ -146,4 +153,8 @@ func (tw *TimeWheel) Count() int {
 		total += len(bucket)
 	}
 	return total
+}
+
+func (tw *TimeWheel) NumBuckets() int {
+	return tw.numBuckets
 }

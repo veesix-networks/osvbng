@@ -1,37 +1,28 @@
 package pppoe
 
 import (
-	"encoding/binary"
-	"hash/fnv"
 	"log/slog"
-	"sync"
 	"time"
 
-	"github.com/veesix-networks/osvbng/pkg/gomemif/memif"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/ppp"
 )
 
 type EchoGenerator struct {
-	timeWheel   *ppp.TimeWheel
-	batcher     BatchSender
-	bufferPool  sync.Pool
-	interval    time.Duration
-	maxMisses   int
-	maxPerTick  int
-	logger      *slog.Logger
-	onDeadPeer  func(sessionID uint16)
-}
-
-type BatchSender interface {
-	QueueLowPriority(batch []memif.MemifPacketBuffer) bool
+	timeWheel  *ppp.TimeWheel
+	sendEcho   func(sessionID uint16, echoID uint8)
+	onDeadPeer func(sessionID uint16)
+	interval   time.Duration
+	maxMisses  int
+	maxPerTick int
+	logger     *slog.Logger
 }
 
 type EchoConfig struct {
-	Interval    time.Duration
-	MaxMisses   int
-	MaxPerTick  int
-	NumBuckets  int
+	Interval   time.Duration
+	MaxMisses  int
+	MaxPerTick int
+	NumBuckets int
 }
 
 func DefaultEchoConfig() EchoConfig {
@@ -43,19 +34,14 @@ func DefaultEchoConfig() EchoConfig {
 	}
 }
 
-func NewEchoGenerator(cfg EchoConfig, batcher BatchSender, onDeadPeer func(uint16)) *EchoGenerator {
+func NewEchoGenerator(cfg EchoConfig, sendEcho func(uint16, uint8), onDeadPeer func(uint16)) *EchoGenerator {
 	g := &EchoGenerator{
-		batcher:    batcher,
+		sendEcho:   sendEcho,
+		onDeadPeer: onDeadPeer,
 		interval:   cfg.Interval,
 		maxMisses:  cfg.MaxMisses,
 		maxPerTick: cfg.MaxPerTick,
 		logger:     logger.Component(logger.ComponentPPPoE),
-		onDeadPeer: onDeadPeer,
-		bufferPool: sync.Pool{
-			New: func() interface{} {
-				return make([]memif.MemifPacketBuffer, 0, 256)
-			},
-		},
 	}
 
 	tickInterval := cfg.Interval / time.Duration(cfg.NumBuckets)
@@ -75,31 +61,22 @@ func (g *EchoGenerator) Stop() {
 	g.timeWheel.Stop()
 }
 
-func (g *EchoGenerator) AddSession(sessionID uint16, magic uint32, dstMAC, srcMAC []byte, outerVLAN, innerVLAN uint16) {
+func (g *EchoGenerator) AddSession(sessionID uint16, magic uint32) {
 	state := &ppp.EchoState{
 		SessionID:  sessionID,
 		Magic:      magic,
 		LastEchoID: 0,
 		MissCount:  0,
 		LastSeen:   time.Now(),
-		OuterVLAN:  outerVLAN,
-		InnerVLAN:  innerVLAN,
-	}
-	copy(state.DstMAC[:], dstMAC)
-	copy(state.SrcMAC[:], srcMAC)
-
-	h := fnv.New32a()
-	h.Write([]byte{byte(sessionID), byte(sessionID >> 8)})
-	bucket := int(h.Sum32()) % g.timeWheel.Count()
-	if bucket < 0 {
-		bucket = 0
 	}
 
-	g.timeWheel.AddToBucket(bucket, state)
+	g.timeWheel.Add(sessionID, state)
+	g.logger.Debug("Added session to echo generator", "session_id", sessionID)
 }
 
 func (g *EchoGenerator) RemoveSession(sessionID uint16) {
 	g.timeWheel.Remove(sessionID)
+	g.logger.Debug("Removed session from echo generator", "session_id", sessionID)
 }
 
 func (g *EchoGenerator) HandleEchoReply(sessionID uint16, echoID uint8) {
@@ -109,6 +86,10 @@ func (g *EchoGenerator) HandleEchoReply(sessionID uint16, echoID uint8) {
 	}
 
 	if state.LastEchoID == echoID {
+		g.logger.Debug("Received LCP Echo-Reply",
+			"session_id", sessionID,
+			"echo_id", echoID)
+		state.MissCount = 0
 		g.timeWheel.UpdateLastSeen(sessionID)
 	}
 }
@@ -131,7 +112,6 @@ func (g *EchoGenerator) processTick(sessions []*ppp.EchoState) {
 	}
 
 	var deadPeers []uint16
-	var toSend []*ppp.EchoState
 
 	for _, state := range sessions {
 		if state.MissCount >= g.maxMisses {
@@ -139,95 +119,23 @@ func (g *EchoGenerator) processTick(sessions []*ppp.EchoState) {
 		} else {
 			state.MissCount++
 			state.LastEchoID++
-			toSend = append(toSend, state)
+			if g.sendEcho != nil {
+				g.logger.Debug("Sending LCP Echo-Request",
+					"session_id", state.SessionID,
+					"echo_id", state.LastEchoID,
+					"miss_count", state.MissCount)
+				g.sendEcho(state.SessionID, state.LastEchoID)
+			}
 		}
 	}
 
 	for _, sessionID := range deadPeers {
+		g.logger.Info("Dead peer detected", "session_id", sessionID)
 		g.timeWheel.Remove(sessionID)
 		if g.onDeadPeer != nil {
 			g.onDeadPeer(sessionID)
 		}
 	}
-
-	if len(toSend) == 0 {
-		return
-	}
-
-	batch := g.bufferPool.Get().([]memif.MemifPacketBuffer)
-	batch = batch[:0]
-
-	for _, state := range toSend {
-		frame := g.buildEchoRequest(state)
-		if frame != nil {
-			batch = append(batch, memif.MemifPacketBuffer{
-				Buf:    frame,
-				Buflen: len(frame),
-			})
-		}
-	}
-
-	if len(batch) > 0 {
-		if !g.batcher.QueueLowPriority(batch) {
-			g.logger.Warn("Egress backpressure, dropped echo batch", "count", len(batch))
-		}
-	}
-}
-
-func (g *EchoGenerator) buildEchoRequest(state *ppp.EchoState) []byte {
-	lcpPayload := make([]byte, 8)
-	lcpPayload[0] = ppp.EchoReq
-	lcpPayload[1] = state.LastEchoID
-	binary.BigEndian.PutUint16(lcpPayload[2:4], 8)
-	binary.BigEndian.PutUint32(lcpPayload[4:8], state.Magic)
-
-	pppPayload := make([]byte, 2+len(lcpPayload))
-	binary.BigEndian.PutUint16(pppPayload[0:2], ppp.ProtoLCP)
-	copy(pppPayload[2:], lcpPayload)
-
-	pppoeHdr := make([]byte, 6)
-	pppoeHdr[0] = 0x11
-	pppoeHdr[1] = 0x00
-	binary.BigEndian.PutUint16(pppoeHdr[2:4], state.SessionID)
-	binary.BigEndian.PutUint16(pppoeHdr[4:6], uint16(len(pppPayload)))
-
-	vlanLen := 0
-	if state.OuterVLAN != 0 {
-		vlanLen = 4
-		if state.InnerVLAN != 0 {
-			vlanLen = 8
-		}
-	}
-	frame := make([]byte, 14+vlanLen+6+len(pppPayload))
-	off := 0
-
-	copy(frame[off:], state.DstMAC[:])
-	off += 6
-	copy(frame[off:], state.SrcMAC[:])
-	off += 6
-
-	if state.OuterVLAN != 0 {
-		if state.InnerVLAN != 0 {
-			binary.BigEndian.PutUint16(frame[off:], 0x88a8)
-			binary.BigEndian.PutUint16(frame[off+2:], state.OuterVLAN)
-			binary.BigEndian.PutUint16(frame[off+4:], 0x8100)
-			binary.BigEndian.PutUint16(frame[off+6:], state.InnerVLAN)
-			off += 8
-		} else {
-			binary.BigEndian.PutUint16(frame[off:], 0x8100)
-			binary.BigEndian.PutUint16(frame[off+2:], state.OuterVLAN)
-			off += 4
-		}
-	}
-
-	binary.BigEndian.PutUint16(frame[off:], 0x8864)
-	off += 2
-
-	copy(frame[off:], pppoeHdr)
-	off += 6
-	copy(frame[off:], pppPayload)
-
-	return frame
 }
 
 func (g *EchoGenerator) SessionCount() int {

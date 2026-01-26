@@ -417,6 +417,22 @@ func (m *MemifHandler) buildEgressFrame(pkt *dataplane.EgressPacket) ([]byte, er
 	return buf.Bytes(), nil
 }
 
+func (m *MemifHandler) SendRawBatch(batch []memif.MemifPacketBuffer) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if !m.connected || m.txQueue == nil {
+		return 0
+	}
+
+	return m.txQueue.Tx_burst(batch)
+}
+
+func (m *MemifHandler) QueueLowPriority(batch []memif.MemifPacketBuffer) bool {
+	sent := m.SendRawBatch(batch)
+	return sent > 0
+}
+
 func (m *MemifHandler) Close() error {
 	m.cancel()
 	m.wg.Wait()
