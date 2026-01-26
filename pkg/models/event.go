@@ -33,12 +33,11 @@ func (e *Event) SetPayload(v interface{}) error {
 }
 
 type AAARequest struct {
-	RequestID     string `json:"request_id"`
-	Username      string `json:"username"`
-	MAC           string `json:"mac"`
-	NASIPAddress  string `json:"nas_ip"`
-	NASPort       uint32 `json:"nas_port"`
-	AcctSessionID string `json:"acct_session_id"`
+	RequestID     string            `json:"request_id"`
+	Username      string            `json:"username"`
+	MAC           string            `json:"mac"`
+	AcctSessionID string            `json:"acct_session_id"`
+	Attributes    map[string]string `json:"attributes,omitempty"`
 }
 
 type AAAResponse struct {

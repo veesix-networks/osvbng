@@ -155,8 +155,17 @@ func (p *PuntSocketIngress) ReadPacket(ctx context.Context) (*dataplane.ParsedPa
 		}
 	case 3:
 		parsedPkt.Protocol = models.ProtocolPPPoEDiscovery
+		if pppoeLayer := packet.Layer(layers.LayerTypePPPoE); pppoeLayer != nil {
+			parsedPkt.PPPoE = pppoeLayer.(*layers.PPPoE)
+		}
 	case 4:
 		parsedPkt.Protocol = models.ProtocolPPPoESession
+		if pppoeLayer := packet.Layer(layers.LayerTypePPPoE); pppoeLayer != nil {
+			parsedPkt.PPPoE = pppoeLayer.(*layers.PPPoE)
+		}
+		if pppLayer := packet.Layer(layers.LayerTypePPP); pppLayer != nil {
+			parsedPkt.PPP = pppLayer.(*layers.PPP)
+		}
 	case 5:
 		parsedPkt.Protocol = models.ProtocolIPv6ND
 	case 6:

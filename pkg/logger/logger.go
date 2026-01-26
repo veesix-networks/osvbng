@@ -10,6 +10,15 @@ import (
 	"sync"
 )
 
+type LogLevel string
+
+const (
+	LogLevelDebug LogLevel = "debug"
+	LogLevelInfo  LogLevel = "info"
+	LogLevelWarn  LogLevel = "warn"
+	LogLevelError LogLevel = "error"
+)
+
 var (
 	Log             *slog.Logger
 	defaultLevel    slog.Level
@@ -30,13 +39,13 @@ func init() {
 	Log = slog.New(handler)
 }
 
-func Configure(logFormat, level string, components map[string]string) {
-	defaultLevel = parseLevel(level)
+func Configure(logFormat string, level LogLevel, components map[string]LogLevel) {
+	defaultLevel = parseLevel(string(level))
 	format = logFormat
 
 	componentLevels = make(map[string]slog.Level)
 	for name, lvl := range components {
-		componentLevels[name] = parseLevel(lvl)
+		componentLevels[name] = parseLevel(string(lvl))
 	}
 
 	var handler slog.Handler

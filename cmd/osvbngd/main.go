@@ -12,6 +12,7 @@ import (
 	"github.com/veesix-networks/osvbng/internal/aaa"
 	"github.com/veesix-networks/osvbng/internal/arp"
 	"github.com/veesix-networks/osvbng/internal/dataplane"
+	"github.com/veesix-networks/osvbng/internal/pppoe"
 	"github.com/veesix-networks/osvbng/internal/gateway"
 	"github.com/veesix-networks/osvbng/internal/ipoe"
 	"github.com/veesix-networks/osvbng/internal/monitor"
@@ -235,6 +236,11 @@ func main() {
 		log.Fatalf("Failed to create arp component: %v", err)
 	}
 
+	pppoeComp, err := pppoe.New(coreDeps, nil)
+	if err != nil {
+		log.Fatalf("Failed to create pppoe component: %v", err)
+	}
+
 	showRegistry := show.NewRegistry()
 	operRegistry := oper.NewRegistry()
 
@@ -274,6 +280,7 @@ func main() {
 	orch.Register(ipoeComp)
 	orch.Register(subscriberComp)
 	orch.Register(arpComp)
+	orch.Register(pppoeComp)
 	orch.Register(monitorComp)
 	orch.Register(gatewayComp)
 

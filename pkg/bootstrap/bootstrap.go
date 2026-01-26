@@ -59,6 +59,10 @@ func (b *Bootstrap) ProvisionInfrastructure() error {
 						return fmt.Errorf("enable dhcp punt on %s: %w", subIfName, err)
 					}
 
+					if err := b.sb.EnablePPPoEPunt(subIfName, puntSocketPath); err != nil {
+						return fmt.Errorf("enable pppoe punt on %s: %w", subIfName, err)
+					}
+
 					if err := b.sb.DisableARPReply(subIfName); err != nil {
 						return fmt.Errorf("disable arp reply on %s: %w", subIfName, err)
 					}

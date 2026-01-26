@@ -89,7 +89,7 @@ func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
 	c.logger.Info("Starting IPoE component")
 
-	if err := c.eventBus.Subscribe(events.TopicAAAResponse, c.handleAAAResponse); err != nil {
+	if err := c.eventBus.Subscribe(events.TopicAAAResponseIPoE, c.handleAAAResponse); err != nil {
 		return fmt.Errorf("subscribe to aaa responses: %w", err)
 	}
 
@@ -102,7 +102,7 @@ func (c *Component) Start(ctx context.Context) error {
 func (c *Component) Stop(ctx context.Context) error {
 	c.logger.Info("Stopping IPoE component")
 
-	c.eventBus.Unsubscribe(events.TopicAAAResponse, c.handleAAAResponse)
+	c.eventBus.Unsubscribe(events.TopicAAAResponseIPoE, c.handleAAAResponse)
 
 	c.StopContext()
 
@@ -286,18 +286,17 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 		}
 	}
 	if policyName != "" {
-		if policy := cfg.AAA.GetPolicy(policyName); policy != nil {
+		if policy := cfg.AAA.GetPolicyByType(policyName, aaa.PolicyTypeDHCP); policy != nil {
 			ctx := &aaa.PolicyContext{
 				MACAddress: pkt.MAC,
 				SVLAN:      pkt.OuterVLAN,
 				CVLAN:      pkt.InnerVLAN,
-				NASPort:    uint32(pkt.OuterVLAN),
 				RemoteID:   string(remoteID),
 				CircuitID:  string(circuitID),
 				Hostname:   hostname,
 			}
 			username = policy.ExpandFormat(ctx)
-			c.logger.Debug("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
+			c.logger.Info("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
 		}
 	}
 
@@ -308,8 +307,6 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 		RequestID:     requestID,
 		Username:      username,
 		MAC:           pkt.MAC.String(),
-		NASIPAddress:  cfg.AAA.NASIP,
-		NASPort:       uint32(pkt.OuterVLAN),
 		AcctSessionID: sess.AcctSessionID,
 	}
 
@@ -428,18 +425,17 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 		}
 	}
 	if policyName != "" {
-		if policy := cfg.AAA.GetPolicy(policyName); policy != nil {
+		if policy := cfg.AAA.GetPolicyByType(policyName, aaa.PolicyTypeDHCP); policy != nil {
 			ctx := &aaa.PolicyContext{
 				MACAddress: pkt.MAC,
 				SVLAN:      pkt.OuterVLAN,
 				CVLAN:      pkt.InnerVLAN,
-				NASPort:    uint32(pkt.OuterVLAN),
 				RemoteID:   string(remoteID),
 				CircuitID:  string(circuitID),
 				Hostname:   hostname,
 			}
 			username = policy.ExpandFormat(ctx)
-			c.logger.Debug("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
+			c.logger.Info("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
 		}
 	}
 
@@ -450,8 +446,6 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 		RequestID:     requestID,
 		Username:      username,
 		MAC:           pkt.MAC.String(),
-		NASIPAddress:  cfg.AAA.NASIP,
-		NASPort:       uint32(pkt.OuterVLAN),
 		AcctSessionID: sess.AcctSessionID,
 	}
 

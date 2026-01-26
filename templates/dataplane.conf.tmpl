@@ -47,8 +47,9 @@ plugins {
   plugin rd_cp_plugin.so { disable }
   plugin igmp_plugin.so { disable }
   plugin osvbng_punt_plugin.so { enable }
-  plugin fib_control_plugin.so { enable }
+  plugin osvbng_fib_control_plugin.so { enable }
   plugin osvbng_accounting_plugin.so { enable }
+  plugin osvbng_pppoe_plugin.so { enable }
 }
 
 logging {

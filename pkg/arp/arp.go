@@ -4,6 +4,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+
+	"github.com/veesix-networks/osvbng/pkg/ethernet"
 )
 
 const (
@@ -29,7 +31,7 @@ func Parse(data []byte) (*Packet, error) {
 	hlen := data[4]
 	plen := data[5]
 
-	if htype != 1 || ptype != 0x0800 || hlen != 6 || plen != 4 {
+	if htype != 1 || ptype != ethernet.EtherTypeIPv4 || hlen != 6 || plen != 4 {
 		return nil, fmt.Errorf("unsupported ARP format")
 	}
 
@@ -58,7 +60,7 @@ func BuildReply(request *Packet, replyMAC net.HardwareAddr) []byte {
 	reply := make([]byte, 28)
 
 	binary.BigEndian.PutUint16(reply[0:2], 1)
-	binary.BigEndian.PutUint16(reply[2:4], 0x0800)
+	binary.BigEndian.PutUint16(reply[2:4], ethernet.EtherTypeIPv4)
 	reply[4] = 6
 	reply[5] = 4
 	binary.BigEndian.PutUint16(reply[6:8], OpReply)
