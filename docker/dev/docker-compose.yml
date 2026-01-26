@@ -20,16 +20,14 @@ services:
     container_name: osvbng
     privileged: true
     cpuset: "0-7"
+    sysctls:
+      - net.unix.max_dgram_qlen=10000
     environment:
       - OSVBNG_ACCESS_INTERFACE=eth1
       - OSVBNG_LOG_LEVEL=debug
     networks:
-      a-mgmt:
-        priority: 1000
       b-access:
-        priority: 900
       c-core:
-        priority: 800
     volumes:
       - /sys/kernel/debug:/sys/kernel/debug:ro
       - /dev/hugepages:/dev/hugepages
