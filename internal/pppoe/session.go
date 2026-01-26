@@ -481,37 +481,49 @@ func (s *SessionState) checkOpen() {
 					s.component.logger.Error("Failed to get encap interface index",
 						"session_id", s.SessionID,
 						"error", err)
-				} else {
-					swIfIndex, err := s.component.vpp.AddPPPoESession(
-						s.PPPoESessionID,
-						s.IPv4Address,
-						s.MAC,
-						localMAC,
-						encapIfIndex,
-						s.OuterVLAN,
-						s.InnerVLAN,
-						0, // decapVrfID
-					)
-					if err != nil {
-						s.component.logger.Error("Failed to add PPPoE session to VPP",
-							"session_id", s.SessionID,
-							"error", err)
-					} else {
-						s.SwIfIndex = swIfIndex
-						s.component.logger.Info("Programmed PPPoE session in VPP",
-							"session_id", s.SessionID,
-							"sw_if_index", swIfIndex,
-							"outer_vlan", s.OuterVLAN,
-							"inner_vlan", s.InnerVLAN)
-					}
+					return
 				}
-			}
 
-			if s.component.echoGen != nil {
+				s.component.vpp.AddPPPoESessionAsync(
+					s.PPPoESessionID,
+					s.IPv4Address,
+					s.MAC,
+					localMAC,
+					encapIfIndex,
+					s.OuterVLAN,
+					s.InnerVLAN,
+					0,
+					s.onVPPSessionCreated,
+				)
+			} else if s.component.echoGen != nil {
 				magic := s.lcp.LocalConfig().Magic
 				s.component.echoGen.AddSession(s.PPPoESessionID, magic)
 			}
 		}
+	}
+}
+
+func (s *SessionState) onVPPSessionCreated(swIfIndex uint32, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err != nil {
+		s.component.logger.Error("Failed to add PPPoE session to VPP",
+			"session_id", s.SessionID,
+			"error", err)
+		return
+	}
+
+	s.SwIfIndex = swIfIndex
+	s.component.logger.Info("Programmed PPPoE session in VPP",
+		"session_id", s.SessionID,
+		"sw_if_index", swIfIndex,
+		"outer_vlan", s.OuterVLAN,
+		"inner_vlan", s.InnerVLAN)
+
+	if s.component.echoGen != nil {
+		magic := s.lcp.LocalConfig().Magic
+		s.component.echoGen.AddSession(s.PPPoESessionID, magic)
 	}
 }
 
@@ -634,18 +646,21 @@ func (s *SessionState) terminate() {
 	}
 
 	if s.Phase == ppp.PhaseOpen || s.Phase == ppp.PhaseNetwork {
-		s.ipcp.FSM().Close()
-		s.ipv6cp.FSM().Close()
+		s.ipcp.FSM().Kill()
+		s.ipv6cp.FSM().Kill()
 	}
-	s.lcp.FSM().Close()
+	s.lcp.FSM().Kill()
 	s.Phase = ppp.PhaseTerminate
 
 	if s.component.vpp != nil && s.SwIfIndex != 0 {
-		if err := s.component.vpp.DeletePPPoESession(s.PPPoESessionID, s.IPv4Address, s.MAC); err != nil {
-			s.component.logger.Warn("Failed to delete PPPoE session from VPP",
-				"session_id", s.SessionID,
-				"error", err)
-		}
+		sessionID := s.SessionID
+		s.component.vpp.DeletePPPoESessionAsync(s.PPPoESessionID, s.IPv4Address, s.MAC, func(err error) {
+			if err != nil {
+				s.component.logger.Warn("Failed to delete PPPoE session from VPP",
+					"session_id", sessionID,
+					"error", err)
+			}
+		})
 	}
 
 	s.component.poolAllocator.Release(s.SessionID)

@@ -125,13 +125,6 @@ func (c *Component) consumeDHCPPackets() {
 }
 
 func (c *Component) processDHCPPacket(pkt *dataplane.ParsedPacket) error {
-	start := time.Now()
-	defer func() {
-		duration := time.Since(start)
-		c.logger.Warn("DHCP packet processing time",
-			"duration_us", duration.Microseconds(),
-			"mac", pkt.MAC.String())
-	}()
 
 	if pkt.DHCPv4 == nil {
 		return fmt.Errorf("no DHCPv4 layer")
@@ -224,9 +217,9 @@ func parseOption82(data []byte) (circuitID, remoteID []byte) {
 func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 	lookupKey := fmt.Sprintf("ipoe-v4:%s:%d:%d", pkt.MAC.String(), pkt.OuterVLAN, pkt.InnerVLAN)
 
-	c.sessionMu.Lock()
+	c.sessionMu.RLock()
 	sess := c.sessions[lookupKey]
-	c.sessionMu.Unlock()
+	c.sessionMu.RUnlock()
 
 	if sess == nil {
 		if err := c.checkSessionLimit(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN); err != nil {
@@ -235,7 +228,7 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 		}
 
 		sessID := session.GenerateID()
-		sess = &SessionState{
+		newSess := &SessionState{
 			SessionID:     sessID,
 			AcctSessionID: session.ToAcctSessionID(sessID),
 			MAC:           pkt.MAC,
@@ -246,8 +239,13 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 		}
 
 		c.sessionMu.Lock()
-		c.sessions[lookupKey] = sess
-		c.sessionIndex[sessID] = sess
+		if existing := c.sessions[lookupKey]; existing != nil {
+			sess = existing
+		} else {
+			sess = newSess
+			c.sessions[lookupKey] = sess
+			c.sessionIndex[sessID] = sess
+		}
 		c.sessionMu.Unlock()
 	}
 
@@ -522,7 +520,7 @@ func (c *Component) handleServerResponse(pkt *dataplane.ParsedPacket) error {
 	}
 
 	msgType := getDHCPMessageType(pkt.DHCPv4.Options)
-	c.logger.Info("Forwarding DHCP to client", "message_type", msgType.String(), "mac", sess.MAC.String(), "session_id", sess.SessionID, "xid", fmt.Sprintf("0x%x", pkt.DHCPv4.Xid))
+	c.logger.Debug("Forwarding DHCP to client", "message_type", msgType.String(), "mac", sess.MAC.String(), "session_id", sess.SessionID, "xid", fmt.Sprintf("0x%x", pkt.DHCPv4.Xid))
 
 	var vmac net.HardwareAddr
 	if c.srgMgr != nil {
@@ -596,7 +594,7 @@ func (c *Component) handleServerResponse(pkt *dataplane.ParsedPacket) error {
 	}
 	egressEvent.SetPayload(egressPayload)
 
-	c.logger.Info("Sending DHCP via egress", "message_type", msgType.String(), "dst_mac", dstMAC, "svlan", sess.OuterVLAN, "cvlan", sess.InnerVLAN)
+	c.logger.Debug("Sending DHCP via egress", "message_type", msgType.String(), "dst_mac", dstMAC, "svlan", sess.OuterVLAN, "cvlan", sess.InnerVLAN)
 
 	if err := c.eventBus.Publish(events.TopicEgress, egressEvent); err != nil {
 		return err
@@ -832,14 +830,10 @@ func (c *Component) countExistingSessions(mac net.HardwareAddr, svlan, cvlan uin
 
 func (c *Component) sendDHCPResponse(sessID string, svlan, cvlan uint16, mac net.HardwareAddr, rawData []byte, msgType string) error {
 	var srcMAC string
-	c.logger.Info("Getting source MAC for DHCP response", "has_srg_mgr", c.srgMgr != nil, "has_vpp", c.vpp != nil, "svlan", svlan)
 
 	if c.srgMgr != nil {
 		if vmac := c.srgMgr.GetVirtualMAC(svlan); vmac != nil {
 			srcMAC = vmac.String()
-			c.logger.Info("Got source MAC from SRG", "src_mac", srcMAC, "svlan", svlan)
-		} else {
-			c.logger.Info("No virtual MAC from SRG for SVLAN", "svlan", svlan)
 		}
 	}
 	if srcMAC == "" && c.vpp != nil {
@@ -847,8 +841,6 @@ func (c *Component) sendDHCPResponse(sessID string, svlan, cvlan uint16, mac net
 			srcMAC = ifMac.String()
 		}
 	}
-
-	c.logger.Info("Final source MAC for DHCP response", "src_mac", srcMAC, "is_empty", srcMAC == "")
 
 	egressPayload := &models.EgressPacketPayload{
 		DstMAC:    mac.String(),
@@ -866,7 +858,7 @@ func (c *Component) sendDHCPResponse(sessID string, svlan, cvlan uint16, mac net
 	}
 	egressEvent.SetPayload(egressPayload)
 
-	c.logger.Info("Sending DHCP "+msgType+" to client", "session_id", sessID, "size", len(rawData))
+	c.logger.Debug("Sending DHCP "+msgType+" to client", "session_id", sessID, "size", len(rawData))
 
 	if err := c.eventBus.Publish(events.TopicEgress, egressEvent); err != nil {
 		c.logger.Error("Failed to publish DHCP "+msgType+" to egress", "session_id", sessID, "error", err)
