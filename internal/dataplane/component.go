@@ -10,6 +10,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
 	"github.com/veesix-networks/osvbng/pkg/dataplane/vpp"
+	"github.com/veesix-networks/osvbng/pkg/ethernet"
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
@@ -145,10 +146,12 @@ func (c *Component) readLoop() {
 				}
 			case models.ProtocolDHCPv6:
 				c.logger.Info("Received DHCPv6 packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
-			case models.ProtocolPPPoEDiscovery:
-				c.logger.Info("Received PPPoE Discovery packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
-			case models.ProtocolPPPoESession:
-				c.logger.Info("Received PPPoE Session packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
+			case models.ProtocolPPPoEDiscovery, models.ProtocolPPPoESession:
+				select {
+				case c.PPPoEChan <- pkt:
+				default:
+					c.logger.Warn("PPPoE channel full, dropping packet")
+				}
 			case models.ProtocolIPv6ND:
 				c.logger.Info("Received IPv6 ND packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
 			case models.ProtocolL2TP:
@@ -200,9 +203,14 @@ func (c *Component) handleEgress(event models.Event) error {
 		return fmt.Errorf("invalid src mac: %w", err)
 	}
 
-	etherType := uint16(0x0800)
-	if event.Protocol == models.ProtocolARP {
-		etherType = 0x0806
+	etherType := ethernet.EtherTypeIPv4
+	switch event.Protocol {
+	case models.ProtocolARP:
+		etherType = ethernet.EtherTypeARP
+	case models.ProtocolPPPoEDiscovery:
+		etherType = ethernet.EtherTypePPPoEDiscovery
+	case models.ProtocolPPPoESession:
+		etherType = ethernet.EtherTypePPPoESession
 	}
 
 	pkt := &dataplane.EgressPacket{

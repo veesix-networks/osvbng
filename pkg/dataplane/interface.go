@@ -14,6 +14,7 @@ type Ingress interface {
 type Egress interface {
 	Init(interfaceName string) error
 	SendPacket(pkt *EgressPacket) error
+	SendPacketBatch(pkts []*EgressPacket) (int, error)
 	Close() error
 }
 
