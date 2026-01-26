@@ -10,6 +10,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/config/protocols"
 	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/config/system"
+	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/version"
 	"gopkg.in/yaml.v3"
 )
@@ -26,16 +27,22 @@ func Generate(opts GenerateOptions) (string, error) {
 
 	coreInterface := os.Getenv("OSVBNG_CORE_INTERFACE")
 
+	logLevel := logger.LogLevel(os.Getenv("OSVBNG_LOG_LEVEL"))
+	if logLevel == "" {
+		logLevel = logger.LogLevelInfo
+	}
+
 	cfg := &Config{
 		Logging: system.LoggingConfig{
 			Format: "text",
-			Level:  "info",
-			Components: map[string]string{
-				"ipoed": "info",
-				"aaad":  "info",
-				"dpd":   "info",
-				"subd":  "info",
-				"arpd":  "info",
+			Level:  logLevel,
+			Components: map[string]logger.LogLevel{
+				"ipoed": logLevel,
+				"aaad":  logLevel,
+				"dpd":   logLevel,
+				"subd":  logLevel,
+				"arpd":  logLevel,
+				"pppoe": logLevel,
 			},
 		},
 		Dataplane: system.DataplaneConfig{},
@@ -80,8 +87,7 @@ func Generate(opts GenerateOptions) (string, error) {
 			Policy: []aaa.AAAPolicy{
 				{
 					Name:                  "default-policy",
-					Format:                "$mac-address$",
-					Type:                  "dhcp",
+					Format:                "$remote-id$",
 					MaxConcurrentSessions: 1,
 				},
 			},

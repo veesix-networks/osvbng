@@ -32,6 +32,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/mpls"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/osvbng_accounting"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/osvbng_punt"
+	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/osvbng_pppoe"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/punt"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/tapv2"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/vlib"
@@ -142,12 +143,20 @@ func (v *VPP) SetL2CrossConnect(iface1, iface2 string) error {
 
 	idx1, ok := v.ifaceCache[iface1]
 	if !ok {
-		return fmt.Errorf("interface %s not found", iface1)
+		i, err := v.GetInterfaceIndex(iface1)
+		if err != nil {
+			return fmt.Errorf("interface %s not found: %w", iface1, err)
+		}
+		idx1 = interface_types.InterfaceIndex(i)
 	}
 
 	idx2, ok := v.ifaceCache[iface2]
 	if !ok {
-		return fmt.Errorf("interface %s not found", iface2)
+		i, err := v.GetInterfaceIndex(iface2)
+		if err != nil {
+			return fmt.Errorf("interface %s not found: %w", iface2, err)
+		}
+		idx2 = interface_types.InterfaceIndex(i)
 	}
 
 	req1 := &l2.SwInterfaceSetL2Xconnect{
@@ -253,7 +262,13 @@ func (v *VPP) CreateSVLAN(vlan uint16, ipv4 []string, ipv6 []string) error {
 	subIfName := fmt.Sprintf("%s.%d", v.parentIface, vlan)
 
 	if idx, exists := v.ifaceCache[subIfName]; exists {
-		v.logger.Info("S-VLAN sub-interface already exists", "interface", subIfName, "sw_if_index", idx)
+		v.logger.Info("S-VLAN sub-interface already in cache", "interface", subIfName, "sw_if_index", idx)
+		return nil
+	}
+
+	if idx, err := v.GetInterfaceIndex(subIfName); err == nil {
+		v.logger.Info("S-VLAN sub-interface already exists in VPP", "interface", subIfName, "sw_if_index", idx)
+		v.ifaceCache[subIfName] = interface_types.InterfaceIndex(idx)
 		return nil
 	}
 
@@ -1085,7 +1100,11 @@ func (v *VPP) SetUnnumbered(ifaceName, loopbackName string) error {
 
 	ifaceIdx, ok := v.ifaceCache[ifaceName]
 	if !ok {
-		return fmt.Errorf("interface %s not found", ifaceName)
+		idx, err := v.GetInterfaceIndex(ifaceName)
+		if err != nil {
+			return fmt.Errorf("interface %s not found: %w", ifaceName, err)
+		}
+		ifaceIdx = interface_types.InterfaceIndex(idx)
 	}
 
 	loopbackIdx, ok := v.ifaceCache[loopbackName]
@@ -1121,7 +1140,11 @@ func (v *VPP) RegisterPuntSocket(socketPath string, port uint16, iface string) e
 
 	ifIdx, ok := v.ifaceCache[iface]
 	if !ok {
-		return fmt.Errorf("interface %s not found in cache", iface)
+		idx, err := v.GetInterfaceIndex(iface)
+		if err != nil {
+			return fmt.Errorf("interface %s not found: %w", iface, err)
+		}
+		ifIdx = interface_types.InterfaceIndex(idx)
 	}
 
 	puntL4 := punt.PuntL4{
@@ -1213,7 +1236,11 @@ func (v *VPP) EnableDirectedBroadcast(ifaceName string) error {
 
 	swIfIndex, ok := v.ifaceCache[ifaceName]
 	if !ok {
-		return fmt.Errorf("interface %s not found in cache", ifaceName)
+		idx, err := v.GetInterfaceIndex(ifaceName)
+		if err != nil {
+			return fmt.Errorf("interface %s not found: %w", ifaceName, err)
+		}
+		swIfIndex = interface_types.InterfaceIndex(idx)
 	}
 
 	req := &interfaces.SwInterfaceSetIPDirectedBroadcast{
@@ -1674,6 +1701,132 @@ func (v *VPP) EnableDHCPv4Punt(ifaceName, socketPath string) error {
 	return nil
 }
 
+func (v *VPP) EnablePPPoEPunt(ifaceName, socketPath string) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	idx, err := v.GetInterfaceIndex(ifaceName)
+	if err != nil {
+		return fmt.Errorf("get interface index: %w", err)
+	}
+
+	for _, protocol := range []uint8{3, 4} {
+		req := &osvbng_punt.OsvbngPuntEnableDisable{
+			SwIfIndex:  interface_types.InterfaceIndex(idx),
+			Protocol:   protocol,
+			Enable:     true,
+			SocketPath: socketPath,
+		}
+
+		reply := &osvbng_punt.OsvbngPuntEnableDisableReply{}
+		if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+			return fmt.Errorf("enable pppoe punt (protocol %d): %w", protocol, err)
+		}
+
+		if reply.Retval != 0 {
+			return fmt.Errorf("enable pppoe punt (protocol %d) failed: retval=%d", protocol, reply.Retval)
+		}
+	}
+
+	v.logger.Info("Enabled PPPoE punt", "interface", ifaceName, "sw_if_index", idx, "socket", socketPath)
+	return nil
+}
+
+func (v *VPP) AddPPPoESession(sessionID uint16, clientIP net.IP, clientMAC net.HardwareAddr, localMAC net.HardwareAddr, encapIfIndex uint32, outerVLAN uint16, innerVLAN uint16, decapVrfID uint32) (uint32, error) {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return 0, fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	clientAddr, err := v.toAddress(clientIP)
+	if err != nil {
+		return 0, fmt.Errorf("convert client IP: %w", err)
+	}
+
+	var clientMacAddr ethernet_types.MacAddress
+	copy(clientMacAddr[:], clientMAC)
+
+	var localMacAddr ethernet_types.MacAddress
+	copy(localMacAddr[:], localMAC)
+
+	req := &osvbng_pppoe.OsvbngPppoeAddDelSession{
+		IsAdd:        true,
+		SessionID:    sessionID,
+		ClientIP:     clientAddr,
+		DecapVrfID:   decapVrfID,
+		ClientMac:    clientMacAddr,
+		LocalMac:     localMacAddr,
+		EncapIfIndex: interface_types.InterfaceIndex(encapIfIndex),
+		OuterVlan:    outerVLAN,
+		InnerVlan:    innerVLAN,
+	}
+
+	reply := &osvbng_pppoe.OsvbngPppoeAddDelSessionReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return 0, fmt.Errorf("add pppoe session: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return 0, fmt.Errorf("add pppoe session failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Info("Added PPPoE session to VPP",
+		"session_id", sessionID,
+		"client_ip", clientIP.String(),
+		"client_mac", clientMAC.String(),
+		"local_mac", localMAC.String(),
+		"encap_if_index", encapIfIndex,
+		"outer_vlan", outerVLAN,
+		"inner_vlan", innerVLAN,
+		"sw_if_index", reply.SwIfIndex)
+
+	return uint32(reply.SwIfIndex), nil
+}
+
+func (v *VPP) DeletePPPoESession(sessionID uint16, clientIP net.IP, clientMAC net.HardwareAddr) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	clientAddr, err := v.toAddress(clientIP)
+	if err != nil {
+		return fmt.Errorf("convert client IP: %w", err)
+	}
+
+	var clientMacAddr ethernet_types.MacAddress
+	copy(clientMacAddr[:], clientMAC)
+
+	// For delete, VPP only uses (client_mac, session_id) for bihash lookup
+	// and client_ip for FIB removal. Other fields are ignored.
+	req := &osvbng_pppoe.OsvbngPppoeAddDelSession{
+		IsAdd:     false,
+		SessionID: sessionID,
+		ClientIP:  clientAddr,
+		ClientMac: clientMacAddr,
+	}
+
+	reply := &osvbng_pppoe.OsvbngPppoeAddDelSessionReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("delete pppoe session: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return fmt.Errorf("delete pppoe session failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Info("Deleted PPPoE session from VPP",
+		"session_id", sessionID,
+		"client_ip", clientIP.String())
+
+	return nil
+}
+
 func (v *VPP) DisableARPReply(ifaceName string) error {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
@@ -1904,6 +2057,13 @@ func (v *VPP) SetupMemifDataplane(memifID uint32, accessIface string, socketPath
 		socketPath = "/run/osvbng/memif.sock"
 	}
 	socketID := uint32(1)
+	memifName := fmt.Sprintf("memif%d/%d", socketID, memifID)
+
+	if idx, err := v.GetInterfaceIndex(memifName); err == nil {
+		v.logger.Info("Memif already exists in VPP", "name", memifName, "sw_if_index", idx)
+		v.ifaceCache[memifName] = interface_types.InterfaceIndex(idx)
+		return nil
+	}
 
 	socketReq := &memif.MemifSocketFilenameAddDelV2{
 		IsAdd:          true,
@@ -1935,7 +2095,6 @@ func (v *VPP) SetupMemifDataplane(memifID uint32, accessIface string, socketPath
 		return fmt.Errorf("create memif failed: retval=%d", memifReply.Retval)
 	}
 
-	memifName := fmt.Sprintf("memif%d/%d", memifID, socketID)
 	v.ifaceCache[memifName] = memifReply.SwIfIndex
 	v.logger.Info("Created memif interface", "id", memifID, "name", memifName, "sw_if_index", memifReply.SwIfIndex)
 

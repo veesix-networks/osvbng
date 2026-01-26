@@ -4,6 +4,7 @@ const (
 	ComponentMain       = "main"
 	ComponentAAA        = "aaad"
 	ComponentIPoE       = "ipoed"
+	ComponentPPPoE      = "pppoed"
 	ComponentARP        = "arpd"
 	ComponentDataplane   = "dpd"
 	ComponentSubscriber  = "subd"
