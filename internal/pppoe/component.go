@@ -87,6 +87,9 @@ type SessionState struct {
 	ipcp   *ppp.IPCP
 	ipv6cp *ppp.IPv6CP
 
+	ipcpOpen   bool
+	ipv6cpOpen bool
+
 	pap           *ppp.PAPHandler
 	chap          *ppp.CHAPHandler
 	chapChallenge []byte

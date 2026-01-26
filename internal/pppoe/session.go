@@ -437,35 +437,73 @@ func (s *SessionState) onIPCPUp() {
 		"ipv4", s.ipcp.PeerConfig().Address)
 
 	s.IPv4Address = s.ipcp.PeerConfig().Address
+	s.ipcpOpen = true
 	s.checkOpen()
 }
 
 func (s *SessionState) onIPCPDown() {
 	s.component.logger.Info("IPCP down", "session_id", s.SessionID)
+	s.ipcpOpen = false
 }
 
 func (s *SessionState) onIPv6CPUp() {
 	s.component.logger.Info("IPv6CP up", "session_id", s.SessionID)
+	s.ipv6cpOpen = true
 	s.checkOpen()
 }
 
 func (s *SessionState) onIPv6CPDown() {
 	s.component.logger.Info("IPv6CP down", "session_id", s.SessionID)
+	s.ipv6cpOpen = false
 }
 
 func (s *SessionState) checkOpen() {
-	if s.Phase == ppp.PhaseNetwork {
-		ipcpOpen := s.ipcp.FSM().State() == ppp.Opened
-		ipv6cpOpen := s.ipv6cp.FSM().State() == ppp.Opened
+	s.component.logger.Info("checkOpen called",
+		"session_id", s.SessionID,
+		"phase", s.Phase,
+		"ipcp_open", s.ipcpOpen,
+		"ipv6cp_open", s.ipv6cpOpen)
 
-		if ipcpOpen || ipv6cpOpen {
+	if s.Phase == ppp.PhaseNetwork {
+		if s.ipcpOpen || s.ipv6cpOpen {
 			s.Phase = ppp.PhaseOpen
 			s.component.logger.Info("Session open",
 				"session_id", s.SessionID,
 				"pppoe_session_id", s.PPPoESessionID,
 				"ipv4", s.IPv4Address)
 
-			// TODO: program VPP dataplane
+			if s.component.vpp != nil && s.IPv4Address != nil {
+				localMAC := s.component.vpp.GetParentInterfaceMAC()
+				encapIfIndex, err := s.component.vpp.GetParentSwIfIndex()
+				if err != nil {
+					s.component.logger.Error("Failed to get encap interface index",
+						"session_id", s.SessionID,
+						"error", err)
+				} else {
+					swIfIndex, err := s.component.vpp.AddPPPoESession(
+						s.PPPoESessionID,
+						s.IPv4Address,
+						s.MAC,
+						localMAC,
+						encapIfIndex,
+						s.OuterVLAN,
+						s.InnerVLAN,
+						0, // decapVrfID
+					)
+					if err != nil {
+						s.component.logger.Error("Failed to add PPPoE session to VPP",
+							"session_id", s.SessionID,
+							"error", err)
+					} else {
+						s.SwIfIndex = swIfIndex
+						s.component.logger.Info("Programmed PPPoE session in VPP",
+							"session_id", s.SessionID,
+							"sw_if_index", swIfIndex,
+							"outer_vlan", s.OuterVLAN,
+							"inner_vlan", s.InnerVLAN)
+					}
+				}
+			}
 		}
 	}
 }
@@ -583,5 +621,14 @@ func (s *SessionState) terminate() {
 	}
 	s.lcp.FSM().Close()
 	s.Phase = ppp.PhaseTerminate
+
+	if s.component.vpp != nil && s.SwIfIndex != 0 {
+		if err := s.component.vpp.DeletePPPoESession(s.PPPoESessionID, s.IPv4Address, s.MAC); err != nil {
+			s.component.logger.Warn("Failed to delete PPPoE session from VPP",
+				"session_id", s.SessionID,
+				"error", err)
+		}
+	}
+
 	s.component.poolAllocator.Release(s.SessionID)
 }
