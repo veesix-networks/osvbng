@@ -316,7 +316,7 @@ func (c *Component) handlePADT(pkt *dataplane.ParsedPacket) error {
 		return nil
 	}
 
-	c.poolAllocator.Release(sess.SessionID)
+	sess.terminate()
 
 	c.logger.Info("Session terminated by PADT",
 		"session_id", sess.SessionID,
