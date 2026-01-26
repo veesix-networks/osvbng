@@ -22,6 +22,7 @@ services:
     cpuset: "0-7"
     environment:
       - OSVBNG_ACCESS_INTERFACE=eth1
+      - OSVBNG_LOG_LEVEL=debug
     networks:
       a-mgmt:
         priority: 1000
