@@ -503,6 +503,14 @@ func (f *FSM) stopTimer() {
 	}
 }
 
+func (f *FSM) Kill() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.stopTimer()
+	f.state = Closed
+}
+
 func ParseOptions(data []byte) ([]Option, error) {
 	var opts []Option
 	for len(data) >= 2 {

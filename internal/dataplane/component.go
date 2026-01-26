@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/component"
@@ -30,6 +31,9 @@ type Component struct {
 	DHCPChan  chan *dataplane.ParsedPacket
 	ARPChan   chan *dataplane.ParsedPacket
 	PPPoEChan chan *dataplane.ParsedPacket
+
+	egressCount  atomic.Int64
+	egressErrors atomic.Int64
 }
 
 func New(deps component.Dependencies) (component.Component, error) {
@@ -107,14 +111,39 @@ func (c *Component) Start(ctx context.Context) error {
 		return fmt.Errorf("subscribe to session lifecycle: %w", err)
 	}
 
-	go c.readLoop()
+	for i := 0; i < 4; i++ {
+		go c.readLoop()
+	}
+	go c.egressStatsLoop()
 
 	return nil
+}
+
+func (c *Component) egressStatsLoop() {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	var lastCount, lastErrors int64
+	for {
+		select {
+		case <-c.Ctx.Done():
+			return
+		case <-ticker.C:
+			count := c.egressCount.Load()
+			errors := c.egressErrors.Load()
+			if count != lastCount || errors != lastErrors {
+				c.logger.Info("Egress stats", "total_sent", count, "total_errors", errors, "sent_per_sec", count-lastCount, "errors_per_sec", errors-lastErrors)
+				lastCount = count
+				lastErrors = errors
+			}
+		}
+	}
 }
 
 func (c *Component) readLoop() {
 	c.logger.Info("Starting dataplane readLoop")
 	ctx := c.Ctx
+	pktCount := 0
+	lastLogTime := time.Now()
 	for {
 		select {
 		case <-ctx.Done():
@@ -131,6 +160,14 @@ func (c *Component) readLoop() {
 				continue
 			}
 
+			pktCount++
+			now := time.Now()
+			if now.Sub(lastLogTime) >= time.Second {
+				c.logger.Info("Punt socket throughput", "packets_per_sec", pktCount, "dhcp_chan_len", len(c.DHCPChan), "ppp_chan_len", len(c.PPPoEChan))
+				pktCount = 0
+				lastLogTime = now
+			}
+
 			switch pkt.Protocol {
 			case models.ProtocolDHCPv4:
 				select {
@@ -145,7 +182,7 @@ func (c *Component) readLoop() {
 					c.logger.Warn("ARP channel full, dropping packet")
 				}
 			case models.ProtocolDHCPv6:
-				c.logger.Info("Received DHCPv6 packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
+				c.logger.Debug("Received DHCPv6 packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
 			case models.ProtocolPPPoEDiscovery, models.ProtocolPPPoESession:
 				select {
 				case c.PPPoEChan <- pkt:
@@ -153,9 +190,9 @@ func (c *Component) readLoop() {
 					c.logger.Warn("PPPoE channel full, dropping packet")
 				}
 			case models.ProtocolIPv6ND:
-				c.logger.Info("Received IPv6 ND packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
+				c.logger.Debug("Received IPv6 ND packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
 			case models.ProtocolL2TP:
-				c.logger.Info("Received L2TP packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
+				c.logger.Debug("Received L2TP packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
 			default:
 				c.logger.Warn("Unknown protocol", "protocol", pkt.Protocol)
 			}
@@ -223,10 +260,12 @@ func (c *Component) handleEgress(event models.Event) error {
 	}
 
 	if err := c.memifHandler.SendPacket(pkt); err != nil {
+		c.egressErrors.Add(1)
 		return fmt.Errorf("send packet: %w", err)
 	}
+	c.egressCount.Add(1)
 
-	c.logger.Info("Sent egress packet", "dst_mac", dstMAC.String(), "svlan", payload.OuterVLAN, "cvlan", payload.InnerVLAN)
+	c.logger.Debug("Sent egress packet", "dst_mac", dstMAC.String(), "svlan", payload.OuterVLAN, "cvlan", payload.InnerVLAN)
 
 	return nil
 }
@@ -238,17 +277,15 @@ func (c *Component) handleSessionLifecycle(event models.Event) error {
 	}
 
 	if sess.State == models.SessionStateActive {
-		return c.programFIB(&sess)
+		c.programFIBAsync(&sess)
 	} else if sess.State == models.SessionStateReleased {
-		return c.removeFIB(&sess)
+		c.removeFIBAsync(&sess)
 	}
 
 	return nil
 }
 
-func (c *Component) programFIB(sess *models.DHCPv4Session) error {
-	start := time.Now()
-
+func (c *Component) programFIBAsync(sess *models.DHCPv4Session) {
 	ipStr := sess.IPv4Address.String()
 	macStr := sess.MAC.String()
 	swIfIndex := uint32(sess.IfIndex)
@@ -256,10 +293,12 @@ func (c *Component) programFIB(sess *models.DHCPv4Session) error {
 	cvlan := sess.InnerVLAN
 
 	if ipStr == "" || macStr == "" || swIfIndex == 0 {
-		return fmt.Errorf("missing required fields: ip=%s mac=%s sw_if_index=%d", ipStr, macStr, swIfIndex)
+		c.logger.Error("Missing required fields for FIB programming",
+			"ip", ipStr, "mac", macStr, "sw_if_index", swIfIndex)
+		return
 	}
 
-	c.logger.Debug("Programming FIB for session",
+	c.logger.Debug("Programming FIB for session (async)",
 		"ip", ipStr,
 		"mac", macStr,
 		"sw_if_index", swIfIndex,
@@ -272,67 +311,56 @@ func (c *Component) programFIB(sess *models.DHCPv4Session) error {
 		fibID = 0
 	}
 
-	c.logger.Debug("Building L2 rewrite", "dst_mac", macStr, "src_mac", c.virtualMAC, "svlan", svlan, "cvlan", cvlan)
-
 	rewrite := c.vpp.BuildL2Rewrite(macStr, c.virtualMAC, svlan, cvlan)
 	if rewrite == nil {
-		return fmt.Errorf("failed to build L2 rewrite")
+		c.logger.Error("Failed to build L2 rewrite", "ip", ipStr)
+		return
 	}
-	c.logger.Debug("Built L2 rewrite", "len", len(rewrite))
 
 	parentSwIfIndex, err := c.vpp.GetParentSwIfIndex()
 	if err != nil {
-		return fmt.Errorf("get parent sw_if_index: %w", err)
+		c.logger.Error("Failed to get parent sw_if_index", "error", err)
+		return
 	}
 
-	// Create adjacency with L2 rewrite on parent interface - we pre-program the FIB here to write the ethernet headers (this is slightly worrying if something goes wrong here, so we should probably have better error checking / validation on the fib_control plugin side to avoid crashing VPP itself)
-	adjStart := time.Now()
-	adjIndex, err := c.vpp.AddAdjacencyWithRewrite(ipStr, parentSwIfIndex, rewrite)
-	adjDuration := time.Since(adjStart)
-	if err != nil {
-		return fmt.Errorf("add adjacency: %w", err)
-	}
+	c.vpp.AddAdjacencyWithRewriteAsync(ipStr, parentSwIfIndex, rewrite, func(adjIndex uint32, err error) {
+		if err != nil {
+			c.logger.Error("Failed to add adjacency", "ip", ipStr, "error", err)
+			return
+		}
 
-	c.logger.Warn("Added adjacency with rewrite",
-		"ip", ipStr,
-		"sw_if_index", parentSwIfIndex,
-		"sub_if_index", swIfIndex,
-		"adj_index", adjIndex,
-		"svlan", svlan,
-		"cvlan", cvlan,
-		"duration_us", adjDuration.Microseconds())
+		c.logger.Debug("Added adjacency with rewrite (async)",
+			"ip", ipStr,
+			"adj_index", adjIndex,
+			"svlan", svlan,
+			"cvlan", cvlan)
 
-	// Add /32 host route pointing to the adjacency, this is required so that FRR/routing daemon can sync routes into control plane (in the event that a customer wants to leak /32s)
-	// We need to rework this whole function (and others tbh) to work properly with IPv6 /128s and also IPv6 delegated prefixes
-	routeStart := time.Now()
-	if err := c.vpp.AddHostRoute(ipStr, adjIndex, fibID, swIfIndex); err != nil {
-		c.logger.Error("Failed to add host route, unlocking adjacency", "error", err)
-		c.vpp.UnlockAdjacency(adjIndex)
-		return fmt.Errorf("add host route: %w", err)
-	}
-	routeDuration := time.Since(routeStart)
+		c.vpp.AddHostRouteAsync(ipStr, adjIndex, fibID, swIfIndex, func(err error) {
+			if err != nil {
+				c.logger.Error("Failed to add host route", "ip", ipStr, "error", err)
+				c.vpp.UnlockAdjacency(adjIndex)
+				return
+			}
 
-	totalDuration := time.Since(start)
-	c.logger.Warn("FIB programming complete",
-		"ip", ipStr,
-		"adj_index", adjIndex,
-		"fib_id", fibID,
-		"adj_duration_us", adjDuration.Microseconds(),
-		"route_duration_us", routeDuration.Microseconds(),
-		"total_duration_us", totalDuration.Microseconds())
-
-	return nil
+			c.logger.Debug("FIB programming complete (async)",
+				"ip", ipStr,
+				"adj_index", adjIndex,
+				"fib_id", fibID)
+		})
+	})
 }
 
-func (c *Component) removeFIB(sess *models.DHCPv4Session) error {
+func (c *Component) removeFIBAsync(sess *models.DHCPv4Session) {
 	ipStr := sess.IPv4Address.String()
 	swIfIndex := uint32(sess.IfIndex)
 
 	if ipStr == "" {
-		return fmt.Errorf("missing ip address")
+		c.logger.Error("Missing IP address for FIB removal")
+		return
 	}
 
-	c.logger.Info("Removing FIB for session", "ip", ipStr, "sw_if_index", swIfIndex)
+	c.logger.Debug("Removing FIB for session (async)", "ip", ipStr, "sw_if_index", swIfIndex)
+
 	fibID, err := c.vpp.GetFIBIDForInterface(swIfIndex)
 	if err != nil {
 		c.logger.Warn("Failed to get FIB ID, using default", "error", err)
@@ -340,11 +368,11 @@ func (c *Component) removeFIB(sess *models.DHCPv4Session) error {
 	}
 
 	// Idea: we should probably build some kind of watchdog based daemon to scan the subscriber database and compare against FIB to clean up adjacencies that have not been properly cleaned up
-	if err := c.vpp.DeleteHostRoute(ipStr, fibID); err != nil {
-		return fmt.Errorf("delete host route: %w", err)
-	}
-
-	c.logger.Info("Removed host route", "ip", ipStr, "fib_id", fibID)
-
-	return nil
+	c.vpp.DeleteHostRouteAsync(ipStr, fibID, func(err error) {
+		if err != nil {
+			c.logger.Error("Failed to delete host route", "ip", ipStr, "error", err)
+			return
+		}
+		c.logger.Debug("Removed host route (async)", "ip", ipStr, "fib_id", fibID)
+	})
 }
