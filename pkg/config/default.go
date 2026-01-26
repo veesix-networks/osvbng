@@ -124,7 +124,7 @@ func Generate(opts GenerateOptions) (string, error) {
 	cfg.Plugins = map[string]interface{}{
 		"subscriber.auth.local": map[string]interface{}{
 			"database_path": "/tmp/osvbng.db",
-			"allow_all":     false,
+			"allow_all":     true,
 		},
 		"exporter.prometheus": map[string]interface{}{
 			"enabled":        false,
