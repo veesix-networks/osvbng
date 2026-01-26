@@ -1,6 +1,17 @@
 #!/bin/bash
 set -e
 
+cat > /etc/sysctl.d/99-osvbng.conf <<'EOF'
+net.unix.max_dgram_qlen = 10000
+
+net.core.rmem_max = 67108864
+net.core.wmem_max = 67108864
+net.core.rmem_default = 1048576
+net.core.wmem_default = 1048576
+EOF
+
+sysctl -p /etc/sysctl.d/99-osvbng.conf || true
+
 cat > /etc/systemd/system/osvbng-config.service <<'EOF'
 [Unit]
 Description=Generate OSVBNG external configurations

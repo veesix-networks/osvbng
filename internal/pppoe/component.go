@@ -162,9 +162,11 @@ func (c *Component) consumePPPoEPackets() {
 		case <-c.Ctx.Done():
 			return
 		case pkt := <-c.pppoeChan:
-			if err := c.handlePacket(pkt); err != nil {
-				c.logger.Debug("Error handling PPPoE packet", "error", err)
-			}
+			go func(pkt *dataplane.ParsedPacket) {
+				if err := c.handlePacket(pkt); err != nil {
+					c.logger.Debug("Error handling PPPoE packet", "error", err)
+				}
+			}(pkt)
 		}
 	}
 }

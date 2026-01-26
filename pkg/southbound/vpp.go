@@ -50,6 +50,7 @@ type VPP struct {
 	fibChan      api.Channel
 	fibMux       sync.Mutex
 	useDPDK      bool
+	asyncWorker  *AsyncWorker
 }
 
 type VPPConfig struct {
@@ -70,6 +71,12 @@ func NewVPP(cfg VPPConfig) (*VPP, error) {
 		return nil, fmt.Errorf("create FIB API channel: %w", err)
 	}
 
+	asyncWorker, err := NewAsyncWorker(conn, DefaultAsyncWorkerConfig())
+	if err != nil {
+		fibChan.Close()
+		return nil, fmt.Errorf("create async worker: %w", err)
+	}
+
 	v := &VPP{
 		conn:        conn,
 		parentIface: cfg.ParentInterface,
@@ -77,12 +84,15 @@ func NewVPP(cfg VPPConfig) (*VPP, error) {
 		logger:      logger.Component(logger.ComponentSouthbound),
 		fibChan:     fibChan,
 		useDPDK:     cfg.UseDPDK,
+		asyncWorker: asyncWorker,
 	}
 
 	if err := v.resolveParentInterface(); err != nil {
 		fibChan.Close()
 		return nil, fmt.Errorf("resolve parent interface: %w", err)
 	}
+
+	asyncWorker.Start()
 
 	v.logger.Info("Connected to VPP", "parent_interface", v.parentIface, "sw_if_index", v.parentIfIdx)
 
@@ -176,6 +186,9 @@ func (v *VPP) SetL2CrossConnect(iface1, iface2 string) error {
 }
 
 func (v *VPP) Close() error {
+	if v.asyncWorker != nil {
+		v.asyncWorker.Stop()
+	}
 	if v.fibChan != nil {
 		v.fibChan.Close()
 	}
@@ -2303,4 +2316,234 @@ func (v *VPP) GetNextAvailableGlobalTableId() (uint32, error) {
 
 	// Is this risky to return 0? 0 is the default... but we do return an error, but someone could just ignore the error
 	return 0, fmt.Errorf("no available table IDs")
+}
+
+func (v *VPP) AddPPPoESessionAsync(sessionID uint16, clientIP net.IP, clientMAC net.HardwareAddr, localMAC net.HardwareAddr, encapIfIndex uint32, outerVLAN uint16, innerVLAN uint16, decapVrfID uint32, callback func(uint32, error)) {
+	clientAddr, err := v.toAddress(clientIP)
+	if err != nil {
+		callback(0, fmt.Errorf("convert client IP: %w", err))
+		return
+	}
+
+	var clientMacAddr ethernet_types.MacAddress
+	copy(clientMacAddr[:], clientMAC)
+
+	var localMacAddr ethernet_types.MacAddress
+	copy(localMacAddr[:], localMAC)
+
+	req := &osvbng_pppoe.OsvbngPppoeAddDelSession{
+		IsAdd:        true,
+		SessionID:    sessionID,
+		ClientIP:     clientAddr,
+		DecapVrfID:   decapVrfID,
+		ClientMac:    clientMacAddr,
+		LocalMac:     localMacAddr,
+		EncapIfIndex: interface_types.InterfaceIndex(encapIfIndex),
+		OuterVlan:    outerVLAN,
+		InnerVlan:    innerVLAN,
+	}
+
+	v.asyncWorker.SendAsync(req, func(reply api.Message, err error) {
+		if err != nil {
+			callback(0, err)
+			return
+		}
+		r := reply.(*osvbng_pppoe.OsvbngPppoeAddDelSessionReply)
+		if r.Retval != 0 {
+			callback(0, fmt.Errorf("VPP error: retval=%d", r.Retval))
+			return
+		}
+		v.logger.Info("Added PPPoE session to VPP (async)",
+			"session_id", sessionID,
+			"client_ip", clientIP.String(),
+			"sw_if_index", r.SwIfIndex)
+		callback(uint32(r.SwIfIndex), nil)
+	})
+}
+
+func (v *VPP) DeletePPPoESessionAsync(sessionID uint16, clientIP net.IP, clientMAC net.HardwareAddr, callback func(error)) {
+	clientAddr, err := v.toAddress(clientIP)
+	if err != nil {
+		callback(fmt.Errorf("convert client IP: %w", err))
+		return
+	}
+
+	var clientMacAddr ethernet_types.MacAddress
+	copy(clientMacAddr[:], clientMAC)
+
+	req := &osvbng_pppoe.OsvbngPppoeAddDelSession{
+		IsAdd:     false,
+		SessionID: sessionID,
+		ClientIP:  clientAddr,
+		ClientMac: clientMacAddr,
+	}
+
+	v.asyncWorker.SendAsync(req, func(reply api.Message, err error) {
+		if err != nil {
+			callback(err)
+			return
+		}
+		r := reply.(*osvbng_pppoe.OsvbngPppoeAddDelSessionReply)
+		if r.Retval != 0 {
+			callback(fmt.Errorf("VPP error: retval=%d", r.Retval))
+			return
+		}
+		v.logger.Info("Deleted PPPoE session from VPP (async)",
+			"session_id", sessionID,
+			"client_ip", clientIP.String())
+		callback(nil)
+	})
+}
+
+func (v *VPP) AddAdjacencyWithRewriteAsync(ipAddr string, swIfIndex uint32, rewrite []byte, callback func(adjIndex uint32, err error)) {
+	ip := net.ParseIP(ipAddr)
+	if ip == nil {
+		callback(0, fmt.Errorf("invalid IP address: %s", ipAddr))
+		return
+	}
+
+	var addr ip_types.Address
+	if ip.To4() != nil {
+		addr = ip_types.Address{
+			Af: ip_types.ADDRESS_IP4,
+			Un: ip_types.AddressUnionIP4(ip_types.IP4Address{
+				ip.To4()[0], ip.To4()[1], ip.To4()[2], ip.To4()[3],
+			}),
+		}
+	} else {
+		var ip6 ip_types.IP6Address
+		copy(ip6[:], ip.To16())
+		addr = ip_types.Address{
+			Af: ip_types.ADDRESS_IP6,
+			Un: ip_types.AddressUnionIP6(ip6),
+		}
+	}
+
+	linkType := uint8(0)
+	if ip.To4() == nil {
+		linkType = 1
+	}
+
+	req := &fib_control.FibControlAdjAddRewrite{
+		SwIfIndex:  interface_types.InterfaceIndex(swIfIndex),
+		NhAddr:     addr,
+		LinkType:   linkType,
+		RewriteLen: uint8(len(rewrite)),
+		Rewrite:    make([]byte, 128),
+	}
+	copy(req.Rewrite, rewrite)
+
+	v.asyncWorker.SendAsync(req, func(reply api.Message, err error) {
+		if err != nil {
+			callback(0, err)
+			return
+		}
+		r := reply.(*fib_control.FibControlAdjAddRewriteReply)
+		if r.Retval != 0 {
+			callback(0, fmt.Errorf("add adjacency failed with retval: %d", r.Retval))
+			return
+		}
+		v.logger.Debug("VPP adjacency created (async)", "adj_index", r.AdjIndex)
+		callback(r.AdjIndex, nil)
+	})
+}
+
+func (v *VPP) AddHostRouteAsync(ipAddr string, adjIndex uint32, fibID uint32, swIfIndex uint32, callback func(error)) {
+	ip := net.ParseIP(ipAddr)
+	if ip == nil {
+		callback(fmt.Errorf("invalid IP address: %s", ipAddr))
+		return
+	}
+
+	var addr ip_types.Address
+	if ip.To4() != nil {
+		addr = ip_types.Address{
+			Af: ip_types.ADDRESS_IP4,
+			Un: ip_types.AddressUnionIP4(ip_types.IP4Address{
+				ip.To4()[0], ip.To4()[1], ip.To4()[2], ip.To4()[3],
+			}),
+		}
+	} else {
+		var ip6 ip_types.IP6Address
+		copy(ip6[:], ip.To16())
+		addr = ip_types.Address{
+			Af: ip_types.ADDRESS_IP6,
+			Un: ip_types.AddressUnionIP6(ip6),
+		}
+	}
+
+	prefix := ip_types.Prefix{
+		Address: addr,
+		Len:     32,
+	}
+
+	req := &fib_control.FibControlAddHostRoute{
+		TableID:   fibID,
+		Prefix:    prefix,
+		AdjIndex:  adjIndex,
+		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+	}
+
+	v.asyncWorker.SendAsync(req, func(reply api.Message, err error) {
+		if err != nil {
+			callback(err)
+			return
+		}
+		r := reply.(*fib_control.FibControlAddHostRouteReply)
+		if r.Retval != 0 {
+			callback(fmt.Errorf("add host route failed with retval: %d", r.Retval))
+			return
+		}
+		v.logger.Debug("VPP host route added (async)", "ip", ipAddr)
+		callback(nil)
+	})
+}
+
+func (v *VPP) DeleteHostRouteAsync(ipAddr string, fibID uint32, callback func(error)) {
+	ip := net.ParseIP(ipAddr)
+	if ip == nil {
+		callback(fmt.Errorf("invalid IP address: %s", ipAddr))
+		return
+	}
+
+	var addr ip_types.Address
+	if ip.To4() != nil {
+		addr = ip_types.Address{
+			Af: ip_types.ADDRESS_IP4,
+			Un: ip_types.AddressUnionIP4(ip_types.IP4Address{
+				ip.To4()[0], ip.To4()[1], ip.To4()[2], ip.To4()[3],
+			}),
+		}
+	} else {
+		var ip6 ip_types.IP6Address
+		copy(ip6[:], ip.To16())
+		addr = ip_types.Address{
+			Af: ip_types.ADDRESS_IP6,
+			Un: ip_types.AddressUnionIP6(ip6),
+		}
+	}
+
+	prefix := ip_types.Prefix{
+		Address: addr,
+		Len:     32,
+	}
+
+	req := &fib_control.FibControlDelHostRoute{
+		TableID: fibID,
+		Prefix:  prefix,
+	}
+
+	v.asyncWorker.SendAsync(req, func(reply api.Message, err error) {
+		if err != nil {
+			callback(err)
+			return
+		}
+		r := reply.(*fib_control.FibControlDelHostRouteReply)
+		if r.Retval != 0 {
+			callback(fmt.Errorf("delete host route failed with retval: %d", r.Retval))
+			return
+		}
+		v.logger.Debug("VPP host route deleted (async)", "ip", ipAddr)
+		callback(nil)
+	})
 }

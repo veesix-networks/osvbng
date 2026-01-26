@@ -47,8 +47,11 @@ func (p *PuntSocketIngress) Init(_ string) error {
 		return fmt.Errorf("create punt socket: %w", err)
 	}
 
-	if err := conn.SetReadBuffer(65536); err != nil {
+	if err := conn.SetReadBuffer(32 * 1024 * 1024); err != nil {
 		p.logger.Warn("Failed to set socket read buffer", "error", err)
+	}
+	if err := conn.SetWriteBuffer(32 * 1024 * 1024); err != nil {
+		p.logger.Warn("Failed to set socket write buffer", "error", err)
 	}
 
 	p.conn = conn
@@ -69,7 +72,7 @@ func (p *PuntSocketIngress) ReadPacket(ctx context.Context) (*dataplane.ParsedPa
 	}
 
 	if unixConn, ok := p.conn.(*net.UnixConn); ok {
-		unixConn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+		unixConn.SetReadDeadline(time.Now().Add(10 * time.Millisecond))
 	}
 
 	n, err := p.conn.Read(p.readBuf)
@@ -81,7 +84,7 @@ func (p *PuntSocketIngress) ReadPacket(ctx context.Context) (*dataplane.ParsedPa
 		return nil, fmt.Errorf("read packet: %w", err)
 	}
 
-	p.logger.Info("Read data from punt socket", "bytes", n)
+	p.logger.Debug("Read data from punt socket", "bytes", n)
 
 	buf := make([]byte, n)
 	copy(buf, p.readBuf[:n])
@@ -98,7 +101,7 @@ func (p *PuntSocketIngress) ReadPacket(ctx context.Context) (*dataplane.ParsedPa
 
 	puntData := buf[16:]
 
-	p.logger.Info("Received punted packet from VPP", "sw_if_index", swIfIndex, "protocol", protocol, "direction", direction, "data_len", dataLen, "timestamp_ns", timestampNs, "size", n-16)
+	p.logger.Debug("Received punted packet from VPP", "sw_if_index", swIfIndex, "protocol", protocol, "direction", direction, "data_len", dataLen, "timestamp_ns", timestampNs, "size", n-16)
 
 	packet := gopacket.NewPacket(puntData, layers.LayerTypeEthernet, gopacket.Default)
 
@@ -174,7 +177,7 @@ func (p *PuntSocketIngress) ReadPacket(ctx context.Context) (*dataplane.ParsedPa
 		return nil, fmt.Errorf("unsupported protocol: %d", protocol)
 	}
 
-	p.logger.Info("Received packet", "protocol", parsedPkt.Protocol, "mac", eth.SrcMAC.String(), "svlan", parsedPkt.OuterVLAN, "cvlan", parsedPkt.InnerVLAN)
+	p.logger.Debug("Received packet", "protocol", parsedPkt.Protocol, "mac", eth.SrcMAC.String(), "svlan", parsedPkt.OuterVLAN, "cvlan", parsedPkt.InnerVLAN)
 
 	return parsedPkt, nil
 }

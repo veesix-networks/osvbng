@@ -8,16 +8,9 @@
         "outer-vlan-min": 100,
         "outer-vlan-max": 100,
         "inner-vlan-min": 100,
-        "inner-vlan-max": 109
+        "inner-vlan-max": 4092
       }
     ]
-  },
-  "sessions": {
-    "count": 10,
-    "max-outstanding": 10,
-    "start-rate": 10,
-    "stop-rate": 10,
-    "autostart": true
   },
   "dhcp": {
     "enable": true
