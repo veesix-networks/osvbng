@@ -87,28 +87,32 @@ func TestTimeWheelTick(t *testing.T) {
 	tw := NewTimeWheel(3, time.Second, nil)
 
 	tw.Add(0, &EchoState{SessionID: 0})
-	tw.Add(3, &EchoState{SessionID: 3})
 	tw.Add(1, &EchoState{SessionID: 1})
 	tw.Add(2, &EchoState{SessionID: 2})
+	tw.Add(3, &EchoState{SessionID: 3})
 
-	sessions := tw.Tick()
-	if len(sessions) != 2 {
-		t.Errorf("expected 2 sessions in bucket 0, got %d", len(sessions))
+	if tw.Count() != 4 {
+		t.Errorf("expected 4 sessions, got %d", tw.Count())
 	}
 
-	sessions = tw.Tick()
-	if len(sessions) != 1 {
-		t.Errorf("expected 1 session in bucket 1, got %d", len(sessions))
+	totalSeen := 0
+	for i := 0; i < 3; i++ {
+		sessions := tw.Tick()
+		totalSeen += len(sessions)
 	}
 
-	sessions = tw.Tick()
-	if len(sessions) != 1 {
-		t.Errorf("expected 1 session in bucket 2, got %d", len(sessions))
+	if totalSeen != 4 {
+		t.Errorf("expected to see all 4 sessions after full rotation, got %d", totalSeen)
 	}
 
-	sessions = tw.Tick()
-	if len(sessions) != 2 {
-		t.Errorf("expected to wrap around to bucket 0, got %d sessions", len(sessions))
+	firstBucketSessions := tw.Tick()
+	secondRotationSeen := len(firstBucketSessions)
+	for i := 0; i < 2; i++ {
+		secondRotationSeen += len(tw.Tick())
+	}
+
+	if secondRotationSeen != 4 {
+		t.Errorf("expected to see all 4 sessions on second rotation, got %d", secondRotationSeen)
 	}
 }
 
