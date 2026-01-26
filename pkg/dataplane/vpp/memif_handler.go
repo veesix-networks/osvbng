@@ -7,10 +7,12 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
+	"github.com/veesix-networks/osvbng/pkg/ethernet"
 	"github.com/veesix-networks/osvbng/pkg/gomemif/memif"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 )
@@ -42,6 +44,7 @@ type MemifHandler struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
 	wg         sync.WaitGroup
+	txChan     chan []byte
 }
 
 func NewMemifHandler(virtualMAC string, arpHandler ARPHandler) (*MemifHandler, error) {
@@ -63,6 +66,7 @@ func NewMemifHandler(virtualMAC string, arpHandler ARPHandler) (*MemifHandler, e
 		logger:     logger.Component("memif"),
 		ctx:        ctx,
 		cancel:     cancel,
+		txChan:     make(chan []byte, 1000),
 	}, nil
 }
 
@@ -83,8 +87,9 @@ func (m *MemifHandler) Init(socketPath string) error {
 		DisconnectedFunc: m.onDisconnect,
 		Name:             "osvbng-cp",
 		MemoryConfig: memif.MemoryConfig{
-			NumQueuePairs: 1,
-			Log2RingSize:  10,
+			NumQueuePairs:    4,
+			Log2RingSize:     12,
+			PacketBufferSize: 2048,
 		},
 	}
 
@@ -132,8 +137,9 @@ func (m *MemifHandler) onConnect(i *memif.Interface) error {
 
 	m.connected = true
 
-	m.wg.Add(1)
+	m.wg.Add(2)
 	go m.rxLoop()
+	go m.txFlushLoop()
 
 	return nil
 }
@@ -192,6 +198,50 @@ func (m *MemifHandler) rxLoop() {
 	}
 }
 
+func (m *MemifHandler) txFlushLoop() {
+	defer m.wg.Done()
+
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+
+	batch := make([]memif.MemifPacketBuffer, 0, 64)
+
+	for {
+		select {
+		case <-m.ctx.Done():
+			if len(batch) > 0 {
+				m.flushBatch(batch)
+			}
+			return
+		case frame := <-m.txChan:
+			batch = append(batch, memif.MemifPacketBuffer{
+				Buf:    frame,
+				Buflen: len(frame),
+			})
+			if len(batch) >= 64 {
+				m.flushBatch(batch)
+				batch = batch[:0]
+			}
+		case <-ticker.C:
+			if len(batch) > 0 {
+				m.flushBatch(batch)
+				batch = batch[:0]
+			}
+		}
+	}
+}
+
+func (m *MemifHandler) flushBatch(batch []memif.MemifPacketBuffer) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if !m.connected || m.txQueue == nil {
+		return
+	}
+
+	m.txQueue.Tx_burst(batch)
+}
+
 func (m *MemifHandler) handleRxPacket(frame []byte) {
 	if len(frame) < 14 {
 		return
@@ -222,7 +272,7 @@ func (m *MemifHandler) handleRxPacket(frame []byte) {
 		}
 	}
 
-	if etherType != 0x0806 {
+	if etherType != ethernet.EtherTypeARP {
 		return
 	}
 
@@ -231,7 +281,7 @@ func (m *MemifHandler) handleRxPacket(frame []byte) {
 		return
 	}
 
-	m.logger.Info("Received ARP via memif",
+	m.logger.Debug("Received ARP via memif",
 		"operation", arp.Operation,
 		"sender_ip", arp.SenderIP,
 		"target_ip", arp.TargetIP,
@@ -255,7 +305,7 @@ func (m *MemifHandler) parseARP(data []byte, srcMAC, dstMAC net.HardwareAddr, ou
 	protoLen := data[5]
 	operation := binary.BigEndian.Uint16(data[6:8])
 
-	if hwType != 1 || protoType != 0x0800 || hwLen != 6 || protoLen != 4 {
+	if hwType != 1 || protoType != ethernet.EtherTypeIPv4 || hwLen != 6 || protoLen != 4 {
 		return nil
 	}
 
@@ -287,7 +337,7 @@ func (m *MemifHandler) SendARPReply(arp *ARPPacket) error {
 		return fmt.Errorf("failed to write ARP reply to memif")
 	}
 
-	m.logger.Info("Sent ARP reply via memif",
+	m.logger.Debug("Sent ARP reply via memif",
 		"target_ip", arp.SenderIP,
 		"target_mac", arp.SenderMAC,
 		"svlan", arp.OuterVLAN,
@@ -317,11 +367,11 @@ func (m *MemifHandler) buildARPReply(req *ARPPacket) []byte {
 		}
 	}
 
-	frame = append(frame, 0x08, 0x06)
+	frame = append(frame, byte(ethernet.EtherTypeARP>>8), byte(ethernet.EtherTypeARP&0xFF))
 
 	arpReply := make([]byte, 28)
 	binary.BigEndian.PutUint16(arpReply[0:2], 1)
-	binary.BigEndian.PutUint16(arpReply[2:4], 0x0800)
+	binary.BigEndian.PutUint16(arpReply[2:4], ethernet.EtherTypeIPv4)
 	arpReply[4] = 6
 	arpReply[5] = 4
 	binary.BigEndian.PutUint16(arpReply[6:8], 2)
@@ -337,18 +387,18 @@ func (m *MemifHandler) buildARPReply(req *ARPPacket) []byte {
 
 func (m *MemifHandler) SendPacket(pkt *dataplane.EgressPacket) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if !m.connected || m.txQueue == nil {
+	if !m.connected {
+		m.mu.Unlock()
 		return fmt.Errorf("memif not connected")
 	}
+	m.mu.Unlock()
 
 	frame, err := m.buildEgressFrame(pkt)
 	if err != nil {
 		return fmt.Errorf("build egress frame: %w", err)
 	}
 
-	m.logger.Info("Sending frame via memif",
+	m.logger.Debug("Sending frame via memif",
 		"dst_mac", pkt.DstMAC,
 		"src_mac", pkt.SrcMAC,
 		"svlan", pkt.OuterVLAN,
@@ -356,15 +406,12 @@ func (m *MemifHandler) SendPacket(pkt *dataplane.EgressPacket) error {
 		"frame_len", len(frame),
 	)
 
-	n := m.txQueue.WritePacket(frame)
-	if n == 0 {
-		return fmt.Errorf("failed to write packet to memif (queue full or error)")
+	select {
+	case m.txChan <- frame:
+		return nil
+	default:
+		return fmt.Errorf("tx channel full")
 	}
-	if n < len(frame) {
-		m.logger.Warn("Partial packet write", "wrote", n, "total", len(frame))
-	}
-
-	return nil
 }
 
 func (m *MemifHandler) buildEgressFrame(pkt *dataplane.EgressPacket) ([]byte, error) {
@@ -414,6 +461,22 @@ func (m *MemifHandler) buildEgressFrame(pkt *dataplane.EgressPacket) ([]byte, er
 	}
 
 	return buf.Bytes(), nil
+}
+
+func (m *MemifHandler) SendRawBatch(batch []memif.MemifPacketBuffer) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if !m.connected || m.txQueue == nil {
+		return 0
+	}
+
+	return m.txQueue.Tx_burst(batch)
+}
+
+func (m *MemifHandler) QueueLowPriority(batch []memif.MemifPacketBuffer) bool {
+	sent := m.SendRawBatch(batch)
+	return sent > 0
 }
 
 func (m *MemifHandler) Close() error {

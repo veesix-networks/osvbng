@@ -33,12 +33,11 @@ func (e *Event) SetPayload(v interface{}) error {
 }
 
 type AAARequest struct {
-	RequestID     string `json:"request_id"`
-	Username      string `json:"username"`
-	MAC           string `json:"mac"`
-	NASIPAddress  string `json:"nas_ip"`
-	NASPort       uint32 `json:"nas_port"`
-	AcctSessionID string `json:"acct_session_id"`
+	RequestID     string            `json:"request_id"`
+	Username      string            `json:"username"`
+	MAC           string            `json:"mac"`
+	AcctSessionID string            `json:"acct_session_id"`
+	Attributes    map[string]string `json:"attributes,omitempty"`
 }
 
 type AAAResponse struct {
@@ -46,28 +45,6 @@ type AAAResponse struct {
 	Allowed    bool                   `json:"allowed"`
 	Attributes map[string]interface{} `json:"attributes,omitempty"`
 	Error      string                 `json:"error,omitempty"`
-}
-
-type DHCPRelayPayload struct {
-	RawData   []byte `json:"raw_data"`
-	MAC       string `json:"mac"`
-	OuterVLAN uint16 `json:"outer_vlan"`
-	InnerVLAN uint16 `json:"inner_vlan"`
-}
-
-type DHCPResponsePayload struct {
-	RawData   []byte `json:"raw_data"`
-	MAC       string `json:"mac"`
-	OuterVLAN uint16 `json:"outer_vlan"`
-	InnerVLAN uint16 `json:"inner_vlan"`
-	XID       uint32 `json:"xid"`
-}
-
-type ARPPacketPayload struct {
-	RawData   []byte `json:"raw_data"`
-	TargetIP  string `json:"target_ip"`
-	OuterVLAN uint16 `json:"outer_vlan"`
-	InnerVLAN uint16 `json:"inner_vlan"`
 }
 
 type EgressPacketPayload struct {
@@ -85,10 +62,6 @@ const (
 	EventTypeSessionLifecycle EventType = "session_lifecycle"
 	EventTypeAAARequest       EventType = "aaa_request"
 	EventTypeAAAResponse      EventType = "aaa_response"
-	EventTypeDHCPRelay        EventType = "dhcp_relay"
-	EventTypeDHCPResponse     EventType = "dhcp_response"
-	EventTypeARPRequest       EventType = "arp_request"
-	EventTypeSubscriberState  EventType = "subscriber_state"
 	EventTypeEgress           EventType = "egress"
 )
 
@@ -104,12 +77,15 @@ const (
 type Protocol string
 
 const (
-	ProtocolDHCPv4  Protocol = "dhcpv4"
-	ProtocolDHCPv6  Protocol = "dhcpv6"
-	ProtocolARP     Protocol = "arp"
-	ProtocolPPP     Protocol = "ppp"
-	ProtocolL2TP    Protocol = "l2tp"
-	ProtocolUnknown Protocol = "unknown"
+	ProtocolDHCPv4         Protocol = "dhcpv4"
+	ProtocolDHCPv6         Protocol = "dhcpv6"
+	ProtocolARP            Protocol = "arp"
+	ProtocolPPPoEDiscovery Protocol = "pppoe_discovery"
+	ProtocolPPPoESession   Protocol = "pppoe_session"
+	ProtocolIPv6ND         Protocol = "ipv6_nd"
+	ProtocolPPP            Protocol = "ppp"
+	ProtocolL2TP           Protocol = "l2tp"
+	ProtocolUnknown        Protocol = "unknown"
 )
 
 type SessionState string

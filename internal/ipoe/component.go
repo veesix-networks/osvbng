@@ -12,12 +12,10 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/uuid"
-	"github.com/veesix-networks/osvbng/pkg/arp"
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/config/aaa"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
-	"github.com/veesix-networks/osvbng/pkg/dhcp"
 	"github.com/veesix-networks/osvbng/pkg/dhcp4"
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/logger"
@@ -43,7 +41,6 @@ type Component struct {
 	sessionMu     sync.RWMutex
 
 	dhcpChan <-chan *dataplane.ParsedPacket
-	arpChan  <-chan *dataplane.ParsedPacket
 }
 
 type SessionState struct {
@@ -83,7 +80,6 @@ func New(deps component.Dependencies, srgMgr *srg.Manager, dhcp4Provider dhcp4.D
 		xidIndex:      make(map[uint32]*SessionState),
 		sessionIndex:  make(map[string]*SessionState),
 		dhcpChan:      deps.DHCPChan,
-		arpChan:       deps.ARPChan,
 	}
 
 	return c, nil
@@ -93,17 +89,12 @@ func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
 	c.logger.Info("Starting IPoE component")
 
-	if err := c.eventBus.Subscribe(events.TopicDHCPResponse, c.handleDHCPResponse); err != nil {
-		return fmt.Errorf("subscribe to dhcp responses: %w", err)
-	}
-
-	if err := c.eventBus.Subscribe(events.TopicAAAResponse, c.handleAAAResponse); err != nil {
+	if err := c.eventBus.Subscribe(events.TopicAAAResponseIPoE, c.handleAAAResponse); err != nil {
 		return fmt.Errorf("subscribe to aaa responses: %w", err)
 	}
 
 	c.Go(c.cleanupSessions)
 	c.Go(c.consumeDHCPPackets)
-	c.Go(c.consumeARPPackets)
 
 	return nil
 }
@@ -111,8 +102,7 @@ func (c *Component) Start(ctx context.Context) error {
 func (c *Component) Stop(ctx context.Context) error {
 	c.logger.Info("Stopping IPoE component")
 
-	c.eventBus.Unsubscribe(events.TopicDHCPResponse, c.handleDHCPResponse)
-	c.eventBus.Unsubscribe(events.TopicAAAResponse, c.handleAAAResponse)
+	c.eventBus.Unsubscribe(events.TopicAAAResponseIPoE, c.handleAAAResponse)
 
 	c.StopContext()
 
@@ -134,101 +124,13 @@ func (c *Component) consumeDHCPPackets() {
 	}
 }
 
-func (c *Component) consumeARPPackets() {
-	for {
-		select {
-		case <-c.Ctx.Done():
-			return
-		case pkt := <-c.arpChan:
-			go func(pkt *dataplane.ParsedPacket) {
-				if err := c.processARPPacket(pkt); err != nil {
-					c.logger.Error("Error processing ARP packet", "error", err)
-				}
-			}(pkt)
-		}
-	}
-}
-
-func (c *Component) processARPPacket(pkt *dataplane.ParsedPacket) error {
-	start := time.Now()
-	defer func() {
-		duration := time.Since(start)
-		c.logger.Warn("ARP packet processing time",
-			"duration_us", duration.Microseconds(),
-			"src_mac", pkt.MAC.String())
-	}()
-
-	if pkt.ARP == nil {
-		return fmt.Errorf("no ARP layer")
-	}
-
-	if pkt.ARP.Operation != layers.ARPRequest {
-		return nil
-	}
-
-	c.logger.Debug("Processing ARP request",
-		"src_mac", net.HardwareAddr(pkt.ARP.SourceHwAddress).String(),
-		"src_ip", net.IP(pkt.ARP.SourceProtAddress).String(),
-		"target_ip", net.IP(pkt.ARP.DstProtAddress).String(),
-		"svlan", pkt.OuterVLAN,
-		"cvlan", pkt.InnerVLAN)
-
-	isDF := c.srgMgr.IsDF(pkt.OuterVLAN, pkt.MAC.String(), pkt.InnerVLAN)
-	if !isDF {
-		c.logger.Debug("ARP request not from DF, ignoring",
-			"mac", pkt.MAC.String(),
-			"svlan", pkt.OuterVLAN,
-			"cvlan", pkt.InnerVLAN)
-		return nil
-	}
-
-	gatewayMAC := c.srgMgr.GetVirtualMAC(pkt.OuterVLAN)
-	replyData := arp.BuildReply(&arp.Packet{
-		SenderMAC: pkt.ARP.SourceHwAddress,
-		SenderIP:  pkt.ARP.SourceProtAddress,
-		TargetMAC: pkt.ARP.DstHwAddress,
-		TargetIP:  pkt.ARP.DstProtAddress,
-		Operation: arp.OpRequest,
-	}, gatewayMAC)
-
-	c.logger.Debug("Sending ARP reply",
-		"target_ip", net.IP(pkt.ARP.DstProtAddress).String(),
-		"gateway_mac", gatewayMAC.String(),
-		"svlan", pkt.OuterVLAN,
-		"cvlan", pkt.InnerVLAN)
-
-	egressPayload := &models.EgressPacketPayload{
-		DstMAC:    net.HardwareAddr(pkt.ARP.SourceHwAddress).String(),
-		SrcMAC:    gatewayMAC.String(),
-		OuterVLAN: pkt.OuterVLAN,
-		InnerVLAN: pkt.InnerVLAN,
-		RawData:   replyData,
-	}
-
-	egressEvent := models.Event{
-		Type:       models.EventTypeEgress,
-		AccessType: models.AccessTypeIPoE,
-		Protocol:   models.ProtocolARP,
-	}
-	egressEvent.SetPayload(egressPayload)
-
-	return c.eventBus.Publish(events.TopicEgress, egressEvent)
-}
-
 func (c *Component) processDHCPPacket(pkt *dataplane.ParsedPacket) error {
-	start := time.Now()
-	defer func() {
-		duration := time.Since(start)
-		c.logger.Warn("DHCP packet processing time",
-			"duration_us", duration.Microseconds(),
-			"mac", pkt.MAC.String())
-	}()
 
 	if pkt.DHCPv4 == nil {
 		return fmt.Errorf("no DHCPv4 layer")
 	}
 
-	if pkt.Direction == dataplane.DirectionRX && pkt.OuterVLAN == 0 {
+	if pkt.OuterVLAN == 0 {
 		return fmt.Errorf("packet rejected: S-VLAN required (untagged not supported)")
 	}
 
@@ -315,9 +217,9 @@ func parseOption82(data []byte) (circuitID, remoteID []byte) {
 func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 	lookupKey := fmt.Sprintf("ipoe-v4:%s:%d:%d", pkt.MAC.String(), pkt.OuterVLAN, pkt.InnerVLAN)
 
-	c.sessionMu.Lock()
+	c.sessionMu.RLock()
 	sess := c.sessions[lookupKey]
-	c.sessionMu.Unlock()
+	c.sessionMu.RUnlock()
 
 	if sess == nil {
 		if err := c.checkSessionLimit(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN); err != nil {
@@ -326,7 +228,7 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 		}
 
 		sessID := session.GenerateID()
-		sess = &SessionState{
+		newSess := &SessionState{
 			SessionID:     sessID,
 			AcctSessionID: session.ToAcctSessionID(sessID),
 			MAC:           pkt.MAC,
@@ -337,8 +239,13 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 		}
 
 		c.sessionMu.Lock()
-		c.sessions[lookupKey] = sess
-		c.sessionIndex[sessID] = sess
+		if existing := c.sessions[lookupKey]; existing != nil {
+			sess = existing
+		} else {
+			sess = newSess
+			c.sessions[lookupKey] = sess
+			c.sessionIndex[sessID] = sess
+		}
 		c.sessionMu.Unlock()
 	}
 
@@ -377,18 +284,17 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 		}
 	}
 	if policyName != "" {
-		if policy := cfg.AAA.GetPolicy(policyName); policy != nil {
+		if policy := cfg.AAA.GetPolicyByType(policyName, aaa.PolicyTypeDHCP); policy != nil {
 			ctx := &aaa.PolicyContext{
 				MACAddress: pkt.MAC,
 				SVLAN:      pkt.OuterVLAN,
 				CVLAN:      pkt.InnerVLAN,
-				NASPort:    uint32(pkt.OuterVLAN),
 				RemoteID:   string(remoteID),
 				CircuitID:  string(circuitID),
 				Hostname:   hostname,
 			}
 			username = policy.ExpandFormat(ctx)
-			c.logger.Debug("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
+			c.logger.Info("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
 		}
 	}
 
@@ -399,8 +305,6 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 		RequestID:     requestID,
 		Username:      username,
 		MAC:           pkt.MAC.String(),
-		NASIPAddress:  cfg.AAA.NASIP,
-		NASPort:       uint32(pkt.OuterVLAN),
 		AcctSessionID: sess.AcctSessionID,
 	}
 
@@ -519,18 +423,17 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 		}
 	}
 	if policyName != "" {
-		if policy := cfg.AAA.GetPolicy(policyName); policy != nil {
+		if policy := cfg.AAA.GetPolicyByType(policyName, aaa.PolicyTypeDHCP); policy != nil {
 			ctx := &aaa.PolicyContext{
 				MACAddress: pkt.MAC,
 				SVLAN:      pkt.OuterVLAN,
 				CVLAN:      pkt.InnerVLAN,
-				NASPort:    uint32(pkt.OuterVLAN),
 				RemoteID:   string(remoteID),
 				CircuitID:  string(circuitID),
 				Hostname:   hostname,
 			}
 			username = policy.ExpandFormat(ctx)
-			c.logger.Debug("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
+			c.logger.Info("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
 		}
 	}
 
@@ -541,8 +444,6 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 		RequestID:     requestID,
 		Username:      username,
 		MAC:           pkt.MAC.String(),
-		NASIPAddress:  cfg.AAA.NASIP,
-		NASPort:       uint32(pkt.OuterVLAN),
 		AcctSessionID: sess.AcctSessionID,
 	}
 
@@ -585,25 +486,6 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 		c.cache.Delete(c.Ctx, counterKey)
 	}
 
-	relayPayload := &models.DHCPRelayPayload{
-		MAC:       pkt.MAC.String(),
-		OuterVLAN: pkt.OuterVLAN,
-		InnerVLAN: pkt.InnerVLAN,
-		RawData:   pkt.RawPacket,
-	}
-
-	relayEvent := models.Event{
-		Type:       models.EventTypeDHCPRelay,
-		AccessType: models.AccessTypeIPoE,
-		Protocol:   models.ProtocolDHCPv4,
-		SessionID:  sessID,
-	}
-	relayEvent.SetPayload(relayPayload)
-
-	if err := c.eventBus.Publish(events.TopicDHCPRelay, relayEvent); err != nil {
-		c.logger.Warn("Failed to relay DHCPRELEASE", "session_id", sessID, "error", err)
-	}
-
 	mac, _ := net.ParseMAC(pkt.MAC.String())
 	lifecyclePayload := &models.DHCPv4Session{
 		SessionID:        sessID,
@@ -638,9 +520,14 @@ func (c *Component) handleServerResponse(pkt *dataplane.ParsedPacket) error {
 	}
 
 	msgType := getDHCPMessageType(pkt.DHCPv4.Options)
-	c.logger.Info("Forwarding DHCP to client", "message_type", msgType.String(), "mac", sess.MAC.String(), "session_id", sess.SessionID, "xid", fmt.Sprintf("0x%x", pkt.DHCPv4.Xid))
+	c.logger.Debug("Forwarding DHCP to client", "message_type", msgType.String(), "mac", sess.MAC.String(), "session_id", sess.SessionID, "xid", fmt.Sprintf("0x%x", pkt.DHCPv4.Xid))
 
-	vmac := c.srgMgr.GetVirtualMAC(sess.OuterVLAN)
+	var vmac net.HardwareAddr
+	if c.srgMgr != nil {
+		vmac = c.srgMgr.GetVirtualMAC(sess.OuterVLAN)
+	} else {
+		vmac = c.vpp.GetParentInterfaceMAC()
+	}
 	if vmac == nil {
 		return fmt.Errorf("no virtual MAC for S-VLAN %d", sess.OuterVLAN)
 	}
@@ -707,7 +594,7 @@ func (c *Component) handleServerResponse(pkt *dataplane.ParsedPacket) error {
 	}
 	egressEvent.SetPayload(egressPayload)
 
-	c.logger.Info("Sending DHCP via egress", "message_type", msgType.String(), "dst_mac", dstMAC, "svlan", sess.OuterVLAN, "cvlan", sess.InnerVLAN)
+	c.logger.Debug("Sending DHCP via egress", "message_type", msgType.String(), "dst_mac", dstMAC, "svlan", sess.OuterVLAN, "cvlan", sess.InnerVLAN)
 
 	if err := c.eventBus.Publish(events.TopicEgress, egressEvent); err != nil {
 		return err
@@ -715,56 +602,6 @@ func (c *Component) handleServerResponse(pkt *dataplane.ParsedPacket) error {
 
 	if msgType == layers.DHCPMsgTypeAck {
 		return c.handleAck(sess, pkt)
-	}
-
-	return nil
-}
-
-func (c *Component) handleDHCPResponse(event models.Event) error {
-	var payload models.DHCPResponsePayload
-	if err := event.GetPayload(&payload); err != nil {
-		return fmt.Errorf("failed to decode DHCP response payload: %w", err)
-	}
-
-	pkt, err := dhcp.Parse(payload.RawData)
-	if err != nil {
-		return fmt.Errorf("parse dhcp: %w", err)
-	}
-
-	if payload.OuterVLAN == 0 {
-		return fmt.Errorf("response rejected: S-VLAN required")
-	}
-
-	c.sessionMu.RLock()
-	sess := c.xidIndex[pkt.XID]
-	c.sessionMu.RUnlock()
-
-	if sess == nil {
-		return nil
-	}
-
-	if sess.MAC.String() != payload.MAC || sess.OuterVLAN != payload.OuterVLAN || sess.InnerVLAN != payload.InnerVLAN {
-		c.logger.Warn("DHCP response XID matches but MAC/VLAN mismatch",
-			"xid", fmt.Sprintf("0x%x", pkt.XID),
-			"expected_mac", sess.MAC.String(), "got_mac", payload.MAC,
-			"expected_vlan", fmt.Sprintf("%d.%d", sess.OuterVLAN, sess.InnerVLAN),
-			"got_vlan", fmt.Sprintf("%d.%d", payload.OuterVLAN, payload.InnerVLAN))
-		return nil
-	}
-
-	c.logger.Info("Received DHCP for session", "message_type", pkt.MessageType.String(), "session_id", sess.SessionID)
-
-	if pkt.MessageType == dhcp.DHCPAck {
-		parsedPkt := &dataplane.ParsedPacket{
-			DHCPv4: &layers.DHCPv4{
-				YourClientIP: pkt.YIAddr,
-				Options: layers.DHCPOptions{
-					{Type: 51, Data: make([]byte, 4)},
-				},
-			},
-		}
-		binary.BigEndian.PutUint32(parsedPkt.DHCPv4.Options[0].Data, pkt.LeaseTime)
-		return c.handleAck(sess, parsedPkt)
 	}
 
 	return nil
@@ -993,14 +830,10 @@ func (c *Component) countExistingSessions(mac net.HardwareAddr, svlan, cvlan uin
 
 func (c *Component) sendDHCPResponse(sessID string, svlan, cvlan uint16, mac net.HardwareAddr, rawData []byte, msgType string) error {
 	var srcMAC string
-	c.logger.Info("Getting source MAC for DHCP response", "has_srg_mgr", c.srgMgr != nil, "has_vpp", c.vpp != nil, "svlan", svlan)
 
 	if c.srgMgr != nil {
 		if vmac := c.srgMgr.GetVirtualMAC(svlan); vmac != nil {
 			srcMAC = vmac.String()
-			c.logger.Info("Got source MAC from SRG", "src_mac", srcMAC, "svlan", svlan)
-		} else {
-			c.logger.Info("No virtual MAC from SRG for SVLAN", "svlan", svlan)
 		}
 	}
 	if srcMAC == "" && c.vpp != nil {
@@ -1008,8 +841,6 @@ func (c *Component) sendDHCPResponse(sessID string, svlan, cvlan uint16, mac net
 			srcMAC = ifMac.String()
 		}
 	}
-
-	c.logger.Info("Final source MAC for DHCP response", "src_mac", srcMAC, "is_empty", srcMAC == "")
 
 	egressPayload := &models.EgressPacketPayload{
 		DstMAC:    mac.String(),
@@ -1027,7 +858,7 @@ func (c *Component) sendDHCPResponse(sessID string, svlan, cvlan uint16, mac net
 	}
 	egressEvent.SetPayload(egressPayload)
 
-	c.logger.Info("Sending DHCP "+msgType+" to client", "session_id", sessID, "size", len(rawData))
+	c.logger.Debug("Sending DHCP "+msgType+" to client", "session_id", sessID, "size", len(rawData))
 
 	if err := c.eventBus.Publish(events.TopicEgress, egressEvent); err != nil {
 		c.logger.Error("Failed to publish DHCP "+msgType+" to egress", "session_id", sessID, "error", err)

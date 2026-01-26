@@ -101,6 +101,10 @@ mkdir -p /dev/hugepages
 mount -t hugetlbfs -o pagesize=2M none /dev/hugepages || true
 echo 512 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages || true
 
+sysctl -w net.unix.max_dgram_qlen=10000 2>/dev/null || echo "Warning: Could not set max_dgram_qlen (need privileged mode)"
+sysctl -w net.core.rmem_max=67108864 2>/dev/null || true
+sysctl -w net.core.wmem_max=67108864 2>/dev/null || true
+
 echo "Management interface: $OSVBNG_MGMT_INTERFACE"
 ip link show $OSVBNG_MGMT_INTERFACE
 

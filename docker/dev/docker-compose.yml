@@ -4,9 +4,10 @@ services:
       context: ../../test-infra
       dockerfile: Dockerfile.bngblaster
     container_name: bng-blaster
-    network_mode: host
     cap_add:
       - NET_ADMIN
+    networks:
+      b-access:
     volumes:
       - ../../test-infra/bngblaster:/config
     stdin_open: true
@@ -19,10 +20,12 @@ services:
     container_name: osvbng
     privileged: true
     cpuset: "0-7"
+    sysctls:
+      - net.unix.max_dgram_qlen=10000
     environment:
       - OSVBNG_ACCESS_INTERFACE=eth1
+      - OSVBNG_LOG_LEVEL=debug
     networks:
-      a-mgmt:
       b-access:
       c-core:
     volumes:

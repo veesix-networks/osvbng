@@ -4,16 +4,15 @@ import (
 	"net"
 
 	"github.com/google/gopacket/layers"
+	"github.com/veesix-networks/osvbng/pkg/models"
 )
 
 type ParsedPacket struct {
-	Direction string
-	Protocol  string
+	Protocol models.Protocol
 
 	MAC       net.HardwareAddr
 	OuterVLAN uint16
 	InnerVLAN uint16
-	VLANCount int
 	SwIfIndex uint32
 
 	Ethernet *layers.Ethernet
@@ -29,5 +28,4 @@ type ParsedPacket struct {
 	PPP      *layers.PPP
 
 	RawPacket []byte
-	Metadata  map[string]interface{}
 }

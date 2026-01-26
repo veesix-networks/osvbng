@@ -144,8 +144,13 @@ func (p *Provider) selectPoolForGroup(group string) *IPPool {
 func (p *Provider) hasAvailableIP(pool *IPPool) bool {
 	start := binary.BigEndian.Uint32(pool.RangeStart.To4())
 	end := binary.BigEndian.Uint32(pool.RangeEnd.To4())
+	gateway := binary.BigEndian.Uint32(pool.Gateway.To4())
 
 	for i := start; i <= end; i++ {
+		if i == gateway {
+			continue
+		}
+
 		ip := make(net.IP, 4)
 		binary.BigEndian.PutUint32(ip, i)
 		if _, used := p.leasesByIP[ip.String()]; !used {
@@ -298,8 +303,13 @@ func (p *Provider) handleRelease(pkt *dhcp4.Packet, dhcp *layers.DHCPv4) (*dhcp4
 func (p *Provider) allocateIP(pool *IPPool, mac, sessionID string) (net.IP, error) {
 	start := binary.BigEndian.Uint32(pool.RangeStart.To4())
 	end := binary.BigEndian.Uint32(pool.RangeEnd.To4())
+	gateway := binary.BigEndian.Uint32(pool.Gateway.To4())
 
 	for i := start; i <= end; i++ {
+		if i == gateway {
+			continue
+		}
+
 		ip := make(net.IP, 4)
 		binary.BigEndian.PutUint32(ip, i)
 

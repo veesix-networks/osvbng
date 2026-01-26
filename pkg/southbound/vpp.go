@@ -18,7 +18,6 @@ import (
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
-	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/arp_punt"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/ethernet_types"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/fib_control"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/fib_types"
@@ -31,7 +30,9 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/lcp"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/memif"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/mpls"
-	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/openbng_accounting"
+	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/osvbng_accounting"
+	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/osvbng_punt"
+	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/osvbng_pppoe"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/punt"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/tapv2"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/vlib"
@@ -49,6 +50,7 @@ type VPP struct {
 	fibChan      api.Channel
 	fibMux       sync.Mutex
 	useDPDK      bool
+	asyncWorker  *AsyncWorker
 }
 
 type VPPConfig struct {
@@ -69,6 +71,12 @@ func NewVPP(cfg VPPConfig) (*VPP, error) {
 		return nil, fmt.Errorf("create FIB API channel: %w", err)
 	}
 
+	asyncWorker, err := NewAsyncWorker(conn, DefaultAsyncWorkerConfig())
+	if err != nil {
+		fibChan.Close()
+		return nil, fmt.Errorf("create async worker: %w", err)
+	}
+
 	v := &VPP{
 		conn:        conn,
 		parentIface: cfg.ParentInterface,
@@ -76,12 +84,15 @@ func NewVPP(cfg VPPConfig) (*VPP, error) {
 		logger:      logger.Component(logger.ComponentSouthbound),
 		fibChan:     fibChan,
 		useDPDK:     cfg.UseDPDK,
+		asyncWorker: asyncWorker,
 	}
 
 	if err := v.resolveParentInterface(); err != nil {
 		fibChan.Close()
 		return nil, fmt.Errorf("resolve parent interface: %w", err)
 	}
+
+	asyncWorker.Start()
 
 	v.logger.Info("Connected to VPP", "parent_interface", v.parentIface, "sw_if_index", v.parentIfIdx)
 
@@ -142,12 +153,20 @@ func (v *VPP) SetL2CrossConnect(iface1, iface2 string) error {
 
 	idx1, ok := v.ifaceCache[iface1]
 	if !ok {
-		return fmt.Errorf("interface %s not found", iface1)
+		i, err := v.GetInterfaceIndex(iface1)
+		if err != nil {
+			return fmt.Errorf("interface %s not found: %w", iface1, err)
+		}
+		idx1 = interface_types.InterfaceIndex(i)
 	}
 
 	idx2, ok := v.ifaceCache[iface2]
 	if !ok {
-		return fmt.Errorf("interface %s not found", iface2)
+		i, err := v.GetInterfaceIndex(iface2)
+		if err != nil {
+			return fmt.Errorf("interface %s not found: %w", iface2, err)
+		}
+		idx2 = interface_types.InterfaceIndex(i)
 	}
 
 	req1 := &l2.SwInterfaceSetL2Xconnect{
@@ -167,6 +186,9 @@ func (v *VPP) SetL2CrossConnect(iface1, iface2 string) error {
 }
 
 func (v *VPP) Close() error {
+	if v.asyncWorker != nil {
+		v.asyncWorker.Stop()
+	}
 	if v.fibChan != nil {
 		v.fibChan.Close()
 	}
@@ -253,7 +275,13 @@ func (v *VPP) CreateSVLAN(vlan uint16, ipv4 []string, ipv6 []string) error {
 	subIfName := fmt.Sprintf("%s.%d", v.parentIface, vlan)
 
 	if idx, exists := v.ifaceCache[subIfName]; exists {
-		v.logger.Info("S-VLAN sub-interface already exists", "interface", subIfName, "sw_if_index", idx)
+		v.logger.Info("S-VLAN sub-interface already in cache", "interface", subIfName, "sw_if_index", idx)
+		return nil
+	}
+
+	if idx, err := v.GetInterfaceIndex(subIfName); err == nil {
+		v.logger.Info("S-VLAN sub-interface already exists in VPP", "interface", subIfName, "sw_if_index", idx)
+		v.ifaceCache[subIfName] = interface_types.InterfaceIndex(idx)
 		return nil
 	}
 
@@ -1085,7 +1113,11 @@ func (v *VPP) SetUnnumbered(ifaceName, loopbackName string) error {
 
 	ifaceIdx, ok := v.ifaceCache[ifaceName]
 	if !ok {
-		return fmt.Errorf("interface %s not found", ifaceName)
+		idx, err := v.GetInterfaceIndex(ifaceName)
+		if err != nil {
+			return fmt.Errorf("interface %s not found: %w", ifaceName, err)
+		}
+		ifaceIdx = interface_types.InterfaceIndex(idx)
 	}
 
 	loopbackIdx, ok := v.ifaceCache[loopbackName]
@@ -1121,7 +1153,11 @@ func (v *VPP) RegisterPuntSocket(socketPath string, port uint16, iface string) e
 
 	ifIdx, ok := v.ifaceCache[iface]
 	if !ok {
-		return fmt.Errorf("interface %s not found in cache", iface)
+		idx, err := v.GetInterfaceIndex(iface)
+		if err != nil {
+			return fmt.Errorf("interface %s not found: %w", iface, err)
+		}
+		ifIdx = interface_types.InterfaceIndex(idx)
 	}
 
 	puntL4 := punt.PuntL4{
@@ -1213,7 +1249,11 @@ func (v *VPP) EnableDirectedBroadcast(ifaceName string) error {
 
 	swIfIndex, ok := v.ifaceCache[ifaceName]
 	if !ok {
-		return fmt.Errorf("interface %s not found in cache", ifaceName)
+		idx, err := v.GetInterfaceIndex(ifaceName)
+		if err != nil {
+			return fmt.Errorf("interface %s not found: %w", ifaceName, err)
+		}
+		swIfIndex = interface_types.InterfaceIndex(idx)
 	}
 
 	req := &interfaces.SwInterfaceSetIPDirectedBroadcast{
@@ -1622,13 +1662,14 @@ func (v *VPP) EnableARPPunt(ifaceName, socketPath string) error {
 		return fmt.Errorf("get interface index: %w", err)
 	}
 
-	req := &arp_punt.ArpPuntEnableDisable{
+	req := &osvbng_punt.OsvbngPuntEnableDisable{
 		SwIfIndex:  interface_types.InterfaceIndex(idx),
-		SocketPath: socketPath,
+		Protocol:   2,
 		Enable:     true,
+		SocketPath: socketPath,
 	}
 
-	reply := &arp_punt.ArpPuntEnableDisableReply{}
+	reply := &osvbng_punt.OsvbngPuntEnableDisableReply{}
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
 		return fmt.Errorf("enable arp punt: %w", err)
 	}
@@ -1638,6 +1679,164 @@ func (v *VPP) EnableARPPunt(ifaceName, socketPath string) error {
 	}
 
 	v.logger.Info("Enabled ARP punt", "interface", ifaceName, "sw_if_index", idx, "socket", socketPath)
+	return nil
+}
+
+func (v *VPP) EnableDHCPv4Punt(ifaceName, socketPath string) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	idx, err := v.GetInterfaceIndex(ifaceName)
+	if err != nil {
+		return fmt.Errorf("get interface index: %w", err)
+	}
+
+	req := &osvbng_punt.OsvbngPuntEnableDisable{
+		SwIfIndex:  interface_types.InterfaceIndex(idx),
+		Protocol:   0,
+		Enable:     true,
+		SocketPath: socketPath,
+	}
+
+	reply := &osvbng_punt.OsvbngPuntEnableDisableReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("enable dhcp punt: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return fmt.Errorf("enable dhcp punt failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Info("Enabled DHCP punt", "interface", ifaceName, "sw_if_index", idx, "socket", socketPath)
+	return nil
+}
+
+func (v *VPP) EnablePPPoEPunt(ifaceName, socketPath string) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	idx, err := v.GetInterfaceIndex(ifaceName)
+	if err != nil {
+		return fmt.Errorf("get interface index: %w", err)
+	}
+
+	for _, protocol := range []uint8{3, 4} {
+		req := &osvbng_punt.OsvbngPuntEnableDisable{
+			SwIfIndex:  interface_types.InterfaceIndex(idx),
+			Protocol:   protocol,
+			Enable:     true,
+			SocketPath: socketPath,
+		}
+
+		reply := &osvbng_punt.OsvbngPuntEnableDisableReply{}
+		if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+			return fmt.Errorf("enable pppoe punt (protocol %d): %w", protocol, err)
+		}
+
+		if reply.Retval != 0 {
+			return fmt.Errorf("enable pppoe punt (protocol %d) failed: retval=%d", protocol, reply.Retval)
+		}
+	}
+
+	v.logger.Info("Enabled PPPoE punt", "interface", ifaceName, "sw_if_index", idx, "socket", socketPath)
+	return nil
+}
+
+func (v *VPP) AddPPPoESession(sessionID uint16, clientIP net.IP, clientMAC net.HardwareAddr, localMAC net.HardwareAddr, encapIfIndex uint32, outerVLAN uint16, innerVLAN uint16, decapVrfID uint32) (uint32, error) {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return 0, fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	clientAddr, err := v.toAddress(clientIP)
+	if err != nil {
+		return 0, fmt.Errorf("convert client IP: %w", err)
+	}
+
+	var clientMacAddr ethernet_types.MacAddress
+	copy(clientMacAddr[:], clientMAC)
+
+	var localMacAddr ethernet_types.MacAddress
+	copy(localMacAddr[:], localMAC)
+
+	req := &osvbng_pppoe.OsvbngPppoeAddDelSession{
+		IsAdd:        true,
+		SessionID:    sessionID,
+		ClientIP:     clientAddr,
+		DecapVrfID:   decapVrfID,
+		ClientMac:    clientMacAddr,
+		LocalMac:     localMacAddr,
+		EncapIfIndex: interface_types.InterfaceIndex(encapIfIndex),
+		OuterVlan:    outerVLAN,
+		InnerVlan:    innerVLAN,
+	}
+
+	reply := &osvbng_pppoe.OsvbngPppoeAddDelSessionReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return 0, fmt.Errorf("add pppoe session: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return 0, fmt.Errorf("add pppoe session failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Info("Added PPPoE session to VPP",
+		"session_id", sessionID,
+		"client_ip", clientIP.String(),
+		"client_mac", clientMAC.String(),
+		"local_mac", localMAC.String(),
+		"encap_if_index", encapIfIndex,
+		"outer_vlan", outerVLAN,
+		"inner_vlan", innerVLAN,
+		"sw_if_index", reply.SwIfIndex)
+
+	return uint32(reply.SwIfIndex), nil
+}
+
+func (v *VPP) DeletePPPoESession(sessionID uint16, clientIP net.IP, clientMAC net.HardwareAddr) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	clientAddr, err := v.toAddress(clientIP)
+	if err != nil {
+		return fmt.Errorf("convert client IP: %w", err)
+	}
+
+	var clientMacAddr ethernet_types.MacAddress
+	copy(clientMacAddr[:], clientMAC)
+
+	// For delete, VPP only uses (client_mac, session_id) for bihash lookup
+	// and client_ip for FIB removal. Other fields are ignored.
+	req := &osvbng_pppoe.OsvbngPppoeAddDelSession{
+		IsAdd:     false,
+		SessionID: sessionID,
+		ClientIP:  clientAddr,
+		ClientMac: clientMacAddr,
+	}
+
+	reply := &osvbng_pppoe.OsvbngPppoeAddDelSessionReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("delete pppoe session: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return fmt.Errorf("delete pppoe session failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Info("Deleted PPPoE session from VPP",
+		"session_id", sessionID,
+		"client_ip", clientIP.String())
+
 	return nil
 }
 
@@ -1684,12 +1883,12 @@ func (v *VPP) EnableAccounting(ifaceName string) error {
 		return fmt.Errorf("get interface index: %w", err)
 	}
 
-	req := &openbng_accounting.OpenbngAcctInterfaceEnableDisable{
+	req := &osvbng_accounting.OsvbngAcctInterfaceEnableDisable{
 		SwIfIndex: interface_types.InterfaceIndex(idx),
 		Enable:    true,
 	}
 
-	reply := &openbng_accounting.OpenbngAcctInterfaceEnableDisableReply{}
+	reply := &osvbng_accounting.OsvbngAcctInterfaceEnableDisableReply{}
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
 		return fmt.Errorf("enable accounting: %w", err)
 	}
@@ -1727,14 +1926,14 @@ func (v *VPP) AddAccountingSubscriber(ipAddr string, fibIndex uint32, swIfIndex 
 	var sessionIDBytes [8]byte
 	copy(sessionIDBytes[:], sessionID)
 
-	req := &openbng_accounting.OpenbngAcctSubscriberAdd{
+	req := &osvbng_accounting.OsvbngAcctSubscriberAdd{
 		IP4Address: ip4Addr,
 		FibIndex:   fibIndex,
 		SwIfIndex:  interface_types.InterfaceIndex(swIfIndex),
 		SessionID:  sessionIDBytes[:],
 	}
 
-	reply := &openbng_accounting.OpenbngAcctSubscriberAddReply{}
+	reply := &osvbng_accounting.OsvbngAcctSubscriberAddReply{}
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
 		return fmt.Errorf("add subscriber: %w", err)
 	}
@@ -1766,12 +1965,12 @@ func (v *VPP) DeleteAccountingSubscriber(ipAddr string, fibIndex uint32) error {
 	var ip4Addr ip_types.IP4Address
 	copy(ip4Addr[:], ip4)
 
-	req := &openbng_accounting.OpenbngAcctSubscriberDel{
+	req := &osvbng_accounting.OsvbngAcctSubscriberDel{
 		IP4Address: ip4Addr,
 		FibIndex:   fibIndex,
 	}
 
-	reply := &openbng_accounting.OpenbngAcctSubscriberDelReply{}
+	reply := &osvbng_accounting.OsvbngAcctSubscriberDelReply{}
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
 		return fmt.Errorf("delete subscriber: %w", err)
 	}
@@ -1791,13 +1990,13 @@ func (v *VPP) GetSubscriberStats(ctx context.Context) ([]subscribers.Statistics,
 	}
 	defer ch.Close()
 
-	stream := ch.SendMultiRequest(&openbng_accounting.OpenbngAcctSubscriberDump{})
+	stream := ch.SendMultiRequest(&osvbng_accounting.OsvbngAcctSubscriberDump{})
 
 	var stats []subscribers.Statistics
 	receivedCount := 0
 
 	for {
-		details := &openbng_accounting.OpenbngAcctSubscriberDetails{}
+		details := &osvbng_accounting.OsvbngAcctSubscriberDetails{}
 		stop, err := stream.ReceiveReply(details)
 		if err != nil || stop {
 			break
@@ -1871,6 +2070,13 @@ func (v *VPP) SetupMemifDataplane(memifID uint32, accessIface string, socketPath
 		socketPath = "/run/osvbng/memif.sock"
 	}
 	socketID := uint32(1)
+	memifName := fmt.Sprintf("memif%d/%d", socketID, memifID)
+
+	if idx, err := v.GetInterfaceIndex(memifName); err == nil {
+		v.logger.Info("Memif already exists in VPP", "name", memifName, "sw_if_index", idx)
+		v.ifaceCache[memifName] = interface_types.InterfaceIndex(idx)
+		return nil
+	}
 
 	socketReq := &memif.MemifSocketFilenameAddDelV2{
 		IsAdd:          true,
@@ -1902,7 +2108,6 @@ func (v *VPP) SetupMemifDataplane(memifID uint32, accessIface string, socketPath
 		return fmt.Errorf("create memif failed: retval=%d", memifReply.Retval)
 	}
 
-	memifName := fmt.Sprintf("memif%d/%d", memifID, socketID)
 	v.ifaceCache[memifName] = memifReply.SwIfIndex
 	v.logger.Info("Created memif interface", "id", memifID, "name", memifName, "sw_if_index", memifReply.SwIfIndex)
 
@@ -2111,4 +2316,234 @@ func (v *VPP) GetNextAvailableGlobalTableId() (uint32, error) {
 
 	// Is this risky to return 0? 0 is the default... but we do return an error, but someone could just ignore the error
 	return 0, fmt.Errorf("no available table IDs")
+}
+
+func (v *VPP) AddPPPoESessionAsync(sessionID uint16, clientIP net.IP, clientMAC net.HardwareAddr, localMAC net.HardwareAddr, encapIfIndex uint32, outerVLAN uint16, innerVLAN uint16, decapVrfID uint32, callback func(uint32, error)) {
+	clientAddr, err := v.toAddress(clientIP)
+	if err != nil {
+		callback(0, fmt.Errorf("convert client IP: %w", err))
+		return
+	}
+
+	var clientMacAddr ethernet_types.MacAddress
+	copy(clientMacAddr[:], clientMAC)
+
+	var localMacAddr ethernet_types.MacAddress
+	copy(localMacAddr[:], localMAC)
+
+	req := &osvbng_pppoe.OsvbngPppoeAddDelSession{
+		IsAdd:        true,
+		SessionID:    sessionID,
+		ClientIP:     clientAddr,
+		DecapVrfID:   decapVrfID,
+		ClientMac:    clientMacAddr,
+		LocalMac:     localMacAddr,
+		EncapIfIndex: interface_types.InterfaceIndex(encapIfIndex),
+		OuterVlan:    outerVLAN,
+		InnerVlan:    innerVLAN,
+	}
+
+	v.asyncWorker.SendAsync(req, func(reply api.Message, err error) {
+		if err != nil {
+			callback(0, err)
+			return
+		}
+		r := reply.(*osvbng_pppoe.OsvbngPppoeAddDelSessionReply)
+		if r.Retval != 0 {
+			callback(0, fmt.Errorf("VPP error: retval=%d", r.Retval))
+			return
+		}
+		v.logger.Info("Added PPPoE session to VPP (async)",
+			"session_id", sessionID,
+			"client_ip", clientIP.String(),
+			"sw_if_index", r.SwIfIndex)
+		callback(uint32(r.SwIfIndex), nil)
+	})
+}
+
+func (v *VPP) DeletePPPoESessionAsync(sessionID uint16, clientIP net.IP, clientMAC net.HardwareAddr, callback func(error)) {
+	clientAddr, err := v.toAddress(clientIP)
+	if err != nil {
+		callback(fmt.Errorf("convert client IP: %w", err))
+		return
+	}
+
+	var clientMacAddr ethernet_types.MacAddress
+	copy(clientMacAddr[:], clientMAC)
+
+	req := &osvbng_pppoe.OsvbngPppoeAddDelSession{
+		IsAdd:     false,
+		SessionID: sessionID,
+		ClientIP:  clientAddr,
+		ClientMac: clientMacAddr,
+	}
+
+	v.asyncWorker.SendAsync(req, func(reply api.Message, err error) {
+		if err != nil {
+			callback(err)
+			return
+		}
+		r := reply.(*osvbng_pppoe.OsvbngPppoeAddDelSessionReply)
+		if r.Retval != 0 {
+			callback(fmt.Errorf("VPP error: retval=%d", r.Retval))
+			return
+		}
+		v.logger.Info("Deleted PPPoE session from VPP (async)",
+			"session_id", sessionID,
+			"client_ip", clientIP.String())
+		callback(nil)
+	})
+}
+
+func (v *VPP) AddAdjacencyWithRewriteAsync(ipAddr string, swIfIndex uint32, rewrite []byte, callback func(adjIndex uint32, err error)) {
+	ip := net.ParseIP(ipAddr)
+	if ip == nil {
+		callback(0, fmt.Errorf("invalid IP address: %s", ipAddr))
+		return
+	}
+
+	var addr ip_types.Address
+	if ip.To4() != nil {
+		addr = ip_types.Address{
+			Af: ip_types.ADDRESS_IP4,
+			Un: ip_types.AddressUnionIP4(ip_types.IP4Address{
+				ip.To4()[0], ip.To4()[1], ip.To4()[2], ip.To4()[3],
+			}),
+		}
+	} else {
+		var ip6 ip_types.IP6Address
+		copy(ip6[:], ip.To16())
+		addr = ip_types.Address{
+			Af: ip_types.ADDRESS_IP6,
+			Un: ip_types.AddressUnionIP6(ip6),
+		}
+	}
+
+	linkType := uint8(0)
+	if ip.To4() == nil {
+		linkType = 1
+	}
+
+	req := &fib_control.FibControlAdjAddRewrite{
+		SwIfIndex:  interface_types.InterfaceIndex(swIfIndex),
+		NhAddr:     addr,
+		LinkType:   linkType,
+		RewriteLen: uint8(len(rewrite)),
+		Rewrite:    make([]byte, 128),
+	}
+	copy(req.Rewrite, rewrite)
+
+	v.asyncWorker.SendAsync(req, func(reply api.Message, err error) {
+		if err != nil {
+			callback(0, err)
+			return
+		}
+		r := reply.(*fib_control.FibControlAdjAddRewriteReply)
+		if r.Retval != 0 {
+			callback(0, fmt.Errorf("add adjacency failed with retval: %d", r.Retval))
+			return
+		}
+		v.logger.Debug("VPP adjacency created (async)", "adj_index", r.AdjIndex)
+		callback(r.AdjIndex, nil)
+	})
+}
+
+func (v *VPP) AddHostRouteAsync(ipAddr string, adjIndex uint32, fibID uint32, swIfIndex uint32, callback func(error)) {
+	ip := net.ParseIP(ipAddr)
+	if ip == nil {
+		callback(fmt.Errorf("invalid IP address: %s", ipAddr))
+		return
+	}
+
+	var addr ip_types.Address
+	if ip.To4() != nil {
+		addr = ip_types.Address{
+			Af: ip_types.ADDRESS_IP4,
+			Un: ip_types.AddressUnionIP4(ip_types.IP4Address{
+				ip.To4()[0], ip.To4()[1], ip.To4()[2], ip.To4()[3],
+			}),
+		}
+	} else {
+		var ip6 ip_types.IP6Address
+		copy(ip6[:], ip.To16())
+		addr = ip_types.Address{
+			Af: ip_types.ADDRESS_IP6,
+			Un: ip_types.AddressUnionIP6(ip6),
+		}
+	}
+
+	prefix := ip_types.Prefix{
+		Address: addr,
+		Len:     32,
+	}
+
+	req := &fib_control.FibControlAddHostRoute{
+		TableID:   fibID,
+		Prefix:    prefix,
+		AdjIndex:  adjIndex,
+		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+	}
+
+	v.asyncWorker.SendAsync(req, func(reply api.Message, err error) {
+		if err != nil {
+			callback(err)
+			return
+		}
+		r := reply.(*fib_control.FibControlAddHostRouteReply)
+		if r.Retval != 0 {
+			callback(fmt.Errorf("add host route failed with retval: %d", r.Retval))
+			return
+		}
+		v.logger.Debug("VPP host route added (async)", "ip", ipAddr)
+		callback(nil)
+	})
+}
+
+func (v *VPP) DeleteHostRouteAsync(ipAddr string, fibID uint32, callback func(error)) {
+	ip := net.ParseIP(ipAddr)
+	if ip == nil {
+		callback(fmt.Errorf("invalid IP address: %s", ipAddr))
+		return
+	}
+
+	var addr ip_types.Address
+	if ip.To4() != nil {
+		addr = ip_types.Address{
+			Af: ip_types.ADDRESS_IP4,
+			Un: ip_types.AddressUnionIP4(ip_types.IP4Address{
+				ip.To4()[0], ip.To4()[1], ip.To4()[2], ip.To4()[3],
+			}),
+		}
+	} else {
+		var ip6 ip_types.IP6Address
+		copy(ip6[:], ip.To16())
+		addr = ip_types.Address{
+			Af: ip_types.ADDRESS_IP6,
+			Un: ip_types.AddressUnionIP6(ip6),
+		}
+	}
+
+	prefix := ip_types.Prefix{
+		Address: addr,
+		Len:     32,
+	}
+
+	req := &fib_control.FibControlDelHostRoute{
+		TableID: fibID,
+		Prefix:  prefix,
+	}
+
+	v.asyncWorker.SendAsync(req, func(reply api.Message, err error) {
+		if err != nil {
+			callback(err)
+			return
+		}
+		r := reply.(*fib_control.FibControlDelHostRouteReply)
+		if r.Retval != 0 {
+			callback(fmt.Errorf("delete host route failed with retval: %d", r.Retval))
+			return
+		}
+		v.logger.Debug("VPP host route deleted (async)", "ip", ipAddr)
+		callback(nil)
+	})
 }
