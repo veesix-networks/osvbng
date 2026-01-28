@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -115,6 +116,12 @@ func (s *SessionState) handleLCP(code, id uint8, data []byte) error {
 		if s.component.echoGen != nil {
 			s.component.echoGen.HandleEchoReply(s.PPPoESessionID, id)
 		}
+	case ppp.ProtoRej:
+		// RFC 1661 Section 5.7 - stop sending the rejected protocol
+		if len(data) >= 2 {
+			rejectedProto := binary.BigEndian.Uint16(data[0:2])
+			s.handleProtocolReject(rejectedProto)
+		}
 	default:
 		s.lcp.FSM().Input(code, id, data)
 	}
@@ -158,6 +165,7 @@ func (s *SessionState) handleCHAPPacket(code, id uint8, data []byte) error {
 
 	switch code {
 	case ppp.CHAPResponse:
+		s.stopCHAPRetryTimer()
 		if len(data) < 1 {
 			return nil
 		}
@@ -204,7 +212,7 @@ func (s *SessionState) publishAAARequest(attrs map[string]string) {
 				AgentRemoteID:  s.AgentRemoteID,
 			}
 			username = policy.ExpandFormat(ctx)
-			s.component.logger.Info("Built username from policy",
+			s.component.logger.Debug("Built username from policy",
 				"policy", policyName,
 				"format", policy.Format,
 				"username", username)
@@ -227,7 +235,7 @@ func (s *SessionState) publishAAARequest(attrs map[string]string) {
 	}
 	aaaEvent.SetPayload(aaaPayload)
 
-	s.component.logger.Info("Publishing AAA request",
+	s.component.logger.Debug("Publishing AAA request",
 		"session_id", s.SessionID,
 		"username", username,
 		"auth_type", s.pendingAuthType)
@@ -238,7 +246,7 @@ func (s *SessionState) publishAAARequest(attrs map[string]string) {
 }
 
 func (s *SessionState) onLCPUp() {
-	s.component.logger.Info("LCP up",
+	s.component.logger.Debug("LCP up",
 		"session_id", s.SessionID,
 		"pppoe_session_id", s.PPPoESessionID)
 
@@ -253,23 +261,68 @@ func (s *SessionState) onLCPUp() {
 }
 
 func (s *SessionState) onLCPDown() {
-	s.component.logger.Info("LCP down",
+	s.component.logger.Debug("LCP down",
 		"session_id", s.SessionID,
 		"pppoe_session_id", s.PPPoESessionID)
 
 	s.Phase = ppp.PhaseEstablish
 }
 
+// we can set this as a config variable at some point
+const (
+	chapRetryTimeout = 3 * time.Second
+	chapMaxRetries   = 10
+)
+
 func (s *SessionState) startAuth(authProto uint16) {
-	s.component.logger.Info("Starting authentication",
+	s.component.logger.Debug("Starting authentication",
 		"session_id", s.SessionID,
 		"auth_proto", fmt.Sprintf("0x%04x", authProto))
 
 	if authProto == ppp.ProtoCHAP {
-		s.chapChallenge = make([]byte, 16)
-		rand.Read(s.chapChallenge)
-		s.chapID++
-		s.chap.SendChallenge(s.chapID, s.chapChallenge, s.component.acName)
+		s.chapRetryCount = 0
+		s.sendCHAPChallenge()
+	}
+}
+
+func (s *SessionState) sendCHAPChallenge() {
+	s.chapChallenge = make([]byte, 16)
+	rand.Read(s.chapChallenge)
+	s.chapID++
+	s.chap.SendChallenge(s.chapID, s.chapChallenge, s.component.acName)
+
+	s.stopCHAPRetryTimer()
+	s.chapRetryTimer = time.AfterFunc(chapRetryTimeout, func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.handleCHAPTimeout()
+	})
+}
+
+func (s *SessionState) handleCHAPTimeout() {
+	if s.Phase != ppp.PhaseAuthenticate {
+		return
+	}
+
+	s.chapRetryCount++
+	if s.chapRetryCount >= chapMaxRetries {
+		s.component.logger.Warn("CHAP authentication timeout",
+			"session_id", s.SessionID,
+			"pppoe_session_id", s.PPPoESessionID)
+		s.lcp.FSM().Close()
+		return
+	}
+
+	s.component.logger.Debug("Retransmitting CHAP challenge",
+		"session_id", s.SessionID,
+		"retry", s.chapRetryCount)
+	s.sendCHAPChallenge()
+}
+
+func (s *SessionState) stopCHAPRetryTimer() {
+	if s.chapRetryTimer != nil {
+		s.chapRetryTimer.Stop()
+		s.chapRetryTimer = nil
 	}
 }
 
@@ -365,7 +418,7 @@ func (s *SessionState) sendCHAPFailure(id uint8) {
 }
 
 func (s *SessionState) onAuthSuccess() {
-	s.component.logger.Info("Authentication successful",
+	s.component.logger.Debug("Authentication successful",
 		"session_id", s.SessionID,
 		"username", s.Username)
 
@@ -374,7 +427,7 @@ func (s *SessionState) onAuthSuccess() {
 }
 
 func (s *SessionState) startNCP() {
-	s.component.logger.Info("Starting NCP",
+	s.component.logger.Debug("Starting NCP",
 		"session_id", s.SessionID)
 
 	if s.IPv4Address == nil {
@@ -428,13 +481,13 @@ func (s *SessionState) allocateFromPool() {
 		s.DNS2 = dns2
 	}
 
-	s.component.logger.Info("Allocated IP from pool",
+	s.component.logger.Debug("Allocated IP from pool",
 		"session_id", s.SessionID,
 		"ip", ip.String())
 }
 
 func (s *SessionState) onIPCPUp() {
-	s.component.logger.Info("IPCP up",
+	s.component.logger.Debug("IPCP up",
 		"session_id", s.SessionID,
 		"ipv4", s.ipcp.PeerConfig().Address)
 
@@ -444,23 +497,23 @@ func (s *SessionState) onIPCPUp() {
 }
 
 func (s *SessionState) onIPCPDown() {
-	s.component.logger.Info("IPCP down", "session_id", s.SessionID)
+	s.component.logger.Debug("IPCP down", "session_id", s.SessionID)
 	s.ipcpOpen = false
 }
 
 func (s *SessionState) onIPv6CPUp() {
-	s.component.logger.Info("IPv6CP up", "session_id", s.SessionID)
+	s.component.logger.Debug("IPv6CP up", "session_id", s.SessionID)
 	s.ipv6cpOpen = true
 	s.checkOpen()
 }
 
 func (s *SessionState) onIPv6CPDown() {
-	s.component.logger.Info("IPv6CP down", "session_id", s.SessionID)
+	s.component.logger.Debug("IPv6CP down", "session_id", s.SessionID)
 	s.ipv6cpOpen = false
 }
 
 func (s *SessionState) checkOpen() {
-	s.component.logger.Info("checkOpen called",
+	s.component.logger.Debug("checkOpen called",
 		"session_id", s.SessionID,
 		"phase", s.Phase,
 		"ipcp_open", s.ipcpOpen,
@@ -469,7 +522,7 @@ func (s *SessionState) checkOpen() {
 	if s.Phase == ppp.PhaseNetwork {
 		if s.ipcpOpen || s.ipv6cpOpen {
 			s.Phase = ppp.PhaseOpen
-			s.component.logger.Info("Session open",
+			s.component.logger.Debug("Session open",
 				"session_id", s.SessionID,
 				"pppoe_session_id", s.PPPoESessionID,
 				"ipv4", s.IPv4Address)
@@ -515,7 +568,7 @@ func (s *SessionState) onVPPSessionCreated(swIfIndex uint32, err error) {
 	}
 
 	s.SwIfIndex = swIfIndex
-	s.component.logger.Info("Programmed PPPoE session in VPP",
+	s.component.logger.Debug("Programmed PPPoE session in VPP",
 		"session_id", s.SessionID,
 		"sw_if_index", swIfIndex,
 		"outer_vlan", s.OuterVLAN,
@@ -547,6 +600,19 @@ func (s *SessionState) sendCHAP(code, id uint8, data []byte) {
 	s.sendPPPPacket(ppp.ProtoCHAP, code, id, data)
 }
 
+func (s *SessionState) handleProtocolReject(proto uint16) {
+	s.component.logger.Debug("Received Protocol-Reject",
+		"pppoe_session_id", s.PPPoESessionID,
+		"rejected_proto", fmt.Sprintf("0x%04x", proto))
+
+	switch proto {
+	case ppp.ProtoIPCP:
+		s.ipcp.FSM().Close()
+	case ppp.ProtoIPv6CP:
+		s.ipv6cp.FSM().Close()
+	}
+}
+
 func (s *SessionState) sendLCPEchoReply(id uint8, data []byte) {
 	magic := s.lcp.LocalConfig().Magic
 	resp := make([]byte, 4)
@@ -558,6 +624,14 @@ func (s *SessionState) sendLCPEchoReply(id uint8, data []byte) {
 }
 
 func (s *SessionState) sendLCPEchoRequest(id uint8) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// RFC 1661 Section 5.8
+	if s.Phase != ppp.PhaseOpen && s.Phase != ppp.PhaseNetwork {
+		return
+	}
+
 	magic := s.lcp.LocalConfig().Magic
 	data := make([]byte, 4)
 	binary.BigEndian.PutUint32(data, magic)
@@ -640,6 +714,8 @@ func (s *SessionState) sendPPPPacket(proto uint16, code, id uint8, data []byte) 
 func (s *SessionState) terminate() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	s.stopCHAPRetryTimer()
 
 	if s.component.echoGen != nil {
 		s.component.echoGen.RemoveSession(s.PPPoESessionID)

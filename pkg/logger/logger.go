@@ -64,6 +64,7 @@ func Configure(logFormat string, level LogLevel, components map[string]LogLevel)
 
 type BNGTextHandler struct {
 	opts  *slog.HandlerOptions
+	level slog.Level
 	mu    sync.Mutex
 	w     io.Writer
 	attrs []slog.Attr
@@ -74,18 +75,19 @@ func NewBNGTextHandler(w io.Writer, opts *slog.HandlerOptions) *BNGTextHandler {
 	if opts == nil {
 		opts = &slog.HandlerOptions{}
 	}
+	level := slog.LevelInfo
+	if opts.Level != nil {
+		level = opts.Level.Level()
+	}
 	return &BNGTextHandler{
-		w:    w,
-		opts: opts,
+		w:     w,
+		opts:  opts,
+		level: level,
 	}
 }
 
 func (h *BNGTextHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	minLevel := slog.LevelInfo
-	if h.opts.Level != nil {
-		minLevel = h.opts.Level.Level()
-	}
-	return level >= minLevel
+	return level >= h.level
 }
 
 func (h *BNGTextHandler) Handle(ctx context.Context, r slog.Record) error {
@@ -136,6 +138,7 @@ func (h *BNGTextHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return &BNGTextHandler{
 		w:     h.w,
 		opts:  h.opts,
+		level: h.level,
 		attrs: append(h.attrs, attrs...),
 		group: h.group,
 	}
@@ -145,6 +148,7 @@ func (h *BNGTextHandler) WithGroup(name string) slog.Handler {
 	return &BNGTextHandler{
 		w:     h.w,
 		opts:  h.opts,
+		level: h.level,
 		attrs: h.attrs,
 		group: name,
 	}

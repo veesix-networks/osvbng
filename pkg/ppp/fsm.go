@@ -185,6 +185,9 @@ func (f *FSM) Input(code uint8, id uint8, data []byte) {
 		f.rtaEvent()
 	case CodeRej:
 		f.rxjEvent(data)
+	case ProtoRej:
+		// RFC 1661 Section 5.7 - silently handle, don't terminate
+		// Protocol-Reject indicates peer doesn't support a protocol we sent
 	case EchoReq:
 		f.rxrEvent(id, data)
 	case EchoRep, DiscReq:
@@ -202,7 +205,7 @@ func (f *FSM) Timeout() {
 		f.restartCount--
 		switch f.state {
 		case Closing, Stopping:
-			f.str()
+			f.strRetransmit()
 		case ReqSent, AckSent:
 			f.scr()
 		case AckRcvd:
@@ -448,6 +451,11 @@ func (f *FSM) scj(id uint8, opts []Option) {
 
 func (f *FSM) str() {
 	f.restartCount = f.maxTerm
+	f.send(TermReq, f.nextID(), nil)
+	f.startTimer()
+}
+
+func (f *FSM) strRetransmit() {
 	f.send(TermReq, f.nextID(), nil)
 	f.startTimer()
 }
