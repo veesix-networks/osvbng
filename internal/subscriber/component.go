@@ -12,7 +12,6 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
-	"github.com/veesix-networks/osvbng/pkg/models/subscribers"
 	"github.com/veesix-networks/osvbng/pkg/session"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"github.com/veesix-networks/osvbng/pkg/srg"
@@ -77,10 +76,6 @@ func (c *Component) Stop(ctx context.Context) error {
 	c.StopContext()
 
 	return nil
-}
-
-func (c *Component) GetSessionStats(ctx context.Context) ([]subscribers.Statistics, error) {
-	return c.vpp.GetSubscriberStats(ctx)
 }
 
 func (c *Component) GetSessionsForAPI(ctx context.Context, accessType, protocol string, svlan uint32) ([]*models.DHCPv4Session, error) {
