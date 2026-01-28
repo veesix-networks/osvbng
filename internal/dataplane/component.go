@@ -131,7 +131,7 @@ func (c *Component) egressStatsLoop() {
 			count := c.egressCount.Load()
 			errors := c.egressErrors.Load()
 			if count != lastCount || errors != lastErrors {
-				c.logger.Info("Egress stats", "total_sent", count, "total_errors", errors, "sent_per_sec", count-lastCount, "errors_per_sec", errors-lastErrors)
+				c.logger.Debug("Egress stats", "total_sent", count, "total_errors", errors, "sent_per_sec", count-lastCount, "errors_per_sec", errors-lastErrors)
 				lastCount = count
 				lastErrors = errors
 			}
@@ -163,7 +163,7 @@ func (c *Component) readLoop() {
 			pktCount++
 			now := time.Now()
 			if now.Sub(lastLogTime) >= time.Second {
-				c.logger.Info("Punt socket throughput", "packets_per_sec", pktCount, "dhcp_chan_len", len(c.DHCPChan), "ppp_chan_len", len(c.PPPoEChan))
+				c.logger.Debug("Punt socket throughput", "packets_per_sec", pktCount, "dhcp_chan_len", len(c.DHCPChan), "ppp_chan_len", len(c.PPPoEChan))
 				pktCount = 0
 				lastLogTime = now
 			}

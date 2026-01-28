@@ -329,14 +329,14 @@ func (c *Component) handleSessionLifecycle(event models.Event) error {
 	}
 
 	if !isDF {
-		c.logger.Info("[NOT-DF] Skipping southbound ops",
+		c.logger.Debug("[NOT-DF] Skipping southbound ops",
 			"session_id", sessionID,
 			"group", c.srgMgr.GetGroupForSVLAN(outerVLAN))
 		c.persistSession(sess)
 		return nil
 	}
 
-	c.logger.Info("[DF] Processing session", "session_id", sessionID, "state", state)
+	c.logger.Debug("[DF] Processing session", "session_id", sessionID, "state", state)
 
 	if err := c.persistSession(sess); err != nil {
 		return fmt.Errorf("persist session: %w", err)
@@ -350,7 +350,7 @@ func (c *Component) handleSessionLifecycle(event models.Event) error {
 		if leaseTime > 0 {
 			expiryTime := time.Now().Add(time.Duration(leaseTime) * time.Second)
 			c.expiryMgr.Set(sessionID, expiryTime)
-			c.logger.Info("Set session expiry", "session_id", sessionID, "expiry_time", expiryTime.Format(time.RFC3339))
+			c.logger.Debug("Set session expiry", "session_id", sessionID, "expiry_time", expiryTime.Format(time.RFC3339))
 		}
 	} else if state == models.SessionStateReleased {
 		c.expiryMgr.Remove(sessionID)
@@ -369,7 +369,7 @@ func (c *Component) activateSession(sess *models.DHCPv4Session) error {
 	if err := c.vpp.ApplyQoS(ifaceName, 10, 10); err != nil {
 		c.logger.Warn("Failed to apply QoS", "error", err, "interface", ifaceName)
 	} else {
-		c.logger.Info("Applied QoS", "interface", ifaceName)
+		c.logger.Debug("Applied QoS", "interface", ifaceName)
 	}
 
 	return nil
@@ -469,7 +469,7 @@ func (c *Component) persistSession(sess *models.DHCPv4Session) error {
 			}
 		}
 
-		c.logger.Info("Deleted session from cache", "session_id", sess.SessionID)
+		c.logger.Debug("Deleted session from cache", "session_id", sess.SessionID)
 		return nil
 	}
 
@@ -478,7 +478,7 @@ func (c *Component) persistSession(sess *models.DHCPv4Session) error {
 		return fmt.Errorf("marshal session: %w", err)
 	}
 
-	c.logger.Info("Persisting session to cache", "session_id", sess.SessionID, "key", key, "data_len", len(data), "json", string(data[:min(200, len(data))]))
+	c.logger.Debug("Persisting session to cache", "session_id", sess.SessionID, "key", key, "data_len", len(data), "json", string(data[:min(200, len(data))]))
 
 	ttl := time.Duration(0)
 	if sess.LeaseTime > 0 {
@@ -489,7 +489,7 @@ func (c *Component) persistSession(sess *models.DHCPv4Session) error {
 		return fmt.Errorf("set session: %w", err)
 	}
 
-	c.logger.Info("Session persisted to cache", "session_id", sess.SessionID)
+	c.logger.Debug("Session persisted to cache", "session_id", sess.SessionID)
 
 	lookupKey := c.buildLookupKey(sess)
 	if lookupKey != "" {
@@ -500,7 +500,7 @@ func (c *Component) persistSession(sess *models.DHCPv4Session) error {
 
 	arpLookupKey := c.buildARPLookupKey(sess)
 	if arpLookupKey != "" {
-		c.logger.Info("Creating ARP lookup index", "key", arpLookupKey, "session_id", sess.SessionID)
+		c.logger.Debug("Creating ARP lookup index", "key", arpLookupKey, "session_id", sess.SessionID)
 		if err := c.cache.Set(c.Ctx, arpLookupKey, []byte(sess.SessionID), ttl); err != nil {
 			return fmt.Errorf("set arp lookup key: %w", err)
 		}
@@ -536,7 +536,7 @@ func (c *Component) buildARPLookupKey(sess *models.DHCPv4Session) string {
 }
 
 func (c *Component) handleSessionExpiry(sessionID string, expiryTime time.Time) {
-	c.logger.Info("Session expired", "session_id", sessionID, "expiry_time", expiryTime.Format(time.RFC3339))
+	c.logger.Debug("Session expired", "session_id", sessionID, "expiry_time", expiryTime.Format(time.RFC3339))
 
 	key := fmt.Sprintf("osvbng:sessions:%s", sessionID)
 	data, err := c.cache.Get(c.Ctx, key)

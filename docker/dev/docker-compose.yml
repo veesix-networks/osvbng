@@ -24,7 +24,7 @@ services:
       - net.unix.max_dgram_qlen=10000
     environment:
       - OSVBNG_ACCESS_INTERFACE=eth1
-      - OSVBNG_LOG_LEVEL=debug
+      - OSVBNG_LOG_LEVEL=info
     networks:
       b-access:
       c-core:

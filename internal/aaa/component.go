@@ -102,7 +102,7 @@ func (c *Component) BuildAccountingBuckets() {
 				next = next.Add(1 * time.Minute)
 			}
 
-			c.logger.Info("Bucket sleeping", "id", bucketId, "until", next, "duration", time.Until(next))
+			c.logger.Debug("Bucket sleeping", "id", bucketId, "until", next, "duration", time.Until(next))
 			time.Sleep(time.Until(next))
 
 			ticker := time.NewTicker(1 * time.Minute)
@@ -182,7 +182,7 @@ func (c *Component) handleAAARequest(event models.Event) error {
 		return c.publishResponse(req.RequestID, event.SessionID, event.AccessType, false, nil, err)
 	}
 
-	c.logger.Info("Authentication response",
+	c.logger.Debug("Authentication response",
 		"allowed", authResp.Allowed,
 		"mac", req.MAC,
 		"acct_session_id", req.AcctSessionID)

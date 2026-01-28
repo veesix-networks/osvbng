@@ -94,7 +94,7 @@ func NewVPP(cfg VPPConfig) (*VPP, error) {
 
 	asyncWorker.Start()
 
-	v.logger.Info("Connected to VPP", "parent_interface", v.parentIface, "sw_if_index", v.parentIfIdx)
+	v.logger.Debug("Connected to VPP", "parent_interface", v.parentIface, "sw_if_index", v.parentIfIdx)
 
 	return v, nil
 }
@@ -139,7 +139,7 @@ func (v *VPP) CreateTAP(tapName string) (string, error) {
 		return "", fmt.Errorf("set interface up: %w", err)
 	}
 
-	v.logger.Info("Created TAP interface", "interface", tapName, "sw_if_index", reply.SwIfIndex)
+	v.logger.Debug("Created TAP interface", "interface", tapName, "sw_if_index", reply.SwIfIndex)
 
 	return tapName, nil
 }
@@ -180,7 +180,7 @@ func (v *VPP) SetL2CrossConnect(iface1, iface2 string) error {
 		return fmt.Errorf("set xconnect %s->%s: %w", iface1, iface2, err)
 	}
 
-	v.logger.Info("Set L2 cross-connect (one-way)", "from", iface1, "to", iface2)
+	v.logger.Debug("Set L2 cross-connect (one-way)", "from", iface1, "to", iface2)
 
 	return nil
 }
@@ -231,21 +231,21 @@ func (v *VPP) resolveParentInterface() error {
 			break
 		}
 
-		v.logger.Info("Scanning VPP interface during parent resolution", "interface_name", msg.InterfaceName, "sw_if_index", msg.SwIfIndex, "mac", net.HardwareAddr(msg.L2Address[:6]).String())
+		v.logger.Debug("Scanning VPP interface during parent resolution", "interface_name", msg.InterfaceName, "sw_if_index", msg.SwIfIndex, "mac", net.HardwareAddr(msg.L2Address[:6]).String())
 
 		// Match exact name or with "host-" prefix (linux_nl plugin adds this automatically for AF_PACKET and XDP interfaces, DPDK we don't care)
 		if msg.InterfaceName == v.parentIface || msg.InterfaceName == "host-"+v.parentIface {
-			v.logger.Info("Resolved parent interface", "requested_name", v.parentIface, "matched_name", msg.InterfaceName, "sw_if_index", msg.SwIfIndex, "mac", net.HardwareAddr(msg.L2Address[:6]).String())
+			v.logger.Debug("Resolved parent interface", "requested_name", v.parentIface, "matched_name", msg.InterfaceName, "sw_if_index", msg.SwIfIndex, "mac", net.HardwareAddr(msg.L2Address[:6]).String())
 			v.parentIfIdx = msg.SwIfIndex
 			v.ifaceCache[v.parentIface] = msg.SwIfIndex
 
 			// If not using DPDK and VPP interface has null MAC, set it from Linux interface
 			vppMAC := net.HardwareAddr(msg.L2Address[:6])
 			if !v.useDPDK && vppMAC.String() == "00:00:00:00:00:00" {
-				v.logger.Info("AF_PACKET interface has null MAC, setting from Linux interface", "interface", v.parentIface)
+				v.logger.Debug("AF_PACKET interface has null MAC, setting from Linux interface", "interface", v.parentIface)
 				if linuxIface, err := net.InterfaceByName(v.parentIface); err == nil {
 					if err := v.SetInterfaceMAC(msg.SwIfIndex, linuxIface.HardwareAddr); err == nil {
-						v.logger.Info("Set VPP interface MAC from Linux", "interface", v.parentIface, "mac", linuxIface.HardwareAddr.String())
+						v.logger.Debug("Set VPP interface MAC from Linux", "interface", v.parentIface, "mac", linuxIface.HardwareAddr.String())
 						v.parentIfMAC = linuxIface.HardwareAddr
 					} else {
 						v.logger.Warn("Failed to set VPP interface MAC", "error", err, "interface", v.parentIface)
@@ -275,12 +275,12 @@ func (v *VPP) CreateSVLAN(vlan uint16, ipv4 []string, ipv6 []string) error {
 	subIfName := fmt.Sprintf("%s.%d", v.parentIface, vlan)
 
 	if idx, exists := v.ifaceCache[subIfName]; exists {
-		v.logger.Info("S-VLAN sub-interface already in cache", "interface", subIfName, "sw_if_index", idx)
+		v.logger.Debug("S-VLAN sub-interface already in cache", "interface", subIfName, "sw_if_index", idx)
 		return nil
 	}
 
 	if idx, err := v.GetInterfaceIndex(subIfName); err == nil {
-		v.logger.Info("S-VLAN sub-interface already exists in VPP", "interface", subIfName, "sw_if_index", idx)
+		v.logger.Debug("S-VLAN sub-interface already exists in VPP", "interface", subIfName, "sw_if_index", idx)
 		v.ifaceCache[subIfName] = interface_types.InterfaceIndex(idx)
 		return nil
 	}
@@ -295,7 +295,7 @@ func (v *VPP) CreateSVLAN(vlan uint16, ipv4 []string, ipv6 []string) error {
 	reply := &interfaces.CreateSubifReply{}
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
 		if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "-56") {
-			v.logger.Info("S-VLAN sub-interface already exists in VPP", "interface", subIfName)
+			v.logger.Debug("S-VLAN sub-interface already exists in VPP", "interface", subIfName)
 			idx, err := v.GetInterfaceIndex(subIfName)
 			if err != nil {
 				return fmt.Errorf("get existing subinterface index: %w", err)
@@ -329,7 +329,7 @@ func (v *VPP) CreateSVLAN(vlan uint16, ipv4 []string, ipv6 []string) error {
 		}
 	}
 
-	v.logger.Info("Created S-VLAN sub-interface", "interface", subIfName, "sw_if_index", reply.SwIfIndex)
+	v.logger.Debug("Created S-VLAN sub-interface", "interface", subIfName, "sw_if_index", reply.SwIfIndex)
 	return nil
 }
 
@@ -355,7 +355,7 @@ func (v *VPP) DeleteInterface(name string) error {
 	}
 
 	delete(v.ifaceCache, name)
-	v.logger.Info("Deleted interface", "interface", name)
+	v.logger.Debug("Deleted interface", "interface", name)
 	return nil
 }
 
@@ -416,7 +416,7 @@ func (v *VPP) AddNeighbor(ipAddr, macAddr, iface string) error {
 		return fmt.Errorf("add neighbor: %w", err)
 	}
 
-	v.logger.Info("Added neighbor", "ip", ipAddr, "mac", macAddr, "interface", iface)
+	v.logger.Debug("Added neighbor", "ip", ipAddr, "mac", macAddr, "interface", iface)
 	return nil
 }
 
@@ -467,17 +467,17 @@ func (v *VPP) DeleteNeighbor(ipAddr, iface string) error {
 		return fmt.Errorf("delete neighbor: %w", err)
 	}
 
-	v.logger.Info("Deleted neighbor", "ip", ipAddr, "interface", iface)
+	v.logger.Debug("Deleted neighbor", "ip", ipAddr, "interface", iface)
 	return nil
 }
 
 func (v *VPP) ApplyQoS(iface string, upMbps, downMbps int) error {
-	v.logger.Info("QoS not yet implemented", "interface", iface, "up_mbps", upMbps, "down_mbps", downMbps)
+	v.logger.Debug("QoS not yet implemented", "interface", iface, "up_mbps", upMbps, "down_mbps", downMbps)
 	return nil
 }
 
 func (v *VPP) RemoveQoS(iface string) error {
-	v.logger.Info("QoS removal not yet implemented", "interface", iface)
+	v.logger.Debug("QoS removal not yet implemented", "interface", iface)
 	return nil
 }
 
@@ -562,7 +562,7 @@ func (v *VPP) AddRoute(prefix, nexthop, vrf string) error {
 		return fmt.Errorf("add route: %w", err)
 	}
 
-	v.logger.Info("Added route", "prefix", prefix, "nexthop", nexthop)
+	v.logger.Debug("Added route", "prefix", prefix, "nexthop", nexthop)
 	return nil
 }
 
@@ -610,7 +610,7 @@ func (v *VPP) AddLocalRoute(prefix string) error {
 		return fmt.Errorf("add local route: %w", err)
 	}
 
-	v.logger.Info("Added local route", "prefix", prefix)
+	v.logger.Debug("Added local route", "prefix", prefix)
 	return nil
 }
 
@@ -664,7 +664,7 @@ func (v *VPP) DeleteRoute(prefix, vrf string) error {
 		return fmt.Errorf("delete route: %w", err)
 	}
 
-	v.logger.Info("Deleted route", "prefix", prefix)
+	v.logger.Debug("Deleted route", "prefix", prefix)
 	return nil
 }
 
@@ -682,7 +682,7 @@ func (v *VPP) GetInterfaceIndex(name string) (int, error) {
 			NameFilter:      name,
 		}
 
-		v.logger.Info("Looking up interface index", "name", name)
+		v.logger.Debug("Looking up interface index", "name", name)
 		stream := ch.SendMultiRequest(req)
 		for {
 			reply := &interfaces.SwInterfaceDetails{}
@@ -694,10 +694,10 @@ func (v *VPP) GetInterfaceIndex(name string) (int, error) {
 				return 0, fmt.Errorf("dump interface: %w", err)
 			}
 
-			v.logger.Info("Checking interface from VPP", "requested_name", name, "vpp_interface_name", reply.InterfaceName, "sw_if_index", reply.SwIfIndex)
+			v.logger.Debug("Checking interface from VPP", "requested_name", name, "vpp_interface_name", reply.InterfaceName, "sw_if_index", reply.SwIfIndex)
 			// Match exact name or with "host-" prefix (linux_nl plugin adds this automatically for AF_PACKET and XDP interfaces)
 			if reply.InterfaceName == name || reply.InterfaceName == "host-"+name {
-				v.logger.Info("Found matching interface", "requested_name", name, "matched_name", reply.InterfaceName, "sw_if_index", reply.SwIfIndex)
+				v.logger.Debug("Found matching interface", "requested_name", name, "matched_name", reply.InterfaceName, "sw_if_index", reply.SwIfIndex)
 				v.ifaceCache[name] = reply.SwIfIndex
 				return int(reply.SwIfIndex), nil
 			}
@@ -705,7 +705,7 @@ func (v *VPP) GetInterfaceIndex(name string) (int, error) {
 
 		return 0, fmt.Errorf("interface %s not found", name)
 	}
-	v.logger.Info("Using cached interface index", "name", name, "sw_if_index", idx)
+	v.logger.Debug("Using cached interface index", "name", name, "sw_if_index", idx)
 	return int(idx), nil
 }
 
@@ -718,12 +718,12 @@ func (v *VPP) GetParentInterfaceMAC() net.HardwareAddr {
 }
 
 func (v *VPP) GetParentSwIfIndex() (uint32, error) {
-	v.logger.Info("Getting parent interface index", "parent_interface_name", v.parentIface)
+	v.logger.Debug("Getting parent interface index", "parent_interface_name", v.parentIface)
 	idx, err := v.GetInterfaceIndex(v.parentIface)
 	if err != nil {
 		return 0, err
 	}
-	v.logger.Info("Got parent interface index", "parent_interface_name", v.parentIface, "sw_if_index", idx)
+	v.logger.Debug("Got parent interface index", "parent_interface_name", v.parentIface, "sw_if_index", idx)
 	return uint32(idx), nil
 }
 
@@ -749,7 +749,7 @@ func (v *VPP) GetInterfaceMAC(swIfIndex uint32) (net.HardwareAddr, error) {
 	}
 
 	mac := net.HardwareAddr(reply.L2Address[:6])
-	v.logger.Info("Got interface MAC from VPP", "sw_if_index", swIfIndex, "interface_name", reply.InterfaceName, "mac", mac.String())
+	v.logger.Debug("Got interface MAC from VPP", "sw_if_index", swIfIndex, "interface_name", reply.InterfaceName, "mac", mac.String())
 	return mac, nil
 }
 
@@ -819,7 +819,7 @@ func (v *VPP) GetLCPHostInterface(vppIface string) (string, error) {
 		return "", fmt.Errorf("no LCP pair found for %s", vppIface)
 	}
 
-	v.logger.Info("Found LCP pair", "tap", hostIfName, "phy", vppIface)
+	v.logger.Debug("Found LCP pair", "tap", hostIfName, "phy", vppIface)
 	return hostIfName, nil
 }
 
@@ -856,7 +856,7 @@ func (v *VPP) setInterfaceMAC(swIfIndex interface_types.InterfaceIndex, mac net.
 		return fmt.Errorf("set mac address: %w", err)
 	}
 
-	v.logger.Info("Set interface MAC", "sw_if_index", swIfIndex, "mac", mac.String())
+	v.logger.Debug("Set interface MAC", "sw_if_index", swIfIndex, "mac", mac.String())
 	return nil
 }
 
@@ -868,7 +868,7 @@ func (v *VPP) CreateLoopback(name string, ipv4 []string, ipv6 []string) error {
 	defer ch.Close()
 
 	if idx, exists := v.ifaceCache[name]; exists {
-		v.logger.Info("Loopback already exists in cache, reconciling IPs", "interface", name, "sw_if_index", idx)
+		v.logger.Debug("Loopback already exists in cache, reconciling IPs", "interface", name, "sw_if_index", idx)
 		return v.reconcileLoopbackIPs(name, ipv4, ipv6)
 	}
 
@@ -888,7 +888,7 @@ func (v *VPP) CreateLoopback(name string, ipv4 []string, ipv6 []string) error {
 		}
 		if msg.InterfaceName == name {
 			v.ifaceCache[name] = msg.SwIfIndex
-			v.logger.Info("Loopback already exists in VPP, reconciling IPs", "interface", name, "sw_if_index", msg.SwIfIndex)
+			v.logger.Debug("Loopback already exists in VPP, reconciling IPs", "interface", name, "sw_if_index", msg.SwIfIndex)
 			return v.reconcileLoopbackIPs(name, ipv4, ipv6)
 		}
 	}
@@ -936,7 +936,7 @@ func (v *VPP) CreateLoopback(name string, ipv4 []string, ipv6 []string) error {
 	if err := ch.SendRequest(lcpReq).ReceiveReply(lcpReply); err != nil {
 		v.logger.Warn("Failed to create linux-cp pair for loopback", "error", err)
 	} else {
-		v.logger.Info("Created linux-cp pair in default namespace", "interface", name)
+		v.logger.Debug("Created linux-cp pair in default namespace", "interface", name)
 	}
 
 	link, err := netlink.LinkByName(name)
@@ -959,7 +959,7 @@ func (v *VPP) CreateLoopback(name string, ipv4 []string, ipv6 []string) error {
 		if err := netlink.AddrAdd(link, addr); err != nil && !os.IsExist(err) {
 			return fmt.Errorf("add ipv4 %s to linux interface: %w", normalizedCIDR, err)
 		}
-		v.logger.Info("Added IPv4 to Linux interface (nl plugin will sync to VPP)", "interface", name, "addr", normalizedCIDR)
+		v.logger.Debug("Added IPv4 to Linux interface (nl plugin will sync to VPP)", "interface", name, "addr", normalizedCIDR)
 	}
 
 	for _, cidr := range ipv6 {
@@ -974,11 +974,11 @@ func (v *VPP) CreateLoopback(name string, ipv4 []string, ipv6 []string) error {
 		if err := netlink.AddrAdd(link, addr); err != nil && !os.IsExist(err) {
 			v.logger.Warn("Failed to add IPv6 address to linux interface", "address", normalizedCIDR, "error", err)
 		} else {
-			v.logger.Info("Added IPv6 to Linux interface (nl plugin will sync to VPP)", "interface", name, "addr", normalizedCIDR)
+			v.logger.Debug("Added IPv6 to Linux interface (nl plugin will sync to VPP)", "interface", name, "addr", normalizedCIDR)
 		}
 	}
 
-	v.logger.Info("Created loopback", "interface", name, "sw_if_index", reply.SwIfIndex)
+	v.logger.Debug("Created loopback", "interface", name, "sw_if_index", reply.SwIfIndex)
 	return nil
 }
 
@@ -1030,7 +1030,7 @@ func (v *VPP) reconcileLoopbackIPs(name string, desiredIPv4 []string, desiredIPv
 			if err := netlink.AddrDel(link, &addr); err != nil {
 				v.logger.Warn("Failed to remove extra IP from interface", "interface", name, "addr", cidrStr, "error", err)
 			} else {
-				v.logger.Info("Removed extra IP from Linux interface (not in config)", "interface", name, "addr", cidrStr)
+				v.logger.Debug("Removed extra IP from Linux interface (not in config)", "interface", name, "addr", cidrStr)
 			}
 		}
 	}
@@ -1058,7 +1058,7 @@ func (v *VPP) reconcileLoopbackIPs(name string, desiredIPv4 []string, desiredIPv
 			if err := netlink.AddrAdd(link, addr); err != nil {
 				return fmt.Errorf("add ipv4 %s to linux: %w", normalizedCIDR, err)
 			}
-			v.logger.Info("Added IPv4 to Linux interface", "interface", name, "addr", normalizedCIDR)
+			v.logger.Debug("Added IPv4 to Linux interface", "interface", name, "addr", normalizedCIDR)
 		}
 
 		if !vppAddrs[normalizedCIDR] {
@@ -1066,7 +1066,7 @@ func (v *VPP) reconcileLoopbackIPs(name string, desiredIPv4 []string, desiredIPv
 			if err := v.addIPAddress(ch, swIfIndex, normalizedCIDR, false); err != nil {
 				v.logger.Warn("Failed to add IPv4 to VPP", "addr", normalizedCIDR, "error", err)
 			} else {
-				v.logger.Info("Added IPv4 to VPP interface", "interface", name, "addr", normalizedCIDR)
+				v.logger.Debug("Added IPv4 to VPP interface", "interface", name, "addr", normalizedCIDR)
 			}
 			ch.Close()
 		}
@@ -1085,7 +1085,7 @@ func (v *VPP) reconcileLoopbackIPs(name string, desiredIPv4 []string, desiredIPv
 			if err := netlink.AddrAdd(link, addr); err != nil {
 				v.logger.Warn("Failed to add IPv6 to linux", "address", normalizedCIDR, "error", err)
 			} else {
-				v.logger.Info("Added IPv6 to Linux interface", "interface", name, "addr", normalizedCIDR)
+				v.logger.Debug("Added IPv6 to Linux interface", "interface", name, "addr", normalizedCIDR)
 			}
 		}
 
@@ -1094,13 +1094,13 @@ func (v *VPP) reconcileLoopbackIPs(name string, desiredIPv4 []string, desiredIPv
 			if err := v.addIPAddress(ch, swIfIndex, normalizedCIDR, true); err != nil {
 				v.logger.Warn("Failed to add IPv6 to VPP", "addr", normalizedCIDR, "error", err)
 			} else {
-				v.logger.Info("Added IPv6 to VPP interface", "interface", name, "addr", normalizedCIDR)
+				v.logger.Debug("Added IPv6 to VPP interface", "interface", name, "addr", normalizedCIDR)
 			}
 			ch.Close()
 		}
 	}
 
-	v.logger.Info("IP reconciliation complete", "interface", name, "ipv4_count", len(desiredIPv4), "ipv6_count", len(desiredIPv6))
+	v.logger.Debug("IP reconciliation complete", "interface", name, "ipv4_count", len(desiredIPv4), "ipv6_count", len(desiredIPv6))
 	return nil
 }
 
@@ -1140,7 +1140,7 @@ func (v *VPP) SetUnnumbered(ifaceName, loopbackName string) error {
 		return fmt.Errorf("set unnumbered: %w", err)
 	}
 
-	v.logger.Info("Set interface unnumbered", "interface", ifaceName, "loopback", loopbackName)
+	v.logger.Debug("Set interface unnumbered", "interface", ifaceName, "loopback", loopbackName)
 	return nil
 }
 
@@ -1178,7 +1178,7 @@ func (v *VPP) RegisterPuntSocket(socketPath string, port uint16, iface string) e
 		Pathname: socketPath,
 	}
 
-	v.logger.Info("Registering punt socket",
+	v.logger.Debug("Registering punt socket",
 		"path", socketPath,
 		"port", port,
 		"interface", iface,
@@ -1189,7 +1189,7 @@ func (v *VPP) RegisterPuntSocket(socketPath string, port uint16, iface string) e
 		return fmt.Errorf("register punt socket API call: %w", err)
 	}
 
-	v.logger.Info("Punt socket register reply", "retval", reply.Retval, "pathname", reply.Pathname)
+	v.logger.Debug("Punt socket register reply", "retval", reply.Retval, "pathname", reply.Pathname)
 
 	if reply.Retval != 0 {
 		return fmt.Errorf("punt socket register failed with retval: %d (pathname: %s)", reply.Retval, reply.Pathname)
@@ -1214,7 +1214,7 @@ func (v *VPP) RegisterPuntSocket(socketPath string, port uint16, iface string) e
 
 		if msg.Punt.Type == punt.PUNT_API_TYPE_L4 {
 			l4 := msg.Punt.Punt.GetL4()
-			v.logger.Info("Found punt socket", "af", l4.Af, "proto", l4.Protocol, "port", l4.Port, "path", msg.Pathname)
+			v.logger.Debug("Found punt socket", "af", l4.Af, "proto", l4.Protocol, "port", l4.Port, "path", msg.Pathname)
 			if l4.Port == port && l4.Protocol == ip_types.IP_API_PROTO_UDP && l4.Af == ip_types.ADDRESS_IP4 {
 				found = true
 			}
@@ -1224,7 +1224,7 @@ func (v *VPP) RegisterPuntSocket(socketPath string, port uint16, iface string) e
 	if !found {
 		v.logger.Warn("Punt socket registered successfully but not found in dump - VPP may not actually punt", "port", port)
 	} else {
-		v.logger.Info("Verified punt socket registration", "port", port, "path", socketPath)
+		v.logger.Debug("Verified punt socket registration", "port", port, "path", socketPath)
 	}
 
 	return nil
@@ -1236,7 +1236,7 @@ func (v *VPP) SetupCPEgressInterface(hostIfName, accessIface string) error {
 		return fmt.Errorf("create CP egress tap: %w", err)
 	}
 
-	v.logger.Info("CP egress interface configured", "tap", tapName)
+	v.logger.Debug("CP egress interface configured", "tap", tapName)
 	return nil
 }
 
@@ -1270,7 +1270,7 @@ func (v *VPP) EnableDirectedBroadcast(ifaceName string) error {
 		return fmt.Errorf("enable directed broadcast failed with retval: %d", reply.Retval)
 	}
 
-	v.logger.Info("Enabled directed broadcast", "interface", ifaceName)
+	v.logger.Debug("Enabled directed broadcast", "interface", ifaceName)
 	return nil
 }
 
@@ -1678,7 +1678,7 @@ func (v *VPP) EnableARPPunt(ifaceName, socketPath string) error {
 		return fmt.Errorf("enable arp punt failed: retval=%d", reply.Retval)
 	}
 
-	v.logger.Info("Enabled ARP punt", "interface", ifaceName, "sw_if_index", idx, "socket", socketPath)
+	v.logger.Debug("Enabled ARP punt", "interface", ifaceName, "sw_if_index", idx, "socket", socketPath)
 	return nil
 }
 
@@ -1710,7 +1710,7 @@ func (v *VPP) EnableDHCPv4Punt(ifaceName, socketPath string) error {
 		return fmt.Errorf("enable dhcp punt failed: retval=%d", reply.Retval)
 	}
 
-	v.logger.Info("Enabled DHCP punt", "interface", ifaceName, "sw_if_index", idx, "socket", socketPath)
+	v.logger.Debug("Enabled DHCP punt", "interface", ifaceName, "sw_if_index", idx, "socket", socketPath)
 	return nil
 }
 
@@ -1744,7 +1744,7 @@ func (v *VPP) EnablePPPoEPunt(ifaceName, socketPath string) error {
 		}
 	}
 
-	v.logger.Info("Enabled PPPoE punt", "interface", ifaceName, "sw_if_index", idx, "socket", socketPath)
+	v.logger.Debug("Enabled PPPoE punt", "interface", ifaceName, "sw_if_index", idx, "socket", socketPath)
 	return nil
 }
 
@@ -1787,7 +1787,7 @@ func (v *VPP) AddPPPoESession(sessionID uint16, clientIP net.IP, clientMAC net.H
 		return 0, fmt.Errorf("add pppoe session failed: retval=%d", reply.Retval)
 	}
 
-	v.logger.Info("Added PPPoE session to VPP",
+	v.logger.Debug("Added PPPoE session to VPP",
 		"session_id", sessionID,
 		"client_ip", clientIP.String(),
 		"client_mac", clientMAC.String(),
@@ -1833,7 +1833,7 @@ func (v *VPP) DeletePPPoESession(sessionID uint16, clientIP net.IP, clientMAC ne
 		return fmt.Errorf("delete pppoe session failed: retval=%d", reply.Retval)
 	}
 
-	v.logger.Info("Deleted PPPoE session from VPP",
+	v.logger.Debug("Deleted PPPoE session from VPP",
 		"session_id", sessionID,
 		"client_ip", clientIP.String())
 
@@ -1867,7 +1867,7 @@ func (v *VPP) DisableARPReply(ifaceName string) error {
 		return fmt.Errorf("disable arp-reply failed: retval=%d", reply.Retval)
 	}
 
-	v.logger.Info("Disabled ARP reply", "interface", ifaceName, "sw_if_index", idx)
+	v.logger.Debug("Disabled ARP reply", "interface", ifaceName, "sw_if_index", idx)
 	return nil
 }
 
@@ -1897,7 +1897,7 @@ func (v *VPP) EnableAccounting(ifaceName string) error {
 		return fmt.Errorf("enable accounting failed: retval=%d", reply.Retval)
 	}
 
-	v.logger.Info("Enabled accounting", "interface", ifaceName, "sw_if_index", idx)
+	v.logger.Debug("Enabled accounting", "interface", ifaceName, "sw_if_index", idx)
 	return nil
 }
 
@@ -1942,7 +1942,7 @@ func (v *VPP) AddAccountingSubscriber(ipAddr string, fibIndex uint32, swIfIndex 
 		return fmt.Errorf("add subscriber failed: retval=%d", reply.Retval)
 	}
 
-	v.logger.Info("Added accounting subscriber", "ip", ipAddr, "fib_index", fibIndex, "sw_if_index", swIfIndex, "session_id", sessionID)
+	v.logger.Debug("Added accounting subscriber", "ip", ipAddr, "fib_index", fibIndex, "sw_if_index", swIfIndex, "session_id", sessionID)
 	return nil
 }
 
@@ -1979,7 +1979,7 @@ func (v *VPP) DeleteAccountingSubscriber(ipAddr string, fibIndex uint32) error {
 		return fmt.Errorf("delete subscriber failed: retval=%d", reply.Retval)
 	}
 
-	v.logger.Info("Deleted accounting subscriber", "ip", ipAddr, "fib_index", fibIndex)
+	v.logger.Debug("Deleted accounting subscriber", "ip", ipAddr, "fib_index", fibIndex)
 	return nil
 }
 
@@ -2055,7 +2055,7 @@ func (v *VPP) CreateLCPPair(vppIface, linuxIface string) error {
 		return fmt.Errorf("create LCP pair failed: retval=%d", reply.Retval)
 	}
 
-	v.logger.Info("Created LCP pair", "vpp_iface", vppIface, "linux_iface", linuxIface)
+	v.logger.Debug("Created LCP pair", "vpp_iface", vppIface, "linux_iface", linuxIface)
 	return nil
 }
 
@@ -2073,7 +2073,7 @@ func (v *VPP) SetupMemifDataplane(memifID uint32, accessIface string, socketPath
 	memifName := fmt.Sprintf("memif%d/%d", socketID, memifID)
 
 	if idx, err := v.GetInterfaceIndex(memifName); err == nil {
-		v.logger.Info("Memif already exists in VPP", "name", memifName, "sw_if_index", idx)
+		v.logger.Debug("Memif already exists in VPP", "name", memifName, "sw_if_index", idx)
 		v.ifaceCache[memifName] = interface_types.InterfaceIndex(idx)
 		return nil
 	}
@@ -2090,7 +2090,7 @@ func (v *VPP) SetupMemifDataplane(memifID uint32, accessIface string, socketPath
 	if socketReply.Retval != 0 {
 		return fmt.Errorf("create memif socket failed: retval=%d", socketReply.Retval)
 	}
-	v.logger.Info("Created memif socket", "path", socketPath, "socket_id", socketID)
+	v.logger.Debug("Created memif socket", "path", socketPath, "socket_id", socketID)
 
 	memifReq := &memif.MemifCreateV2{
 		Role:     memif.MEMIF_ROLE_API_MASTER,
@@ -2109,7 +2109,7 @@ func (v *VPP) SetupMemifDataplane(memifID uint32, accessIface string, socketPath
 	}
 
 	v.ifaceCache[memifName] = memifReply.SwIfIndex
-	v.logger.Info("Created memif interface", "id", memifID, "name", memifName, "sw_if_index", memifReply.SwIfIndex)
+	v.logger.Debug("Created memif interface", "id", memifID, "name", memifName, "sw_if_index", memifReply.SwIfIndex)
 
 	setStateReq := &interfaces.SwInterfaceSetFlags{
 		SwIfIndex: memifReply.SwIfIndex,
@@ -2138,10 +2138,10 @@ func (v *VPP) SetupMemifDataplane(memifID uint32, accessIface string, socketPath
 		if err := ch.SendRequest(setAccessUpReq).ReceiveReply(setAccessUpReply); err != nil {
 			return fmt.Errorf("set access interface up: %w", err)
 		}
-		v.logger.Info("Set access interface up", "interface", accessIface)
+		v.logger.Debug("Set access interface up", "interface", accessIface)
 	}
 
-	v.logger.Info("Setup memif dataplane", "memif", memifName, "access_iface", accessIface)
+	v.logger.Debug("Setup memif dataplane", "memif", memifName, "access_iface", accessIface)
 	return nil
 }
 
@@ -2353,7 +2353,7 @@ func (v *VPP) AddPPPoESessionAsync(sessionID uint16, clientIP net.IP, clientMAC 
 			callback(0, fmt.Errorf("VPP error: retval=%d", r.Retval))
 			return
 		}
-		v.logger.Info("Added PPPoE session to VPP (async)",
+		v.logger.Debug("Added PPPoE session to VPP (async)",
 			"session_id", sessionID,
 			"client_ip", clientIP.String(),
 			"sw_if_index", r.SwIfIndex)
@@ -2388,7 +2388,7 @@ func (v *VPP) DeletePPPoESessionAsync(sessionID uint16, clientIP net.IP, clientM
 			callback(fmt.Errorf("VPP error: retval=%d", r.Retval))
 			return
 		}
-		v.logger.Info("Deleted PPPoE session from VPP (async)",
+		v.logger.Debug("Deleted PPPoE session from VPP (async)",
 			"session_id", sessionID,
 			"client_ip", clientIP.String())
 		callback(nil)

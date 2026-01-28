@@ -130,7 +130,7 @@ func (g *EchoGenerator) processTick(sessions []*ppp.EchoState) {
 	}
 
 	for _, sessionID := range deadPeers {
-		g.logger.Info("Dead peer detected", "session_id", sessionID)
+		g.logger.Debug("Dead peer detected", "session_id", sessionID)
 		g.timeWheel.Remove(sessionID)
 		if g.onDeadPeer != nil {
 			g.onDeadPeer(sessionID)

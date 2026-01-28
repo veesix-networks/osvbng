@@ -96,7 +96,7 @@ fi
 echo "Waiting for dataplane interfaces to be ready..."
 sleep 5
 
-vppctl -s /run/osvbng/cli.sock show interface
+vppctl -s /run/osvbng/cli.sock show interface || echo "Warning: VPP not ready yet, continuing..."
 
 echo "Setting dataplane API socket permissions..."
 chmod 660 /run/osvbng/dataplane_api.sock || true
