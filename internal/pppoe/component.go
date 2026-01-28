@@ -95,6 +95,8 @@ type SessionState struct {
 	chap          *ppp.CHAPHandler
 	chapChallenge []byte
 	chapID        uint8
+	chapRetryTimer *time.Timer
+	chapRetryCount int
 
 	pendingAuthRequestID string
 	pendingAuthType      string
@@ -227,7 +229,7 @@ func (c *Component) handlePADI(pkt *dataplane.ParsedPacket) error {
 		return fmt.Errorf("parse PADI tags: %w", err)
 	}
 
-	c.logger.Info("Received PADI",
+	c.logger.Debug("Received PADI",
 		"mac", pkt.MAC.String(),
 		"svlan", pkt.OuterVLAN,
 		"cvlan", pkt.InnerVLAN,
@@ -245,7 +247,7 @@ func (c *Component) handlePADR(pkt *dataplane.ParsedPacket) error {
 		return fmt.Errorf("parse PADR tags: %w", err)
 	}
 
-	c.logger.Info("Received PADR",
+	c.logger.Debug("Received PADR",
 		"mac", pkt.MAC.String(),
 		"svlan", pkt.OuterVLAN,
 		"cvlan", pkt.InnerVLAN,
@@ -290,7 +292,7 @@ func (c *Component) handlePADR(pkt *dataplane.ParsedPacket) error {
 	c.sidIndex[sessionID] = sess
 	c.sessionMu.Unlock()
 
-	c.logger.Info("Created PPPoE session",
+	c.logger.Debug("Created PPPoE session",
 		"session_id", sess.SessionID,
 		"pppoe_session_id", sessionID,
 		"mac", pkt.MAC.String(),
@@ -325,7 +327,7 @@ func (c *Component) handlePADT(pkt *dataplane.ParsedPacket) error {
 
 	sess.terminate()
 
-	c.logger.Info("Session terminated by PADT",
+	c.logger.Debug("Session terminated by PADT",
 		"session_id", sess.SessionID,
 		"pppoe_session_id", sid,
 		"mac", sess.MAC.String())
@@ -427,7 +429,7 @@ func (c *Component) sendDiscoveryPacket(pkt *dataplane.ParsedPacket, code layers
 	}
 	egressEvent.SetPayload(egressPayload)
 
-	c.logger.Info("Sending PPPoE discovery packet",
+	c.logger.Debug("Sending PPPoE discovery packet",
 		"code", code.String(),
 		"session_id", sessionID,
 		"dst_mac", pkt.MAC.String(),
@@ -462,7 +464,7 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 		return nil
 	}
 
-	c.logger.Info("Received AAA response",
+	c.logger.Debug("Received AAA response",
 		"session_id", sess.SessionID,
 		"request_id", resp.RequestID,
 		"allowed", resp.Allowed)
@@ -535,7 +537,7 @@ func (c *Component) handleDeadPeer(sessionID uint16) {
 		return
 	}
 
-	c.logger.Info("Terminating session due to dead peer",
+	c.logger.Debug("Terminating session due to dead peer",
 		"session_id", sess.SessionID,
 		"pppoe_session_id", sessionID)
 
