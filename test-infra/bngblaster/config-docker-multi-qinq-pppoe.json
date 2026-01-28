@@ -12,6 +12,36 @@
       }
     ]
   },
+  "sessions": {
+    "count": 1000,
+    "max-outstanding": 100,
+    "start-rate": 20,
+    "stop-rate": 400
+  },
+  "pppoe": {                                                                                                                                                           
+    "reconnect": true,                                                                                                                                                 
+    "discovery-timeout": 3,                                                                                                                                            
+    "discovery-retry": 20,                                                                                                                                             
+    "host-uniq": true
+  },                                                                                                                                                                
+  "ppp": {                                                                                                                                                           
+    "authentication": {                                                                                                                                              
+      "timeout": 10,                                                                                                                                                 
+      "retry": 20                                                                                                                                                    
+    },
+    "lcp": {                                                                                                                                                         
+      "conf-request-timeout": 5,                                                                                                                                     
+      "conf-request-retry": 10,
+      "keepalive-retry": 5,
+      "start-delay": 100                                                                                                                                       
+    },
+    "ipcp": {
+      "enable": true
+    },
+    "ip6cp": {
+      "enable": false
+    }                                                                                                                                                
+  },                                                                                                                                                                  
   "access-line": {
     "agent-circuit-id": "eth 0/1/2/3/{session-global}:100.{session-global}",
     "agent-remote-id": "DSLAM-{session-global}"
