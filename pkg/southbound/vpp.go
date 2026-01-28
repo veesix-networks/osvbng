@@ -1840,6 +1840,164 @@ func (v *VPP) DeletePPPoESession(sessionID uint16, clientIP net.IP, clientMAC ne
 	return nil
 }
 
+func (v *VPP) EnableDHCPv4Punt(ifaceName, socketPath string) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	idx, err := v.GetInterfaceIndex(ifaceName)
+	if err != nil {
+		return fmt.Errorf("get interface index: %w", err)
+	}
+
+	req := &osvbng_punt.OsvbngPuntEnableDisable{
+		SwIfIndex:  interface_types.InterfaceIndex(idx),
+		Protocol:   0,
+		Enable:     true,
+		SocketPath: socketPath,
+	}
+
+	reply := &osvbng_punt.OsvbngPuntEnableDisableReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("enable dhcp punt: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return fmt.Errorf("enable dhcp punt failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Info("Enabled DHCP punt", "interface", ifaceName, "sw_if_index", idx, "socket", socketPath)
+	return nil
+}
+
+func (v *VPP) EnablePPPoEPunt(ifaceName, socketPath string) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	idx, err := v.GetInterfaceIndex(ifaceName)
+	if err != nil {
+		return fmt.Errorf("get interface index: %w", err)
+	}
+
+	for _, protocol := range []uint8{3, 4} {
+		req := &osvbng_punt.OsvbngPuntEnableDisable{
+			SwIfIndex:  interface_types.InterfaceIndex(idx),
+			Protocol:   protocol,
+			Enable:     true,
+			SocketPath: socketPath,
+		}
+
+		reply := &osvbng_punt.OsvbngPuntEnableDisableReply{}
+		if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+			return fmt.Errorf("enable pppoe punt (protocol %d): %w", protocol, err)
+		}
+
+		if reply.Retval != 0 {
+			return fmt.Errorf("enable pppoe punt (protocol %d) failed: retval=%d", protocol, reply.Retval)
+		}
+	}
+
+	v.logger.Info("Enabled PPPoE punt", "interface", ifaceName, "sw_if_index", idx, "socket", socketPath)
+	return nil
+}
+
+func (v *VPP) AddPPPoESession(sessionID uint16, clientIP net.IP, clientMAC net.HardwareAddr, localMAC net.HardwareAddr, encapIfIndex uint32, outerVLAN uint16, innerVLAN uint16, decapVrfID uint32) (uint32, error) {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return 0, fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	clientAddr, err := v.toAddress(clientIP)
+	if err != nil {
+		return 0, fmt.Errorf("convert client IP: %w", err)
+	}
+
+	var clientMacAddr ethernet_types.MacAddress
+	copy(clientMacAddr[:], clientMAC)
+
+	var localMacAddr ethernet_types.MacAddress
+	copy(localMacAddr[:], localMAC)
+
+	req := &osvbng_pppoe.OsvbngPppoeAddDelSession{
+		IsAdd:        true,
+		SessionID:    sessionID,
+		ClientIP:     clientAddr,
+		DecapVrfID:   decapVrfID,
+		ClientMac:    clientMacAddr,
+		LocalMac:     localMacAddr,
+		EncapIfIndex: interface_types.InterfaceIndex(encapIfIndex),
+		OuterVlan:    outerVLAN,
+		InnerVlan:    innerVLAN,
+	}
+
+	reply := &osvbng_pppoe.OsvbngPppoeAddDelSessionReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return 0, fmt.Errorf("add pppoe session: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return 0, fmt.Errorf("add pppoe session failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Info("Added PPPoE session to VPP",
+		"session_id", sessionID,
+		"client_ip", clientIP.String(),
+		"client_mac", clientMAC.String(),
+		"local_mac", localMAC.String(),
+		"encap_if_index", encapIfIndex,
+		"outer_vlan", outerVLAN,
+		"inner_vlan", innerVLAN,
+		"sw_if_index", reply.SwIfIndex)
+
+	return uint32(reply.SwIfIndex), nil
+}
+
+func (v *VPP) DeletePPPoESession(sessionID uint16, clientIP net.IP, clientMAC net.HardwareAddr) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	clientAddr, err := v.toAddress(clientIP)
+	if err != nil {
+		return fmt.Errorf("convert client IP: %w", err)
+	}
+
+	var clientMacAddr ethernet_types.MacAddress
+	copy(clientMacAddr[:], clientMAC)
+
+	// For delete, VPP only uses (client_mac, session_id) for bihash lookup
+	// and client_ip for FIB removal. Other fields are ignored.
+	req := &osvbng_pppoe.OsvbngPppoeAddDelSession{
+		IsAdd:     false,
+		SessionID: sessionID,
+		ClientIP:  clientAddr,
+		ClientMac: clientMacAddr,
+	}
+
+	reply := &osvbng_pppoe.OsvbngPppoeAddDelSessionReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("delete pppoe session: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return fmt.Errorf("delete pppoe session failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Info("Deleted PPPoE session from VPP",
+		"session_id", sessionID,
+		"client_ip", clientIP.String())
+
+	return nil
+}
+
 func (v *VPP) DisableARPReply(ifaceName string) error {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
