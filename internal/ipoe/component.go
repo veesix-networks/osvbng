@@ -49,7 +49,8 @@ type SessionState struct {
 	MAC                 net.HardwareAddr
 	OuterVLAN           uint16
 	InnerVLAN           uint16
-	SwIfIndex           uint32
+	EncapIfIndex        uint32
+	IPoESwIfIndex       uint32
 	State               string
 	IPv4                net.IP
 	LeaseTime           uint32
@@ -60,6 +61,7 @@ type SessionState struct {
 	RemoteID            []byte
 	LastSeen            time.Time
 	AAAApproved         bool
+	IPoESessionCreated  bool
 	PendingDHCPDiscover []byte
 	PendingDHCPRequest  []byte
 }
@@ -234,7 +236,7 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 			MAC:           pkt.MAC,
 			OuterVLAN:     pkt.OuterVLAN,
 			InnerVLAN:     pkt.InnerVLAN,
-			SwIfIndex:     pkt.SwIfIndex,
+			EncapIfIndex:  pkt.SwIfIndex,
 			State:         "discovering",
 		}
 
@@ -332,7 +334,7 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 			MAC:           pkt.MAC,
 			OuterVLAN:     pkt.OuterVLAN,
 			InnerVLAN:     pkt.InnerVLAN,
-			SwIfIndex:     pkt.SwIfIndex,
+			EncapIfIndex:  pkt.SwIfIndex,
 			State:         "requesting",
 		}
 		c.sessions[lookupKey] = sess
@@ -472,11 +474,30 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 	sessID := sess.SessionID
 	acctSessionID := sess.AcctSessionID
 	xid := sess.XID
+	ipoeSwIfIndex := sess.IPoESwIfIndex
+	ipv4 := sess.IPv4
+	mac := sess.MAC
+	encapIfIndex := sess.EncapIfIndex
+	innerVLAN := sess.InnerVLAN
 	delete(c.xidIndex, xid)
 	delete(c.sessionIndex, sessID)
+	delete(c.sessions, lookupKey)
 	c.sessionMu.Unlock()
 
 	c.logger.Info("Session released by client", "session_id", sessID)
+
+	if c.vpp != nil && ipoeSwIfIndex != 0 {
+		if ipv4 != nil {
+			if err := c.vpp.IPoESetSessionIPv4(ipoeSwIfIndex, ipv4, false); err != nil {
+				c.logger.Warn("Failed to unbind IPv4 from IPoE session", "session_id", sessID, "error", err)
+			}
+		}
+		if err := c.vpp.DeleteIPoESession(mac, encapIfIndex, innerVLAN); err != nil {
+			c.logger.Warn("Failed to delete IPoE session", "session_id", sessID, "error", err)
+		} else {
+			c.logger.Info("Deleted IPoE session from VPP", "session_id", sessID, "sw_if_index", ipoeSwIfIndex)
+		}
+	}
 
 	counterKey := fmt.Sprintf("osvbng:session_count:%s:%d:%d", pkt.MAC.String(), pkt.OuterVLAN, pkt.InnerVLAN)
 	newCount, err := c.cache.Decr(c.Ctx, counterKey)
@@ -486,7 +507,6 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 		c.cache.Delete(c.Ctx, counterKey)
 	}
 
-	mac, _ := net.ParseMAC(pkt.MAC.String())
 	lifecyclePayload := &models.DHCPv4Session{
 		SessionID:        sessID,
 		RADIUSSessionID:  acctSessionID,
@@ -620,21 +640,17 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 	mac := sess.MAC
 	svlan := sess.OuterVLAN
 	cvlan := sess.InnerVLAN
+	ipoeSwIfIndex := sess.IPoESwIfIndex
 	c.sessionMu.Unlock()
 
 	c.logger.Info("Session bound", "session_id", sess.SessionID, "ipv4", sess.IPv4.String())
 
-	// at some point, we need to make sure if VRF is returned via RADIUS, then we need to actually grab the fib index
-	// not based on the sub interface but which fib the subscriber will be programmed for
-	if c.vpp != nil {
-		fibIndex, err := c.vpp.GetFIBIDForInterface(sess.SwIfIndex)
-		if err != nil {
-			c.logger.Warn("Failed to get FIB index for accounting", "error", err, "sw_if_index", sess.SwIfIndex)
-		} else {
-			if err := c.vpp.AddAccountingSubscriber(sess.IPv4.String(), fibIndex, sess.SwIfIndex, sess.AcctSessionID); err != nil {
-				c.logger.Warn("Failed to add accounting subscriber", "error", err, "ip", sess.IPv4.String(), "session_id", sess.AcctSessionID)
-			}
+	if c.vpp != nil && ipoeSwIfIndex != 0 {
+		if err := c.vpp.IPoESetSessionIPv4(ipoeSwIfIndex, sess.IPv4, true); err != nil {
+			c.logger.Error("Failed to bind IPv4 to IPoE session", "session_id", sess.SessionID, "error", err)
+			return fmt.Errorf("bind ipv4: %w", err)
 		}
+		c.logger.Info("Bound IPv4 to IPoE session", "session_id", sess.SessionID, "sw_if_index", ipoeSwIfIndex, "ipv4", sess.IPv4.String())
 	}
 
 	counterKey := fmt.Sprintf("osvbng:session_count:%s:%d:%d", mac.String(), svlan, cvlan)
@@ -647,7 +663,7 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 	}
 	c.cache.Expire(c.Ctx, counterKey, expiry)
 
-	c.logger.Info("Publishing session lifecycle event", "session_id", sess.SessionID, "sw_if_index", sess.SwIfIndex, "ipv4", sess.IPv4.String())
+	c.logger.Info("Publishing session lifecycle event", "session_id", sess.SessionID, "sw_if_index", ipoeSwIfIndex, "ipv4", sess.IPv4.String())
 
 	lifecyclePayload := &models.DHCPv4Session{
 		SessionID:        sess.SessionID,
@@ -656,7 +672,7 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 		OuterVLAN:        sess.OuterVLAN,
 		InnerVLAN:        sess.InnerVLAN,
 		VLANCount:        c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
-		IfIndex:          int(sess.SwIfIndex),
+		IfIndex:          int(ipoeSwIfIndex),
 		IPv4Address:      sess.IPv4,
 		LeaseTime:        sess.LeaseTime,
 		RADIUSSessionID:  sess.AcctSessionID,
@@ -698,6 +714,8 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 	mac := sess.MAC
 	svlan := sess.OuterVLAN
 	cvlan := sess.InnerVLAN
+	encapIfIndex := sess.EncapIfIndex
+	ipoeCreated := sess.IPoESessionCreated
 	c.sessionMu.Unlock()
 
 	if !allowed {
@@ -706,6 +724,27 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 	}
 
 	c.logger.Info("Session AAA approved", "session_id", sessID)
+
+	if !ipoeCreated && c.vpp != nil {
+		localMAC := c.getLocalMAC(svlan)
+		if localMAC == nil {
+			c.logger.Error("No local MAC available for IPoE session", "session_id", sessID, "svlan", svlan)
+			return fmt.Errorf("no local MAC for svlan %d", svlan)
+		}
+
+		swIfIndex, err := c.vpp.AddIPoESession(mac, localMAC, encapIfIndex, svlan, cvlan, 0)
+		if err != nil {
+			c.logger.Error("Failed to create IPoE session in VPP", "session_id", sessID, "error", err)
+			return fmt.Errorf("create ipoe session: %w", err)
+		}
+
+		c.sessionMu.Lock()
+		sess.IPoESwIfIndex = swIfIndex
+		sess.IPoESessionCreated = true
+		c.sessionMu.Unlock()
+
+		c.logger.Info("Created IPoE session in VPP", "session_id", sessID, "sw_if_index", swIfIndex)
+	}
 
 	if pendingDiscover != nil {
 		c.logger.Info("Forwarding pending DHCP DISCOVER", "session_id", sessID)
@@ -879,15 +918,48 @@ func (c *Component) cleanupSessions() {
 		case <-ticker.C:
 			c.sessionMu.Lock()
 			now := time.Now()
+			var toDelete []struct {
+				key           string
+				sess          *SessionState
+			}
 			for sessionID, session := range c.sessions {
 				if now.Sub(session.LastSeen) > 30*time.Minute {
-					c.logger.Info("Cleaning up stale session", "session_id", sessionID)
-					delete(c.xidIndex, session.XID)
-					delete(c.sessionIndex, session.SessionID)
-					delete(c.sessions, sessionID)
+					toDelete = append(toDelete, struct {
+						key  string
+						sess *SessionState
+					}{sessionID, session})
 				}
 			}
+			for _, item := range toDelete {
+				c.logger.Info("Cleaning up stale session", "session_id", item.sess.SessionID)
+				delete(c.xidIndex, item.sess.XID)
+				delete(c.sessionIndex, item.sess.SessionID)
+				delete(c.sessions, item.key)
+			}
 			c.sessionMu.Unlock()
+
+			for _, item := range toDelete {
+				if c.vpp != nil && item.sess.IPoESwIfIndex != 0 {
+					if item.sess.IPv4 != nil {
+						c.vpp.IPoESetSessionIPv4(item.sess.IPoESwIfIndex, item.sess.IPv4, false)
+					}
+					if err := c.vpp.DeleteIPoESession(item.sess.MAC, item.sess.EncapIfIndex, item.sess.InnerVLAN); err != nil {
+						c.logger.Warn("Failed to delete stale IPoE session", "session_id", item.sess.SessionID, "error", err)
+					}
+				}
+			}
 		}
 	}
+}
+
+func (c *Component) getLocalMAC(svlan uint16) net.HardwareAddr {
+	if c.srgMgr != nil {
+		if vmac := c.srgMgr.GetVirtualMAC(svlan); vmac != nil {
+			return vmac
+		}
+	}
+	if c.vpp != nil {
+		return c.vpp.GetParentInterfaceMAC()
+	}
+	return nil
 }
