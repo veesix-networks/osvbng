@@ -66,20 +66,10 @@ func (b *Bootstrap) ProvisionInfrastructure() error {
 					if err := b.sb.DisableARPReply(subIfName); err != nil {
 						return fmt.Errorf("disable arp reply on %s: %w", subIfName, err)
 					}
-
-					if err := b.sb.EnableAccounting(subIfName); err != nil {
-						return fmt.Errorf("enable accounting on %s: %w", subIfName, err)
-					}
 				}
 			}
 		}
 	}
-
-	accessInterface := b.sb.GetParentInterface()
-	if err := b.sb.EnableAccounting(accessInterface); err != nil {
-		return fmt.Errorf("enable accounting on %s: %w", accessInterface, err)
-	}
-	b.logger.Info("Enabled accounting on access interface", "interface", accessInterface)
 
 	b.logger.Info("Infrastructure provisioning complete")
 	return nil

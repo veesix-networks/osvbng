@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"github.com/veesix-networks/osvbng/pkg/logger"
-	"github.com/veesix-networks/osvbng/pkg/models/subscribers"
 	"github.com/veesix-networks/osvbng/pkg/models/system"
 	"github.com/vishvananda/netlink"
 	"go.fd.io/govpp/api"
@@ -30,9 +29,9 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/lcp"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/memif"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/mpls"
-	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/osvbng_accounting"
-	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/osvbng_punt"
+	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/osvbng_ipoe"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/osvbng_pppoe"
+	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/osvbng_punt"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/punt"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/tapv2"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/vlib"
@@ -1840,7 +1839,7 @@ func (v *VPP) DeletePPPoESession(sessionID uint16, clientIP net.IP, clientMAC ne
 	return nil
 }
 
-func (v *VPP) EnableDHCPv4Punt(ifaceName, socketPath string) error {
+func (v *VPP) IPoEEnableDisable(ifaceName string, enable bool) error {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
 		return fmt.Errorf("create API channel: %w", err)
@@ -1852,71 +1851,30 @@ func (v *VPP) EnableDHCPv4Punt(ifaceName, socketPath string) error {
 		return fmt.Errorf("get interface index: %w", err)
 	}
 
-	req := &osvbng_punt.OsvbngPuntEnableDisable{
-		SwIfIndex:  interface_types.InterfaceIndex(idx),
-		Protocol:   0,
-		Enable:     true,
-		SocketPath: socketPath,
+	req := &osvbng_ipoe.OsvbngIpoeEnableDisable{
+		SwIfIndex: interface_types.InterfaceIndex(idx),
+		Enable:    enable,
 	}
 
-	reply := &osvbng_punt.OsvbngPuntEnableDisableReply{}
+	reply := &osvbng_ipoe.OsvbngIpoeEnableDisableReply{}
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
-		return fmt.Errorf("enable dhcp punt: %w", err)
+		return fmt.Errorf("ipoe enable/disable: %w", err)
 	}
 
 	if reply.Retval != 0 {
-		return fmt.Errorf("enable dhcp punt failed: retval=%d", reply.Retval)
+		return fmt.Errorf("ipoe enable/disable failed: retval=%d", reply.Retval)
 	}
 
-	v.logger.Info("Enabled DHCP punt", "interface", ifaceName, "sw_if_index", idx, "socket", socketPath)
+	v.logger.Debug("IPoE enable/disable", "interface", ifaceName, "sw_if_index", idx, "enable", enable)
 	return nil
 }
 
-func (v *VPP) EnablePPPoEPunt(ifaceName, socketPath string) error {
-	ch, err := v.conn.NewAPIChannel()
-	if err != nil {
-		return fmt.Errorf("create API channel: %w", err)
-	}
-	defer ch.Close()
-
-	idx, err := v.GetInterfaceIndex(ifaceName)
-	if err != nil {
-		return fmt.Errorf("get interface index: %w", err)
-	}
-
-	for _, protocol := range []uint8{3, 4} {
-		req := &osvbng_punt.OsvbngPuntEnableDisable{
-			SwIfIndex:  interface_types.InterfaceIndex(idx),
-			Protocol:   protocol,
-			Enable:     true,
-			SocketPath: socketPath,
-		}
-
-		reply := &osvbng_punt.OsvbngPuntEnableDisableReply{}
-		if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
-			return fmt.Errorf("enable pppoe punt (protocol %d): %w", protocol, err)
-		}
-
-		if reply.Retval != 0 {
-			return fmt.Errorf("enable pppoe punt (protocol %d) failed: retval=%d", protocol, reply.Retval)
-		}
-	}
-
-	v.logger.Info("Enabled PPPoE punt", "interface", ifaceName, "sw_if_index", idx, "socket", socketPath)
-	return nil
-}
-
-func (v *VPP) AddPPPoESession(sessionID uint16, clientIP net.IP, clientMAC net.HardwareAddr, localMAC net.HardwareAddr, encapIfIndex uint32, outerVLAN uint16, innerVLAN uint16, decapVrfID uint32) (uint32, error) {
+func (v *VPP) AddIPoESession(clientMAC net.HardwareAddr, localMAC net.HardwareAddr, encapIfIndex uint32, outerVLAN uint16, innerVLAN uint16, decapVrfID uint32) (uint32, error) {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
 		return 0, fmt.Errorf("create API channel: %w", err)
 	}
 	defer ch.Close()
-
-	clientAddr, err := v.toAddress(clientIP)
-	if err != nil {
-		return 0, fmt.Errorf("convert client IP: %w", err)
-	}
 
 	var clientMacAddr ethernet_types.MacAddress
 	copy(clientMacAddr[:], clientMAC)
@@ -1924,30 +1882,26 @@ func (v *VPP) AddPPPoESession(sessionID uint16, clientIP net.IP, clientMAC net.H
 	var localMacAddr ethernet_types.MacAddress
 	copy(localMacAddr[:], localMAC)
 
-	req := &osvbng_pppoe.OsvbngPppoeAddDelSession{
+	req := &osvbng_ipoe.OsvbngIpoeAddDelSession{
 		IsAdd:        true,
-		SessionID:    sessionID,
-		ClientIP:     clientAddr,
-		DecapVrfID:   decapVrfID,
+		EncapIfIndex: interface_types.InterfaceIndex(encapIfIndex),
 		ClientMac:    clientMacAddr,
 		LocalMac:     localMacAddr,
-		EncapIfIndex: interface_types.InterfaceIndex(encapIfIndex),
 		OuterVlan:    outerVLAN,
 		InnerVlan:    innerVLAN,
+		DecapVrfID:   decapVrfID,
 	}
 
-	reply := &osvbng_pppoe.OsvbngPppoeAddDelSessionReply{}
+	reply := &osvbng_ipoe.OsvbngIpoeAddDelSessionReply{}
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
-		return 0, fmt.Errorf("add pppoe session: %w", err)
+		return 0, fmt.Errorf("add ipoe session: %w", err)
 	}
 
 	if reply.Retval != 0 {
-		return 0, fmt.Errorf("add pppoe session failed: retval=%d", reply.Retval)
+		return 0, fmt.Errorf("add ipoe session failed: retval=%d", reply.Retval)
 	}
 
-	v.logger.Info("Added PPPoE session to VPP",
-		"session_id", sessionID,
-		"client_ip", clientIP.String(),
+	v.logger.Debug("Added IPoE session",
 		"client_mac", clientMAC.String(),
 		"local_mac", localMAC.String(),
 		"encap_if_index", encapIfIndex,
@@ -1958,43 +1912,152 @@ func (v *VPP) AddPPPoESession(sessionID uint16, clientIP net.IP, clientMAC net.H
 	return uint32(reply.SwIfIndex), nil
 }
 
-func (v *VPP) DeletePPPoESession(sessionID uint16, clientIP net.IP, clientMAC net.HardwareAddr) error {
+func (v *VPP) DeleteIPoESession(clientMAC net.HardwareAddr, encapIfIndex uint32, innerVLAN uint16) error {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
 		return fmt.Errorf("create API channel: %w", err)
 	}
 	defer ch.Close()
 
-	clientAddr, err := v.toAddress(clientIP)
-	if err != nil {
-		return fmt.Errorf("convert client IP: %w", err)
-	}
-
 	var clientMacAddr ethernet_types.MacAddress
 	copy(clientMacAddr[:], clientMAC)
 
-	// For delete, VPP only uses (client_mac, session_id) for bihash lookup
-	// and client_ip for FIB removal. Other fields are ignored.
-	req := &osvbng_pppoe.OsvbngPppoeAddDelSession{
-		IsAdd:     false,
-		SessionID: sessionID,
-		ClientIP:  clientAddr,
-		ClientMac: clientMacAddr,
+	req := &osvbng_ipoe.OsvbngIpoeAddDelSession{
+		IsAdd:        false,
+		EncapIfIndex: interface_types.InterfaceIndex(encapIfIndex),
+		ClientMac:    clientMacAddr,
+		InnerVlan:    innerVLAN,
 	}
 
-	reply := &osvbng_pppoe.OsvbngPppoeAddDelSessionReply{}
+	reply := &osvbng_ipoe.OsvbngIpoeAddDelSessionReply{}
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
-		return fmt.Errorf("delete pppoe session: %w", err)
+		return fmt.Errorf("delete ipoe session: %w", err)
 	}
 
 	if reply.Retval != 0 {
-		return fmt.Errorf("delete pppoe session failed: retval=%d", reply.Retval)
+		return fmt.Errorf("delete ipoe session failed: retval=%d", reply.Retval)
 	}
 
-	v.logger.Info("Deleted PPPoE session from VPP",
-		"session_id", sessionID,
-		"client_ip", clientIP.String())
+	v.logger.Debug("Deleted IPoE session", "client_mac", clientMAC.String(), "encap_if_index", encapIfIndex, "inner_vlan", innerVLAN)
+	return nil
+}
 
+func (v *VPP) IPoESetSessionIPv4(swIfIndex uint32, clientIP net.IP, isAdd bool) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	ip4 := clientIP.To4()
+	if ip4 == nil {
+		return fmt.Errorf("invalid IPv4 address: %s", clientIP)
+	}
+
+	var clientAddr ip_types.IP4Address
+	copy(clientAddr[:], ip4)
+
+	req := &osvbng_ipoe.OsvbngIpoeSetSessionIPv4{
+		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+		ClientIP:  clientAddr,
+		IsAdd:     isAdd,
+	}
+
+	reply := &osvbng_ipoe.OsvbngIpoeSetSessionIPv4Reply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("set ipoe session ipv4: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return fmt.Errorf("set ipoe session ipv4 failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Debug("Set IPoE session IPv4", "sw_if_index", swIfIndex, "client_ip", clientIP.String(), "is_add", isAdd)
+	return nil
+}
+
+func (v *VPP) IPoESetSessionIPv6(swIfIndex uint32, clientIP net.IP, isAdd bool) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	ip6 := clientIP.To16()
+	if ip6 == nil || clientIP.To4() != nil {
+		return fmt.Errorf("invalid IPv6 address: %s", clientIP)
+	}
+
+	var clientAddr ip_types.IP6Address
+	copy(clientAddr[:], ip6)
+
+	req := &osvbng_ipoe.OsvbngIpoeSetSessionIPv6{
+		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+		ClientIP:  clientAddr,
+		IsAdd:     isAdd,
+	}
+
+	reply := &osvbng_ipoe.OsvbngIpoeSetSessionIPv6Reply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("set ipoe session ipv6: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return fmt.Errorf("set ipoe session ipv6 failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Debug("Set IPoE session IPv6", "sw_if_index", swIfIndex, "client_ip", clientIP.String(), "is_add", isAdd)
+	return nil
+}
+
+func (v *VPP) IPoESetDelegatedPrefix(swIfIndex uint32, prefix net.IPNet, nextHop net.IP, isAdd bool) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	prefixLen, _ := prefix.Mask.Size()
+	ip6 := prefix.IP.To16()
+	if ip6 == nil || prefix.IP.To4() != nil {
+		return fmt.Errorf("invalid IPv6 prefix: %s", prefix.String())
+	}
+
+	var prefixAddr ip_types.IP6Address
+	copy(prefixAddr[:], ip6)
+
+	var nextHopAddr ip_types.IP6Address
+	if nextHop != nil {
+		nh6 := nextHop.To16()
+		if nh6 == nil {
+			return fmt.Errorf("invalid IPv6 next-hop: %s", nextHop)
+		}
+		copy(nextHopAddr[:], nh6)
+	}
+
+	req := &osvbng_ipoe.OsvbngIpoeSetDelegatedPrefix{
+		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+		Prefix: ip_types.Prefix{
+			Address: ip_types.Address{
+				Af: ip_types.ADDRESS_IP6,
+				Un: ip_types.AddressUnionIP6(prefixAddr),
+			},
+			Len: uint8(prefixLen),
+		},
+		NextHop: nextHopAddr,
+		IsAdd:   isAdd,
+	}
+
+	reply := &osvbng_ipoe.OsvbngIpoeSetDelegatedPrefixReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("set ipoe delegated prefix: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return fmt.Errorf("set ipoe delegated prefix failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Debug("Set IPoE delegated prefix", "sw_if_index", swIfIndex, "prefix", prefix.String(), "next_hop", nextHop, "is_add", isAdd)
 	return nil
 }
 
@@ -2027,162 +2090,6 @@ func (v *VPP) DisableARPReply(ifaceName string) error {
 
 	v.logger.Debug("Disabled ARP reply", "interface", ifaceName, "sw_if_index", idx)
 	return nil
-}
-
-func (v *VPP) EnableAccounting(ifaceName string) error {
-	ch, err := v.conn.NewAPIChannel()
-	if err != nil {
-		return fmt.Errorf("create API channel: %w", err)
-	}
-	defer ch.Close()
-
-	idx, err := v.GetInterfaceIndex(ifaceName)
-	if err != nil {
-		return fmt.Errorf("get interface index: %w", err)
-	}
-
-	req := &osvbng_accounting.OsvbngAcctInterfaceEnableDisable{
-		SwIfIndex: interface_types.InterfaceIndex(idx),
-		Enable:    true,
-	}
-
-	reply := &osvbng_accounting.OsvbngAcctInterfaceEnableDisableReply{}
-	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
-		return fmt.Errorf("enable accounting: %w", err)
-	}
-
-	if reply.Retval != 0 {
-		return fmt.Errorf("enable accounting failed: retval=%d", reply.Retval)
-	}
-
-	v.logger.Debug("Enabled accounting", "interface", ifaceName, "sw_if_index", idx)
-	return nil
-}
-
-func (v *VPP) AddAccountingSubscriber(ipAddr string, fibIndex uint32, swIfIndex uint32, sessionID string) error {
-	ch, err := v.conn.NewAPIChannel()
-	if err != nil {
-		return fmt.Errorf("create API channel: %w", err)
-	}
-	defer ch.Close()
-
-	ip := net.ParseIP(ipAddr)
-	if ip == nil {
-		return fmt.Errorf("invalid IP address: %s", ipAddr)
-	}
-	ip4 := ip.To4()
-	if ip4 == nil {
-		return fmt.Errorf("not an IPv4 address: %s", ipAddr)
-	}
-
-	var ip4Addr ip_types.IP4Address
-	copy(ip4Addr[:], ip4)
-
-	if len(sessionID) != 8 {
-		return fmt.Errorf("invalid session ID length: expected 8, got %d", len(sessionID))
-	}
-	var sessionIDBytes [8]byte
-	copy(sessionIDBytes[:], sessionID)
-
-	req := &osvbng_accounting.OsvbngAcctSubscriberAdd{
-		IP4Address: ip4Addr,
-		FibIndex:   fibIndex,
-		SwIfIndex:  interface_types.InterfaceIndex(swIfIndex),
-		SessionID:  sessionIDBytes[:],
-	}
-
-	reply := &osvbng_accounting.OsvbngAcctSubscriberAddReply{}
-	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
-		return fmt.Errorf("add subscriber: %w", err)
-	}
-
-	if reply.Retval != 0 {
-		return fmt.Errorf("add subscriber failed: retval=%d", reply.Retval)
-	}
-
-	v.logger.Debug("Added accounting subscriber", "ip", ipAddr, "fib_index", fibIndex, "sw_if_index", swIfIndex, "session_id", sessionID)
-	return nil
-}
-
-func (v *VPP) DeleteAccountingSubscriber(ipAddr string, fibIndex uint32) error {
-	ch, err := v.conn.NewAPIChannel()
-	if err != nil {
-		return fmt.Errorf("create API channel: %w", err)
-	}
-	defer ch.Close()
-
-	ip := net.ParseIP(ipAddr)
-	if ip == nil {
-		return fmt.Errorf("invalid IP address: %s", ipAddr)
-	}
-	ip4 := ip.To4()
-	if ip4 == nil {
-		return fmt.Errorf("not an IPv4 address: %s", ipAddr)
-	}
-
-	var ip4Addr ip_types.IP4Address
-	copy(ip4Addr[:], ip4)
-
-	req := &osvbng_accounting.OsvbngAcctSubscriberDel{
-		IP4Address: ip4Addr,
-		FibIndex:   fibIndex,
-	}
-
-	reply := &osvbng_accounting.OsvbngAcctSubscriberDelReply{}
-	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
-		return fmt.Errorf("delete subscriber: %w", err)
-	}
-
-	if reply.Retval != 0 {
-		return fmt.Errorf("delete subscriber failed: retval=%d", reply.Retval)
-	}
-
-	v.logger.Debug("Deleted accounting subscriber", "ip", ipAddr, "fib_index", fibIndex)
-	return nil
-}
-
-func (v *VPP) GetSubscriberStats(ctx context.Context) ([]subscribers.Statistics, error) {
-	ch, err := v.conn.NewAPIChannel()
-	if err != nil {
-		return nil, fmt.Errorf("create API channel: %w", err)
-	}
-	defer ch.Close()
-
-	stream := ch.SendMultiRequest(&osvbng_accounting.OsvbngAcctSubscriberDump{})
-
-	var stats []subscribers.Statistics
-	receivedCount := 0
-
-	for {
-		details := &osvbng_accounting.OsvbngAcctSubscriberDetails{}
-		stop, err := stream.ReceiveReply(details)
-		if err != nil || stop {
-			break
-		}
-
-		receivedCount++
-		v.logger.Debug("Received subscriber accounting details",
-			"session_id", string(details.SessionID[:]),
-			"ip", net.IP(details.IP4Address[:]).String(),
-			"rx_packets", details.RxPackets,
-			"tx_packets", details.TxPackets,
-			"rx_bytes", details.RxBytes,
-			"tx_bytes", details.TxBytes)
-
-		if details.RxPackets > 0 || details.TxPackets > 0 {
-			stats = append(stats, subscribers.Statistics{
-				SessionID: string(details.SessionID[:]),
-				IP:        net.IP(details.IP4Address[:]),
-				RxPackets: details.RxPackets,
-				RxBytes:   details.RxBytes,
-				TxPackets: details.TxPackets,
-				TxBytes:   details.TxBytes,
-			})
-		}
-	}
-
-	v.logger.Debug("GetSubscriberStats complete", "received", receivedCount, "filtered", len(stats))
-	return stats, nil
 }
 
 func (v *VPP) CreateLCPPair(vppIface, linuxIface string) error {
