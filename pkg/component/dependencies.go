@@ -19,7 +19,8 @@ type Dependencies struct {
 	VPP           *southbound.VPP
 	ConfigManager ConfigManager
 
-	DHCPChan <-chan *dataplane.ParsedPacket
-	ARPChan  <-chan *dataplane.ParsedPacket
-	PPPChan  <-chan *dataplane.ParsedPacket
+	DHCPChan   <-chan *dataplane.ParsedPacket
+	DHCPv6Chan <-chan *dataplane.ParsedPacket
+	ARPChan    <-chan *dataplane.ParsedPacket
+	PPPChan    <-chan *dataplane.ParsedPacket
 }

@@ -66,6 +66,8 @@ func Generate(opts GenerateOptions) (string, error) {
 							Priority: 1,
 						},
 					},
+					IANAPool: "wan-link-pool",
+					PDPool:   "subscriber-pd-pool",
 					DHCP: &subscriber.SubscriberDHCP{
 						AutoGenerate: true,
 						LeaseTime:    "3600",
@@ -81,6 +83,35 @@ func Generate(opts GenerateOptions) (string, error) {
 		},
 		DHCP: ip.DHCPConfig{
 			Provider: "local",
+		},
+		DHCPv6: ip.DHCPv6Config{
+			Provider:   "local",
+			DNSServers: []string{"2001:4860:4860::8888", "2001:4860:4860::8844"},
+			IANAPools: []ip.DHCPv6Pool{
+				{
+					Name:          "wan-link-pool",
+					Network:       "2001:db8:0:1::/64",
+					RangeStart:    "2001:db8:0:1::1000",
+					RangeEnd:      "2001:db8:0:1::ffff",
+					Gateway:       "2001:db8:0:1::1",
+					PreferredTime: 3600,
+					ValidTime:     7200,
+				},
+			},
+			PDPools: []ip.DHCPv6PDPool{
+				{
+					Name:          "subscriber-pd-pool",
+					Network:       "2001:db8:100::/40",
+					PrefixLength:  56,
+					PreferredTime: 3600,
+					ValidTime:     7200,
+				},
+			},
+			RA: &ip.IPv6RAConfig{
+				RouterLifetime: 1800,
+				MaxInterval:    600,
+				MinInterval:    200,
+			},
 		},
 		AAA: aaa.AAAConfig{
 			Provider:      "local",
@@ -126,6 +157,7 @@ func Generate(opts GenerateOptions) (string, error) {
 		LCP:         true,
 		Address: &interfaces.AddressConfig{
 			IPv4: []string{"10.255.0.1/32"},
+			IPv6: []string{"2001:db8:0:1::1/128"},
 		},
 	}
 

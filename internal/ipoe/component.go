@@ -15,8 +15,10 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/config/aaa"
+	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
 	"github.com/veesix-networks/osvbng/pkg/dhcp4"
+	"github.com/veesix-networks/osvbng/pkg/dhcp6"
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
@@ -35,12 +37,15 @@ type Component struct {
 	vpp           *southbound.VPP
 	cache         cache.Cache
 	dhcp4Provider dhcp4.DHCPProvider
+	dhcp6Provider dhcp6.DHCPProvider
 	sessions      map[string]*SessionState
 	xidIndex      map[uint32]*SessionState
+	xid6Index     map[[3]byte]*SessionState
 	sessionIndex  map[string]*SessionState
 	sessionMu     sync.RWMutex
 
-	dhcpChan <-chan *dataplane.ParsedPacket
+	dhcpChan   <-chan *dataplane.ParsedPacket
+	dhcp6Chan  <-chan *dataplane.ParsedPacket
 }
 
 type SessionState struct {
@@ -64,9 +69,19 @@ type SessionState struct {
 	IPoESessionCreated  bool
 	PendingDHCPDiscover []byte
 	PendingDHCPRequest  []byte
+
+	IPv6Address          net.IP
+	IPv6Prefix           *net.IPNet
+	ClientLinkLocal      net.IP
+	DHCPv6DUID           []byte
+	DHCPv6XID            [3]byte
+	IPv6LeaseTime        uint32
+	IPv6Bound            bool
+	PendingDHCPv6Solicit []byte
+	PendingDHCPv6Request []byte
 }
 
-func New(deps component.Dependencies, srgMgr *srg.Manager, dhcp4Provider dhcp4.DHCPProvider) (component.Component, error) {
+func New(deps component.Dependencies, srgMgr *srg.Manager, dhcp4Provider dhcp4.DHCPProvider, dhcp6Provider dhcp6.DHCPProvider) (component.Component, error) {
 	log := logger.Component(logger.ComponentIPoE)
 
 	c := &Component{
@@ -78,10 +93,13 @@ func New(deps component.Dependencies, srgMgr *srg.Manager, dhcp4Provider dhcp4.D
 		vpp:           deps.VPP,
 		cache:         deps.Cache,
 		dhcp4Provider: dhcp4Provider,
+		dhcp6Provider: dhcp6Provider,
 		sessions:      make(map[string]*SessionState),
 		xidIndex:      make(map[uint32]*SessionState),
+		xid6Index:     make(map[[3]byte]*SessionState),
 		sessionIndex:  make(map[string]*SessionState),
 		dhcpChan:      deps.DHCPChan,
+		dhcp6Chan:     deps.DHCPv6Chan,
 	}
 
 	return c, nil
@@ -97,6 +115,7 @@ func (c *Component) Start(ctx context.Context) error {
 
 	c.Go(c.cleanupSessions)
 	c.Go(c.consumeDHCPPackets)
+	c.Go(c.consumeDHCPv6Packets)
 
 	return nil
 }
@@ -217,7 +236,7 @@ func parseOption82(data []byte) (circuitID, remoteID []byte) {
 }
 
 func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
-	lookupKey := fmt.Sprintf("ipoe-v4:%s:%d:%d", pkt.MAC.String(), pkt.OuterVLAN, pkt.InnerVLAN)
+	lookupKey := c.makeSessionKeyV4(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN)
 
 	c.sessionMu.RLock()
 	sess := c.sessions[lookupKey]
@@ -273,9 +292,41 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 	sess.LastSeen = time.Now()
 	sess.PendingDHCPDiscover = buf.Bytes()
 	c.xidIndex[pkt.DHCPv4.Xid] = sess
+	alreadyApproved := sess.AAAApproved
+	ipoeCreated := sess.IPoESessionCreated
+	v6AaaPending := sess.PendingDHCPv6Solicit != nil || sess.PendingDHCPv6Request != nil
 	c.sessionMu.Unlock()
 
 	c.logger.Info("Session discovering", "session_id", sess.SessionID, "circuit_id", string(circuitID), "remote_id", string(remoteID))
+
+	if alreadyApproved && ipoeCreated {
+		c.logger.Info("Session already approved, forwarding DISCOVER to provider", "session_id", sess.SessionID)
+		pkt := &dhcp4.Packet{
+			SessionID: sess.SessionID,
+			MAC:       sess.MAC.String(),
+			SVLAN:     sess.OuterVLAN,
+			CVLAN:     sess.InnerVLAN,
+			Raw:       buf.Bytes(),
+		}
+		response, err := c.dhcp4Provider.HandlePacket(c.Ctx, pkt)
+		if err != nil {
+			return fmt.Errorf("dhcp provider failed: %w", err)
+		}
+		if response != nil && len(response.Raw) > 0 {
+			return c.sendDHCPResponse(sess.SessionID, sess.OuterVLAN, sess.InnerVLAN, sess.MAC, response.Raw, "OFFER")
+		}
+		return nil
+	}
+
+	if alreadyApproved && !ipoeCreated {
+		c.logger.Info("DHCP DISCOVER received, AAA approved but IPoE session pending", "session_id", sess.SessionID)
+		return nil
+	}
+
+	if v6AaaPending {
+		c.logger.Info("DHCP DISCOVER received, waiting for v6 AAA response", "session_id", sess.SessionID)
+		return nil
+	}
 
 	cfg, _ := c.cfgMgr.GetRunning()
 	username := pkt.MAC.String()
@@ -322,7 +373,7 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 }
 
 func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
-	lookupKey := fmt.Sprintf("ipoe-v4:%s:%d:%d", pkt.MAC.String(), pkt.OuterVLAN, pkt.InnerVLAN)
+	lookupKey := c.makeSessionKeyV4(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN)
 
 	c.sessionMu.Lock()
 	sess := c.sessions[lookupKey]
@@ -461,7 +512,7 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 }
 
 func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
-	lookupKey := fmt.Sprintf("ipoe-v4:%s:%d:%d", pkt.MAC.String(), pkt.OuterVLAN, pkt.InnerVLAN)
+	lookupKey := c.makeSessionKeyV4(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN)
 
 	c.sessionMu.Lock()
 	sess := c.sessions[lookupKey]
@@ -470,7 +521,7 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 		c.logger.Info("Received DHCPRELEASE for unknown session", "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
 		return nil
 	}
-	sess.State = "released"
+
 	sessID := sess.SessionID
 	acctSessionID := sess.AcctSessionID
 	xid := sess.XID
@@ -479,12 +530,25 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 	mac := sess.MAC
 	encapIfIndex := sess.EncapIfIndex
 	innerVLAN := sess.InnerVLAN
+	ipv6Bound := sess.IPv6Bound
+
+	sess.IPv4 = nil
+	sess.State = "released"
 	delete(c.xidIndex, xid)
-	delete(c.sessionIndex, sessID)
-	delete(c.sessions, lookupKey)
+
+	sessionMode := c.getSessionMode(pkt.OuterVLAN)
+	deleteSession := true
+	if sessionMode == subscriber.SessionModeUnified && ipv6Bound {
+		deleteSession = false
+	}
+
+	if deleteSession {
+		delete(c.sessionIndex, sessID)
+		delete(c.sessions, lookupKey)
+	}
 	c.sessionMu.Unlock()
 
-	c.logger.Info("Session released by client", "session_id", sessID)
+	c.logger.Info("IPv4 released by client", "session_id", sessID, "delete_session", deleteSession)
 
 	if c.vpp != nil && ipoeSwIfIndex != 0 {
 		if ipv4 != nil {
@@ -492,19 +556,23 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 				c.logger.Warn("Failed to unbind IPv4 from IPoE session", "session_id", sessID, "error", err)
 			}
 		}
-		if err := c.vpp.DeleteIPoESession(mac, encapIfIndex, innerVLAN); err != nil {
-			c.logger.Warn("Failed to delete IPoE session", "session_id", sessID, "error", err)
-		} else {
-			c.logger.Info("Deleted IPoE session from VPP", "session_id", sessID, "sw_if_index", ipoeSwIfIndex)
+		if deleteSession {
+			if err := c.vpp.DeleteIPoESession(mac, encapIfIndex, innerVLAN); err != nil {
+				c.logger.Warn("Failed to delete IPoE session", "session_id", sessID, "error", err)
+			} else {
+				c.logger.Info("Deleted IPoE session from VPP", "session_id", sessID, "sw_if_index", ipoeSwIfIndex)
+			}
 		}
 	}
 
-	counterKey := fmt.Sprintf("osvbng:session_count:%s:%d:%d", pkt.MAC.String(), pkt.OuterVLAN, pkt.InnerVLAN)
-	newCount, err := c.cache.Decr(c.Ctx, counterKey)
-	if err != nil {
-		c.logger.Warn("Failed to decrement session counter", "error", err, "key", counterKey)
-	} else if newCount <= 0 {
-		c.cache.Delete(c.Ctx, counterKey)
+	if deleteSession {
+		counterKey := fmt.Sprintf("osvbng:session_count:%s:%d:%d", pkt.MAC.String(), pkt.OuterVLAN, pkt.InnerVLAN)
+		newCount, err := c.cache.Decr(c.Ctx, counterKey)
+		if err != nil {
+			c.logger.Warn("Failed to decrement session counter", "error", err, "key", counterKey)
+		} else if newCount <= 0 {
+			c.cache.Delete(c.Ctx, counterKey)
+		}
 	}
 
 	lifecyclePayload := &models.DHCPv4Session{
@@ -726,25 +794,57 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 	c.logger.Info("Session AAA approved", "session_id", sessID)
 
 	if !ipoeCreated && c.vpp != nil {
-		localMAC := c.getLocalMAC(svlan)
-		if localMAC == nil {
-			c.logger.Error("No local MAC available for IPoE session", "session_id", sessID, "svlan", svlan)
-			return fmt.Errorf("no local MAC for svlan %d", svlan)
-		}
-
-		swIfIndex, err := c.vpp.AddIPoESession(mac, localMAC, encapIfIndex, svlan, cvlan, 0)
-		if err != nil {
-			c.logger.Error("Failed to create IPoE session in VPP", "session_id", sessID, "error", err)
-			return fmt.Errorf("create ipoe session: %w", err)
-		}
-
 		c.sessionMu.Lock()
-		sess.IPoESwIfIndex = swIfIndex
-		sess.IPoESessionCreated = true
-		c.sessionMu.Unlock()
+		if sess.IPoESessionCreated {
+			c.sessionMu.Unlock()
+			c.logger.Debug("IPoE session already created by another handler", "session_id", sessID)
+		} else {
+			c.sessionMu.Unlock()
 
-		c.logger.Info("Created IPoE session in VPP", "session_id", sessID, "sw_if_index", swIfIndex)
+			localMAC := c.getLocalMAC(svlan)
+			if localMAC == nil {
+				c.logger.Error("No local MAC available for IPoE session", "session_id", sessID, "svlan", svlan)
+				return fmt.Errorf("no local MAC for svlan %d", svlan)
+			}
+
+			swIfIndex, err := c.vpp.AddIPoESession(mac, localMAC, encapIfIndex, svlan, cvlan, 0)
+			if err != nil {
+				c.sessionMu.Lock()
+				if sess.IPoESessionCreated {
+					c.sessionMu.Unlock()
+					c.logger.Debug("IPoE session created by concurrent handler", "session_id", sessID)
+				} else {
+					c.sessionMu.Unlock()
+					c.logger.Error("Failed to create IPoE session in VPP", "session_id", sessID, "error", err)
+					return fmt.Errorf("create ipoe session: %w", err)
+				}
+			} else {
+				c.sessionMu.Lock()
+				sess.IPoESwIfIndex = swIfIndex
+				sess.IPoESessionCreated = true
+				c.sessionMu.Unlock()
+
+				c.logger.Info("Created IPoE session in VPP", "session_id", sessID, "sw_if_index", swIfIndex)
+				// RA is configured once at bootstrap on the sub-interface, not per-subscriber
+			}
+		}
 	}
+
+	c.sessionMu.Lock()
+	if pendingDiscover == nil {
+		pendingDiscover = sess.PendingDHCPDiscover
+		sess.PendingDHCPDiscover = nil
+	}
+	if pendingRequest == nil {
+		pendingRequest = sess.PendingDHCPRequest
+		sess.PendingDHCPRequest = nil
+	}
+	pendingDHCPv6Solicit := sess.PendingDHCPv6Solicit
+	pendingDHCPv6Request := sess.PendingDHCPv6Request
+	dhcpv6DUID := sess.DHCPv6DUID
+	sess.PendingDHCPv6Solicit = nil
+	sess.PendingDHCPv6Request = nil
+	c.sessionMu.Unlock()
 
 	if pendingDiscover != nil {
 		c.logger.Info("Forwarding pending DHCP DISCOVER", "session_id", sessID)
@@ -790,6 +890,64 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 		if response != nil && len(response.Raw) > 0 {
 			if err := c.sendDHCPResponse(sessID, svlan, cvlan, mac, response.Raw, "ACK"); err != nil {
 				return err
+			}
+		}
+	}
+
+	if pendingDHCPv6Solicit != nil && c.dhcp6Provider != nil {
+		c.logger.Info("Forwarding pending DHCPv6 SOLICIT", "session_id", sessID)
+
+		pkt := &dhcp6.Packet{
+			SessionID: sessID,
+			MAC:       mac.String(),
+			SVLAN:     svlan,
+			CVLAN:     cvlan,
+			DUID:      dhcpv6DUID,
+			Raw:       pendingDHCPv6Solicit,
+		}
+
+		response, err := c.dhcp6Provider.HandlePacket(c.Ctx, pkt)
+		if err != nil {
+			c.logger.Error("DHCPv6 provider failed for SOLICIT", "session_id", sessID, "error", err)
+		} else if response == nil || len(response.Raw) == 0 {
+			c.logger.Warn("DHCPv6 provider returned empty response for SOLICIT", "session_id", sessID)
+		} else {
+			c.logger.Info("Sending DHCPv6 ADVERTISE", "session_id", sessID, "size", len(response.Raw))
+			if err := c.sendDHCPv6Response(sess, response.Raw); err != nil {
+				c.logger.Error("Failed to send DHCPv6 ADVERTISE", "session_id", sessID, "error", err)
+			}
+		}
+	}
+
+	if pendingDHCPv6Request != nil && c.dhcp6Provider != nil {
+		c.logger.Info("Forwarding pending DHCPv6 REQUEST", "session_id", sessID)
+
+		pkt := &dhcp6.Packet{
+			SessionID: sessID,
+			MAC:       mac.String(),
+			SVLAN:     svlan,
+			CVLAN:     cvlan,
+			DUID:      dhcpv6DUID,
+			Raw:       pendingDHCPv6Request,
+		}
+
+		response, err := c.dhcp6Provider.HandlePacket(c.Ctx, pkt)
+		if err != nil {
+			c.logger.Error("DHCPv6 provider failed for REQUEST", "session_id", sessID, "error", err)
+		} else if response == nil || len(response.Raw) == 0 {
+			c.logger.Warn("DHCPv6 provider returned empty response for REQUEST", "session_id", sessID)
+		} else {
+			c.logger.Info("Sending DHCPv6 REPLY", "session_id", sessID, "size", len(response.Raw))
+			if err := c.sendDHCPv6Response(sess, response.Raw); err != nil {
+				c.logger.Error("Failed to send DHCPv6 REPLY", "session_id", sessID, "error", err)
+			}
+
+			dhcpResp := gopacket.NewPacket(response.Raw, layers.LayerTypeDHCPv6, gopacket.Default)
+			if layer := dhcpResp.Layer(layers.LayerTypeDHCPv6); layer != nil {
+				dhcp := layer.(*layers.DHCPv6)
+				if dhcp.MsgType == layers.DHCPv6MsgTypeReply {
+					c.handleDHCPv6Reply(sess, dhcp)
+				}
 			}
 		}
 	}
@@ -961,5 +1119,640 @@ func (c *Component) getLocalMAC(svlan uint16) net.HardwareAddr {
 	if c.vpp != nil {
 		return c.vpp.GetParentInterfaceMAC()
 	}
+	return nil
+}
+
+func (c *Component) getSessionMode(svlan uint16) subscriber.SessionMode {
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+		return subscriber.SessionModeUnified
+	}
+
+	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(svlan)
+	if group == nil {
+		return subscriber.SessionModeUnified
+	}
+
+	return group.GetSessionMode()
+}
+
+func (c *Component) configureSubscriberRA(swIfIndex uint32, svlan uint16) error {
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil {
+		return nil
+	}
+
+	if cfg.DHCPv6.Provider == "" {
+		return nil
+	}
+
+	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(svlan)
+
+	raConfig := southbound.IPv6RAConfig{
+		Managed:        true,
+		Other:          true,
+		RouterLifetime: 1800,
+		MaxInterval:    600,
+		MinInterval:    200,
+	}
+
+	if cfg.DHCPv6.RA != nil {
+		raConfig.Managed = cfg.DHCPv6.RA.GetManaged()
+		raConfig.Other = cfg.DHCPv6.RA.GetOther()
+		raConfig.RouterLifetime = cfg.DHCPv6.RA.GetRouterLifetime()
+		raConfig.MaxInterval = cfg.DHCPv6.RA.GetMaxInterval()
+		raConfig.MinInterval = cfg.DHCPv6.RA.GetMinInterval()
+	}
+
+	if group != nil && group.IPv6 != nil && group.IPv6.RA != nil {
+		groupRA := group.IPv6.RA
+		if groupRA.Managed != nil {
+			raConfig.Managed = *groupRA.Managed
+		}
+		if groupRA.Other != nil {
+			raConfig.Other = *groupRA.Other
+		}
+		if groupRA.RouterLifetime != 0 {
+			raConfig.RouterLifetime = groupRA.RouterLifetime
+		}
+		if groupRA.MaxInterval != 0 {
+			raConfig.MaxInterval = groupRA.MaxInterval
+		}
+		if groupRA.MinInterval != 0 {
+			raConfig.MinInterval = groupRA.MinInterval
+		}
+	}
+
+	var loopbackName string
+	if group != nil {
+		vlanCfg := group.FindVLANConfig(svlan)
+		if vlanCfg != nil {
+			loopbackName = vlanCfg.Interface
+		}
+	}
+
+	if loopbackName == "" {
+		c.logger.Debug("No loopback configured for RA", "svlan", svlan)
+		return nil
+	}
+
+	if err := c.vpp.ConfigureIPv6RA(loopbackName, raConfig); err != nil {
+		return fmt.Errorf("configure ra on %s: %w", loopbackName, err)
+	}
+
+	var ianaPoolName string
+	if group != nil {
+		ianaPoolName = group.IANAPool
+	}
+
+	for _, pool := range cfg.DHCPv6.IANAPools {
+		if ianaPoolName != "" && pool.Name != ianaPoolName {
+			continue
+		}
+
+		prefixConfig := southbound.IPv6RAPrefixConfig{
+			Prefix:            pool.Network,
+			OnLink:            true,
+			Autonomous:        false,
+			ValidLifetime:     pool.ValidTime,
+			PreferredLifetime: pool.PreferredTime,
+		}
+
+		if err := c.vpp.AddIPv6RAPrefix(loopbackName, prefixConfig); err != nil {
+			return fmt.Errorf("add ra prefix %s: %w", pool.Network, err)
+		}
+
+		if ianaPoolName != "" {
+			break
+		}
+	}
+
+	c.logger.Debug("Configured RA on loopback", "loopback", loopbackName, "managed", raConfig.Managed, "other", raConfig.Other)
+	return nil
+}
+
+func (c *Component) makeSessionKeyV4(mac net.HardwareAddr, svlan, cvlan uint16) string {
+	mode := c.getSessionMode(svlan)
+	if mode == subscriber.SessionModeUnified {
+		return fmt.Sprintf("ipoe:%s:%d:%d", mac.String(), svlan, cvlan)
+	}
+	return fmt.Sprintf("ipoe-v4:%s:%d:%d", mac.String(), svlan, cvlan)
+}
+
+func (c *Component) makeSessionKeyV6(mac net.HardwareAddr, svlan, cvlan uint16) string {
+	mode := c.getSessionMode(svlan)
+	if mode == subscriber.SessionModeUnified {
+		return fmt.Sprintf("ipoe:%s:%d:%d", mac.String(), svlan, cvlan)
+	}
+	return fmt.Sprintf("ipoe-v6:%s:%d:%d", mac.String(), svlan, cvlan)
+}
+
+func (c *Component) consumeDHCPv6Packets() {
+	if c.dhcp6Chan == nil {
+		c.logger.Debug("DHCPv6 channel not configured, skipping DHCPv6 consumer")
+		return
+	}
+
+	for {
+		select {
+		case <-c.Ctx.Done():
+			return
+		case pkt := <-c.dhcp6Chan:
+			go func(pkt *dataplane.ParsedPacket) {
+				if err := c.processDHCPv6Packet(pkt); err != nil {
+					c.logger.Error("Error processing DHCPv6 packet", "error", err)
+				}
+			}(pkt)
+		}
+	}
+}
+
+func (c *Component) processDHCPv6Packet(pkt *dataplane.ParsedPacket) error {
+	if pkt.DHCPv6 == nil {
+		return fmt.Errorf("no DHCPv6 layer")
+	}
+
+	if pkt.OuterVLAN == 0 {
+		return fmt.Errorf("packet rejected: S-VLAN required")
+	}
+
+	if c.dhcp6Provider == nil {
+		return fmt.Errorf("no DHCPv6 provider configured")
+	}
+
+	isDF := true
+	if c.srgMgr != nil {
+		isDF = c.srgMgr.IsDF(pkt.OuterVLAN, pkt.MAC.String(), pkt.InnerVLAN)
+	}
+	if !isDF {
+		return nil
+	}
+
+	c.logger.Debug("[DF] Received DHCPv6 packet",
+		"message_type", pkt.DHCPv6.MsgType.String(),
+		"mac", pkt.MAC.String(),
+		"xid", fmt.Sprintf("0x%x", pkt.DHCPv6.TransactionID))
+
+	switch pkt.DHCPv6.MsgType {
+	case layers.DHCPv6MsgTypeSolicit:
+		return c.handleDHCPv6Solicit(pkt)
+	case layers.DHCPv6MsgTypeRequest, layers.DHCPv6MsgTypeRenew, layers.DHCPv6MsgTypeRebind:
+		return c.handleDHCPv6Request(pkt)
+	case layers.DHCPv6MsgTypeRelease, layers.DHCPv6MsgTypeDecline:
+		return c.handleDHCPv6Release(pkt)
+	}
+
+	return nil
+}
+
+func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket) error {
+	lookupKey := c.makeSessionKeyV6(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN)
+
+	c.sessionMu.RLock()
+	sess := c.sessions[lookupKey]
+	c.sessionMu.RUnlock()
+
+	if sess == nil {
+		sessID := session.GenerateID()
+		newSess := &SessionState{
+			SessionID:     sessID,
+			AcctSessionID: session.ToAcctSessionID(sessID),
+			MAC:           pkt.MAC,
+			OuterVLAN:     pkt.OuterVLAN,
+			InnerVLAN:     pkt.InnerVLAN,
+			EncapIfIndex:  pkt.SwIfIndex,
+			State:         "soliciting",
+		}
+
+		c.sessionMu.Lock()
+		if existing := c.sessions[lookupKey]; existing != nil {
+			sess = existing
+		} else {
+			sess = newSess
+			c.sessions[lookupKey] = sess
+			c.sessionIndex[sessID] = sess
+		}
+		c.sessionMu.Unlock()
+	}
+
+	clientDUID := c.extractDHCPv6ClientDUID(pkt.DHCPv6)
+
+	buf := gopacket.NewSerializeBuffer()
+	opts := gopacket.SerializeOptions{FixLengths: true}
+	if err := pkt.DHCPv6.SerializeTo(buf, opts); err != nil {
+		return fmt.Errorf("serialize DHCPv6: %w", err)
+	}
+
+	var xid [3]byte
+	copy(xid[:], pkt.DHCPv6.TransactionID[:])
+
+	c.sessionMu.Lock()
+	sess.DHCPv6XID = xid
+	sess.DHCPv6DUID = clientDUID
+	sess.LastSeen = time.Now()
+	sess.PendingDHCPv6Solicit = buf.Bytes()
+	if pkt.IPv6 != nil {
+		sess.ClientLinkLocal = pkt.IPv6.SrcIP
+	}
+	c.xid6Index[xid] = sess
+	alreadyApproved := sess.AAAApproved
+	ipoeCreated := sess.IPoESessionCreated
+	circuitID := sess.CircuitID
+	remoteID := sess.RemoteID
+	v4AaaPending := sess.PendingDHCPDiscover != nil || sess.PendingDHCPRequest != nil
+	c.sessionMu.Unlock()
+
+	if alreadyApproved && ipoeCreated {
+		return c.forwardDHCPv6ToProvider(sess, pkt, buf.Bytes())
+	}
+
+	if alreadyApproved && !ipoeCreated {
+		c.logger.Info("DHCPv6 SOLICIT received, AAA approved but IPoE session pending", "session_id", sess.SessionID)
+		return nil
+	}
+
+	if v4AaaPending {
+		c.logger.Info("DHCPv6 SOLICIT received, waiting for v4 AAA response", "session_id", sess.SessionID)
+		return nil
+	}
+
+	c.logger.Info("DHCPv6 SOLICIT received, requesting AAA", "session_id", sess.SessionID)
+
+	cfg, _ := c.cfgMgr.GetRunning()
+	username := pkt.MAC.String()
+	var policyName string
+	if cfg != nil && cfg.SubscriberGroups != nil {
+		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(pkt.OuterVLAN); group != nil {
+			policyName = group.AAAPolicy
+		}
+	}
+	if policyName != "" {
+		if policy := cfg.AAA.GetPolicyByType(policyName, aaa.PolicyTypeDHCP); policy != nil {
+			ctx := &aaa.PolicyContext{
+				MACAddress: pkt.MAC,
+				SVLAN:      pkt.OuterVLAN,
+				CVLAN:      pkt.InnerVLAN,
+				RemoteID:   string(remoteID),
+				CircuitID:  string(circuitID),
+			}
+			username = policy.ExpandFormat(ctx)
+			c.logger.Info("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
+		}
+	}
+
+	requestID := uuid.New().String()
+	aaaPayload := &models.AAARequest{
+		RequestID:     requestID,
+		Username:      username,
+		MAC:           pkt.MAC.String(),
+		AcctSessionID: sess.AcctSessionID,
+	}
+
+	aaaEvent := models.Event{
+		Type:       models.EventTypeAAARequest,
+		AccessType: models.AccessTypeIPoE,
+		Protocol:   models.ProtocolDHCPv6,
+		SessionID:  sess.SessionID,
+	}
+	aaaEvent.SetPayload(aaaPayload)
+
+	c.logger.Info("Publishing AAA request for DHCPv6 SOLICIT", "session_id", sess.SessionID, "username", username)
+
+	return c.eventBus.Publish(events.TopicAAARequest, aaaEvent)
+}
+
+func (c *Component) handleDHCPv6Request(pkt *dataplane.ParsedPacket) error {
+	lookupKey := c.makeSessionKeyV6(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN)
+
+	c.sessionMu.Lock()
+	sess := c.sessions[lookupKey]
+	if sess == nil {
+		c.sessionMu.Unlock()
+		return fmt.Errorf("no session for DHCPv6 REQUEST")
+	}
+
+	buf := gopacket.NewSerializeBuffer()
+	opts := gopacket.SerializeOptions{FixLengths: true}
+	if err := pkt.DHCPv6.SerializeTo(buf, opts); err != nil {
+		c.sessionMu.Unlock()
+		return fmt.Errorf("serialize DHCPv6: %w", err)
+	}
+
+	var xid [3]byte
+	copy(xid[:], pkt.DHCPv6.TransactionID[:])
+	sess.DHCPv6XID = xid
+	sess.LastSeen = time.Now()
+	sess.PendingDHCPv6Request = buf.Bytes()
+	if pkt.IPv6 != nil && sess.ClientLinkLocal == nil {
+		sess.ClientLinkLocal = pkt.IPv6.SrcIP
+	}
+	c.xid6Index[xid] = sess
+	alreadyApproved := sess.AAAApproved
+	ipoeCreated := sess.IPoESessionCreated
+	c.sessionMu.Unlock()
+
+	if alreadyApproved && ipoeCreated {
+		return c.forwardDHCPv6ToProvider(sess, pkt, buf.Bytes())
+	}
+
+	c.logger.Info("DHCPv6 REQUEST received, session awaiting AAA", "session_id", sess.SessionID)
+
+	return nil
+}
+
+func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
+	lookupKey := c.makeSessionKeyV6(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN)
+
+	c.sessionMu.Lock()
+	sess := c.sessions[lookupKey]
+	if sess == nil {
+		c.sessionMu.Unlock()
+		return nil
+	}
+
+	sessID := sess.SessionID
+	ipv6Address := sess.IPv6Address
+	ipv6Prefix := sess.IPv6Prefix
+	ipoeSwIfIndex := sess.IPoESwIfIndex
+	mac := sess.MAC
+	encapIfIndex := sess.EncapIfIndex
+	innerVLAN := sess.InnerVLAN
+	ipv4Bound := sess.IPv4 != nil
+	xid6 := sess.DHCPv6XID
+
+	sess.IPv6Bound = false
+	sess.IPv6Address = nil
+	sess.IPv6Prefix = nil
+	delete(c.xid6Index, xid6)
+
+	sessionMode := c.getSessionMode(pkt.OuterVLAN)
+	deleteSession := true
+	if sessionMode == subscriber.SessionModeUnified && ipv4Bound {
+		deleteSession = false
+	}
+
+	if deleteSession {
+		delete(c.sessionIndex, sessID)
+		delete(c.sessions, lookupKey)
+	}
+	c.sessionMu.Unlock()
+
+	c.logger.Info("IPv6 released by client", "session_id", sessID, "delete_session", deleteSession)
+
+	if c.vpp != nil && ipoeSwIfIndex != 0 {
+		if ipv6Address != nil {
+			if err := c.vpp.IPoESetSessionIPv6(ipoeSwIfIndex, ipv6Address, false); err != nil {
+				c.logger.Warn("Failed to unbind IPv6 from IPoE session", "session_id", sessID, "error", err)
+			}
+		}
+		if ipv6Prefix != nil {
+			if err := c.vpp.IPoESetDelegatedPrefix(ipoeSwIfIndex, *ipv6Prefix, net.ParseIP("::"), false); err != nil {
+				c.logger.Warn("Failed to unbind delegated prefix from IPoE session", "session_id", sessID, "error", err)
+			}
+		}
+		if deleteSession {
+			if err := c.vpp.DeleteIPoESession(mac, encapIfIndex, innerVLAN); err != nil {
+				c.logger.Warn("Failed to delete IPoE session", "session_id", sessID, "error", err)
+			} else {
+				c.logger.Info("Deleted IPoE session from VPP", "session_id", sessID, "sw_if_index", ipoeSwIfIndex)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (c *Component) forwardDHCPv6ToProvider(sess *SessionState, pkt *dataplane.ParsedPacket, raw []byte) error {
+	dhcpPkt := &dhcp6.Packet{
+		SessionID: sess.SessionID,
+		MAC:       sess.MAC.String(),
+		SVLAN:     sess.OuterVLAN,
+		CVLAN:     sess.InnerVLAN,
+		DUID:      sess.DHCPv6DUID,
+		Raw:       raw,
+	}
+
+	response, err := c.dhcp6Provider.HandlePacket(c.Ctx, dhcpPkt)
+	if err != nil {
+		return fmt.Errorf("dhcp6 provider failed: %w", err)
+	}
+
+	if response == nil || len(response.Raw) == 0 {
+		return nil
+	}
+
+	if err := c.sendDHCPv6Response(sess, response.Raw); err != nil {
+		return err
+	}
+
+	dhcpResp := gopacket.NewPacket(response.Raw, layers.LayerTypeDHCPv6, gopacket.Default)
+	if layer := dhcpResp.Layer(layers.LayerTypeDHCPv6); layer != nil {
+		dhcp := layer.(*layers.DHCPv6)
+		if dhcp.MsgType == layers.DHCPv6MsgTypeReply {
+			return c.handleDHCPv6Reply(sess, dhcp)
+		}
+	}
+
+	return nil
+}
+
+func (c *Component) handleDHCPv6Reply(sess *SessionState, dhcp *layers.DHCPv6) error {
+	var ianaAddr net.IP
+	var pdPrefix *net.IPNet
+	var validTime uint32
+
+	for _, opt := range dhcp.Options {
+		if opt.Code == layers.DHCPv6OptIANA && len(opt.Data) >= 12 {
+			iaData := opt.Data[12:]
+			for len(iaData) >= 4 {
+				subCode := binary.BigEndian.Uint16(iaData[0:2])
+				subLen := binary.BigEndian.Uint16(iaData[2:4])
+				if len(iaData) < int(4+subLen) {
+					break
+				}
+				if subCode == 5 && subLen >= 24 {
+					ianaAddr = net.IP(iaData[4:20])
+					validTime = binary.BigEndian.Uint32(iaData[24:28])
+				}
+				iaData = iaData[4+subLen:]
+			}
+		}
+
+		if opt.Code == layers.DHCPv6OptIAPD && len(opt.Data) >= 12 {
+			pdData := opt.Data[12:]
+			for len(pdData) >= 4 {
+				subCode := binary.BigEndian.Uint16(pdData[0:2])
+				subLen := binary.BigEndian.Uint16(pdData[2:4])
+				if len(pdData) < int(4+subLen) {
+					break
+				}
+				if subCode == 26 && subLen >= 25 {
+					prefixLen := pdData[12]
+					prefixIP := net.IP(pdData[13:29])
+					pdPrefix = &net.IPNet{
+						IP:   prefixIP,
+						Mask: net.CIDRMask(int(prefixLen), 128),
+					}
+				}
+				pdData = pdData[4+subLen:]
+			}
+		}
+	}
+
+	c.sessionMu.Lock()
+	sess.IPv6Address = ianaAddr
+	sess.IPv6Prefix = pdPrefix
+	sess.IPv6LeaseTime = validTime
+	sess.IPv6Bound = true
+	ipoeSwIfIndex := sess.IPoESwIfIndex
+	c.sessionMu.Unlock()
+
+	c.logger.Info("DHCPv6 session bound", "session_id", sess.SessionID, "ipv6", ianaAddr, "prefix", pdPrefix)
+
+	if c.vpp != nil && ipoeSwIfIndex != 0 {
+		if ianaAddr != nil {
+			if err := c.vpp.IPoESetSessionIPv6(ipoeSwIfIndex, ianaAddr, true); err != nil {
+				c.logger.Error("Failed to bind IPv6 to IPoE session", "session_id", sess.SessionID, "error", err)
+			} else {
+				c.logger.Info("Bound IPv6 to IPoE session", "session_id", sess.SessionID, "ipv6", ianaAddr.String())
+			}
+		}
+
+		if pdPrefix != nil {
+			nextHop := ianaAddr
+			if nextHop == nil {
+				nextHop = net.ParseIP("::")
+			}
+			if err := c.vpp.IPoESetDelegatedPrefix(ipoeSwIfIndex, *pdPrefix, nextHop, true); err != nil {
+				c.logger.Error("Failed to set delegated prefix", "session_id", sess.SessionID, "error", err)
+			} else {
+				c.logger.Info("Set delegated prefix", "session_id", sess.SessionID, "prefix", pdPrefix.String())
+			}
+		}
+	}
+
+	return nil
+}
+
+func (c *Component) sendDHCPv6Response(sess *SessionState, rawDHCPv6 []byte) error {
+	var srcMACBytes net.HardwareAddr
+
+	if c.srgMgr != nil {
+		srcMACBytes = c.srgMgr.GetVirtualMAC(sess.OuterVLAN)
+	}
+	if srcMACBytes == nil && c.vpp != nil {
+		srcMACBytes = c.vpp.GetParentInterfaceMAC()
+	}
+	if srcMACBytes == nil {
+		return fmt.Errorf("no source MAC available")
+	}
+
+	srcMAC := srcMACBytes.String()
+	srcIP := c.getLoopbackIPv6(sess.OuterVLAN)
+	if srcIP == nil {
+		return fmt.Errorf("no IPv6 source address available for S-VLAN %d", sess.OuterVLAN)
+	}
+	dstIP := sess.ClientLinkLocal
+	if dstIP == nil {
+		return fmt.Errorf("no client link-local address for session %s", sess.SessionID)
+	}
+
+	udpLayer := &layers.UDP{
+		SrcPort: 547,
+		DstPort: 546,
+	}
+	ipv6Layer := &layers.IPv6{
+		Version:    6,
+		HopLimit:   64,
+		NextHeader: layers.IPProtocolUDP,
+		SrcIP:      srcIP,
+		DstIP:      dstIP,
+	}
+	udpLayer.SetNetworkLayerForChecksum(ipv6Layer)
+
+	buf := gopacket.NewSerializeBuffer()
+	opts := gopacket.SerializeOptions{
+		ComputeChecksums: true,
+		FixLengths:       true,
+	}
+
+	payload := gopacket.Payload(rawDHCPv6)
+	if err := gopacket.SerializeLayers(buf, opts, ipv6Layer, udpLayer, payload); err != nil {
+		return fmt.Errorf("serialize IPv6/UDP/DHCPv6: %w", err)
+	}
+
+	egressPayload := &models.EgressPacketPayload{
+		DstMAC:    sess.MAC.String(),
+		SrcMAC:    srcMAC,
+		OuterVLAN: sess.OuterVLAN,
+		InnerVLAN: sess.InnerVLAN,
+		RawData:   buf.Bytes(),
+	}
+
+	egressEvent := models.Event{
+		Type:       models.EventTypeEgress,
+		AccessType: models.AccessTypeIPoE,
+		Protocol:   models.ProtocolDHCPv6,
+		SessionID:  sess.SessionID,
+	}
+	egressEvent.SetPayload(egressPayload)
+
+	c.logger.Debug("Sending DHCPv6 response", "session_id", sess.SessionID, "size", len(rawDHCPv6), "dst_ip", dstIP)
+
+	return c.eventBus.Publish(events.TopicEgress, egressEvent)
+}
+
+func (c *Component) extractDHCPv6ClientDUID(dhcp *layers.DHCPv6) []byte {
+	for _, opt := range dhcp.Options {
+		if opt.Code == layers.DHCPv6OptClientID {
+			return opt.Data
+		}
+	}
+	return nil
+}
+
+func (c *Component) getLoopbackIPv6(svlan uint16) net.IP {
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil {
+		return nil
+	}
+
+	if cfg.SubscriberGroups == nil {
+		return nil
+	}
+
+	group, vlanCfg := cfg.SubscriberGroups.FindGroupBySVLAN(svlan)
+	if group == nil || vlanCfg == nil {
+		return nil
+	}
+
+	loopbackName := vlanCfg.Interface
+	if loopbackName == "" {
+		return nil
+	}
+
+	iface, ok := cfg.Interfaces[loopbackName]
+	if !ok || iface.Address == nil {
+		return nil
+	}
+
+	for _, cidr := range iface.Address.IPv6 {
+		ip, _, err := net.ParseCIDR(cidr)
+		if err != nil {
+			continue
+		}
+		if ip.IsLinkLocalUnicast() {
+			return ip
+		}
+	}
+
+	for _, cidr := range iface.Address.IPv6 {
+		ip, _, err := net.ParseCIDR(cidr)
+		if err != nil {
+			continue
+		}
+		return ip
+	}
+
 	return nil
 }

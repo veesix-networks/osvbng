@@ -19,13 +19,50 @@ func (sgc *SubscriberGroupsConfig) FindGroupBySVLAN(svlan uint16) (*SubscriberGr
 	return nil, nil
 }
 
+// SessionMode determines how IPv4 and IPv6 sessions are managed
+type SessionMode string
+
+const (
+	// SessionModeUnified uses a single session per MAC+VLAN for both IPv4 and IPv6.
+	// First protocol triggers AAA, second finds existing approved session.
+	SessionModeUnified SessionMode = "unified"
+
+	// SessionModeIndependent uses separate sessions for IPv4 and IPv6.
+	// Each triggers its own AAA request and can have different policies.
+	SessionModeIndependent SessionMode = "independent"
+)
+
 type SubscriberGroup struct {
-	VLANs        []VLANRange     `json:"vlans,omitempty" yaml:"vlans,omitempty"`
-	AddressPools []*AddressPool  `json:"address-pools,omitempty" yaml:"address-pools,omitempty"`
-	DHCP         *SubscriberDHCP `json:"dhcp,omitempty" yaml:"dhcp,omitempty"`
-	BGP          *SubscriberBGP  `json:"bgp,omitempty" yaml:"bgp,omitempty"`
-	VRF          string          `json:"vrf,omitempty" yaml:"vrf,omitempty"`
-	AAAPolicy    string          `json:"aaa-policy,omitempty" yaml:"aaa-policy,omitempty"`
+	VLANs        []VLANRange      `json:"vlans,omitempty" yaml:"vlans,omitempty"`
+	AddressPools []*AddressPool   `json:"address-pools,omitempty" yaml:"address-pools,omitempty"`
+	IANAPool     string           `json:"iana-pool,omitempty" yaml:"iana-pool,omitempty"`
+	PDPool       string           `json:"pd-pool,omitempty" yaml:"pd-pool,omitempty"`
+	SessionMode  SessionMode      `json:"session-mode,omitempty" yaml:"session-mode,omitempty"`
+	DHCP         *SubscriberDHCP  `json:"dhcp,omitempty" yaml:"dhcp,omitempty"`
+	IPv6         *SubscriberIPv6  `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`
+	BGP          *SubscriberBGP   `json:"bgp,omitempty" yaml:"bgp,omitempty"`
+	VRF          string           `json:"vrf,omitempty" yaml:"vrf,omitempty"`
+	AAAPolicy    string           `json:"aaa-policy,omitempty" yaml:"aaa-policy,omitempty"`
+}
+
+// GetSessionMode returns the configured session mode, defaulting to unified
+func (sg *SubscriberGroup) GetSessionMode() SessionMode {
+	if sg.SessionMode == "" {
+		return SessionModeUnified
+	}
+	return sg.SessionMode
+}
+
+type SubscriberIPv6 struct {
+	RA *SubscriberIPv6RA `json:"ra,omitempty" yaml:"ra,omitempty"`
+}
+
+type SubscriberIPv6RA struct {
+	Managed        *bool  `json:"managed,omitempty" yaml:"managed,omitempty"`
+	Other          *bool  `json:"other,omitempty" yaml:"other,omitempty"`
+	RouterLifetime uint32 `json:"router_lifetime,omitempty" yaml:"router_lifetime,omitempty"`
+	MaxInterval    uint32 `json:"max_interval,omitempty" yaml:"max_interval,omitempty"`
+	MinInterval    uint32 `json:"min_interval,omitempty" yaml:"min_interval,omitempty"`
 }
 
 type AddressPool struct {

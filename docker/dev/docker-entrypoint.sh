@@ -117,6 +117,8 @@ chmod 660 /var/run/frr/zserv.api || true
 echo "Routing daemon status:"
 /usr/lib/frr/frrinit.sh status || true
 
+sleep 5
+
 echo "Starting osvbng..."
 
 if [ "$USE_TASKSET" = true ] && [ -n "$OSVBNG_CP_CORES" ]; then
