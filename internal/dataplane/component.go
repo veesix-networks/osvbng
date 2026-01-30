@@ -28,9 +28,10 @@ type Component struct {
 	vpp          *southbound.VPP
 	virtualMAC   string
 
-	DHCPChan  chan *dataplane.ParsedPacket
-	ARPChan   chan *dataplane.ParsedPacket
-	PPPoEChan chan *dataplane.ParsedPacket
+	DHCPChan   chan *dataplane.ParsedPacket
+	DHCPv6Chan chan *dataplane.ParsedPacket
+	ARPChan    chan *dataplane.ParsedPacket
+	PPPoEChan  chan *dataplane.ParsedPacket
 
 	egressCount  atomic.Int64
 	egressErrors atomic.Int64
@@ -77,6 +78,7 @@ func New(deps component.Dependencies) (component.Component, error) {
 		vpp:        deps.VPP,
 		virtualMAC: virtualMAC,
 		DHCPChan:   make(chan *dataplane.ParsedPacket, 1000),
+		DHCPv6Chan: make(chan *dataplane.ParsedPacket, 1000),
 		ARPChan:    make(chan *dataplane.ParsedPacket, 1000),
 		PPPoEChan:  make(chan *dataplane.ParsedPacket, 1000),
 	}
@@ -182,7 +184,11 @@ func (c *Component) readLoop() {
 					c.logger.Warn("ARP channel full, dropping packet")
 				}
 			case models.ProtocolDHCPv6:
-				c.logger.Debug("Received DHCPv6 packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
+				select {
+				case c.DHCPv6Chan <- pkt:
+				default:
+					c.logger.Warn("DHCPv6 channel full, dropping packet")
+				}
 			case models.ProtocolPPPoEDiscovery, models.ProtocolPPPoESession:
 				select {
 				case c.PPPoEChan <- pkt:
@@ -248,6 +254,8 @@ func (c *Component) handleEgress(event models.Event) error {
 		etherType = ethernet.EtherTypePPPoEDiscovery
 	case models.ProtocolPPPoESession:
 		etherType = ethernet.EtherTypePPPoESession
+	case models.ProtocolDHCPv6, models.ProtocolIPv6ND:
+		etherType = ethernet.EtherTypeIPv6
 	}
 
 	pkt := &dataplane.EgressPacket{

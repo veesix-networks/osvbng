@@ -16,6 +16,7 @@ type Config struct {
 	Dataplane        system.DataplaneConfig                 `json:"dataplane,omitempty" yaml:"dataplane,omitempty"`
 	SubscriberGroups *subscriber.SubscriberGroupsConfig     `json:"subscriber-groups,omitempty" yaml:"subscriber-groups,omitempty"`
 	DHCP             ip.DHCPConfig                          `json:"dhcp,omitempty" yaml:"dhcp,omitempty"`
+	DHCPv6           ip.DHCPv6Config                        `json:"dhcpv6,omitempty" yaml:"dhcpv6,omitempty"`
 	Monitoring       system.MonitoringConfig                `json:"monitoring,omitempty" yaml:"monitoring,omitempty"`
 	API              system.APIConfig                       `json:"api,omitempty" yaml:"api,omitempty"`
 	Interfaces       map[string]*interfaces.InterfaceConfig `json:"interfaces,omitempty" yaml:"interfaces,omitempty"`

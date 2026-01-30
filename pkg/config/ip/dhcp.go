@@ -31,3 +31,73 @@ type DHCPPool struct {
 	DNSServers []string `json:"dns_servers,omitempty" yaml:"dns_servers,omitempty"`
 	LeaseTime  uint32   `json:"lease_time,omitempty" yaml:"lease_time,omitempty"`
 }
+
+type DHCPv6Config struct {
+	Provider   string         `json:"provider,omitempty" yaml:"provider,omitempty"`
+	IANAPools  []DHCPv6Pool   `json:"iana_pools,omitempty" yaml:"iana_pools,omitempty"`
+	PDPools    []DHCPv6PDPool `json:"pd_pools,omitempty" yaml:"pd_pools,omitempty"`
+	DNSServers []string       `json:"dns_servers,omitempty" yaml:"dns_servers,omitempty"`
+	DomainList []string       `json:"domain_list,omitempty" yaml:"domain_list,omitempty"`
+	RA         *IPv6RAConfig  `json:"ra,omitempty" yaml:"ra,omitempty"`
+}
+
+type DHCPv6Pool struct {
+	Name          string `json:"name,omitempty" yaml:"name,omitempty"`
+	Network       string `json:"network,omitempty" yaml:"network,omitempty"`
+	RangeStart    string `json:"range_start,omitempty" yaml:"range_start,omitempty"`
+	RangeEnd      string `json:"range_end,omitempty" yaml:"range_end,omitempty"`
+	Gateway       string `json:"gateway,omitempty" yaml:"gateway,omitempty"`
+	PreferredTime uint32 `json:"preferred_time,omitempty" yaml:"preferred_time,omitempty"`
+	ValidTime     uint32 `json:"valid_time,omitempty" yaml:"valid_time,omitempty"`
+}
+
+type DHCPv6PDPool struct {
+	Name          string `json:"name,omitempty" yaml:"name,omitempty"`
+	Network       string `json:"network,omitempty" yaml:"network,omitempty"`
+	PrefixLength  uint8  `json:"prefix_length,omitempty" yaml:"prefix_length,omitempty"`
+	PreferredTime uint32 `json:"preferred_time,omitempty" yaml:"preferred_time,omitempty"`
+	ValidTime     uint32 `json:"valid_time,omitempty" yaml:"valid_time,omitempty"`
+}
+
+type IPv6RAConfig struct {
+	Managed        *bool  `json:"managed,omitempty" yaml:"managed,omitempty"`
+	Other          *bool  `json:"other,omitempty" yaml:"other,omitempty"`
+	RouterLifetime uint32 `json:"router_lifetime,omitempty" yaml:"router_lifetime,omitempty"`
+	MaxInterval    uint32 `json:"max_interval,omitempty" yaml:"max_interval,omitempty"`
+	MinInterval    uint32 `json:"min_interval,omitempty" yaml:"min_interval,omitempty"`
+}
+
+func (r *IPv6RAConfig) GetManaged() bool {
+	if r == nil || r.Managed == nil {
+		return true
+	}
+	return *r.Managed
+}
+
+func (r *IPv6RAConfig) GetOther() bool {
+	if r == nil || r.Other == nil {
+		return true
+	}
+	return *r.Other
+}
+
+func (r *IPv6RAConfig) GetRouterLifetime() uint32 {
+	if r == nil || r.RouterLifetime == 0 {
+		return 1800
+	}
+	return r.RouterLifetime
+}
+
+func (r *IPv6RAConfig) GetMaxInterval() uint32 {
+	if r == nil || r.MaxInterval == 0 {
+		return 600
+	}
+	return r.MaxInterval
+}
+
+func (r *IPv6RAConfig) GetMinInterval() uint32 {
+	if r == nil || r.MinInterval == 0 {
+		return 200
+	}
+	return r.MinInterval
+}

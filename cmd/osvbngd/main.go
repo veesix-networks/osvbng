@@ -26,6 +26,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/dhcp4"
+	"github.com/veesix-networks/osvbng/pkg/dhcp6"
 	"github.com/veesix-networks/osvbng/pkg/events/local"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/conf/all"
 	"github.com/veesix-networks/osvbng/pkg/handlers/oper"
@@ -173,6 +174,7 @@ func main() {
 
 	dpComp := dataplaneComp.(*dataplane.Component)
 	coreDeps.DHCPChan = dpComp.DHCPChan
+	coreDeps.DHCPv6Chan = dpComp.DHCPv6Chan
 	coreDeps.ARPChan = dpComp.ARPChan
 	coreDeps.PPPChan = dpComp.PPPoEChan
 
@@ -221,7 +223,20 @@ func main() {
 		log.Fatalf("Failed to create DHCP4 provider '%s': %v", dhcp4ProviderName, err)
 	}
 
-	ipoeComp, err := ipoe.New(coreDeps, nil, dhcp4Provider)
+	dhcp6ProviderName := cfg.DHCPv6.Provider
+	if dhcp6ProviderName == "" {
+		dhcp6ProviderName = "local"
+	}
+
+	var dhcp6Provider dhcp6.DHCPProvider
+	if dhcp6Factory, ok := dhcp6.Get(dhcp6ProviderName); ok {
+		dhcp6Provider, err = dhcp6Factory(cfg)
+		if err != nil {
+			log.Fatalf("Failed to create DHCP6 provider '%s': %v", dhcp6ProviderName, err)
+		}
+	}
+
+	ipoeComp, err := ipoe.New(coreDeps, nil, dhcp4Provider, dhcp6Provider)
 	if err != nil {
 		log.Fatalf("Failed to create ipoe component: %v", err)
 	}

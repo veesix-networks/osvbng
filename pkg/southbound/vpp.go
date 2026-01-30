@@ -28,7 +28,9 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/l2"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/lcp"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/memif"
+	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/mfib_types"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/mpls"
+	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/ip6_nd"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/osvbng_ipoe"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/osvbng_pppoe"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/osvbng_punt"
@@ -1710,6 +1712,393 @@ func (v *VPP) EnableDHCPv4Punt(ifaceName, socketPath string) error {
 	}
 
 	v.logger.Debug("Enabled DHCP punt", "interface", ifaceName, "sw_if_index", idx, "socket", socketPath)
+	return nil
+}
+
+func (v *VPP) EnableDHCPv6Punt(ifaceName, socketPath string) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	idx, err := v.GetInterfaceIndex(ifaceName)
+	if err != nil {
+		return fmt.Errorf("get interface index: %w", err)
+	}
+
+	req := &osvbng_punt.OsvbngPuntEnableDisable{
+		SwIfIndex:  interface_types.InterfaceIndex(idx),
+		Protocol:   1, // DHCPv6
+		Enable:     true,
+		SocketPath: socketPath,
+	}
+
+	reply := &osvbng_punt.OsvbngPuntEnableDisableReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("enable dhcpv6 punt: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return fmt.Errorf("enable dhcpv6 punt failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Debug("Enabled DHCPv6 punt", "interface", ifaceName, "sw_if_index", idx, "socket", socketPath)
+	return nil
+}
+
+type IPv6RAConfig struct {
+	Managed        bool   // M flag
+	Other          bool   // O flag
+	RouterLifetime uint32
+	MaxInterval    uint32
+	MinInterval    uint32
+}
+
+type IPv6RAPrefixConfig struct {
+	Prefix            string
+	OnLink            bool // L flag
+	Autonomous        bool // A flag
+	ValidLifetime     uint32
+	PreferredLifetime uint32
+}
+
+func (v *VPP) EnableIPv6(ifaceName string) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	idx, err := v.GetInterfaceIndex(ifaceName)
+	if err != nil {
+		return fmt.Errorf("get interface index: %w", err)
+	}
+
+	req := &ip.SwInterfaceIP6EnableDisable{
+		SwIfIndex: interface_types.InterfaceIndex(idx),
+		Enable:    true,
+	}
+
+	reply := &ip.SwInterfaceIP6EnableDisableReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("enable ipv6: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return fmt.Errorf("enable ipv6 failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Debug("Enabled IPv6 on interface", "interface", ifaceName)
+	return nil
+}
+
+func (v *VPP) EnableIPv6ByIndex(swIfIndex uint32) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	req := &ip.SwInterfaceIP6EnableDisable{
+		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+		Enable:    true,
+	}
+
+	reply := &ip.SwInterfaceIP6EnableDisableReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("enable ipv6: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return fmt.Errorf("enable ipv6 failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Debug("Enabled IPv6 on interface", "sw_if_index", swIfIndex)
+	return nil
+}
+
+func (v *VPP) EnableDHCPv6Multicast(ifaceName string) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	idx, err := v.GetInterfaceIndex(ifaceName)
+	if err != nil {
+		return fmt.Errorf("get interface index: %w", err)
+	}
+
+	// DHCPv6 all-relay-agents-and-servers multicast: ff02::1:2
+	var grpAddr ip_types.AddressUnion
+	grpAddr.SetIP6(ip_types.IP6Address{0xff, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01, 0, 0x02})
+
+	req := &ip.IPMrouteAddDel{
+		IsAdd: true,
+		Route: ip.IPMroute{
+			TableID:    0,
+			EntryFlags: mfib_types.MFIB_API_ENTRY_FLAG_ACCEPT_ALL_ITF,
+			Prefix: ip_types.Mprefix{
+				Af:               ip_types.ADDRESS_IP6,
+				GrpAddressLength: 128,
+				GrpAddress:       grpAddr,
+			},
+			NPaths: 1,
+			Paths: []mfib_types.MfibPath{
+				{
+					ItfFlags: mfib_types.MFIB_API_ITF_FLAG_FORWARD,
+					Path: fib_types.FibPath{
+						SwIfIndex: uint32(idx),
+						Proto:     fib_types.FIB_API_PATH_NH_PROTO_IP6,
+						Type:      fib_types.FIB_API_PATH_TYPE_LOCAL,
+					},
+				},
+			},
+		},
+	}
+
+	reply := &ip.IPMrouteAddDelReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("add dhcpv6 mcast route: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return fmt.Errorf("add dhcpv6 mcast route failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Debug("Enabled DHCPv6 multicast on interface", "interface", ifaceName)
+	return nil
+}
+
+func (v *VPP) ConfigureIPv6RA(ifaceName string, config IPv6RAConfig) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	idx, err := v.GetInterfaceIndex(ifaceName)
+	if err != nil {
+		return fmt.Errorf("get interface index: %w", err)
+	}
+
+	lifetime := config.RouterLifetime
+	if lifetime > 9000 {
+		lifetime = 9000
+	}
+
+	var managed, other uint8
+	if config.Managed {
+		managed = 1
+	}
+	if config.Other {
+		other = 1
+	}
+
+	req := &ip6_nd.SwInterfaceIP6ndRaConfig{
+		SwIfIndex:       interface_types.InterfaceIndex(idx),
+		Suppress:        0,       // 0 = send RAs, 1 = suppress RAs
+		Managed:         managed, // M flag: use DHCPv6 for address config
+		Other:           other,   // O flag: use DHCPv6 for other config
+		LlOption:        1,       // 1 = include source link-layer address option
+		SendUnicast:     1,       // 1 = send unicast RA in response to RS
+		Cease:           0,       // 1 = cease sending RAs
+		IsNo:            false,   // true = disable/remove config
+		DefaultRouter:   1,       // 1 = advertise as default router
+		MaxInterval:     config.MaxInterval,
+		MinInterval:     config.MinInterval,
+		Lifetime:        lifetime,
+		InitialCount:    3,  // number of initial RAs to send rapidly
+		InitialInterval: 16, // interval between initial RAs (seconds)
+	}
+
+	reply := &ip6_nd.SwInterfaceIP6ndRaConfigReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("configure ipv6 ra: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return fmt.Errorf("configure ipv6 ra failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Debug("Configured IPv6 RA", "interface", ifaceName,
+		"managed", config.Managed, "other", config.Other, "lifetime", lifetime)
+	return nil
+}
+
+func (v *VPP) AddIPv6RAPrefix(ifaceName string, config IPv6RAPrefixConfig) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	idx, err := v.GetInterfaceIndex(ifaceName)
+	if err != nil {
+		return fmt.Errorf("get interface index: %w", err)
+	}
+
+	_, ipNet, err := net.ParseCIDR(config.Prefix)
+	if err != nil {
+		return fmt.Errorf("parse prefix: %w", err)
+	}
+
+	prefixLen, _ := ipNet.Mask.Size()
+	var ip6Addr ip_types.IP6Address
+	copy(ip6Addr[:], ipNet.IP.To16())
+
+	req := &ip6_nd.SwInterfaceIP6ndRaPrefix{
+		SwIfIndex: interface_types.InterfaceIndex(idx),
+		Prefix: ip_types.Prefix{
+			Address: ip_types.Address{
+				Af: ip_types.ADDRESS_IP6,
+				Un: ip_types.AddressUnionIP6(ip6Addr),
+			},
+			Len: uint8(prefixLen),
+		},
+		OffLink:      !config.OnLink,
+		NoAutoconfig: !config.Autonomous,
+		ValLifetime:  config.ValidLifetime,
+		PrefLifetime: config.PreferredLifetime,
+		IsNo:         false,
+	}
+
+	reply := &ip6_nd.SwInterfaceIP6ndRaPrefixReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("add ra prefix: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return fmt.Errorf("add ra prefix failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Debug("Added IPv6 RA prefix", "interface", ifaceName,
+		"prefix", config.Prefix, "onlink", config.OnLink, "autonomous", config.Autonomous)
+	return nil
+}
+
+func (v *VPP) DisableIPv6RA(ifaceName string) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	idx, err := v.GetInterfaceIndex(ifaceName)
+	if err != nil {
+		return fmt.Errorf("get interface index: %w", err)
+	}
+
+	req := &ip6_nd.SwInterfaceIP6ndRaConfig{
+		SwIfIndex: interface_types.InterfaceIndex(idx),
+		Suppress:  1,
+		IsNo:      true,
+	}
+
+	reply := &ip6_nd.SwInterfaceIP6ndRaConfigReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("disable ipv6 ra: %w", err)
+	}
+
+	v.logger.Debug("Disabled IPv6 RA", "interface", ifaceName)
+	return nil
+}
+
+func (v *VPP) ConfigureIPv6RAByIndex(swIfIndex uint32, config IPv6RAConfig) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	lifetime := config.RouterLifetime
+	if lifetime > 9000 {
+		lifetime = 9000
+	}
+
+	var managed, other uint8
+	if config.Managed {
+		managed = 1
+	}
+	if config.Other {
+		other = 1
+	}
+
+	req := &ip6_nd.SwInterfaceIP6ndRaConfig{
+		SwIfIndex:       interface_types.InterfaceIndex(swIfIndex),
+		Suppress:        0,
+		Managed:         managed,
+		Other:           other,
+		LlOption:        1,
+		SendUnicast:     1,
+		Cease:           0,
+		IsNo:            false,
+		DefaultRouter:   1,
+		MaxInterval:     config.MaxInterval,
+		MinInterval:     config.MinInterval,
+		Lifetime:        lifetime,
+		InitialCount:    3,
+		InitialInterval: 16,
+	}
+
+	reply := &ip6_nd.SwInterfaceIP6ndRaConfigReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("configure ipv6 ra: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return fmt.Errorf("configure ipv6 ra failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Debug("Configured IPv6 RA", "sw_if_index", swIfIndex,
+		"managed", config.Managed, "other", config.Other, "lifetime", lifetime)
+	return nil
+}
+
+func (v *VPP) AddIPv6RAPrefixByIndex(swIfIndex uint32, config IPv6RAPrefixConfig) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	_, ipNet, err := net.ParseCIDR(config.Prefix)
+	if err != nil {
+		return fmt.Errorf("parse prefix: %w", err)
+	}
+
+	prefixLen, _ := ipNet.Mask.Size()
+	var ip6Addr ip_types.IP6Address
+	copy(ip6Addr[:], ipNet.IP.To16())
+
+	req := &ip6_nd.SwInterfaceIP6ndRaPrefix{
+		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+		Prefix: ip_types.Prefix{
+			Address: ip_types.Address{
+				Af: ip_types.ADDRESS_IP6,
+				Un: ip_types.AddressUnionIP6(ip6Addr),
+			},
+			Len: uint8(prefixLen),
+		},
+		OffLink:      !config.OnLink,
+		NoAutoconfig: !config.Autonomous,
+		ValLifetime:  config.ValidLifetime,
+		PrefLifetime: config.PreferredLifetime,
+		IsNo:         false,
+	}
+
+	reply := &ip6_nd.SwInterfaceIP6ndRaPrefixReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("add ra prefix: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return fmt.Errorf("add ra prefix failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Debug("Added IPv6 RA prefix", "sw_if_index", swIfIndex,
+		"prefix", config.Prefix, "onlink", config.OnLink, "autonomous", config.Autonomous)
 	return nil
 }
 

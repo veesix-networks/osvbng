@@ -151,6 +151,15 @@ func (p *PuntSocketIngress) ReadPacket(ctx context.Context) (*dataplane.ParsedPa
 		}
 	case 1:
 		parsedPkt.Protocol = models.ProtocolDHCPv6
+		if ipv6Layer := packet.Layer(layers.LayerTypeIPv6); ipv6Layer != nil {
+			parsedPkt.IPv6 = ipv6Layer.(*layers.IPv6)
+		}
+		if udpLayer := packet.Layer(layers.LayerTypeUDP); udpLayer != nil {
+			parsedPkt.UDP = udpLayer.(*layers.UDP)
+		}
+		if dhcpv6Layer := packet.Layer(layers.LayerTypeDHCPv6); dhcpv6Layer != nil {
+			parsedPkt.DHCPv6 = dhcpv6Layer.(*layers.DHCPv6)
+		}
 	case 2:
 		parsedPkt.Protocol = models.ProtocolARP
 		if arpLayer := packet.Layer(layers.LayerTypeARP); arpLayer != nil {
