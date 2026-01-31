@@ -13,6 +13,37 @@ type InterfaceConfig struct {
 	Bond    *BondConfig `json:"bond,omitempty" yaml:"bond,omitempty"`
 	LCP     bool        `json:"lcp,omitempty" yaml:"lcp,omitempty"`
 	BNGMode string      `json:"bng_mode,omitempty" yaml:"bng_mode,omitempty"`
+
+	Subinterfaces map[string]*SubinterfaceConfig `json:"subinterfaces,omitempty" yaml:"subinterfaces,omitempty"`
+	IPv6          *IPv6Config                    `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`
+	ARP           *ARPConfig                     `json:"arp,omitempty" yaml:"arp,omitempty"`
+	Unnumbered    string                         `json:"unnumbered,omitempty" yaml:"unnumbered,omitempty"`
+}
+
+type SubinterfaceConfig struct {
+	VLAN       int         `json:"vlan" yaml:"vlan"`
+	Enabled    bool        `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	IPv6       *IPv6Config `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`
+	ARP        *ARPConfig  `json:"arp,omitempty" yaml:"arp,omitempty"`
+	Unnumbered string      `json:"unnumbered,omitempty" yaml:"unnumbered,omitempty"`
+}
+
+type IPv6Config struct {
+	Enabled   bool       `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	RA        *RAConfig  `json:"ra,omitempty" yaml:"ra,omitempty"`
+	Multicast bool       `json:"multicast,omitempty" yaml:"multicast,omitempty"`
+}
+
+type RAConfig struct {
+	Managed        bool   `json:"managed,omitempty" yaml:"managed,omitempty"`
+	Other          bool   `json:"other,omitempty" yaml:"other,omitempty"`
+	RouterLifetime uint32 `json:"router-lifetime,omitempty" yaml:"router-lifetime,omitempty"`
+	MaxInterval    uint32 `json:"max-interval,omitempty" yaml:"max-interval,omitempty"`
+	MinInterval    uint32 `json:"min-interval,omitempty" yaml:"min-interval,omitempty"`
+}
+
+type ARPConfig struct {
+	Enabled bool `json:"enabled" yaml:"enabled"`
 }
 
 type AddressConfig struct {

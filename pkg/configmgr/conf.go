@@ -16,6 +16,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	pathspkg "github.com/veesix-networks/osvbng/pkg/paths"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
 
 type ConfigManager struct {
@@ -23,10 +24,11 @@ type ConfigManager struct {
 	frrConfig *frr.Config
 	logger    *slog.Logger
 
-	runningConfig *config.Config
-	startupConfig *config.Config
-	sessions      map[conf.SessionID]*session
-	versions      []ConfigVersion
+	runningConfig  *config.Config
+	startupConfig  *config.Config
+	dataplaneState *DataplaneState
+	sessions       map[conf.SessionID]*session
+	versions       []ConfigVersion
 
 	versionDir        string
 	startupConfigPath string
@@ -332,6 +334,11 @@ func (cd *ConfigManager) resolveDepPath(currentPath, currentPattern, depPattern 
 		return depPattern, nil
 	}
 
+	depWildcardCount := strings.Count(depPattern, "<")
+	if depWildcardCount < len(wildcardValues) {
+		wildcardValues = wildcardValues[:depWildcardCount]
+	}
+
 	resolvedPath, err := pathspkg.Build(depPattern, wildcardValues...)
 	if err != nil {
 		return depPattern, nil
@@ -580,6 +587,32 @@ func (cd *ConfigManager) GetStartup() (*config.Config, error) {
 	defer cd.mu.RUnlock()
 
 	return cd.startupConfig, nil
+}
+
+func (cd *ConfigManager) LoadFromDataplane(vpp *southbound.VPP) error {
+	cd.mu.Lock()
+	defer cd.mu.Unlock()
+
+	cd.dataplaneState = NewDataplaneState()
+	if err := cd.dataplaneState.LoadFromDataplane(vpp); err != nil {
+		return fmt.Errorf("load dataplane state: %w", err)
+	}
+
+	cd.logger.Info("Loaded dataplane state",
+		"interfaces", len(cd.dataplaneState.Interfaces),
+		"unnumbered", len(cd.dataplaneState.Unnumbered),
+		"ipv6_enabled", len(cd.dataplaneState.IPv6Enabled),
+		"punt_registrations", len(cd.dataplaneState.PuntRegistrations),
+	)
+
+	return nil
+}
+
+func (cd *ConfigManager) GetDataplaneState() *DataplaneState {
+	cd.mu.RLock()
+	defer cd.mu.RUnlock()
+
+	return cd.dataplaneState
 }
 
 func (cd *ConfigManager) SaveStartup() error {

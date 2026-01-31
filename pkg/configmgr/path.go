@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	confpaths "github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
 	"github.com/veesix-networks/osvbng/pkg/config"
+	confpaths "github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
 	"github.com/veesix-networks/osvbng/pkg/paths"
 )
 
@@ -170,6 +170,10 @@ func setValueInConfig(config *config.Config, path string, value interface{}, pat
 	}
 	if len(parts) == 0 {
 		return fmt.Errorf("empty path")
+	}
+
+	if parts[0] == "_internal" {
+		return nil
 	}
 
 	if config.Plugins == nil {

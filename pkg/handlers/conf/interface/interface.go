@@ -16,11 +16,15 @@ func init() {
 }
 
 type InterfaceHandler struct {
-	dataplane operations.Dataplane
+	dataplane      operations.Dataplane
+	dataplaneState operations.DataplaneStateReader
 }
 
 func NewInterfaceHandler(daemons *deps.ConfDeps) conf.Handler {
-	return &InterfaceHandler{dataplane: daemons.Dataplane}
+	return &InterfaceHandler{
+		dataplane:      daemons.Dataplane,
+		dataplaneState: daemons.DataplaneState,
+	}
 }
 
 func (h *InterfaceHandler) Validate(ctx context.Context, hctx *conf.HandlerContext) error {
@@ -33,6 +37,11 @@ func (h *InterfaceHandler) Validate(ctx context.Context, hctx *conf.HandlerConte
 
 func (h *InterfaceHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error {
 	cfg := hctx.NewValue.(*interfaces.InterfaceConfig)
+
+	if h.dataplaneState != nil && h.dataplaneState.IsInterfaceConfigured(cfg.Name) {
+		return nil
+	}
+
 	return h.dataplane.CreateInterface(cfg)
 }
 

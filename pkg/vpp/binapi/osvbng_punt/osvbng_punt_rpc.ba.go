@@ -14,6 +14,7 @@ import (
 // RPCService defines RPC service osvbng_punt.
 type RPCService interface {
 	OsvbngPuntEnableDisable(ctx context.Context, in *OsvbngPuntEnableDisable) (*OsvbngPuntEnableDisableReply, error)
+	OsvbngPuntRegistrationDump(ctx context.Context, in *OsvbngPuntRegistrationDump) (RPCService_OsvbngPuntRegistrationDumpClient, error)
 	OsvbngPuntStatsDump(ctx context.Context, in *OsvbngPuntStatsDump) (RPCService_OsvbngPuntStatsDumpClient, error)
 }
 
@@ -32,6 +33,49 @@ func (c *serviceClient) OsvbngPuntEnableDisable(ctx context.Context, in *OsvbngP
 		return nil, err
 	}
 	return out, api.RetvalToVPPApiError(out.Retval)
+}
+
+func (c *serviceClient) OsvbngPuntRegistrationDump(ctx context.Context, in *OsvbngPuntRegistrationDump) (RPCService_OsvbngPuntRegistrationDumpClient, error) {
+	stream, err := c.conn.NewStream(ctx)
+	if err != nil {
+		return nil, err
+	}
+	x := &serviceClient_OsvbngPuntRegistrationDumpClient{stream}
+	if err := x.Stream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err = x.Stream.SendMsg(&memclnt.ControlPing{}); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type RPCService_OsvbngPuntRegistrationDumpClient interface {
+	Recv() (*OsvbngPuntRegistrationDetails, error)
+	api.Stream
+}
+
+type serviceClient_OsvbngPuntRegistrationDumpClient struct {
+	api.Stream
+}
+
+func (c *serviceClient_OsvbngPuntRegistrationDumpClient) Recv() (*OsvbngPuntRegistrationDetails, error) {
+	msg, err := c.Stream.RecvMsg()
+	if err != nil {
+		return nil, err
+	}
+	switch m := msg.(type) {
+	case *OsvbngPuntRegistrationDetails:
+		return m, nil
+	case *memclnt.ControlPingReply:
+		err = c.Stream.Close()
+		if err != nil {
+			return nil, err
+		}
+		return nil, io.EOF
+	default:
+		return nil, fmt.Errorf("unexpected message: %T %v", m, m)
+	}
 }
 
 func (c *serviceClient) OsvbngPuntStatsDump(ctx context.Context, in *OsvbngPuntStatsDump) (RPCService_OsvbngPuntStatsDumpClient, error) {

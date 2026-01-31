@@ -24,6 +24,8 @@ type OperDeps struct {
 
 type ConfDeps struct {
 	Dataplane        operations.Dataplane
+	DataplaneState   operations.DataplaneStateReader
+	Southbound       *southbound.VPP
 	AAA              *aaacomp.Component
 	Routing          *routingcomp.Component
 	PluginComponents map[string]component.Component
