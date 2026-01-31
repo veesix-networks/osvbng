@@ -7,7 +7,7 @@
 // Package osvbng_punt contains generated bindings for API file osvbng_punt.api.
 //
 // Contents:
-// -  4 messages
+// -  6 messages
 package osvbng_punt
 
 import (
@@ -25,7 +25,7 @@ const _ = api.GoVppAPIPackageIsVersion2
 const (
 	APIFile    = "osvbng_punt"
 	APIVersion = "1.0.0"
-	VersionCrc = 0x7042fae5
+	VersionCrc = 0x81360d8f
 )
 
 // Enable/disable OSVBNG punt for a protocol on an interface
@@ -114,6 +114,77 @@ func (m *OsvbngPuntEnableDisableReply) Unmarshal(b []byte) error {
 	return nil
 }
 
+// OSVBNG punt registration details
+//   - sw_if_index - interface index
+//   - protocol - protocol type (0=DHCPv4, 1=DHCPv6, 2=ARP, 3=PPPoE-Disc, 4=PPPoE-Sess, 5=IPv6-ND, 6=L2TP)
+//
+// OsvbngPuntRegistrationDetails defines message 'osvbng_punt_registration_details'.
+type OsvbngPuntRegistrationDetails struct {
+	SwIfIndex interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
+	Protocol  uint8                          `binapi:"u8,name=protocol" json:"protocol,omitempty"`
+}
+
+func (m *OsvbngPuntRegistrationDetails) Reset() { *m = OsvbngPuntRegistrationDetails{} }
+func (*OsvbngPuntRegistrationDetails) GetMessageName() string {
+	return "osvbng_punt_registration_details"
+}
+func (*OsvbngPuntRegistrationDetails) GetCrcString() string { return "b436106a" }
+func (*OsvbngPuntRegistrationDetails) GetMessageType() api.MessageType {
+	return api.ReplyMessage
+}
+
+func (m *OsvbngPuntRegistrationDetails) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.SwIfIndex
+	size += 1 // m.Protocol
+	return size
+}
+func (m *OsvbngPuntRegistrationDetails) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeUint32(uint32(m.SwIfIndex))
+	buf.EncodeUint8(m.Protocol)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngPuntRegistrationDetails) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.SwIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
+	m.Protocol = buf.DecodeUint8()
+	return nil
+}
+
+// Dump OSVBNG punt registrations
+// OsvbngPuntRegistrationDump defines message 'osvbng_punt_registration_dump'.
+type OsvbngPuntRegistrationDump struct{}
+
+func (m *OsvbngPuntRegistrationDump) Reset()               { *m = OsvbngPuntRegistrationDump{} }
+func (*OsvbngPuntRegistrationDump) GetMessageName() string { return "osvbng_punt_registration_dump" }
+func (*OsvbngPuntRegistrationDump) GetCrcString() string   { return "51077d14" }
+func (*OsvbngPuntRegistrationDump) GetMessageType() api.MessageType {
+	return api.RequestMessage
+}
+
+func (m *OsvbngPuntRegistrationDump) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	return size
+}
+func (m *OsvbngPuntRegistrationDump) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngPuntRegistrationDump) Unmarshal(b []byte) error {
+	return nil
+}
+
 // OSVBNG punt statistics details
 //   - protocol - protocol type
 //   - packets_punted - number of packets successfully punted
@@ -192,6 +263,8 @@ func init() { file_osvbng_punt_binapi_init() }
 func file_osvbng_punt_binapi_init() {
 	api.RegisterMessage((*OsvbngPuntEnableDisable)(nil), "osvbng_punt_enable_disable_28d700f9")
 	api.RegisterMessage((*OsvbngPuntEnableDisableReply)(nil), "osvbng_punt_enable_disable_reply_e8d4e804")
+	api.RegisterMessage((*OsvbngPuntRegistrationDetails)(nil), "osvbng_punt_registration_details_b436106a")
+	api.RegisterMessage((*OsvbngPuntRegistrationDump)(nil), "osvbng_punt_registration_dump_51077d14")
 	api.RegisterMessage((*OsvbngPuntStatsDetails)(nil), "osvbng_punt_stats_details_1fa3c17c")
 	api.RegisterMessage((*OsvbngPuntStatsDump)(nil), "osvbng_punt_stats_dump_51077d14")
 }
@@ -201,6 +274,8 @@ func AllMessages() []api.Message {
 	return []api.Message{
 		(*OsvbngPuntEnableDisable)(nil),
 		(*OsvbngPuntEnableDisableReply)(nil),
+		(*OsvbngPuntRegistrationDetails)(nil),
+		(*OsvbngPuntRegistrationDump)(nil),
 		(*OsvbngPuntStatsDetails)(nil),
 		(*OsvbngPuntStatsDump)(nil),
 	}
