@@ -2,6 +2,7 @@ package southbound
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -1782,11 +1783,12 @@ func (v *VPP) EnableIPv6(ifaceName string) error {
 
 	reply := &ip.SwInterfaceIP6EnableDisableReply{}
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		var vppErr api.VPPApiError
+		if errors.As(err, &vppErr) && vppErr == -81 {
+			v.logger.Debug("IPv6 already enabled on interface", "interface", ifaceName)
+			return nil
+		}
 		return fmt.Errorf("enable ipv6: %w", err)
-	}
-
-	if reply.Retval != 0 {
-		return fmt.Errorf("enable ipv6 failed: retval=%d", reply.Retval)
 	}
 
 	v.logger.Debug("Enabled IPv6 on interface", "interface", ifaceName)
@@ -1807,11 +1809,12 @@ func (v *VPP) EnableIPv6ByIndex(swIfIndex uint32) error {
 
 	reply := &ip.SwInterfaceIP6EnableDisableReply{}
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		var vppErr api.VPPApiError
+		if errors.As(err, &vppErr) && vppErr == -81 {
+			v.logger.Debug("IPv6 already enabled on interface", "sw_if_index", swIfIndex)
+			return nil
+		}
 		return fmt.Errorf("enable ipv6: %w", err)
-	}
-
-	if reply.Retval != 0 {
-		return fmt.Errorf("enable ipv6 failed: retval=%d", reply.Retval)
 	}
 
 	v.logger.Debug("Enabled IPv6 on interface", "sw_if_index", swIfIndex)
@@ -3000,4 +3003,350 @@ func (v *VPP) DeleteHostRouteAsync(ipAddr string, fibID uint32, callback func(er
 		v.logger.Debug("VPP host route deleted (async)", "ip", ipAddr)
 		callback(nil)
 	})
+}
+
+type InterfaceInfo struct {
+	SwIfIndex    uint32
+	Name         string
+	AdminUp      bool
+	LinkUp       bool
+	MTU          uint32
+	OuterVlanID  uint16
+	InnerVlanID  uint16
+	SupSwIfIndex uint32
+}
+
+type IPAddressInfo struct {
+	SwIfIndex uint32
+	Address   string
+	IsIPv6    bool
+}
+
+type UnnumberedInfo struct {
+	SwIfIndex   uint32
+	IPSwIfIndex uint32
+}
+
+type IPv6RAInfo struct {
+	SwIfIndex          uint32
+	Managed            bool
+	Other              bool
+	RouterLifetimeSecs uint16
+	MaxIntervalSecs    float64
+	MinIntervalSecs    float64
+	SendRadv           bool
+}
+
+type PuntRegistration struct {
+	SwIfIndex uint32
+	Protocol  uint8
+}
+
+type MrouteInfo struct {
+	TableID    uint32
+	GrpAddress net.IP
+	SrcAddress net.IP
+	IsIPv6     bool
+}
+
+func (v *VPP) DumpInterfaces() ([]InterfaceInfo, error) {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return nil, err
+	}
+	defer ch.Close()
+
+	req := &interfaces.SwInterfaceDump{
+		SwIfIndex: interface_types.InterfaceIndex(^uint32(0)),
+	}
+
+	stream := ch.SendMultiRequest(req)
+	var result []InterfaceInfo
+
+	for {
+		reply := &interfaces.SwInterfaceDetails{}
+		stop, err := stream.ReceiveReply(reply)
+		if stop {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("dump interfaces: %w", err)
+		}
+
+		info := InterfaceInfo{
+			SwIfIndex:    uint32(reply.SwIfIndex),
+			Name:         strings.TrimRight(reply.InterfaceName, "\x00"),
+			AdminUp:      reply.Flags&interface_types.IF_STATUS_API_FLAG_ADMIN_UP != 0,
+			LinkUp:       reply.Flags&interface_types.IF_STATUS_API_FLAG_LINK_UP != 0,
+			MTU:          reply.Mtu[0],
+			OuterVlanID:  reply.SubOuterVlanID,
+			InnerVlanID:  reply.SubInnerVlanID,
+			SupSwIfIndex: reply.SupSwIfIndex,
+		}
+		result = append(result, info)
+	}
+
+	v.logger.Debug("Dumped interfaces", "count", len(result))
+	return result, nil
+}
+
+func (v *VPP) DumpIPAddresses() ([]IPAddressInfo, error) {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return nil, err
+	}
+	defer ch.Close()
+
+	var result []IPAddressInfo
+	reqV4 := &ip.IPAddressDump{
+		SwIfIndex: interface_types.InterfaceIndex(^uint32(0)),
+		IsIPv6:    false,
+	}
+
+	streamV4 := ch.SendMultiRequest(reqV4)
+	for {
+		reply := &ip.IPAddressDetails{}
+		stop, err := streamV4.ReceiveReply(reply)
+		if stop {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("dump ipv4 addresses: %w", err)
+		}
+
+		addr := fmt.Sprintf("%s/%d",
+			reply.Prefix.Address.Un.GetIP4().String(),
+			reply.Prefix.Len)
+		result = append(result, IPAddressInfo{
+			SwIfIndex: uint32(reply.SwIfIndex),
+			Address:   addr,
+			IsIPv6:    false,
+		})
+	}
+
+	reqV6 := &ip.IPAddressDump{
+		SwIfIndex: interface_types.InterfaceIndex(^uint32(0)),
+		IsIPv6:    true,
+	}
+
+	streamV6 := ch.SendMultiRequest(reqV6)
+	for {
+		reply := &ip.IPAddressDetails{}
+		stop, err := streamV6.ReceiveReply(reply)
+		if stop {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("dump ipv6 addresses: %w", err)
+		}
+
+		addr := fmt.Sprintf("%s/%d",
+			reply.Prefix.Address.Un.GetIP6().String(),
+			reply.Prefix.Len)
+		result = append(result, IPAddressInfo{
+			SwIfIndex: uint32(reply.SwIfIndex),
+			Address:   addr,
+			IsIPv6:    true,
+		})
+	}
+
+	v.logger.Debug("Dumped IP addresses", "count", len(result))
+	return result, nil
+}
+
+func (v *VPP) DumpUnnumbered() ([]UnnumberedInfo, error) {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return nil, err
+	}
+	defer ch.Close()
+
+	req := &ip.IPUnnumberedDump{
+		SwIfIndex: interface_types.InterfaceIndex(^uint32(0)),
+	}
+
+	stream := ch.SendMultiRequest(req)
+	var result []UnnumberedInfo
+
+	for {
+		reply := &ip.IPUnnumberedDetails{}
+		stop, err := stream.ReceiveReply(reply)
+		if stop {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("dump unnumbered: %w", err)
+		}
+
+		info := UnnumberedInfo{
+			SwIfIndex:   uint32(reply.SwIfIndex),
+			IPSwIfIndex: uint32(reply.IPSwIfIndex),
+		}
+		result = append(result, info)
+	}
+
+	v.logger.Debug("Dumped unnumbered", "count", len(result))
+	return result, nil
+}
+
+func (v *VPP) IsIPv6EnabledByIndex(swIfIndex uint32) bool {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return false
+	}
+	defer ch.Close()
+
+	req := &ip.SwInterfaceIP6GetLinkLocalAddress{
+		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+	}
+
+	reply := &ip.SwInterfaceIP6GetLinkLocalAddressReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return false
+	}
+
+	return reply.Retval == 0
+}
+
+func (v *VPP) DumpIPv6Enabled() ([]uint32, error) {
+	interfaces, err := v.DumpInterfaces()
+	if err != nil {
+		return nil, fmt.Errorf("dump interfaces: %w", err)
+	}
+
+	var result []uint32
+	for _, iface := range interfaces {
+		if v.IsIPv6EnabledByIndex(iface.SwIfIndex) {
+			result = append(result, iface.SwIfIndex)
+		}
+	}
+
+	v.logger.Debug("Dumped IPv6 enabled interfaces", "count", len(result))
+	return result, nil
+}
+
+func (v *VPP) DumpIPv6RA() ([]IPv6RAInfo, error) {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return nil, err
+	}
+	defer ch.Close()
+
+	req := &ip6_nd.SwInterfaceIP6ndRaDump{
+		SwIfIndex: interface_types.InterfaceIndex(^uint32(0)),
+	}
+
+	stream := ch.SendMultiRequest(req)
+	var result []IPv6RAInfo
+
+	for {
+		reply := &ip6_nd.SwInterfaceIP6ndRaDetails{}
+		stop, err := stream.ReceiveReply(reply)
+		if stop {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("dump ipv6 ra: %w", err)
+		}
+
+		info := IPv6RAInfo{
+			SwIfIndex:          uint32(reply.SwIfIndex),
+			Managed:            reply.AdvManagedFlag,
+			Other:              reply.AdvOtherFlag,
+			RouterLifetimeSecs: reply.AdvRouterLifetime,
+			MaxIntervalSecs:    reply.MaxRadvInterval,
+			MinIntervalSecs:    reply.MinRadvInterval,
+			SendRadv:           reply.SendRadv,
+		}
+		result = append(result, info)
+	}
+
+	v.logger.Debug("Dumped IPv6 RA configs", "count", len(result))
+	return result, nil
+}
+
+func (v *VPP) DumpPuntRegistrations() ([]PuntRegistration, error) {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return nil, err
+	}
+	defer ch.Close()
+
+	req := &osvbng_punt.OsvbngPuntRegistrationDump{}
+
+	stream := ch.SendMultiRequest(req)
+	var result []PuntRegistration
+
+	for {
+		reply := &osvbng_punt.OsvbngPuntRegistrationDetails{}
+		stop, err := stream.ReceiveReply(reply)
+		if stop {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("dump punt registrations: %w", err)
+		}
+
+		info := PuntRegistration{
+			SwIfIndex: uint32(reply.SwIfIndex),
+			Protocol:  reply.Protocol,
+		}
+		result = append(result, info)
+	}
+
+	v.logger.Debug("Dumped punt registrations", "count", len(result))
+	return result, nil
+}
+
+func (v *VPP) DumpMroutes() ([]MrouteInfo, error) {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return nil, err
+	}
+	defer ch.Close()
+
+	req := &ip.IPMrouteDump{
+		Table: ip.IPTable{
+			TableID: 0,
+			IsIP6:   true,
+		},
+	}
+
+	stream := ch.SendMultiRequest(req)
+	var result []MrouteInfo
+
+	for {
+		reply := &ip.IPMrouteDetails{}
+		stop, err := stream.ReceiveReply(reply)
+		if stop {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("dump mroutes: %w", err)
+		}
+
+		var grpIP, srcIP net.IP
+		if reply.Route.Prefix.Af == ip_types.ADDRESS_IP6 {
+			grp6 := reply.Route.Prefix.GrpAddress.GetIP6()
+			src6 := reply.Route.Prefix.SrcAddress.GetIP6()
+			grpIP = net.IP(grp6[:])
+			srcIP = net.IP(src6[:])
+		} else {
+			grp4 := reply.Route.Prefix.GrpAddress.GetIP4()
+			src4 := reply.Route.Prefix.SrcAddress.GetIP4()
+			grpIP = net.IP(grp4[:])
+			srcIP = net.IP(src4[:])
+		}
+
+		info := MrouteInfo{
+			TableID:    reply.Route.TableID,
+			GrpAddress: grpIP,
+			SrcAddress: srcIP,
+			IsIPv6:     reply.Route.Prefix.Af == ip_types.ADDRESS_IP6,
+		}
+		result = append(result, info)
+	}
+
+	v.logger.Debug("Dumped mroutes", "count", len(result))
+	return result, nil
 }

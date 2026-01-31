@@ -91,6 +91,14 @@ func DecodeMAC(encoded string) (string, error) {
 	return mac.String(), nil
 }
 
+func EncodeInterfaceName(name string) string {
+	return strings.ReplaceAll(name, ".", "_dot_")
+}
+
+func DecodeInterfaceName(encoded string) string {
+	return strings.ReplaceAll(encoded, "_dot_", ".")
+}
+
 func encodeValue(value string, wildcardType WildcardType) (string, error) {
 	switch wildcardType {
 	case WildcardGeneric, WildcardString:

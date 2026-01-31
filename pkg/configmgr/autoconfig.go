@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/veesix-networks/osvbng/pkg/autoconfig"
 	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/config/protocols"
 	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
@@ -23,6 +24,23 @@ func (cm *ConfigManager) ProcessSubscriberGroups(sessionID conf.SessionID, cfg *
 			}
 		}
 	}
+	return nil
+}
+
+func (cm *ConfigManager) ApplyInfrastructureConfig(sessionID conf.SessionID, cfg *config.Config, parentInterface string) error {
+	ac := autoconfig.New(cfg, parentInterface)
+
+	changes, err := ac.DeriveConfig()
+	if err != nil {
+		return fmt.Errorf("derive infrastructure config: %w", err)
+	}
+
+	for _, change := range changes {
+		if err := cm.Set(sessionID, change.Path, change.Value); err != nil {
+			return fmt.Errorf("apply %s: %w", change.Path, err)
+		}
+	}
+
 	return nil
 }
 
