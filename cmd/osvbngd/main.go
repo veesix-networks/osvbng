@@ -19,7 +19,6 @@ import (
 	"github.com/veesix-networks/osvbng/internal/routing"
 	"github.com/veesix-networks/osvbng/internal/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/auth"
-	"github.com/veesix-networks/osvbng/pkg/bootstrap"
 	"github.com/veesix-networks/osvbng/pkg/cache/memory"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/config"
@@ -105,6 +104,11 @@ func main() {
 		log.Fatalf("Failed to connect to VPP: %v", err)
 	}
 
+	accessInterface, err := cfg.GetAccessInterface()
+	if err != nil {
+		log.Fatalf("Invalid access interface configuration: %v", err)
+	}
+
 	vppDataplane := operations.NewVPPDataplane(vppConn)
 
 	if err := configd.LoadVersions(); err != nil {
@@ -113,12 +117,14 @@ func main() {
 
 	configd.AutoRegisterHandlers(&deps.ConfDeps{
 		Dataplane:        vppDataplane,
+		DataplaneState:   nil,
+		Southbound:       nil,
 		AAA:              nil,
 		Routing:          nil,
 		PluginComponents: nil,
 	})
 
-	mainLog.Info("Applying startup configuration")
+	mainLog.Info("Applying startup configuration (interfaces)")
 	if err := configd.ApplyLoadedConfig(); err != nil {
 		if err.Error() == "failed to commit: no changes to commit" {
 			mainLog.Info("No startup configuration changes to apply")
@@ -129,10 +135,8 @@ func main() {
 		mainLog.Info("Startup configuration applied")
 	}
 
-	accessInterface, err := cfg.GetAccessInterface()
-	if err != nil {
-		log.Fatalf("Invalid access interface configuration: %v", err)
-	}
+	mainLog.Info("Waiting for VPP LCP to sync interfaces...")
+	time.Sleep(5 * time.Second)
 
 	vpp, err := southbound.NewVPP(southbound.VPPConfig{
 		Connection:      vppConn,
@@ -143,8 +147,19 @@ func main() {
 		log.Fatalf("Failed to create VPP southbound: %v", err)
 	}
 
-	mainLog.Info("Waiting for VPP LCP to sync interfaces...")
-	time.Sleep(5 * time.Second)
+	mainLog.Info("Loading dataplane state")
+	if err := configd.LoadFromDataplane(vpp); err != nil {
+		log.Fatalf("Failed to load dataplane state: %v", err)
+	}
+
+	configd.AutoRegisterHandlers(&deps.ConfDeps{
+		Dataplane:        vppDataplane,
+		DataplaneState:   configd.GetDataplaneState(),
+		Southbound:       vpp,
+		AAA:              nil,
+		Routing:          nil,
+		PluginComponents: nil,
+	})
 
 	if err := vpp.SetupMemifDataplane(0, accessInterface, cfg.Dataplane.MemifSocketPath); err != nil {
 		log.Fatalf("Failed to setup memif dataplane: %v", err)
@@ -178,11 +193,23 @@ func main() {
 	coreDeps.ARPChan = dpComp.ARPChan
 	coreDeps.PPPChan = dpComp.PPPoEChan
 
-	// We will move bootstrap under config handlers at some point, or abstract the config into a generic subscriber template language?
-	bootstrapper := bootstrap.New(vpp, cfg)
-	if err := bootstrapper.ProvisionInfrastructure(); err != nil {
-		log.Fatalf("Failed to provision infrastructure: %v", err)
+	mainLog.Info("Applying infrastructure configuration")
+	infraSessionID, err := configd.CreateCandidateSession()
+	if err != nil {
+		log.Fatalf("Failed to create infrastructure session: %v", err)
 	}
+	if err := configd.ApplyInfrastructureConfig(infraSessionID, cfg, vpp.GetParentInterface()); err != nil {
+		configd.CloseCandidateSession(infraSessionID)
+		log.Fatalf("Failed to apply infrastructure config: %v", err)
+	}
+	if err := configd.Commit(infraSessionID); err != nil {
+		if err.Error() != "no changes to commit" {
+			configd.CloseCandidateSession(infraSessionID)
+			log.Fatalf("Failed to commit infrastructure config: %v", err)
+		}
+	}
+	configd.CloseCandidateSession(infraSessionID)
+	mainLog.Info("Infrastructure configuration applied")
 
 	if err := vpp.EnableDirectedBroadcast(accessInterface); err != nil {
 		mainLog.Warn("Failed to enable directed broadcast", "interface", accessInterface, "error", err)
@@ -315,6 +342,8 @@ func main() {
 
 	configd.AutoRegisterHandlers(&deps.ConfDeps{
 		Dataplane:        vppDataplane,
+		DataplaneState:   configd.GetDataplaneState(),
+		Southbound:       vpp,
 		AAA:              aaaComp.(*aaa.Component),
 		Routing:          routingComp.(*routing.Component),
 		PluginComponents: pluginComponentsMap,
