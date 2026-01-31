@@ -21,6 +21,23 @@ const (
 	InterfaceIPv4Address Path = "interfaces.<*>.address.ipv4"
 	InterfaceIPv6Address Path = "interfaces.<*>.address.ipv6"
 
+	InterfaceSubinterface             Path = "interfaces.<*>.subinterfaces.<*>"
+	InterfaceSubinterfaceDescription  Path = "interfaces.<*>.subinterfaces.<*>.description"
+	InterfaceSubinterfaceEnabled      Path = "interfaces.<*>.subinterfaces.<*>.enabled"
+	InterfaceSubinterfaceMTU          Path = "interfaces.<*>.subinterfaces.<*>.mtu"
+	InterfaceSubinterfaceIPv4Address  Path = "interfaces.<*>.subinterfaces.<*>.address.ipv4"
+	InterfaceSubinterfaceIPv6Address  Path = "interfaces.<*>.subinterfaces.<*>.address.ipv6"
+	InterfaceSubinterfaceIPv6         Path = "interfaces.<*>.subinterfaces.<*>.ipv6"
+	InterfaceSubinterfaceARP          Path = "interfaces.<*>.subinterfaces.<*>.arp"
+	InterfaceSubinterfaceUnnumbered   Path = "interfaces.<*>.subinterfaces.<*>.unnumbered"
+
+	InterfaceIPv6          Path = "interfaces.<*>.ipv6"
+	InterfaceIPv6Enabled   Path = "interfaces.<*>.ipv6.enabled"
+	InterfaceIPv6RA        Path = "interfaces.<*>.ipv6.ra"
+	InterfaceIPv6Multicast Path = "interfaces.<*>.ipv6.multicast"
+	InterfaceARP           Path = "interfaces.<*>.arp"
+	InterfaceUnnumbered    Path = "interfaces.<*>.unnumbered"
+
 	BFDEnabled Path = "protocols.bfd.enabled"
 
 	OSPFEnabled     Path = "protocols.ospf.enabled"
@@ -52,6 +69,17 @@ const (
 	AAARADIUSGroup   Path = "aaa.radius.groups.<*>"
 	AAANASIdentifier Path = "aaa.nas_identifier"
 	AAANASIP         Path = "aaa.nas_ip"
+
+	InternalPuntARP         Path = "_internal.punt.<*>.arp"
+	InternalPuntDHCPv4      Path = "_internal.punt.<*>.dhcpv4"
+	InternalPuntDHCPv6      Path = "_internal.punt.<*>.dhcpv6"
+	InternalPuntPPPoE       Path = "_internal.punt.<*>.pppoe"
+	InternalIPv6Enabled     Path = "_internal.ipv6.<*>.enabled"
+	InternalIPv6RA          Path = "_internal.ipv6.<*>.ra"
+	InternalIPv6Multicast   Path = "_internal.ipv6.<*>.multicast"
+	InternalSVLAN           Path = "_internal.svlan.<*>.<*>"
+	InternalUnnumbered      Path = "_internal.unnumbered.<*>"
+	InternalDisableARPReply Path = "_internal.disable-arp-reply.<*>"
 )
 
 func (p Path) String() string {

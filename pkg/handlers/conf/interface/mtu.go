@@ -1,25 +1,54 @@
 package iface
 
 import (
-	"github.com/veesix-networks/osvbng/pkg/deps"
 	"context"
 	"fmt"
 
+	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
 	"github.com/veesix-networks/osvbng/pkg/operations"
 )
 
 func init() {
-	conf.RegisterFactory(NewMTUHandler)
+	conf.RegisterFactory(NewInterfaceMTUHandler)
+	conf.RegisterFactory(NewSubinterfaceMTUHandler)
 }
 
 type MTUHandler struct {
-	dataplane operations.Dataplane
+	dataplane      operations.Dataplane
+	dataplaneState operations.DataplaneStateReader
+	pathPattern    paths.Path
+	dependencies   []paths.Path
 }
 
-func NewMTUHandler(daemons *deps.ConfDeps) conf.Handler {
-	return &MTUHandler{dataplane: daemons.Dataplane}
+func NewInterfaceMTUHandler(d *deps.ConfDeps) conf.Handler {
+	return &MTUHandler{
+		dataplane:      d.Dataplane,
+		dataplaneState: d.DataplaneState,
+		pathPattern:    paths.InterfaceMTU,
+		dependencies:   []paths.Path{paths.Interface},
+	}
+}
+
+func NewSubinterfaceMTUHandler(d *deps.ConfDeps) conf.Handler {
+	return &MTUHandler{
+		dataplane:      d.Dataplane,
+		dataplaneState: d.DataplaneState,
+		pathPattern:    paths.InterfaceSubinterfaceMTU,
+		dependencies:   []paths.Path{paths.InterfaceSubinterface},
+	}
+}
+
+func (h *MTUHandler) extractInterfaceName(path string) (string, error) {
+	values, err := h.pathPattern.ExtractWildcards(path, 2)
+	if err != nil {
+		return "", err
+	}
+	if len(values) == 1 {
+		return values[0], nil
+	}
+	return fmt.Sprintf("%s.%s", values[0], values[1]), nil
 }
 
 func (h *MTUHandler) Validate(ctx context.Context, hctx *conf.HandlerContext) error {
@@ -43,7 +72,10 @@ func (h *MTUHandler) Validate(ctx context.Context, hctx *conf.HandlerContext) er
 }
 
 func (h *MTUHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error {
-	ifName := conf.ExtractInterfaceName(hctx.Path)
+	ifName, err := h.extractInterfaceName(hctx.Path)
+	if err != nil {
+		return fmt.Errorf("extract interface name: %w", err)
+	}
 
 	var mtu int
 	switch v := hctx.NewValue.(type) {
@@ -55,11 +87,21 @@ func (h *MTUHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error
 		mtu = int(v)
 	}
 
+	if h.dataplaneState != nil {
+		currentMTU := h.dataplaneState.GetInterfaceMTU(ifName)
+		if currentMTU == uint32(mtu) {
+			return nil
+		}
+	}
+
 	return h.dataplane.SetInterfaceMTU(ifName, mtu)
 }
 
 func (h *MTUHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) error {
-	ifName := conf.ExtractInterfaceName(hctx.Path)
+	ifName, err := h.extractInterfaceName(hctx.Path)
+	if err != nil {
+		return fmt.Errorf("extract interface name: %w", err)
+	}
 
 	if hctx.OldValue == nil {
 		return nil
@@ -79,11 +121,11 @@ func (h *MTUHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) er
 }
 
 func (h *MTUHandler) PathPattern() paths.Path {
-	return paths.InterfaceMTU
+	return h.pathPattern
 }
 
 func (h *MTUHandler) Dependencies() []paths.Path {
-	return []paths.Path{paths.Interface}
+	return h.dependencies
 }
 
 func (h *MTUHandler) Callbacks() *conf.Callbacks {
