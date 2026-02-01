@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -12,10 +13,10 @@ import (
 	"github.com/veesix-networks/osvbng/internal/aaa"
 	"github.com/veesix-networks/osvbng/internal/arp"
 	"github.com/veesix-networks/osvbng/internal/dataplane"
-	"github.com/veesix-networks/osvbng/internal/pppoe"
 	"github.com/veesix-networks/osvbng/internal/gateway"
 	"github.com/veesix-networks/osvbng/internal/ipoe"
 	"github.com/veesix-networks/osvbng/internal/monitor"
+	"github.com/veesix-networks/osvbng/internal/pppoe"
 	"github.com/veesix-networks/osvbng/internal/routing"
 	"github.com/veesix-networks/osvbng/internal/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/auth"
@@ -36,13 +37,20 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/operations"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"github.com/veesix-networks/osvbng/pkg/state"
+	"github.com/veesix-networks/osvbng/pkg/version"
 	_ "github.com/veesix-networks/osvbng/plugins/all"
 	"go.fd.io/govpp"
 )
 
 func main() {
 	configPath := flag.String("config", "configs/config.yaml", "Path to configuration file")
+	showVersion := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version.Full())
+		return
+	}
 
 	if len(flag.Args()) > 0 && flag.Args()[0] == "config" {
 		allDataplane := false
