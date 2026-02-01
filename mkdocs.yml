@@ -57,7 +57,8 @@ nav:
       - Plugins: architecture/PLUGINS.md
       - Supported NICs: architecture/SUPPORTED_NICS.md
   - Contributing:
-    - PLEASE READ FIRST: contributing/please_read_first.md
+    - Getting Started: contributing/please_read_first.md
+    - Guidelines: contributing/guidelines.md
   - Author: https://github.com/veesix-networks
 markdown_extensions:
   - admonition

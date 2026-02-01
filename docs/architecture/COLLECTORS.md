@@ -66,7 +66,7 @@ This enables per-instance metrics export (e.g., separate Prometheus metrics for 
 
 To enable periodic caching of your plugin's data for exporters, register a collector using `state.RegisterMetric(cachePath, handlerPath)` in your show handler's init() function.
 
-See `docs/plugins/PLUGINS.md` for complete implementation details.
+See `PLUGINS.md` for complete implementation details.
 
 ## Configuration
 

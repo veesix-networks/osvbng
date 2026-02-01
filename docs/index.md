@@ -14,7 +14,7 @@
 - 400+Gbps throughput with Intel DPDK (Up to 100+Gbps without DPDK)
 - 20,000+ Subscriber Sessions
 - Plugin-based architecture
-- IPoE/DHCPv4
+- IPoE (DHCPv4 + DHCPv6) and PPPoE
 - Modern monitoring stack
 - Core implementation is fully open source
 - Docker and KVM support
