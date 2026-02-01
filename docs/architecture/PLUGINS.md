@@ -20,8 +20,6 @@ Issues and PRs raised for the codebase for `plugins/community` have a low priori
 
 In short, a component typically has its own lifecycle and is independent of the core implementation (but may import things from the core codebase) whereas providers swap out implementation that already exist in the core, essentially changing the behaviour at specific points of the component itself. An authentication plugin is typically a provider that implements the AuthenticationProvider interface, but a new feature like CGN or wallgarden would be a separate component.
 
-For more details please [refer to the README.md](../README.md)
-
 ## Quick Start: Generate Plugin Scaffold
 
 Use the cookiecutter template to generate a complete plugin structure following Pattern 1:
@@ -30,14 +28,11 @@ Use the cookiecutter template to generate a complete plugin structure following 
 # Install cookiecutter (if not already installed)
 pipx install cookiecutter
 
-# Generate plugin (local repo)
-cookiecutter tools/generate_plugin -o plugins/community/
-
-# Or from GitHub
-cookiecutter gh:veesix-networks/osvbng --directory="tools/generate_plugin"
+# Generate plugin from GitHub
+cookiecutter gh:veesix-networks/osvbng-plugin-cookiecutter -o plugins/community/
 ```
 
-See [tools/generate_plugin/README.md](../../tools/generate_plugin/README.md) for details.
+See the [osvbng-plugin-cookiecutter](https://github.com/veesix-networks/osvbng-plugin-cookiecutter) repo for details.
 
 ## Folder/File Structure
 
@@ -199,7 +194,7 @@ The `StateStatusPath` is used for collector registration to enable periodic cach
 
 ### 4. Show Handler (Pattern 1: status_show.go, Pattern 2: show/status.go)
 
-Show handlers collect and display system state/information. For detailed documentation on the handler interface and methods (`Collect`, `PathPattern`, `Dependencies`), see [HANDLERS.md](../HANDLERS.md#show-handlers).
+Show handlers collect and display system state/information. For detailed documentation on the handler interface and methods (`Collect`, `PathPattern`, `Dependencies`), see [HANDLERS.md](HANDLERS.md#show-handlers).
 
 **Pattern 1** (same package):
 ```go
@@ -318,7 +313,7 @@ func (h *StatusHandler) Dependencies() []paths.Path {
 
 ### 5. Config Handler (Pattern 1: message_conf.go, Pattern 2: conf/message.go)
 
-Config handlers validate and apply configuration changes. For detailed documentation on the handler interface and methods (`Validate`, `Apply`, `Rollback`, `PathPattern`, `Dependencies`, `Callbacks`), see [HANDLERS.md](../HANDLERS.md#config-handlers).
+Config handlers validate and apply configuration changes. For detailed documentation on the handler interface and methods (`Validate`, `Apply`, `Rollback`, `PathPattern`, `Dependencies`, `Callbacks`), see [HANDLERS.md](HANDLERS.md#config-handlers).
 
 **Pattern 1** (same package):
 ```go
@@ -694,7 +689,7 @@ This wraps your show handler in a collector that periodically (default: every 5 
 - The CLI and gRPC API call show handlers directly for real-time data
 - Collectors are only for exporters
 
-See [COLLECTORS.md](../COLLECTORS.md) for details.
+See [COLLECTORS.md](COLLECTORS.md) for details.
 
 ## Key Concepts
 
@@ -751,7 +746,7 @@ This ensures consistency and makes refactoring easier.
 ## Reference
 
 - Example plugin: `plugins/community/hello`
-- Handler documentation: [HANDLERS.md](../HANDLERS.md)
+- Handler documentation: [HANDLERS.md](HANDLERS.md)
 - Component interface: `pkg/component/component.go`
 - Config manager: `pkg/configmgr/`
 - Show handlers: `pkg/handlers/show/`

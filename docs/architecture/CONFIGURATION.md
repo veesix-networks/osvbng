@@ -181,10 +181,10 @@ plugins:
 
 Each plugin registers a typed configuration structure, allowing type-safe access while maintaining a single unified configuration file. Plugin configurations follow the same transactional model as core configuration - changes are validated, committed atomically, and versioned.
 
-See [Plugin Development](plugins/PLUGINS.md) for implementation details.
+See [Plugin Development](PLUGINS.md) for implementation details.
 
 ## Related Documentation
 
 - [Handlers](HANDLERS.md) - Implementing config and show handlers
-- [Plugin Development](plugins/PLUGINS.md) - Building plugins with configuration
+- [Plugin Development](PLUGINS.md) - Building plugins with configuration
 - [Component System](COMPONENTS.md) - Component architecture

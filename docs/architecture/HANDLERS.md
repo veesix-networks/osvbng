@@ -389,6 +389,6 @@ For detailed implementation guidance, see:
 
 ## Related Documentation
 
-- [Plugin Development](plugins/PLUGINS.md) - How to build plugins with handlers
+- [Plugin Development](PLUGINS.md) - How to build plugins with handlers
 - [Component System](COMPONENTS.md) - Understanding components
 - [Configuration System](CONFIGURATION.md) - How config management works

@@ -162,6 +162,6 @@ A provider modifies behavior at specific points within a component, while a comp
 
 ## Related Documentation
 
-- [Plugin Development](plugins/PLUGINS.md) - How to build plugin components
+- [Plugin Development](PLUGINS.md) - How to build plugin components
 - [Configuration System](CONFIGURATION.md) - How configuration works
 - [Handlers](HANDLERS.md) - Config and show handlers
