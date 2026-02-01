@@ -1,14 +1,17 @@
-# Contributing
+# Getting Started
 
-## Getting Started
+!!! abstract "Community Guidelines"
+    - Be respectful
+    - Don't be a dick
+    - Be a part of the solution, not the problem
 
-### Prerequisites
+## Prerequisites
 
 - Go 1.24+
 - [golangci-lint](https://golangci-lint.run/docs/welcome/install/local/)
 - Docker & Docker Compose (for local testing)
 
-### Clone and Build
+## Clone and Build
 
 ```bash
 git clone https://github.com/veesix-networks/osvbng.git
@@ -18,9 +21,7 @@ make build
 
 This produces `bin/osvbngd` and `bin/osvbngcli`.
 
-### Running Locally
-
-The dev environment uses Docker Compose with VPP and bngblaster:
+## Running Locally
 
 ```bash
 make build
@@ -32,7 +33,8 @@ docker-compose up
 
 ### Code Style
 
-Before submitting, run:
+!!! warning "Before submitting"
+    Always run linting before opening a PR.
 
 ```bash
 make lint   # check for issues
@@ -45,14 +47,22 @@ make fmt    # auto-fix formatting
 make test
 ```
 
+## New Features
+
+!!! note "Before you start coding"
+    Open an [issue](https://github.com/veesix-networks/osvbng/issues) first to discuss your idea with the core developers. This helps ensure your contribution aligns with the project direction and avoids wasted effort.
+
 ## Submitting Changes
 
 1. Fork the repo
-2. Create a branch (`git checkout -b feature/my-feature`)
+2. Create a branch (`git checkout -b my-feature`)
 3. Make your changes
 4. Run `make lint` and `make test`
 5. Commit and push
 6. Open a PR against `main`
+
+!!! important "Documentation"
+    Any contribution that adds, modifies, or removes behaviour must include corresponding documentation updates.
 
 ## Questions?
 
