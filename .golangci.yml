@@ -1,0 +1,31 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    paths:
+      - pkg/vpp/binapi
+      - tools/generate_plugin
+
+linters:
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - ineffassign
+    - misspell
+  exclusions:
+    paths:
+      - pkg/vpp/binapi
+      - tools/generate_plugin
+
+linters-settings:
+  goimports:
+    local-prefixes:
+      - github.com/veesix-networks/osvbng
