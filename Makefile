@@ -1,4 +1,4 @@
-.PHONY: all build generate generate-proto clean run test cli build-cli docker-local
+.PHONY: all build generate generate-proto clean run test cli build-cli docker-local lint fmt
 
 all: generate build
 
@@ -45,5 +45,11 @@ docker-local:
 		--build-arg COMMIT=$(COMMIT) \
 		--build-arg DATE=$(DATE) \
 		-t veesixnetworks/osvbng:local .
+
+lint:
+	golangci-lint run
+
+fmt:
+	golangci-lint run --fix
 
 .DEFAULT_GOAL := all

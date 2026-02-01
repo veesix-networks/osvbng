@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://docs.osvbng.v6n.io/
+    about: Read the documentation
+  - name: Discussions
+    url: https://github.com/veesix-networks/osvbng/discussions
+    about: Ask questions and discuss ideas
