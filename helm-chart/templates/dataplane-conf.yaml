@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: osvbng-dataplane-template
+data:
+  dataplane.conf.template: |
+    unix {
+      interactive
+      log /var/log/osvbng/dataplane.log
+      full-coredump
+      cli-listen /run/osvbng/cli.sock
+      cli-prompt osvbng#
+      cli-no-pager
+      poll-sleep-usec 100
+    }
+    socksvr {
+      socket-name /run/osvbng/dataplane_api.sock
+    }
+    api-trace {
+      on
+    }
+    memory {
+      main-heap-size 512M
+      main-heap-page-size 4k
+    }
+    api-segment {
+      gid osvbng
+    }
+    cpu {
+      main-core __DP_MAIN_CORE__
+      corelist-workers __DP_WORKER_CORES__
+    }
+    buffers {
+      buffers-per-numa 65536
+      default data-size 2048
+      page-size 4k
+    }
+    plugins {
+      plugin default { enable }
+      plugin dpdk_plugin.so { disable }
+      plugin linux_cp_plugin.so { enable }
+      plugin linux_nl_plugin.so { enable }
+      plugin arp_plugin.so { disable }
+      plugin rd_cp_plugin.so { disable }
+      plugin igmp_plugin.so { disable }
+      plugin osvbng_punt_plugin.so { enable }
+      plugin fib_control_plugin.so { enable }
+      plugin osvbng_accounting_plugin.so { enable }
+    }
+    logging {
+      default-log-level info
+      default-syslog-log-level info
+    }
+    linux-cp {
+      lcp-sync
+      lcp-auto-subint
+      del-static-on-link-down
+      del-dynamic-on-link-down
+    }
+    statseg {
+      default
+      per-node-counters on
+    }
