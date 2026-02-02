@@ -170,12 +170,17 @@ func (c *Component) handleAAARequest(event models.Event) error {
 		Username:      req.Username,
 		MAC:           req.MAC,
 		AcctSessionID: req.AcctSessionID,
+		SVLAN:         req.SVLAN,
+		CVLAN:         req.CVLAN,
+		Interface:     req.Interface,
+		AccessType:    string(event.AccessType),
+		PolicyName:    req.PolicyName,
 		Attributes:    attrs,
 	}
 
 	authResp, err := c.authProvider.Authenticate(c.Ctx, authReq)
 	if err != nil {
-		c.logger.Error("RADIUS authentication failed",
+		c.logger.Error("Authentication failed",
 			"mac", req.MAC,
 			"acct_session_id", req.AcctSessionID,
 			"error", err)
@@ -237,8 +242,48 @@ func calculateBucket(authTime time.Time, bucketSize time.Duration) int {
 }
 
 func (c *Component) handleSessionLifecycle(event models.Event) error {
-	bucketId := calculateBucket(event.Timestamp, defaultBucketSize)
 	sessionId := event.SessionID
+
+	var username, mac, ipv4Address, acctSessionID string
+	var sessionState models.SessionState
+	attributes := make(map[string]string)
+
+	switch event.AccessType {
+	case models.AccessTypeIPoE:
+		var sess models.DHCPv4Session
+		if err := event.GetPayload(&sess); err == nil {
+			sessionState = sess.State
+			mac = sess.MAC.String()
+			if sess.IPv4Address != nil {
+				ipv4Address = sess.IPv4Address.String()
+				attributes["ipv4_address"] = ipv4Address
+			}
+			if user, ok := sess.RADIUSAttributes["username"]; ok {
+				username = user
+			}
+			acctSessionID = sess.RADIUSSessionID
+		}
+	case models.AccessTypePPPoE:
+		var sess models.PPPSession
+		if err := event.GetPayload(&sess); err == nil {
+			sessionState = sess.State
+			mac = sess.MAC.String()
+			if sess.IPv4Address != nil {
+				ipv4Address = sess.IPv4Address.String()
+				attributes["ipv4_address"] = ipv4Address
+			}
+			if user, ok := sess.RADIUSAttributes["username"]; ok {
+				username = user
+			}
+			acctSessionID = sess.RADIUSSessionID
+		}
+	}
+
+	if sessionState == models.SessionStateReleased {
+		return c.handleSessionRelease(sessionId, username, mac, acctSessionID, attributes)
+	}
+
+	bucketId := calculateBucket(event.Timestamp, defaultBucketSize)
 
 	c.bucketMu.Lock()
 	if sessions, exists := c.buckets[bucketId]; exists {
@@ -253,38 +298,6 @@ func (c *Component) handleSessionLifecycle(event models.Event) error {
 	c.bucketMu.Unlock()
 
 	c.logger.Debug("Added session to bucket for accounting", "sessionId", sessionId, "bucketId", bucketId)
-
-	var username, mac, ipv4Address, acctSessionID string
-	attributes := make(map[string]string)
-
-	switch event.AccessType {
-	case models.AccessTypeIPoE:
-		var sess models.DHCPv4Session
-		if err := event.GetPayload(&sess); err == nil {
-			mac = sess.MAC.String()
-			if sess.IPv4Address != nil {
-				ipv4Address = sess.IPv4Address.String()
-				attributes["ipv4_address"] = ipv4Address
-			}
-			if user, ok := sess.RADIUSAttributes["username"]; ok {
-				username = user
-			}
-			acctSessionID = sess.RADIUSSessionID
-		}
-	case models.AccessTypePPPoE:
-		var sess models.PPPSession
-		if err := event.GetPayload(&sess); err == nil {
-			mac = sess.MAC.String()
-			if sess.IPv4Address != nil {
-				ipv4Address = sess.IPv4Address.String()
-				attributes["ipv4_address"] = ipv4Address
-			}
-			if user, ok := sess.RADIUSAttributes["username"]; ok {
-				username = user
-			}
-			acctSessionID = sess.RADIUSSessionID
-		}
-	}
 
 	c.acctCacheMu.Lock()
 	acctSession := &AccountingSession{
@@ -310,6 +323,46 @@ func (c *Component) handleSessionLifecycle(event models.Event) error {
 	}
 
 	go c.authProvider.StartAccounting(c.Ctx, session)
+
+	return nil
+}
+
+func (c *Component) handleSessionRelease(sessionId, username, mac, acctSessionID string, attributes map[string]string) error {
+	c.logger.Debug("Session released, sending stop accounting", "sessionId", sessionId)
+
+	c.acctCacheMu.Lock()
+	acctSession, exists := c.acctCache[sessionId]
+	if exists {
+		delete(c.acctCache, sessionId)
+	}
+	c.acctCacheMu.Unlock()
+
+	c.bucketMu.Lock()
+	for bucketId, sessions := range c.buckets {
+		for i, sid := range sessions {
+			if sid == sessionId {
+				c.buckets[bucketId] = append(sessions[:i], sessions[i+1:]...)
+				break
+			}
+		}
+	}
+	c.bucketMu.Unlock()
+
+	var sessionDuration uint32
+	if exists && acctSession != nil {
+		sessionDuration = uint32(time.Since(acctSession.authDate).Seconds())
+	}
+
+	session := &auth.Session{
+		SessionID:       sessionId,
+		AcctSessionID:   acctSessionID,
+		Username:        username,
+		MAC:             mac,
+		SessionDuration: sessionDuration,
+		Attributes:      attributes,
+	}
+
+	go c.authProvider.StopAccounting(c.Ctx, session)
 
 	return nil
 }

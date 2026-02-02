@@ -10,10 +10,11 @@ import (
 type ParsedPacket struct {
 	Protocol models.Protocol
 
-	MAC       net.HardwareAddr
-	OuterVLAN uint16
-	InnerVLAN uint16
-	SwIfIndex uint32
+	MAC           net.HardwareAddr
+	OuterVLAN     uint16
+	InnerVLAN     uint16
+	SwIfIndex     uint32
+	InterfaceName string
 
 	Ethernet *layers.Ethernet
 	Dot1Q    []*layers.Dot1Q

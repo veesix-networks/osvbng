@@ -224,6 +224,9 @@ func (s *SessionState) publishAAARequest(attrs map[string]string) {
 		Username:      username,
 		MAC:           s.MAC.String(),
 		AcctSessionID: s.AcctSessionID,
+		SVLAN:         s.OuterVLAN,
+		CVLAN:         s.InnerVLAN,
+		PolicyName:    policyName,
 		Attributes:    attrs,
 	}
 

@@ -235,6 +235,46 @@ func parseOption82(data []byte) (circuitID, remoteID []byte) {
 	return
 }
 
+func parseDHCPv6RelayOptions(dhcp *layers.DHCPv6) (interfaceID, remoteID []byte) {
+	for _, opt := range dhcp.Options {
+		switch opt.Code {
+		case 18:
+			interfaceID = opt.Data
+		case 37:
+			if len(opt.Data) >= 4 {
+				remoteID = opt.Data[4:]
+			}
+		}
+	}
+	return
+}
+
+func (c *Component) unwrapDHCPv6Relay(pkt *dataplane.ParsedPacket) (*layers.DHCPv6, []byte, []byte) {
+	relay := pkt.DHCPv6
+	interfaceID, remoteID := parseDHCPv6RelayOptions(relay)
+
+	c.logger.Info("DHCPv6 relay message",
+		"hop_count", relay.HopCount,
+		"link_addr", relay.LinkAddr,
+		"peer_addr", relay.PeerAddr,
+		"interface_id", string(interfaceID),
+		"remote_id", string(remoteID))
+
+	for _, opt := range relay.Options {
+		if opt.Code == 9 {
+			innerPkt := gopacket.NewPacket(opt.Data, layers.LayerTypeDHCPv6, gopacket.Default)
+			if layer := innerPkt.Layer(layers.LayerTypeDHCPv6); layer != nil {
+				inner := layer.(*layers.DHCPv6)
+				c.logger.Info("Unwrapped inner DHCPv6 message",
+					"inner_type", inner.MsgType.String(),
+					"xid", fmt.Sprintf("0x%x", inner.TransactionID))
+				return inner, interfaceID, remoteID
+			}
+		}
+	}
+	return nil, interfaceID, remoteID
+}
+
 func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 	lookupKey := c.makeSessionKeyV4(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN)
 
@@ -331,9 +371,13 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 	cfg, _ := c.cfgMgr.GetRunning()
 	username := pkt.MAC.String()
 	var policyName string
-	if cfg != nil && cfg.SubscriberGroups != nil {
-		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(pkt.OuterVLAN); group != nil {
-			policyName = group.AAAPolicy
+	var accessInterface string
+	if cfg != nil {
+		accessInterface, _ = cfg.GetAccessInterface()
+		if cfg.SubscriberGroups != nil {
+			if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(pkt.OuterVLAN); group != nil {
+				policyName = group.AAAPolicy
+			}
 		}
 	}
 	if policyName != "" {
@@ -359,6 +403,10 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 		Username:      username,
 		MAC:           pkt.MAC.String(),
 		AcctSessionID: sess.AcctSessionID,
+		SVLAN:         pkt.OuterVLAN,
+		CVLAN:         pkt.InnerVLAN,
+		Interface:     accessInterface,
+		PolicyName:    policyName,
 	}
 
 	aaaEvent := models.Event{
@@ -470,9 +518,13 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 	cfg, _ := c.cfgMgr.GetRunning()
 	username := pkt.MAC.String()
 	var policyName string
-	if cfg != nil && cfg.SubscriberGroups != nil {
-		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(pkt.OuterVLAN); group != nil {
-			policyName = group.AAAPolicy
+	var accessInterface string
+	if cfg != nil {
+		accessInterface, _ = cfg.GetAccessInterface()
+		if cfg.SubscriberGroups != nil {
+			if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(pkt.OuterVLAN); group != nil {
+				policyName = group.AAAPolicy
+			}
 		}
 	}
 	if policyName != "" {
@@ -498,6 +550,10 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 		Username:      username,
 		MAC:           pkt.MAC.String(),
 		AcctSessionID: sess.AcctSessionID,
+		SVLAN:         pkt.OuterVLAN,
+		CVLAN:         pkt.InnerVLAN,
+		Interface:     accessInterface,
+		PolicyName:    policyName,
 	}
 
 	aaaEvent := models.Event{
@@ -1288,14 +1344,27 @@ func (c *Component) processDHCPv6Packet(pkt *dataplane.ParsedPacket) error {
 		return nil
 	}
 
-	c.logger.Debug("[DF] Received DHCPv6 packet",
+	c.logger.Info("Received DHCPv6 packet",
 		"message_type", pkt.DHCPv6.MsgType.String(),
 		"mac", pkt.MAC.String(),
 		"xid", fmt.Sprintf("0x%x", pkt.DHCPv6.TransactionID))
 
+	if pkt.DHCPv6.MsgType == layers.DHCPv6MsgTypeRelayForward {
+		inner, interfaceID, remoteID := c.unwrapDHCPv6Relay(pkt)
+		if inner == nil {
+			return fmt.Errorf("failed to unwrap relay message")
+		}
+		pkt.DHCPv6 = inner
+		return c.processDHCPv6Message(pkt, interfaceID, remoteID)
+	}
+
+	return c.processDHCPv6Message(pkt, nil, nil)
+}
+
+func (c *Component) processDHCPv6Message(pkt *dataplane.ParsedPacket, relayInterfaceID, relayRemoteID []byte) error {
 	switch pkt.DHCPv6.MsgType {
 	case layers.DHCPv6MsgTypeSolicit:
-		return c.handleDHCPv6Solicit(pkt)
+		return c.handleDHCPv6Solicit(pkt, relayInterfaceID, relayRemoteID)
 	case layers.DHCPv6MsgTypeRequest, layers.DHCPv6MsgTypeRenew, layers.DHCPv6MsgTypeRebind:
 		return c.handleDHCPv6Request(pkt)
 	case layers.DHCPv6MsgTypeRelease, layers.DHCPv6MsgTypeDecline:
@@ -1305,7 +1374,7 @@ func (c *Component) processDHCPv6Packet(pkt *dataplane.ParsedPacket) error {
 	return nil
 }
 
-func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket) error {
+func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, relayInterfaceID, relayRemoteID []byte) error {
 	lookupKey := c.makeSessionKeyV6(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN)
 
 	c.sessionMu.RLock()
@@ -1362,6 +1431,15 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket) error {
 	v4AaaPending := sess.PendingDHCPDiscover != nil || sess.PendingDHCPRequest != nil
 	c.sessionMu.Unlock()
 
+	if len(circuitID) == 0 && len(relayInterfaceID) > 0 {
+		circuitID = relayInterfaceID
+		c.logger.Info("Using DHCPv6 relay interface-id as circuit-id", "interface_id", string(relayInterfaceID))
+	}
+	if len(remoteID) == 0 && len(relayRemoteID) > 0 {
+		remoteID = relayRemoteID
+		c.logger.Info("Using DHCPv6 relay remote-id as remote-id", "remote_id", string(relayRemoteID))
+	}
+
 	if alreadyApproved && ipoeCreated {
 		return c.forwardDHCPv6ToProvider(sess, pkt, buf.Bytes())
 	}
@@ -1381,9 +1459,13 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket) error {
 	cfg, _ := c.cfgMgr.GetRunning()
 	username := pkt.MAC.String()
 	var policyName string
-	if cfg != nil && cfg.SubscriberGroups != nil {
-		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(pkt.OuterVLAN); group != nil {
-			policyName = group.AAAPolicy
+	var accessInterface string
+	if cfg != nil {
+		accessInterface, _ = cfg.GetAccessInterface()
+		if cfg.SubscriberGroups != nil {
+			if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(pkt.OuterVLAN); group != nil {
+				policyName = group.AAAPolicy
+			}
 		}
 	}
 	if policyName != "" {
@@ -1406,6 +1488,10 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket) error {
 		Username:      username,
 		MAC:           pkt.MAC.String(),
 		AcctSessionID: sess.AcctSessionID,
+		SVLAN:         pkt.OuterVLAN,
+		CVLAN:         pkt.InnerVLAN,
+		Interface:     accessInterface,
+		PolicyName:    policyName,
 	}
 
 	aaaEvent := models.Event{
