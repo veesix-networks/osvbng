@@ -100,7 +100,7 @@ plugins:
         allow_all: true
         database_path: /tmp/osvbng.db
     subscriber.auth.http:
-        endpoint: http://host.docker.internal:8081/api/v1/auth
+        endpoint: http://host.docker.internal:8081/api/v1/subscribers
         method: POST
         timeout: 30s
         # tls:
@@ -109,8 +109,8 @@ plugins:
         # auth:
         #     type: bearer
         #     token: your-api-token
-        # headers:
-        #     X-Custom-Header: value
+        headers:
+            osvbng-dev: True
         response:
             allowed_condition:
                 jsonpath: status
@@ -118,8 +118,8 @@ plugins:
         accounting:
             enabled: true
             start:
-                endpoint: http://host.docker.internal:8081/api/v1/accounting/start
+                endpoint: http://host.docker.internal:8081/api/v1/subscribers/{{.AcctSessionID}}/accounting/start
             update:
-                endpoint: http://host.docker.internal:8081/api/v1/accounting/update
+                endpoint: http://host.docker.internal:8081/api/v1/subscribers/{{.AcctSessionID}}/accounting/update
             stop:
-                endpoint: http://host.docker.internal:8081/api/v1/accounting/stop
+                endpoint: http://host.docker.internal:8081/api/v1/subscribers/{{.AcctSessionID}}/accounting/stop

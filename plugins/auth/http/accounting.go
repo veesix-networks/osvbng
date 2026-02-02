@@ -33,7 +33,7 @@ func (p *Provider) StopAccounting(ctx context.Context, session *auth.Session) er
 func (p *Provider) sendAccountingEvent(ctx context.Context, event string, session *auth.Session) error {
 	endpoint, template := p.getAccountingConfig(event)
 	if endpoint == "" {
-		endpoint = p.cfg.Endpoint
+		return nil
 	}
 
 	endpointTmpl, err := parseTemplate("acct_endpoint", endpoint)
@@ -146,17 +146,25 @@ func (p *Provider) getAccountingConfig(event string) (endpoint, template string)
 	}
 
 	var eventCfg *AccountingEventConfig
+	var defaultEndpoint string
 	switch event {
 	case "start":
 		eventCfg = p.cfg.Accounting.Start
+		defaultEndpoint = p.cfg.Endpoint + "/{{.AcctSessionID}}/accounting/start"
 	case "update":
 		eventCfg = p.cfg.Accounting.Update
+		defaultEndpoint = p.cfg.Endpoint + "/{{.AcctSessionID}}/accounting/update"
 	case "stop":
 		eventCfg = p.cfg.Accounting.Stop
+		defaultEndpoint = p.cfg.Endpoint + "/{{.AcctSessionID}}/accounting/stop"
 	}
 
 	if eventCfg == nil {
-		return "", ""
+		return defaultEndpoint, ""
+	}
+
+	if eventCfg.Endpoint == "" {
+		return defaultEndpoint, eventCfg.Template
 	}
 
 	return eventCfg.Endpoint, eventCfg.Template
