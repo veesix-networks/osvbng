@@ -114,7 +114,7 @@ func Generate(opts GenerateOptions) (string, error) {
 			},
 		},
 		AAA: aaa.AAAConfig{
-			Provider:      "local",
+			AuthProvider:  "local",
 			NASIdentifier: "osvbng",
 			Policy: []aaa.AAAPolicy{
 				{
