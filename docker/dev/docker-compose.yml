@@ -25,7 +25,7 @@ services:
     sysctls:
       - net.unix.max_dgram_qlen=10000
     environment:
-      - OSVBNG_ACCESS_INTERFACE=eth1
+      - OSVBNG_ACCESS_INTERFACE=eth0
       - OSVBNG_LOG_LEVEL=info
     networks:
       b-access:
@@ -34,7 +34,7 @@ services:
       - /sys/kernel/debug:/sys/kernel/debug:ro
       - /dev/hugepages:/dev/hugepages
       # - ./dataplane.conf:/etc/osvbng/dataplane.conf:ro
-      # - ./osvbng.yaml:/etc/osvbng/osvbng.yaml:ro
+      - ./osvbng.yaml:/etc/osvbng/osvbng.yaml:ro
       - bng-config-versions:/var/lib/osvbng/config-versions
       - ../../bin/osvbngd:/usr/local/bin/osvbngd:ro
       - ../../bin/osvbngcli:/usr/local/bin/osvbngcli:ro
