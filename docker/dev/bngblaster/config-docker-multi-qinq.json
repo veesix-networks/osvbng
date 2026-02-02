@@ -20,7 +20,8 @@
     "ia-na": true,
     "ia-pd": true,
     "rapid-commit": false,
-    "access-line": true                                                                                                                                          
+    "access-line": true,
+    "ldra": true                                                                                                                                          
   }, 
   "ipoe": {
     "ipv6": true

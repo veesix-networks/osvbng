@@ -21,9 +21,11 @@ type AuthRequest struct {
 	AcctSessionID string
 	Attributes    map[string]string
 
-	SVLAN     uint16
-	CVLAN     uint16
-	Interface string
+	SVLAN      uint16
+	CVLAN      uint16
+	Interface  string
+	AccessType string
+	PolicyName string
 
 	SubscriberGroup *subscriber.SubscriberGroup
 }

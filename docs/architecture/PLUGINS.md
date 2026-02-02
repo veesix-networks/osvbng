@@ -737,8 +737,9 @@ This ensures consistency and makes refactoring easier.
 ## Testing Your Plugin
 
 1. Build: `go build -o bin/osvbngd ./cmd/osvbngd`
-2. Run: `./bin/osvbngd -config test-infra/configs/bng-vpp.yaml`
-3. Use CLI to test commands:
+2. Navigate to the Docker dev directory :`cd docker/dev`
+3. Run: `docker compose up osvbng`
+4. Use CLI to test commands:
    - `show myplugin status`
    - `configure` then `set myplugin message "test"`
    - `commit` to persist changes

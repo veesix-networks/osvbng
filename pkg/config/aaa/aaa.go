@@ -6,7 +6,7 @@ const (
 )
 
 type AAAConfig struct {
-	Provider      string      `json:"provider,omitempty" yaml:"provider,omitempty"`
+	AuthProvider  string      `json:"auth_provider,omitempty" yaml:"auth_provider,omitempty"`
 	NASIdentifier string      `json:"nas_identifier,omitempty" yaml:"nas_identifier,omitempty"`
 	NASIP         string      `json:"nas_ip,omitempty" yaml:"nas_ip,omitempty"`
 	Policy        []AAAPolicy `json:"policy,omitempty" yaml:"policy,omitempty"`

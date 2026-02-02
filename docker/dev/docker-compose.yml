@@ -9,7 +9,7 @@ services:
     networks:
       b-access:
     volumes:
-      - ../../test-infra/bngblaster:/config
+      - ./bngblaster:/config
     stdin_open: true
     tty: true
 
@@ -18,6 +18,8 @@ services:
       context: ../..
       dockerfile: docker/dev/Dockerfile
     container_name: osvbng
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     privileged: true
     cpuset: "0-7"
     sysctls:
@@ -31,8 +33,8 @@ services:
     volumes:
       - /sys/kernel/debug:/sys/kernel/debug:ro
       - /dev/hugepages:/dev/hugepages
-      # - ../../test-infra/configs/dataplane.conf:/etc/osvbng/dataplane.conf:ro
-      # - ../../test-infra/configs/osvbng.yaml:/etc/osvbng/osvbng.yaml:ro
+      # - ./dataplane.conf:/etc/osvbng/dataplane.conf:ro
+      # - ./osvbng.yaml:/etc/osvbng/osvbng.yaml:ro
       - bng-config-versions:/var/lib/osvbng/config-versions
       - ../../bin/osvbngd:/usr/local/bin/osvbngd:ro
       - ../../bin/osvbngcli:/usr/local/bin/osvbngcli:ro

@@ -223,7 +223,7 @@ func main() {
 		mainLog.Warn("Failed to enable directed broadcast", "interface", accessInterface, "error", err)
 	}
 
-	authProviderName := cfg.AAA.Provider
+	authProviderName := cfg.AAA.AuthProvider
 	if authProviderName == "" {
 		authProviderName = "local"
 	}
