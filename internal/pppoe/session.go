@@ -525,10 +525,29 @@ func (s *SessionState) checkOpen() {
 	if s.Phase == ppp.PhaseNetwork {
 		if s.ipcpOpen || s.ipv6cpOpen {
 			s.Phase = ppp.PhaseOpen
+			s.BoundAt = time.Now()
+			s.LCPMagic = s.lcp.LocalConfig().Magic
 			s.component.logger.Debug("Session open",
 				"session_id", s.SessionID,
 				"pppoe_session_id", s.PPPoESessionID,
 				"ipv4", s.IPv4Address)
+
+			s.component.checkpointSession(s)
+
+			s.component.publishSessionLifecycle(&models.PPPSession{
+				SessionID:       s.SessionID,
+				State:           models.SessionStateActive,
+				AccessType:      string(models.AccessTypePPPoE),
+				Protocol:        string(models.ProtocolPPPoESession),
+				PPPSessionID:    s.PPPoESessionID,
+				MAC:             s.MAC,
+				OuterVLAN:       s.OuterVLAN,
+				InnerVLAN:       s.InnerVLAN,
+				IfIndex:         s.SwIfIndex,
+				IPv4Address:     s.IPv4Address,
+				IPv6Address:     s.IPv6Address,
+				RADIUSSessionID: s.AcctSessionID,
+			})
 
 			if s.component.vpp != nil && s.IPv4Address != nil {
 				localMAC := s.component.vpp.GetParentInterfaceMAC()
@@ -743,4 +762,17 @@ func (s *SessionState) terminate() {
 	}
 
 	s.component.poolAllocator.Release(s.SessionID)
+	s.component.deleteSessionCheckpoint(s.SessionID)
+
+	s.component.publishSessionLifecycle(&models.PPPSession{
+		SessionID:       s.SessionID,
+		State:           models.SessionStateReleased,
+		AccessType:      string(models.AccessTypePPPoE),
+		Protocol:        string(models.ProtocolPPPoESession),
+		PPPSessionID:    s.PPPoESessionID,
+		MAC:             s.MAC,
+		OuterVLAN:       s.OuterVLAN,
+		InnerVLAN:       s.InnerVLAN,
+		RADIUSSessionID: s.AcctSessionID,
+	})
 }
