@@ -78,24 +78,15 @@ func (c *Component) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (c *Component) GetSessionsForAPI(ctx context.Context, accessType, protocol string, svlan uint32) ([]*models.DHCPv4Session, error) {
-	sessions, err := c.GetSessions(ctx, accessType, protocol, svlan)
-	if err != nil {
-		return nil, err
-	}
-
-	result := make([]*models.DHCPv4Session, 0, len(sessions))
-	for _, s := range sessions {
-		result = append(result, s)
-	}
-	return result, nil
+func (c *Component) GetSessionsForAPI(ctx context.Context, accessType, protocol string, svlan uint32) ([]models.SubscriberSession, error) {
+	return c.GetSessions(ctx, accessType, protocol, svlan)
 }
 
-func (c *Component) GetSessions(ctx context.Context, accessType, protocol string, svlan uint32) ([]*models.DHCPv4Session, error) {
+func (c *Component) GetSessions(ctx context.Context, accessType, protocol string, svlan uint32) ([]models.SubscriberSession, error) {
 	pattern := "osvbng:sessions:*"
 
 	var cursor uint64
-	var sessions []*models.DHCPv4Session
+	var sessions []models.SubscriberSession
 
 	for {
 		keys, nextCursor, err := c.cache.Scan(ctx, cursor, pattern, 100)
@@ -110,31 +101,71 @@ func (c *Component) GetSessions(ctx context.Context, accessType, protocol string
 				continue
 			}
 
-			var sess models.DHCPv4Session
-			if err := json.Unmarshal(data, &sess); err != nil{
-				c.logger.Debug("Failed to unmarshal", "key", key, "error", err)
+			var meta struct {
+				SessionID  string `json:"SessionID"`
+				AccessType string `json:"AccessType"`
+				Protocol   string `json:"Protocol"`
+				OuterVLAN  uint16 `json:"OuterVLAN"`
+			}
+			if err := json.Unmarshal(data, &meta); err != nil {
+				c.logger.Debug("Failed to unmarshal metadata", "key", key, "error", err)
 				continue
 			}
 
-			if sess.SessionID == "" {
+			if meta.SessionID == "" {
 				c.logger.Debug("Empty session_id", "key", key)
 				continue
 			}
 
-			if accessType != "" && sess.AccessType != accessType {
+			if accessType != "" && meta.AccessType != accessType {
 				continue
 			}
 
-			if protocol != "" && sess.Protocol != protocol {
+			if protocol != "" && meta.Protocol != protocol {
 				continue
 			}
 
-			if svlan > 0 && uint32(sess.OuterVLAN) != svlan {
+			if svlan > 0 && uint32(meta.OuterVLAN) != svlan {
 				continue
 			}
 
-			c.logger.Debug("Found session", "session_id", sess.SessionID)
-			sessions = append(sessions, &sess)
+			var sess models.SubscriberSession
+			switch meta.AccessType {
+			case string(models.AccessTypePPPoE):
+				var pppSess models.PPPSession
+				if err := json.Unmarshal(data, &pppSess); err != nil {
+					c.logger.Debug("Failed to unmarshal PPP session", "key", key, "error", err)
+					continue
+				}
+				sess = &pppSess
+			case string(models.AccessTypeIPoE):
+				switch meta.Protocol {
+				case string(models.ProtocolDHCPv6):
+					var dhcp6Sess models.DHCPv6Session
+					if err := json.Unmarshal(data, &dhcp6Sess); err != nil {
+						c.logger.Debug("Failed to unmarshal DHCPv6 session", "key", key, "error", err)
+						continue
+					}
+					sess = &dhcp6Sess
+				default:
+					var dhcp4Sess models.DHCPv4Session
+					if err := json.Unmarshal(data, &dhcp4Sess); err != nil {
+						c.logger.Debug("Failed to unmarshal DHCPv4 session", "key", key, "error", err)
+						continue
+					}
+					sess = &dhcp4Sess
+				}
+			default:
+				var dhcp4Sess models.DHCPv4Session
+				if err := json.Unmarshal(data, &dhcp4Sess); err != nil {
+					c.logger.Debug("Failed to unmarshal DHCP session", "key", key, "error", err)
+					continue
+				}
+				sess = &dhcp4Sess
+			}
+
+			c.logger.Debug("Found session", "session_id", meta.SessionID, "access_type", meta.AccessType)
+			sessions = append(sessions, sess)
 		}
 
 		cursor = nextCursor
@@ -279,40 +310,41 @@ func (c *Component) TerminateSession(ctx context.Context, sessionID string) erro
 }
 
 func (c *Component) handleSessionLifecycle(event models.Event) error {
-	var sessionID, macStr string
-	var outerVLAN, innerVLAN uint16
-	var state models.SessionState
+	var sess models.SubscriberSession
 	var leaseTime uint32
-	var sess *models.DHCPv4Session
 
 	switch event.AccessType {
 	case models.AccessTypeIPoE:
-		var dhcpSess models.DHCPv4Session
-		if err := event.GetPayload(&dhcpSess); err != nil {
-			return fmt.Errorf("failed to decode DHCPv4 session: %w", err)
+		switch event.Protocol {
+		case models.ProtocolDHCPv6:
+			var dhcp6Sess models.DHCPv6Session
+			if err := event.GetPayload(&dhcp6Sess); err != nil {
+				return fmt.Errorf("failed to decode DHCPv6 session: %w", err)
+			}
+			sess = &dhcp6Sess
+		default:
+			var dhcp4Sess models.DHCPv4Session
+			if err := event.GetPayload(&dhcp4Sess); err != nil {
+				return fmt.Errorf("failed to decode DHCPv4 session: %w", err)
+			}
+			leaseTime = dhcp4Sess.LeaseTime
+			sess = &dhcp4Sess
 		}
-		sess = &dhcpSess
-		sess.AccessType = string(event.AccessType)
-		sess.Protocol = string(event.Protocol)
-		sessionID = sess.SessionID
-		macStr = sess.MAC.String()
-		outerVLAN = sess.OuterVLAN
-		innerVLAN = sess.InnerVLAN
-		state = sess.State
-		leaseTime = sess.LeaseTime
 	case models.AccessTypePPPoE:
 		var pppSess models.PPPSession
 		if err := event.GetPayload(&pppSess); err != nil {
 			return fmt.Errorf("failed to decode PPP session: %w", err)
 		}
-		sessionID = pppSess.SessionID
-		macStr = pppSess.MAC.String()
-		outerVLAN = pppSess.OuterVLAN
-		innerVLAN = pppSess.InnerVLAN
-		state = pppSess.State
+		sess = &pppSess
 	default:
 		return fmt.Errorf("unsupported access type: %s", event.AccessType)
 	}
+
+	sessionID := sess.GetSessionID()
+	macStr := sess.GetMAC().String()
+	outerVLAN := sess.GetOuterVLAN()
+	innerVLAN := sess.GetInnerVLAN()
+	state := sess.GetState()
 
 	if outerVLAN == 0 {
 		return fmt.Errorf("session rejected: S-VLAN required (untagged not supported)")
@@ -358,33 +390,23 @@ func (c *Component) handleSessionLifecycle(event models.Event) error {
 	return nil
 }
 
-func (c *Component) activateSession(sess *models.DHCPv4Session) error {
-	ifaceName := c.determineInterface(sess)
+func (c *Component) activateSession(sess models.SubscriberSession) error {
+	swIfIndex := sess.GetIfIndex()
+	if swIfIndex == 0 {
+		return nil
+	}
 
-	if err := c.vpp.ApplyQoS(ifaceName, 10, 10); err != nil {
-		c.logger.Warn("Failed to apply QoS", "error", err, "interface", ifaceName)
+	if err := c.vpp.ApplyQoS(swIfIndex, 10, 10); err != nil {
+		c.logger.Warn("Failed to apply QoS", "error", err, "sw_if_index", swIfIndex)
 	} else {
-		c.logger.Debug("Applied QoS", "interface", ifaceName)
+		c.logger.Debug("Applied QoS", "sw_if_index", swIfIndex)
 	}
 
 	return nil
 }
 
-func (c *Component) releaseSession(sess *models.DHCPv4Session) error {
+func (c *Component) releaseSession(sess models.SubscriberSession) error {
 	return nil
-}
-
-func (c *Component) determineInterface(sess *models.DHCPv4Session) string {
-	if sess.InterfaceName != "" {
-		return sess.InterfaceName
-	}
-
-	parentName := c.vpp.GetParentInterface()
-
-	if sess.VLANCount == 1 || sess.InnerVLAN == 0 {
-		return fmt.Sprintf("%s.%d", parentName, sess.OuterVLAN)
-	}
-	return fmt.Sprintf("%s.%d.%d", parentName, sess.OuterVLAN, sess.InnerVLAN)
 }
 
 func (c *Component) interfaceExists(name string) bool {
@@ -442,10 +464,11 @@ func (c *Component) countActiveSessions(svlan, cvlan uint16) int {
 	return count
 }
 
-func (c *Component) persistSession(sess *models.DHCPv4Session) error {
-	key := fmt.Sprintf("osvbng:sessions:%s", sess.SessionID)
+func (c *Component) persistSession(sess models.SubscriberSession) error {
+	sessionID := sess.GetSessionID()
+	key := fmt.Sprintf("osvbng:sessions:%s", sessionID)
 
-	if sess.State == models.SessionStateReleased {
+	if sess.GetState() == models.SessionStateReleased {
 		if err := c.cache.Delete(c.Ctx, key); err != nil {
 			return fmt.Errorf("delete session: %w", err)
 		}
@@ -464,7 +487,7 @@ func (c *Component) persistSession(sess *models.DHCPv4Session) error {
 			}
 		}
 
-		c.logger.Debug("Deleted session from cache", "session_id", sess.SessionID)
+		c.logger.Debug("Deleted session from cache", "session_id", sessionID)
 		return nil
 	}
 
@@ -473,61 +496,60 @@ func (c *Component) persistSession(sess *models.DHCPv4Session) error {
 		return fmt.Errorf("marshal session: %w", err)
 	}
 
-	c.logger.Debug("Persisting session to cache", "session_id", sess.SessionID, "key", key, "data_len", len(data), "json", string(data[:min(200, len(data))]))
+	c.logger.Debug("Persisting session to cache", "session_id", sessionID, "key", key, "data_len", len(data), "json", string(data[:min(200, len(data))]))
 
 	ttl := time.Duration(0)
-	if sess.LeaseTime > 0 {
-		ttl = time.Duration(sess.LeaseTime) * time.Second
+	if dhcpSess, ok := sess.(*models.DHCPv4Session); ok && dhcpSess.LeaseTime > 0 {
+		ttl = time.Duration(dhcpSess.LeaseTime) * time.Second
 	}
 
 	if err := c.cache.Set(c.Ctx, key, data, ttl); err != nil {
 		return fmt.Errorf("set session: %w", err)
 	}
 
-	c.logger.Debug("Session persisted to cache", "session_id", sess.SessionID)
+	c.logger.Debug("Session persisted to cache", "session_id", sessionID)
 
 	lookupKey := c.buildLookupKey(sess)
 	if lookupKey != "" {
-		if err := c.cache.Set(c.Ctx, lookupKey, []byte(sess.SessionID), ttl); err != nil {
+		if err := c.cache.Set(c.Ctx, lookupKey, []byte(sessionID), ttl); err != nil {
 			return fmt.Errorf("set lookup key: %w", err)
 		}
 	}
 
 	arpLookupKey := c.buildARPLookupKey(sess)
 	if arpLookupKey != "" {
-		c.logger.Debug("Creating ARP lookup index", "key", arpLookupKey, "session_id", sess.SessionID)
-		if err := c.cache.Set(c.Ctx, arpLookupKey, []byte(sess.SessionID), ttl); err != nil {
+		c.logger.Debug("Creating ARP lookup index", "key", arpLookupKey, "session_id", sessionID)
+		if err := c.cache.Set(c.Ctx, arpLookupKey, []byte(sessionID), ttl); err != nil {
 			return fmt.Errorf("set arp lookup key: %w", err)
 		}
 	} else {
-		c.logger.Debug("Skipping ARP lookup index creation", "session_id", sess.SessionID, "reason", "empty key")
+		c.logger.Debug("Skipping ARP lookup index creation", "session_id", sessionID, "reason", "empty key")
 	}
 
 	return nil
 }
 
-func (c *Component) buildLookupKey(sess *models.DHCPv4Session) string {
-	if sess.MAC == nil {
+func (c *Component) buildLookupKey(sess models.SubscriberSession) string {
+	mac := sess.GetMAC()
+	if mac == nil {
 		return ""
 	}
 
-	return fmt.Sprintf("osvbng:lookup:ipoe-v4:%s:%d:%d", sess.MAC.String(), sess.OuterVLAN, sess.InnerVLAN)
+	return fmt.Sprintf("osvbng:lookup:%s:%s:%d:%d", sess.GetAccessType(), mac.String(), sess.GetOuterVLAN(), sess.GetInnerVLAN())
 }
 
-func (c *Component) buildARPLookupKey(sess *models.DHCPv4Session) string {
-	if sess.IPv4Address == nil {
-		c.logger.Debug("buildARPLookupKey: no IPv4Address in session")
+func (c *Component) buildARPLookupKey(sess models.SubscriberSession) string {
+	ipv4 := sess.GetIPv4Address()
+	if ipv4 == nil {
 		return ""
 	}
 
-	if sess.IfIndex == 0 {
-		c.logger.Debug("buildARPLookupKey: IfIndex is 0")
+	ifIndex := sess.GetIfIndex()
+	if ifIndex == 0 {
 		return ""
 	}
 
-	key := fmt.Sprintf("osvbng:lookup:arp:%d:%s", sess.IfIndex, sess.IPv4Address.String())
-	c.logger.Debug("buildARPLookupKey result", "key", key, "sw_if_index", sess.IfIndex, "ipv4", sess.IPv4Address.String())
-	return key
+	return fmt.Sprintf("osvbng:lookup:arp:%d:%s", ifIndex, ipv4.String())
 }
 
 func (c *Component) handleSessionExpiry(sessionID string, expiryTime time.Time) {
@@ -540,35 +562,80 @@ func (c *Component) handleSessionExpiry(sessionID string, expiryTime time.Time) 
 		return
 	}
 
-	dataStr := string(data)
-	if dataStr == "" {
-		dataBytes := data
-		if dataStr == "" {
-			c.logger.Warn("Invalid data type from cache", "session_id", sessionID)
-			return
-		}
-		dataStr = string(dataBytes)
-	}
-
-	var sess models.DHCPv4Session
-	if err := json.Unmarshal([]byte(dataStr), &sess); err != nil {
-		c.logger.Warn("Failed to unmarshal session", "session_id", sessionID, "error", err)
+	if len(data) == 0 {
+		c.logger.Warn("Empty session data from cache", "session_id", sessionID)
 		return
 	}
 
-	sess.State = models.SessionStateReleased
+	var meta struct {
+		AccessType string `json:"AccessType"`
+		Protocol   string `json:"Protocol"`
+	}
+	if err := json.Unmarshal(data, &meta); err != nil {
+		c.logger.Warn("Failed to unmarshal session metadata", "session_id", sessionID, "error", err)
+		return
+	}
 
 	if err := c.cache.Delete(c.Ctx, key); err != nil {
 		c.logger.Warn("Failed to delete expired session", "session_id", sessionID, "error", err)
 	}
 
+	accessType := models.AccessType(meta.AccessType)
+	protocol := models.Protocol(meta.Protocol)
+
+	if accessType == "" {
+		accessType = models.AccessTypeIPoE
+	}
+	if protocol == "" {
+		protocol = models.ProtocolDHCPv4
+	}
+
+	var payload interface{}
+	switch accessType {
+	case models.AccessTypePPPoE:
+		var pppSess models.PPPSession
+		if err := json.Unmarshal(data, &pppSess); err != nil {
+			c.logger.Warn("Failed to unmarshal PPP session", "session_id", sessionID, "error", err)
+			return
+		}
+		pppSess.State = models.SessionStateReleased
+		payload = &pppSess
+	case models.AccessTypeIPoE:
+		switch protocol {
+		case models.ProtocolDHCPv6:
+			var dhcp6Sess models.DHCPv6Session
+			if err := json.Unmarshal(data, &dhcp6Sess); err != nil {
+				c.logger.Warn("Failed to unmarshal DHCPv6 session", "session_id", sessionID, "error", err)
+				return
+			}
+			dhcp6Sess.State = models.SessionStateReleased
+			payload = &dhcp6Sess
+		default:
+			var dhcp4Sess models.DHCPv4Session
+			if err := json.Unmarshal(data, &dhcp4Sess); err != nil {
+				c.logger.Warn("Failed to unmarshal DHCPv4 session", "session_id", sessionID, "error", err)
+				return
+			}
+			dhcp4Sess.State = models.SessionStateReleased
+			payload = &dhcp4Sess
+		}
+	default:
+		var dhcp4Sess models.DHCPv4Session
+		if err := json.Unmarshal(data, &dhcp4Sess); err != nil {
+			c.logger.Warn("Failed to unmarshal session", "session_id", sessionID, "error", err)
+			return
+		}
+		dhcp4Sess.State = models.SessionStateReleased
+		payload = &dhcp4Sess
+	}
+
 	releaseEvent := models.Event{
 		Type:       models.EventTypeSessionLifecycle,
-		AccessType: models.AccessTypeIPoE,
-		Protocol:   models.ProtocolDHCPv4,
+		AccessType: accessType,
+		Protocol:   protocol,
 		SessionID:  sessionID,
 	}
-	releaseEvent.SetPayload(&sess)
+	releaseEvent.SetPayload(payload)
 
 	if err := c.eventBus.Publish(events.TopicSessionLifecycle, releaseEvent); err != nil {
 		c.logger.Warn("Failed to publish expiry event", "session_id", sessionID, "error", err)
