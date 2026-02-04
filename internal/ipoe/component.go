@@ -3,6 +3,7 @@ package ipoe
 import (
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -22,6 +23,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
+	"github.com/veesix-networks/osvbng/pkg/opdb"
 	"github.com/veesix-networks/osvbng/pkg/session"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"github.com/veesix-networks/osvbng/pkg/srg"
@@ -36,6 +38,7 @@ type Component struct {
 	cfgMgr        component.ConfigManager
 	vpp           *southbound.VPP
 	cache         cache.Cache
+	opdb          opdb.Store
 	dhcp4Provider dhcp4.DHCPProvider
 	dhcp6Provider dhcp6.DHCPProvider
 	sessions      map[string]*SessionState
@@ -92,6 +95,7 @@ func New(deps component.Dependencies, srgMgr *srg.Manager, dhcp4Provider dhcp4.D
 		cfgMgr:        deps.ConfigManager,
 		vpp:           deps.VPP,
 		cache:         deps.Cache,
+		opdb:          deps.OpDB,
 		dhcp4Provider: dhcp4Provider,
 		dhcp6Provider: dhcp6Provider,
 		sessions:      make(map[string]*SessionState),
@@ -108,6 +112,10 @@ func New(deps component.Dependencies, srgMgr *srg.Manager, dhcp4Provider dhcp4.D
 func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
 	c.logger.Info("Starting IPoE component")
+
+	if err := c.restoreSessions(ctx); err != nil {
+		c.logger.Warn("Failed to restore sessions from OpDB", "error", err)
+	}
 
 	if err := c.eventBus.Subscribe(events.TopicAAAResponseIPoE, c.handleAAAResponse); err != nil {
 		return fmt.Errorf("subscribe to aaa responses: %w", err)
@@ -629,6 +637,9 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 		} else if newCount <= 0 {
 			c.cache.Delete(c.Ctx, counterKey)
 		}
+		c.deleteSessionCheckpoint(sessID, ipv4 != nil, ipv6Bound)
+	} else if sess != nil {
+		c.checkpointSession(sess)
 	}
 
 	lifecyclePayload := &models.DHCPv4Session{
@@ -786,6 +797,8 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 		expiry = 24 * time.Hour
 	}
 	c.cache.Expire(c.Ctx, counterKey, expiry)
+
+	c.checkpointSession(sess)
 
 	c.logger.Info("Publishing session lifecycle event", "session_id", sess.SessionID, "sw_if_index", ipoeSwIfIndex, "ipv4", sess.IPv4.String())
 
@@ -1605,6 +1618,12 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
 		}
 	}
 
+	if deleteSession {
+		c.deleteSessionCheckpoint(sessID, ipv4Bound, ipv6Address != nil || ipv6Prefix != nil)
+	} else if sess != nil {
+		c.checkpointSession(sess)
+	}
+
 	return nil
 }
 
@@ -1716,6 +1735,8 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, dhcp *layers.DHCPv6) e
 			}
 		}
 	}
+
+	c.checkpointSession(sess)
 
 	return nil
 }
@@ -1840,5 +1861,100 @@ func (c *Component) getLoopbackIPv6(svlan uint16) net.IP {
 		return ip
 	}
 
+	return nil
+}
+
+func (c *Component) checkpointSession(sess *SessionState) {
+	if c.opdb == nil {
+		return
+	}
+
+	data, err := json.Marshal(sess)
+	if err != nil {
+		c.logger.Warn("Failed to marshal session for checkpoint", "session_id", sess.SessionID, "error", err)
+		return
+	}
+
+	namespace := opdb.NamespaceDHCPv4Sessions
+	oldNamespace := ""
+	if sess.IPv6Bound && sess.IPv4 == nil {
+		namespace = opdb.NamespaceDHCPv6Sessions
+	} else if sess.IPv6Bound && sess.IPv4 != nil {
+		oldNamespace = opdb.NamespaceDHCPv6Sessions
+	}
+
+	if err := c.opdb.Put(c.Ctx, namespace, sess.SessionID, data); err != nil {
+		c.logger.Warn("Failed to checkpoint session", "session_id", sess.SessionID, "error", err)
+	}
+
+	if oldNamespace != "" {
+		c.opdb.Delete(c.Ctx, oldNamespace, sess.SessionID)
+	}
+}
+
+func (c *Component) deleteSessionCheckpoint(sessionID string, hasIPv4, hasIPv6 bool) {
+	if c.opdb == nil {
+		return
+	}
+
+	if hasIPv4 {
+		if err := c.opdb.Delete(c.Ctx, opdb.NamespaceDHCPv4Sessions, sessionID); err != nil {
+			c.logger.Warn("Failed to delete v4 session checkpoint", "session_id", sessionID, "error", err)
+		}
+	}
+	if hasIPv6 {
+		if err := c.opdb.Delete(c.Ctx, opdb.NamespaceDHCPv6Sessions, sessionID); err != nil {
+			c.logger.Warn("Failed to delete v6 session checkpoint", "session_id", sessionID, "error", err)
+		}
+	}
+}
+
+func (c *Component) restoreSessions(ctx context.Context) error {
+	if c.opdb == nil {
+		return nil
+	}
+
+	var count int
+
+	for _, namespace := range []string{opdb.NamespaceDHCPv4Sessions, opdb.NamespaceDHCPv6Sessions} {
+		err := c.opdb.Load(ctx, namespace, func(key string, value []byte) error {
+			var sess SessionState
+			if err := json.Unmarshal(value, &sess); err != nil {
+				c.logger.Warn("Failed to unmarshal session from opdb", "key", key, "error", err)
+				return nil
+			}
+
+			lookupKey := c.makeSessionKeyV4(sess.MAC, sess.OuterVLAN, sess.InnerVLAN)
+			if namespace == opdb.NamespaceDHCPv6Sessions {
+				lookupKey = c.makeSessionKeyV6(sess.MAC, sess.OuterVLAN, sess.InnerVLAN)
+			}
+
+			c.sessionMu.Lock()
+			if existing := c.sessions[lookupKey]; existing != nil {
+				if sess.IPv4 != nil {
+					existing.IPv4 = sess.IPv4
+					existing.LeaseTime = sess.LeaseTime
+				}
+				if sess.IPv6Address != nil {
+					existing.IPv6Address = sess.IPv6Address
+					existing.IPv6Prefix = sess.IPv6Prefix
+					existing.IPv6LeaseTime = sess.IPv6LeaseTime
+					existing.IPv6Bound = sess.IPv6Bound
+				}
+			} else {
+				c.sessions[lookupKey] = &sess
+				c.sessionIndex[sess.SessionID] = &sess
+			}
+			c.sessionMu.Unlock()
+
+			count++
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("restore %s: %w", namespace, err)
+		}
+	}
+
+	c.logger.Info("Restored sessions from OpDB", "count", count)
 	return nil
 }
