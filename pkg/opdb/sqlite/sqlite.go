@@ -6,13 +6,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/veesix-networks/osvbng/pkg/opdb"
 )
 
 type Store struct {
-	db *sql.DB
+	db      *sql.DB
+	puts    atomic.Uint64
+	deletes atomic.Uint64
+	loads   atomic.Uint64
+	clears  atomic.Uint64
 }
 
 func Open(path string) (*Store, error) {
@@ -69,6 +74,9 @@ func (s *Store) Put(ctx context.Context, namespace, key string, value []byte) er
 			value = excluded.value,
 			updated_at = excluded.updated_at
 	`, namespace, key, value)
+	if err == nil {
+		s.puts.Add(1)
+	}
 	return err
 }
 
@@ -76,10 +84,14 @@ func (s *Store) Delete(ctx context.Context, namespace, key string) error {
 	_, err := s.db.ExecContext(ctx, `
 		DELETE FROM opdb WHERE namespace = ? AND key = ?
 	`, namespace, key)
+	if err == nil {
+		s.deletes.Add(1)
+	}
 	return err
 }
 
 func (s *Store) Load(ctx context.Context, namespace string, fn opdb.LoadFunc) error {
+	s.loads.Add(1)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT key, value FROM opdb WHERE namespace = ?
 	`, namespace)
@@ -101,11 +113,29 @@ func (s *Store) Load(ctx context.Context, namespace string, fn opdb.LoadFunc) er
 	return rows.Err()
 }
 
+func (s *Store) Count(ctx context.Context, namespace string) (int, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM opdb WHERE namespace = ?`, namespace).Scan(&count)
+	return count, err
+}
+
 func (s *Store) Clear(ctx context.Context, namespace string) error {
 	_, err := s.db.ExecContext(ctx, `
 		DELETE FROM opdb WHERE namespace = ?
 	`, namespace)
+	if err == nil {
+		s.clears.Add(1)
+	}
 	return err
+}
+
+func (s *Store) Stats() opdb.Stats {
+	return opdb.Stats{
+		Puts:    s.puts.Load(),
+		Deletes: s.deletes.Load(),
+		Loads:   s.loads.Load(),
+		Clears:  s.clears.Load(),
+	}
 }
 
 func (s *Store) Close() error {
