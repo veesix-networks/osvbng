@@ -41,6 +41,10 @@ func (l *LCP) FSM() *FSM             { return l.fsm }
 func (l *LCP) LocalConfig() LCPConfig { return l.local }
 func (l *LCP) PeerConfig() LCPConfig  { return l.peer }
 
+func (l *LCP) SetMagic(magic uint32) {
+	l.local.Magic = magic
+}
+
 func (l *LCP) SetAuthProto(proto uint16, algo uint8) {
 	l.local.AuthProto = proto
 	l.local.AuthAlgo = algo
