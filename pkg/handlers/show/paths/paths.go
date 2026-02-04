@@ -24,6 +24,8 @@ const (
 	SystemShowHandlers         Path = "system.show_handlers"
 	SystemOperHandlers         Path = "system.oper_handlers"
 	SystemVersion              Path = "system.version"
+	SystemOpDBSessions         Path = "system.opdb.sessions"
+	SystemOpDBStatistics       Path = "system.opdb.statistics"
 
 	VRFS Path = "vrfs"
 )
