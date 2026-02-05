@@ -181,6 +181,7 @@ type Session struct {
 	State         string                 `protobuf:"bytes,7,opt,name=state,proto3" json:"state,omitempty"`
 	Ipv4Address   string                 `protobuf:"bytes,8,opt,name=ipv4_address,json=ipv4Address,proto3" json:"ipv4_address,omitempty"`
 	Ipv6Address   string                 `protobuf:"bytes,9,opt,name=ipv6_address,json=ipv6Address,proto3" json:"ipv6_address,omitempty"`
+	Ipv6Prefix    string                 `protobuf:"bytes,21,opt,name=ipv6_prefix,json=ipv6Prefix,proto3" json:"ipv6_prefix,omitempty"`
 	LeaseTime     uint32                 `protobuf:"varint,10,opt,name=lease_time,json=leaseTime,proto3" json:"lease_time,omitempty"`
 	Hostname      string                 `protobuf:"bytes,11,opt,name=hostname,proto3" json:"hostname,omitempty"`
 	CircuitId     []byte                 `protobuf:"bytes,12,opt,name=circuit_id,json=circuitId,proto3" json:"circuit_id,omitempty"`
@@ -291,6 +292,13 @@ func (x *Session) GetIpv4Address() string {
 func (x *Session) GetIpv6Address() string {
 	if x != nil {
 		return x.Ipv6Address
+	}
+	return ""
+}
+
+func (x *Session) GetIpv6Prefix() string {
+	if x != nil {
+		return x.Ipv6Prefix
 	}
 	return ""
 }
@@ -1740,7 +1748,7 @@ const file_api_proto_bng_proto_rawDesc = "" +
 	"\bsessions\x18\x01 \x03(\v2\x13.openbng.v1.SessionR\bsessions\"2\n" +
 	"\x11GetSessionRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\"\xd5\x04\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"\xf6\x04\n" +
 	"\aSession\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12&\n" +
@@ -1755,7 +1763,9 @@ const file_api_proto_bng_proto_rawDesc = "" +
 	"inner_vlan\x18\x06 \x01(\rR\tinnerVlan\x12\x14\n" +
 	"\x05state\x18\a \x01(\tR\x05state\x12!\n" +
 	"\fipv4_address\x18\b \x01(\tR\vipv4Address\x12!\n" +
-	"\fipv6_address\x18\t \x01(\tR\vipv6Address\x12\x1d\n" +
+	"\fipv6_address\x18\t \x01(\tR\vipv6Address\x12\x1f\n" +
+	"\vipv6_prefix\x18\x15 \x01(\tR\n" +
+	"ipv6Prefix\x12\x1d\n" +
 	"\n" +
 	"lease_time\x18\n" +
 	" \x01(\rR\tleaseTime\x12\x1a\n" +

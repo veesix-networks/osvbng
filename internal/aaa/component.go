@@ -250,7 +250,7 @@ func (c *Component) handleSessionLifecycle(event models.Event) error {
 
 	switch event.AccessType {
 	case models.AccessTypeIPoE:
-		var sess models.DHCPv4Session
+		var sess models.IPoESession
 		if err := event.GetPayload(&sess); err == nil {
 			sessionState = sess.State
 			mac = sess.MAC.String()

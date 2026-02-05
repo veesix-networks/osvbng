@@ -22,7 +22,6 @@ type Stats struct {
 }
 
 const (
-	NamespaceDHCPv4Sessions = "dhcpv4_sessions"
-	NamespaceDHCPv6Sessions = "dhcpv6_sessions"
-	NamespacePPPoESessions  = "pppoe_sessions"
+	NamespaceIPoESessions  = "ipoe_sessions"
+	NamespacePPPoESessions = "pppoe_sessions"
 )

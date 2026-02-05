@@ -141,14 +141,14 @@ func (c *Component) GetSessions(ctx context.Context, accessType, protocol string
 			case string(models.AccessTypeIPoE):
 				switch meta.Protocol {
 				case string(models.ProtocolDHCPv6):
-					var dhcp6Sess models.DHCPv6Session
+					var dhcp6Sess models.IPoESession
 					if err := json.Unmarshal(data, &dhcp6Sess); err != nil {
 						c.logger.Debug("Failed to unmarshal DHCPv6 session", "key", key, "error", err)
 						continue
 					}
 					sess = &dhcp6Sess
 				default:
-					var dhcp4Sess models.DHCPv4Session
+					var dhcp4Sess models.IPoESession
 					if err := json.Unmarshal(data, &dhcp4Sess); err != nil {
 						c.logger.Debug("Failed to unmarshal DHCPv4 session", "key", key, "error", err)
 						continue
@@ -156,7 +156,7 @@ func (c *Component) GetSessions(ctx context.Context, accessType, protocol string
 					sess = &dhcp4Sess
 				}
 			default:
-				var dhcp4Sess models.DHCPv4Session
+				var dhcp4Sess models.IPoESession
 				if err := json.Unmarshal(data, &dhcp4Sess); err != nil {
 					c.logger.Debug("Failed to unmarshal DHCP session", "key", key, "error", err)
 					continue
@@ -177,7 +177,7 @@ func (c *Component) GetSessions(ctx context.Context, accessType, protocol string
 	return sessions, nil
 }
 
-func (c *Component) GetSession(ctx context.Context, sessionID string) (*models.DHCPv4Session, error) {
+func (c *Component) GetSession(ctx context.Context, sessionID string) (*models.IPoESession, error) {
 	key := fmt.Sprintf("osvbng:sessions:%s", sessionID)
 
 	data, err := c.cache.Get(ctx, key)
@@ -194,7 +194,7 @@ func (c *Component) GetSession(ctx context.Context, sessionID string) (*models.D
 		dataStr = string(dataBytes)
 	}
 
-	var sess models.DHCPv4Session
+	var sess models.IPoESession
 	if err := json.Unmarshal([]byte(dataStr), &sess); err != nil {
 		return nil, fmt.Errorf("unmarshal session: %w", err)
 	}
@@ -317,13 +317,13 @@ func (c *Component) handleSessionLifecycle(event models.Event) error {
 	case models.AccessTypeIPoE:
 		switch event.Protocol {
 		case models.ProtocolDHCPv6:
-			var dhcp6Sess models.DHCPv6Session
+			var dhcp6Sess models.IPoESession
 			if err := event.GetPayload(&dhcp6Sess); err != nil {
 				return fmt.Errorf("failed to decode DHCPv6 session: %w", err)
 			}
 			sess = &dhcp6Sess
 		default:
-			var dhcp4Sess models.DHCPv4Session
+			var dhcp4Sess models.IPoESession
 			if err := event.GetPayload(&dhcp4Sess); err != nil {
 				return fmt.Errorf("failed to decode DHCPv4 session: %w", err)
 			}
@@ -499,7 +499,7 @@ func (c *Component) persistSession(sess models.SubscriberSession) error {
 	c.logger.Debug("Persisting session to cache", "session_id", sessionID, "key", key, "data_len", len(data), "json", string(data[:min(200, len(data))]))
 
 	ttl := time.Duration(0)
-	if dhcpSess, ok := sess.(*models.DHCPv4Session); ok && dhcpSess.LeaseTime > 0 {
+	if dhcpSess, ok := sess.(*models.IPoESession); ok && dhcpSess.LeaseTime > 0 {
 		ttl = time.Duration(dhcpSess.LeaseTime) * time.Second
 	}
 
@@ -603,7 +603,7 @@ func (c *Component) handleSessionExpiry(sessionID string, expiryTime time.Time) 
 	case models.AccessTypeIPoE:
 		switch protocol {
 		case models.ProtocolDHCPv6:
-			var dhcp6Sess models.DHCPv6Session
+			var dhcp6Sess models.IPoESession
 			if err := json.Unmarshal(data, &dhcp6Sess); err != nil {
 				c.logger.Warn("Failed to unmarshal DHCPv6 session", "session_id", sessionID, "error", err)
 				return
@@ -611,7 +611,7 @@ func (c *Component) handleSessionExpiry(sessionID string, expiryTime time.Time) 
 			dhcp6Sess.State = models.SessionStateReleased
 			payload = &dhcp6Sess
 		default:
-			var dhcp4Sess models.DHCPv4Session
+			var dhcp4Sess models.IPoESession
 			if err := json.Unmarshal(data, &dhcp4Sess); err != nil {
 				c.logger.Warn("Failed to unmarshal DHCPv4 session", "session_id", sessionID, "error", err)
 				return
@@ -620,7 +620,7 @@ func (c *Component) handleSessionExpiry(sessionID string, expiryTime time.Time) 
 			payload = &dhcp4Sess
 		}
 	default:
-		var dhcp4Sess models.DHCPv4Session
+		var dhcp4Sess models.IPoESession
 		if err := json.Unmarshal(data, &dhcp4Sess); err != nil {
 			c.logger.Warn("Failed to unmarshal session", "session_id", sessionID, "error", err)
 			return

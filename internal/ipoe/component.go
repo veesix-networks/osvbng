@@ -639,12 +639,12 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 		} else if newCount <= 0 {
 			c.cache.Delete(c.Ctx, counterKey)
 		}
-		c.deleteSessionCheckpoint(sessID, ipv4 != nil, ipv6Bound)
+		c.deleteSessionCheckpoint(sessID)
 	} else if sess != nil {
 		c.checkpointSession(sess)
 	}
 
-	return c.publishSessionLifecycle(&models.DHCPv4Session{
+	return c.publishSessionLifecycle(&models.IPoESession{
 		SessionID:        sessID,
 		State:            models.SessionStateReleased,
 		AccessType:       string(models.AccessTypeIPoE),
@@ -797,7 +797,7 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 
 	c.logger.Info("Publishing session lifecycle event", "session_id", sess.SessionID, "sw_if_index", ipoeSwIfIndex, "ipv4", sess.IPv4.String())
 
-	return c.publishSessionLifecycle(&models.DHCPv4Session{
+	ipoeSess := &models.IPoESession{
 		SessionID:        sess.SessionID,
 		State:            models.SessionStateActive,
 		AccessType:       string(models.AccessTypeIPoE),
@@ -809,9 +809,17 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 		IfIndex:          ipoeSwIfIndex,
 		IPv4Address:      sess.IPv4,
 		LeaseTime:        sess.LeaseTime,
+		IPv6Address:      sess.IPv6Address,
+		IPv6LeaseTime:    sess.IPv6LeaseTime,
+		DUID:             sess.DHCPv6DUID,
 		RADIUSSessionID:  sess.AcctSessionID,
 		RADIUSAttributes: make(map[string]string),
-	})
+	}
+	if sess.IPv6Prefix != nil {
+		ipoeSess.IPv6Prefix = sess.IPv6Prefix.String()
+	}
+
+	return c.publishSessionLifecycle(ipoeSess)
 }
 
 func (c *Component) handleAAAResponse(event models.Event) error {
@@ -1606,7 +1614,7 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
 	}
 
 	if deleteSession {
-		c.deleteSessionCheckpoint(sessID, ipv4Bound, ipv6Address != nil || ipv6Prefix != nil)
+		c.deleteSessionCheckpoint(sessID)
 	} else if sess != nil {
 		c.checkpointSession(sess)
 	}
@@ -1617,7 +1625,7 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
 			prefixStr = ipv6Prefix.String()
 		}
 
-		return c.publishSessionLifecycle(&models.DHCPv6Session{
+		return c.publishSessionLifecycle(&models.IPoESession{
 			SessionID:       sessID,
 			State:           models.SessionStateReleased,
 			AccessType:      string(models.AccessTypeIPoE),
@@ -1747,30 +1755,31 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, dhcp *layers.DHCPv6) e
 
 	c.checkpointSession(sess)
 
-	sessionMode := c.getSessionMode(sess.OuterVLAN)
-	if sessionMode != subscriber.SessionModeUnified {
-		var prefixStr string
-		if pdPrefix != nil {
-			prefixStr = pdPrefix.String()
-		}
-
-		return c.publishSessionLifecycle(&models.DHCPv6Session{
-			SessionID:       sess.SessionID,
-			State:           models.SessionStateActive,
-			AccessType:      string(models.AccessTypeIPoE),
-			Protocol:        string(models.ProtocolDHCPv6),
-			MAC:             sess.MAC,
-			OuterVLAN:       sess.OuterVLAN,
-			InnerVLAN:       sess.InnerVLAN,
-			VLANCount:       c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
-			IfIndex:         ipoeSwIfIndex,
-			IPv6Address:     ianaAddr,
-			IPv6Prefix:      prefixStr,
-			RADIUSSessionID: sess.AcctSessionID,
-		})
+	var prefixStr string
+	if pdPrefix != nil {
+		prefixStr = pdPrefix.String()
 	}
 
-	return nil
+	ipoeSess := &models.IPoESession{
+		SessionID:       sess.SessionID,
+		State:           models.SessionStateActive,
+		AccessType:      string(models.AccessTypeIPoE),
+		Protocol:        string(models.ProtocolDHCPv6),
+		MAC:             sess.MAC,
+		OuterVLAN:       sess.OuterVLAN,
+		InnerVLAN:       sess.InnerVLAN,
+		VLANCount:       c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
+		IfIndex:         ipoeSwIfIndex,
+		IPv4Address:     sess.IPv4,
+		LeaseTime:       sess.LeaseTime,
+		IPv6Address:     ianaAddr,
+		IPv6Prefix:      prefixStr,
+		IPv6LeaseTime:   sess.IPv6LeaseTime,
+		DUID:            sess.DHCPv6DUID,
+		RADIUSSessionID: sess.AcctSessionID,
+	}
+
+	return c.publishSessionLifecycle(ipoeSess)
 }
 
 func (c *Component) sendDHCPv6Response(sess *SessionState, rawDHCPv6 []byte) error {
@@ -1918,37 +1927,18 @@ func (c *Component) checkpointSession(sess *SessionState) {
 		return
 	}
 
-	namespace := opdb.NamespaceDHCPv4Sessions
-	oldNamespace := ""
-	if sess.IPv6Bound && sess.IPv4 == nil {
-		namespace = opdb.NamespaceDHCPv6Sessions
-	} else if sess.IPv6Bound && sess.IPv4 != nil {
-		oldNamespace = opdb.NamespaceDHCPv6Sessions
-	}
-
-	if err := c.opdb.Put(c.Ctx, namespace, sess.SessionID, data); err != nil {
+	if err := c.opdb.Put(c.Ctx, opdb.NamespaceIPoESessions, sess.SessionID, data); err != nil {
 		c.logger.Warn("Failed to checkpoint session", "session_id", sess.SessionID, "error", err)
-	}
-
-	if oldNamespace != "" {
-		c.opdb.Delete(c.Ctx, oldNamespace, sess.SessionID)
 	}
 }
 
-func (c *Component) deleteSessionCheckpoint(sessionID string, hasIPv4, hasIPv6 bool) {
+func (c *Component) deleteSessionCheckpoint(sessionID string) {
 	if c.opdb == nil {
 		return
 	}
 
-	if hasIPv4 {
-		if err := c.opdb.Delete(c.Ctx, opdb.NamespaceDHCPv4Sessions, sessionID); err != nil {
-			c.logger.Warn("Failed to delete v4 session checkpoint", "session_id", sessionID, "error", err)
-		}
-	}
-	if hasIPv6 {
-		if err := c.opdb.Delete(c.Ctx, opdb.NamespaceDHCPv6Sessions, sessionID); err != nil {
-			c.logger.Warn("Failed to delete v6 session checkpoint", "session_id", sessionID, "error", err)
-		}
+	if err := c.opdb.Delete(c.Ctx, opdb.NamespaceIPoESessions, sessionID); err != nil {
+		c.logger.Warn("Failed to delete session checkpoint", "session_id", sessionID, "error", err)
 	}
 }
 
@@ -1961,60 +1951,40 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 	sessionCounts := make(map[string]int)
 	now := time.Now()
 
-	for _, namespace := range []string{opdb.NamespaceDHCPv4Sessions, opdb.NamespaceDHCPv6Sessions} {
-		err := c.opdb.Load(ctx, namespace, func(key string, value []byte) error {
-			var sess SessionState
-			if err := json.Unmarshal(value, &sess); err != nil {
-				c.logger.Warn("Failed to unmarshal session from opdb", "key", key, "error", err)
-				return nil
-			}
-
-			if c.isSessionExpired(&sess, now) {
-				c.opdb.Delete(ctx, namespace, key)
-				expired++
-				return nil
-			}
-
-			lookupKey := c.makeSessionKeyV4(sess.MAC, sess.OuterVLAN, sess.InnerVLAN)
-			if namespace == opdb.NamespaceDHCPv6Sessions {
-				lookupKey = c.makeSessionKeyV6(sess.MAC, sess.OuterVLAN, sess.InnerVLAN)
-			}
-
-			c.sessionMu.Lock()
-			if existing := c.sessions[lookupKey]; existing != nil {
-				if sess.IPv4 != nil {
-					existing.IPv4 = sess.IPv4
-					existing.LeaseTime = sess.LeaseTime
-					existing.BoundAt = sess.BoundAt
-				}
-				if sess.IPv6Address != nil {
-					existing.IPv6Address = sess.IPv6Address
-					existing.IPv6Prefix = sess.IPv6Prefix
-					existing.IPv6LeaseTime = sess.IPv6LeaseTime
-					existing.IPv6BoundAt = sess.IPv6BoundAt
-					existing.IPv6Bound = sess.IPv6Bound
-				}
-			} else {
-				c.sessions[lookupKey] = &sess
-				c.sessionIndex[sess.SessionID] = &sess
-
-				if sess.State == "bound" && sess.MAC != nil {
-					counterKey := fmt.Sprintf("osvbng:session_count:%s:%d:%d", sess.MAC.String(), sess.OuterVLAN, sess.InnerVLAN)
-					sessionCounts[counterKey]++
-				}
-			}
-			c.sessionMu.Unlock()
-
-			if sess.State == "bound" {
-				c.restoreSessionToCache(ctx, &sess, now)
-			}
-
-			count++
+	err := c.opdb.Load(ctx, opdb.NamespaceIPoESessions, func(key string, value []byte) error {
+		var sess SessionState
+		if err := json.Unmarshal(value, &sess); err != nil {
+			c.logger.Warn("Failed to unmarshal session from opdb", "key", key, "error", err)
 			return nil
-		})
-		if err != nil {
-			return fmt.Errorf("restore %s: %w", namespace, err)
 		}
+
+		if c.isSessionExpired(&sess, now) {
+			c.opdb.Delete(ctx, opdb.NamespaceIPoESessions, key)
+			expired++
+			return nil
+		}
+
+		lookupKey := c.makeSessionKeyV4(sess.MAC, sess.OuterVLAN, sess.InnerVLAN)
+
+		c.sessionMu.Lock()
+		c.sessions[lookupKey] = &sess
+		c.sessionIndex[sess.SessionID] = &sess
+
+		if sess.State == "bound" && sess.MAC != nil {
+			counterKey := fmt.Sprintf("osvbng:session_count:%s:%d:%d", sess.MAC.String(), sess.OuterVLAN, sess.InnerVLAN)
+			sessionCounts[counterKey]++
+		}
+		c.sessionMu.Unlock()
+
+		if sess.State == "bound" {
+			c.restoreSessionToCache(ctx, &sess, now)
+		}
+
+		count++
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("restore ipoe sessions: %w", err)
 	}
 
 	for counterKey, cnt := range sessionCounts {
@@ -2052,63 +2022,52 @@ func (c *Component) isSessionExpired(sess *SessionState, now time.Time) bool {
 func (c *Component) restoreSessionToCache(ctx context.Context, sess *SessionState, now time.Time) {
 	cacheKey := fmt.Sprintf("osvbng:sessions:%s", sess.SessionID)
 
-	var data []byte
-	var err error
-	var ttl time.Duration
-
-	if sess.IPv6Bound && sess.IPv4 == nil {
-		dhcp6Sess := &models.DHCPv6Session{
-			SessionID:       sess.SessionID,
-			State:           models.SessionStateActive,
-			MAC:             sess.MAC,
-			OuterVLAN:       sess.OuterVLAN,
-			InnerVLAN:       sess.InnerVLAN,
-			VLANCount:       c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
-			IfIndex:         sess.IPoESwIfIndex,
-			IPv6Address:     sess.IPv6Address,
-			RADIUSSessionID: sess.AcctSessionID,
-			AccessType:      string(models.AccessTypeIPoE),
-			Protocol:        string(models.ProtocolDHCPv6),
-		}
-		if sess.IPv6Prefix != nil {
-			dhcp6Sess.IPv6Prefix = sess.IPv6Prefix.String()
-		}
-		data, err = json.Marshal(dhcp6Sess)
-		if sess.IPv6LeaseTime > 0 && !sess.IPv6BoundAt.IsZero() {
-			expiresAt := sess.IPv6BoundAt.Add(time.Duration(sess.IPv6LeaseTime) * time.Second)
-			ttl = expiresAt.Sub(now)
-			if ttl < 0 {
-				ttl = 0
-			}
-		}
-	} else {
-		dhcp4Sess := &models.DHCPv4Session{
-			SessionID:       sess.SessionID,
-			State:           models.SessionStateActive,
-			MAC:             sess.MAC,
-			OuterVLAN:       sess.OuterVLAN,
-			InnerVLAN:       sess.InnerVLAN,
-			VLANCount:       c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
-			IfIndex:         sess.IPoESwIfIndex,
-			IPv4Address:     sess.IPv4,
-			LeaseTime:       sess.LeaseTime,
-			RADIUSSessionID: sess.AcctSessionID,
-			AccessType:      string(models.AccessTypeIPoE),
-			Protocol:        string(models.ProtocolDHCPv4),
-		}
-		data, err = json.Marshal(dhcp4Sess)
-		if sess.LeaseTime > 0 && !sess.BoundAt.IsZero() {
-			expiresAt := sess.BoundAt.Add(time.Duration(sess.LeaseTime) * time.Second)
-			ttl = expiresAt.Sub(now)
-			if ttl < 0 {
-				ttl = 0
-			}
-		}
+	protocol := string(models.ProtocolDHCPv4)
+	if sess.IPv4 == nil && sess.IPv6Bound {
+		protocol = string(models.ProtocolDHCPv6)
 	}
 
+	ipoeSess := &models.IPoESession{
+		SessionID:       sess.SessionID,
+		State:           models.SessionStateActive,
+		AccessType:      string(models.AccessTypeIPoE),
+		Protocol:        protocol,
+		MAC:             sess.MAC,
+		OuterVLAN:       sess.OuterVLAN,
+		InnerVLAN:       sess.InnerVLAN,
+		VLANCount:       c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
+		IfIndex:         sess.IPoESwIfIndex,
+		IPv4Address:     sess.IPv4,
+		LeaseTime:       sess.LeaseTime,
+		IPv6Address:     sess.IPv6Address,
+		IPv6LeaseTime:   sess.IPv6LeaseTime,
+		DUID:            sess.DHCPv6DUID,
+		RADIUSSessionID: sess.AcctSessionID,
+	}
+	if sess.IPv6Prefix != nil {
+		ipoeSess.IPv6Prefix = sess.IPv6Prefix.String()
+	}
+
+	data, err := json.Marshal(ipoeSess)
 	if err != nil {
 		c.logger.Warn("Failed to marshal session for cache restore", "session_id", sess.SessionID, "error", err)
 		return
+	}
+
+	var ttl time.Duration
+	if sess.LeaseTime > 0 && !sess.BoundAt.IsZero() {
+		expiresAt := sess.BoundAt.Add(time.Duration(sess.LeaseTime) * time.Second)
+		ttl = expiresAt.Sub(now)
+		if ttl < 0 {
+			ttl = 0
+		}
+	}
+	if sess.IPv6LeaseTime > 0 && !sess.IPv6BoundAt.IsZero() {
+		expiresAt := sess.IPv6BoundAt.Add(time.Duration(sess.IPv6LeaseTime) * time.Second)
+		v6ttl := expiresAt.Sub(now)
+		if v6ttl > ttl {
+			ttl = v6ttl
+		}
 	}
 
 	if err := c.cache.Set(ctx, cacheKey, data, ttl); err != nil {
