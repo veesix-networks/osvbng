@@ -57,7 +57,7 @@ func New(deps component.Dependencies) (component.Component, error) {
 		}
 	}
 
-	log := logger.Component(logger.ComponentDataplane)
+	log := logger.Get(logger.Dataplane)
 
 	virtualMAC := ""
 	if accessIface != "" {

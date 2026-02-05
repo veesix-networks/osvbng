@@ -79,7 +79,7 @@ func New(deps component.Dependencies) (component.Component, error) {
 
 	return &Component{
 		Base:   component.NewBase(Namespace),
-		logger: logger.Component(Namespace),
+		logger: logger.Get(Namespace),
 		cache:  deps.Cache,
 		addr:   addr,
 	}, nil

@@ -27,7 +27,7 @@ func NewEgressBatcher(highCap, lowCap int) *EgressBatcher {
 	return &EgressBatcher{
 		highPriority: make(chan []memif.MemifPacketBuffer, highCap),
 		lowPriority:  make(chan []memif.MemifPacketBuffer, lowCap),
-		logger:       logger.Component(logger.ComponentEgress),
+		logger:       logger.Get(logger.Egress),
 	}
 }
 

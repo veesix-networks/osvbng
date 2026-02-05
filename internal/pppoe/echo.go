@@ -41,7 +41,7 @@ func NewEchoGenerator(cfg EchoConfig, sendEcho func(uint16, uint8), onDeadPeer f
 		interval:   cfg.Interval,
 		maxMisses:  cfg.MaxMisses,
 		maxPerTick: cfg.MaxPerTick,
-		logger:     logger.Component(logger.ComponentPPPoE),
+		logger:     logger.Get(logger.PPPoE),
 	}
 
 	tickInterval := cfg.Interval / time.Duration(cfg.NumBuckets)

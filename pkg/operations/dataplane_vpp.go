@@ -28,7 +28,7 @@ func NewVPPDataplane(conn *core.Connection) *VPPDataplane {
 	return &VPPDataplane{
 		conn:       conn,
 		ifaceCache: make(map[string]interface_types.InterfaceIndex),
-		logger:     logger.Component(logger.ComponentDataplane),
+		logger:     logger.Get(logger.Dataplane),
 	}
 }
 

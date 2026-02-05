@@ -30,6 +30,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/events/local"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/conf/all"
 	"github.com/veesix-networks/osvbng/pkg/handlers/oper"
+	_ "github.com/veesix-networks/osvbng/pkg/handlers/oper/all"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/all"
 	"github.com/veesix-networks/osvbng/pkg/logger"
@@ -99,7 +100,7 @@ func main() {
 
 	logger.Configure(cfg.Logging.Format, cfg.Logging.Level, cfg.Logging.Components)
 
-	mainLog := logger.Component(logger.ComponentMain)
+	mainLog := logger.Get(logger.Main)
 
 	mainLog.Info("Starting osvbng")
 

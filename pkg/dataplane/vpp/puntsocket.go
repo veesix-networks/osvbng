@@ -28,7 +28,7 @@ type PuntSocketIngress struct {
 func NewPuntSocketIngress(socketPath string) *PuntSocketIngress {
 	return &PuntSocketIngress{
 		socketPath: socketPath,
-		logger:     logger.Component(logger.ComponentDataplaneIO),
+		logger:     logger.Get(logger.Dataplane),
 	}
 }
 

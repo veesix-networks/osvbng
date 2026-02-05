@@ -31,7 +31,7 @@ type Component struct {
 }
 
 func New(deps component.Dependencies, srgMgr *srg.Manager) (component.Component, error) {
-	log := logger.Component(logger.ComponentARP)
+	log := logger.Get(logger.ARP)
 
 	return &Component{
 		Base:      component.NewBase("arp"),

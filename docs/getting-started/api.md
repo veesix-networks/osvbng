@@ -1,6 +1,6 @@
 # Northbound API
 
-osvbng includes a REST API that auto-generates endpoints from registered [show and config handlers](../architecture/HANDLERS.md). Every `show` handler becomes a GET endpoint, and every `conf` handler becomes a POST endpoint.
+osvbng includes a REST API that auto-generates endpoints from registered [show, config, and oper handlers](../architecture/HANDLERS.md). Every `show` handler becomes a GET endpoint under `/api/show/`, every `conf` handler becomes a POST endpoint under `/api/set/`, and every `oper` handler becomes a POST endpoint under `/api/exec/`.
 
 !!! success "Enabled by default"
     The northbound API is enabled by default on port `8080`. No configuration needed.
@@ -21,8 +21,9 @@ plugins:
 | GET | `/api` | List all available paths |
 | GET | `/api/running-config` | Get running configuration |
 | GET | `/api/startup-config` | Get startup configuration |
-| GET | `/api/{path}` | Execute show handler |
-| POST | `/api/{path}` | Execute config handler |
+| GET | `/api/show/{path}` | Execute show handler |
+| POST | `/api/set/{path}` | Execute config handler |
+| POST | `/api/exec/{path}` | Execute oper handler |
 
 ## Path Mapping
 
@@ -30,9 +31,10 @@ Handler paths use dots internally (e.g., `subscriber.sessions`), API paths use s
 
 | Handler Path | API Endpoint |
 |--------------|--------------|
-| `subscriber.sessions` | `GET /api/subscriber/sessions` |
-| `interfaces` | `GET /api/interfaces` |
-| `interfaces.eth1.description` | `POST /api/interfaces/eth1/description` |
+| `subscriber.sessions` | `GET /api/show/subscriber/sessions` |
+| `interfaces` | `GET /api/show/interfaces` |
+| `interfaces.eth1.description` | `POST /api/set/interfaces/eth1/description` |
+| `system.logging.level.<*>` | `POST /api/exec/system/logging/level/{name}` |
 
 ## Examples
 
@@ -54,7 +56,9 @@ curl http://localhost:8080/api
     "interfaces.*.description",
     "interfaces.*.enabled"
   ],
-  "oper_paths": []
+  "oper_paths": [
+    "system.logging.level.<*>"
+  ]
 }
 ```
 
@@ -67,7 +71,7 @@ curl http://localhost:8080/api/running-config
 ### Show Subscriber Sessions
 
 ```bash
-curl http://localhost:8080/api/subscriber/sessions
+curl http://localhost:8080/api/show/subscriber/sessions
 ```
 
 ```json
@@ -90,7 +94,7 @@ curl http://localhost:8080/api/subscriber/sessions
 ### Show Single Session
 
 ```bash
-curl "http://localhost:8080/api/subscriber/session?session_id=abc123"
+curl "http://localhost:8080/api/show/subscriber/session?session_id=abc123"
 ```
 
 Query parameters are passed as options to the handler.
@@ -98,7 +102,7 @@ Query parameters are passed as options to the handler.
 ### Update Interface Description
 
 ```bash
-curl -X POST http://localhost:8080/api/interfaces/eth1/description \
+curl -X POST http://localhost:8080/api/set/interfaces/eth1/description \
   -H "Content-Type: application/json" \
   -d '"New description"'
 ```
@@ -106,6 +110,21 @@ curl -X POST http://localhost:8080/api/interfaces/eth1/description \
 ```json
 {
   "status": "ok"
+}
+```
+
+### Set Log Level (Oper Command)
+
+```bash
+curl -X POST http://localhost:8080/api/exec/system/logging/level/ipoe.dhcp4 \
+  -H "Content-Type: application/json" \
+  -d '{"level": "debug"}'
+```
+
+```json
+{
+  "name": "ipoe.dhcp4",
+  "level": "debug"
 }
 ```
 

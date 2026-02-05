@@ -39,7 +39,7 @@ type Config struct {
 func New(cfg Config) *Component {
 	return &Component{
 		Base:               component.NewBase("monitor"),
-		logger:             logger.Component("monitor"),
+		logger:             logger.Get("monitor"),
 		cache:              cfg.Cache,
 		collectorRegistry:  cfg.CollectorRegistry,
 		collectorConfig:    cfg.CollectorConfig,

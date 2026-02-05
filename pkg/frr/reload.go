@@ -31,7 +31,7 @@ func NewConfig() *Config {
 		TemplateDir: DefaultTemplateDir,
 		ConfigPath:  DefaultConfigPath,
 		ReloadCmd:   DefaultReloadCmd,
-		logger:      logger.Component(logger.ComponentRouting),
+		logger:      logger.Get(logger.Routing),
 	}
 }
 

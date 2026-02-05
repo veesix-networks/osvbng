@@ -83,7 +83,7 @@ func NewVPP(cfg VPPConfig) (*VPP, error) {
 		conn:        conn,
 		parentIface: cfg.ParentInterface,
 		ifaceCache:  make(map[string]interface_types.InterfaceIndex),
-		logger:      logger.Component(logger.ComponentSouthbound),
+		logger:      logger.Get(logger.Southbound),
 		fibChan:     fibChan,
 		useDPDK:     cfg.UseDPDK,
 		asyncWorker: asyncWorker,

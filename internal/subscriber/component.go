@@ -30,7 +30,7 @@ type Component struct {
 }
 
 func New(deps component.Dependencies, srgMgr *srg.Manager) (component.Component, error) {
-	log := logger.Component(logger.ComponentSubscriber)
+	log := logger.Get(logger.Subscriber)
 
 	c := &Component{
 		Base:     component.NewBase("subscriber"),

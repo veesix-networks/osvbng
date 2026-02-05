@@ -63,7 +63,7 @@ func NewMemifHandler(virtualMAC string, arpHandler ARPHandler) (*MemifHandler, e
 	return &MemifHandler{
 		gatewayMAC: gwMAC,
 		arpHandler: arpHandler,
-		logger:     logger.Component("memif"),
+		logger:     logger.Get("memif"),
 		ctx:        ctx,
 		cancel:     cancel,
 		txChan:     make(chan []byte, 1000),

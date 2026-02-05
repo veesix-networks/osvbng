@@ -83,7 +83,7 @@ func NewManager(cfg Config) (*Manager, error) {
 		heartbeatInterval: cfg.HeartbeatInterval,
 		memberTimeout:     cfg.MemberTimeout,
 		vnodeCount:        vnodeCount,
-		logger:            logger.Component(logger.ComponentSRG),
+		logger:            logger.Get(logger.SRG),
 	}
 
 	return m, nil

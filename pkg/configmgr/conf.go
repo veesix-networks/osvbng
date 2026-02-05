@@ -47,7 +47,7 @@ func NewConfigManager() *ConfigManager {
 	return &ConfigManager{
 		registry:          conf.NewRegistry(),
 		frrConfig:         frr.NewConfig(),
-		logger:            logger.Component(logger.ComponentConfig),
+		logger:            logger.Get(logger.Config),
 		runningConfig:     &config.Config{},
 		startupConfig:     &config.Config{},
 		sessions:          make(map[conf.SessionID]*session),

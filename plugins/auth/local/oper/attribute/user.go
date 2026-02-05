@@ -28,7 +28,7 @@ type SetUserAttributeHandler struct {
 func NewSetUserAttributeHandler(deps *deps.OperDeps) oper.OperHandler {
 	return &SetUserAttributeHandler{
 		deps:   deps,
-		logger: logger.Component(local.Namespace + ".oper"),
+		logger: logger.Get(local.Namespace).WithGroup("oper"),
 	}
 }
 

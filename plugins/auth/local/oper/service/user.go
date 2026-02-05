@@ -28,7 +28,7 @@ type SetUserServiceHandler struct {
 func NewSetUserServiceHandler(deps *deps.OperDeps) oper.OperHandler {
 	return &SetUserServiceHandler{
 		deps:   deps,
-		logger: logger.Component(local.Namespace + ".oper"),
+		logger: logger.Get(local.Namespace).WithGroup("oper"),
 	}
 }
 
