@@ -1947,9 +1947,18 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 		return nil
 	}
 
-	var count, expired int
+	var count, expired, stale int
 	sessionCounts := make(map[string]int)
 	now := time.Now()
+
+	validIfIndexes := make(map[uint32]bool)
+	if c.vpp != nil {
+		if ifaces, err := c.vpp.DumpInterfaces(); err == nil {
+			for _, iface := range ifaces {
+				validIfIndexes[iface.SwIfIndex] = true
+			}
+		}
+	}
 
 	err := c.opdb.Load(ctx, opdb.NamespaceIPoESessions, func(key string, value []byte) error {
 		var sess SessionState
@@ -1962,6 +1971,25 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 			c.opdb.Delete(ctx, opdb.NamespaceIPoESessions, key)
 			expired++
 			return nil
+		}
+
+		if sess.IPoESwIfIndex != 0 && !validIfIndexes[sess.IPoESwIfIndex] {
+			c.logger.Info("VPP interface not found, resetting session state",
+				"session_id", sess.SessionID,
+				"stale_sw_if_index", sess.IPoESwIfIndex)
+			sess.IPoESwIfIndex = 0
+			sess.IPoESessionCreated = false
+			sess.AAAApproved = false
+			sess.PendingDHCPDiscover = nil
+			sess.PendingDHCPRequest = nil
+			sess.PendingDHCPv6Solicit = nil
+			sess.PendingDHCPv6Request = nil
+			stale++
+
+			data, err := json.Marshal(&sess)
+			if err == nil {
+				c.opdb.Put(ctx, opdb.NamespaceIPoESessions, sess.SessionID, data)
+			}
 		}
 
 		lookupKey := c.makeSessionKeyV4(sess.MAC, sess.OuterVLAN, sess.InnerVLAN)
@@ -1993,7 +2021,7 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 		}
 	}
 
-	c.logger.Info("Restored sessions from OpDB", "count", count, "expired", expired, "counters", len(sessionCounts))
+	c.logger.Info("Restored sessions from OpDB", "count", count, "expired", expired, "stale_vpp", stale, "counters", len(sessionCounts))
 	return nil
 }
 
