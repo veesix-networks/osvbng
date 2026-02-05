@@ -597,8 +597,17 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 		return nil
 	}
 
-	var count, expired int
+	var count, expired, stale int
 	now := time.Now()
+
+	validIfIndexes := make(map[uint32]bool)
+	if c.vpp != nil {
+		if ifaces, err := c.vpp.DumpInterfaces(); err == nil {
+			for _, iface := range ifaces {
+				validIfIndexes[iface.SwIfIndex] = true
+			}
+		}
+	}
 
 	err := c.opdb.Load(ctx, opdb.NamespacePPPoESessions, func(key string, value []byte) error {
 		var sess SessionState
@@ -610,6 +619,15 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 		if c.isSessionExpired(&sess, now) {
 			c.opdb.Delete(ctx, opdb.NamespacePPPoESessions, key)
 			expired++
+			return nil
+		}
+
+		if sess.SwIfIndex != 0 && !validIfIndexes[sess.SwIfIndex] {
+			c.logger.Info("VPP interface not found, deleting stale PPPoE session",
+				"session_id", sess.SessionID,
+				"stale_sw_if_index", sess.SwIfIndex)
+			c.opdb.Delete(ctx, opdb.NamespacePPPoESessions, key)
+			stale++
 			return nil
 		}
 
@@ -645,7 +663,7 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 		return fmt.Errorf("restore pppoe sessions: %w", err)
 	}
 
-	c.logger.Info("Restored PPPoE sessions from OpDB", "count", count, "expired", expired)
+	c.logger.Info("Restored PPPoE sessions from OpDB", "count", count, "expired", expired, "stale_vpp", stale)
 	return nil
 }
 
