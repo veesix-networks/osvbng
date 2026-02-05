@@ -24,7 +24,7 @@ type DeleteServiceHandler struct {
 func NewDeleteServiceHandler(deps *deps.OperDeps) oper.OperHandler {
 	return &DeleteServiceHandler{
 		deps:   deps,
-		logger: logger.Component(local.Namespace + ".oper"),
+		logger: logger.Get(local.Namespace).WithGroup("oper"),
 	}
 }
 

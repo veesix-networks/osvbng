@@ -27,7 +27,7 @@ type SetServiceAttributeHandler struct {
 func NewSetServiceAttributeHandler(deps *deps.OperDeps) oper.OperHandler {
 	return &SetServiceAttributeHandler{
 		deps:   deps,
-		logger: logger.Component(local.Namespace + ".oper"),
+		logger: logger.Get(local.Namespace).WithGroup("oper"),
 	}
 }
 

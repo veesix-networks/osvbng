@@ -23,8 +23,10 @@ var (
 	Log             *slog.Logger
 	defaultLevel    slog.Level
 	componentLevels map[string]slog.Level
+	levelsMu        sync.RWMutex
 	format          string
 	pid             int
+	loggerCache     sync.Map
 )
 
 func init() {
@@ -33,20 +35,21 @@ func init() {
 	format = "text"
 	pid = os.Getpid()
 
-	handler := NewBNGTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: defaultLevel,
-	})
+	handler := NewBNGTextHandler(os.Stdout, nil, "")
 	Log = slog.New(handler)
 }
 
 func Configure(logFormat string, level LogLevel, components map[string]LogLevel) {
+	levelsMu.Lock()
 	defaultLevel = parseLevel(string(level))
 	format = logFormat
-
 	componentLevels = make(map[string]slog.Level)
 	for name, lvl := range components {
 		componentLevels[name] = parseLevel(string(lvl))
 	}
+	levelsMu.Unlock()
+
+	loggerCache = sync.Map{}
 
 	var handler slog.Handler
 	if strings.ToLower(format) == "json" {
@@ -54,72 +57,56 @@ func Configure(logFormat string, level LogLevel, components map[string]LogLevel)
 			Level: defaultLevel,
 		})
 	} else {
-		handler = NewBNGTextHandler(os.Stdout, &slog.HandlerOptions{
-			Level: defaultLevel,
-		})
+		handler = NewBNGTextHandler(os.Stdout, nil, "")
 	}
 
 	Log = slog.New(handler)
 }
 
 type BNGTextHandler struct {
-	opts  *slog.HandlerOptions
-	level slog.Level
-	mu    sync.Mutex
-	w     io.Writer
-	attrs []slog.Attr
-	group string
+	opts      *slog.HandlerOptions
+	mu        sync.Mutex
+	w         io.Writer
+	attrs     []slog.Attr
+	component string
 }
 
-func NewBNGTextHandler(w io.Writer, opts *slog.HandlerOptions) *BNGTextHandler {
+func NewBNGTextHandler(w io.Writer, opts *slog.HandlerOptions, component string) *BNGTextHandler {
 	if opts == nil {
 		opts = &slog.HandlerOptions{}
 	}
-	level := slog.LevelInfo
-	if opts.Level != nil {
-		level = opts.Level.Level()
-	}
 	return &BNGTextHandler{
-		w:     w,
-		opts:  opts,
-		level: level,
+		w:         w,
+		opts:      opts,
+		component: component,
 	}
 }
 
 func (h *BNGTextHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	return level >= h.level
+	return level >= getEffectiveLevel(h.component)
 }
 
 func (h *BNGTextHandler) Handle(ctx context.Context, r slog.Record) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	var component string
 	attrs := make(map[string]any)
 
 	r.Attrs(func(a slog.Attr) bool {
-		if a.Key == "component" {
-			component = a.Value.String()
-		} else {
-			attrs[a.Key] = a.Value.Any()
-		}
+		attrs[a.Key] = a.Value.Any()
 		return true
 	})
 
 	for _, a := range h.attrs {
-		if a.Key == "component" {
-			component = a.Value.String()
-		} else {
-			attrs[a.Key] = a.Value.Any()
-		}
+		attrs[a.Key] = a.Value.Any()
 	}
 
 	buf := make([]byte, 0, 256)
 	buf = append(buf, r.Time.Format("2006/01/02 15:04:05.000")...)
 	buf = append(buf, fmt.Sprintf(" [%d]", pid)...)
 
-	if component != "" {
-		buf = append(buf, fmt.Sprintf(" [%s]", component)...)
+	if h.component != "" {
+		buf = append(buf, fmt.Sprintf(" [%s]", h.component)...)
 	}
 
 	buf = append(buf, ' ')
@@ -136,21 +123,25 @@ func (h *BNGTextHandler) Handle(ctx context.Context, r slog.Record) error {
 
 func (h *BNGTextHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return &BNGTextHandler{
-		w:     h.w,
-		opts:  h.opts,
-		level: h.level,
-		attrs: append(h.attrs, attrs...),
-		group: h.group,
+		w:         h.w,
+		opts:      h.opts,
+		attrs:     append(h.attrs, attrs...),
+		component: h.component,
 	}
 }
 
 func (h *BNGTextHandler) WithGroup(name string) slog.Handler {
+	newComponent := h.component
+	if newComponent != "" {
+		newComponent = newComponent + "." + name
+	} else {
+		newComponent = name
+	}
 	return &BNGTextHandler{
-		w:     h.w,
-		opts:  h.opts,
-		level: h.level,
-		attrs: h.attrs,
-		group: name,
+		w:         h.w,
+		opts:      h.opts,
+		attrs:     h.attrs,
+		component: newComponent,
 	}
 }
 
@@ -169,24 +160,132 @@ func parseLevel(level string) slog.Level {
 	}
 }
 
-func Component(name string) *slog.Logger {
-	level, ok := componentLevels[name]
-	if !ok {
-		level = defaultLevel
+func getEffectiveLevel(component string) slog.Level {
+	levelsMu.RLock()
+	defer levelsMu.RUnlock()
+
+	if level, ok := componentLevels[component]; ok {
+		return level
+	}
+
+	path := component
+	for {
+		idx := strings.LastIndex(path, ".")
+		if idx < 0 {
+			break
+		}
+		path = path[:idx]
+		if level, ok := componentLevels[path]; ok {
+			return level
+		}
+	}
+
+	return defaultLevel
+}
+
+type BNGJSONHandler struct {
+	inner     *slog.JSONHandler
+	component string
+}
+
+func newJSONHandler(component string) *BNGJSONHandler {
+	return &BNGJSONHandler{
+		inner: slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		}),
+		component: component,
+	}
+}
+
+func (h *BNGJSONHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return level >= getEffectiveLevel(h.component)
+}
+
+func (h *BNGJSONHandler) Handle(ctx context.Context, r slog.Record) error {
+	if h.component != "" {
+		r.AddAttrs(slog.String("component", h.component))
+	}
+	return h.inner.Handle(ctx, r)
+}
+
+func (h *BNGJSONHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &BNGJSONHandler{
+		inner:     h.inner.WithAttrs(attrs).(*slog.JSONHandler),
+		component: h.component,
+	}
+}
+
+func (h *BNGJSONHandler) WithGroup(name string) slog.Handler {
+	newComponent := h.component
+	if newComponent != "" {
+		newComponent = newComponent + "." + name
+	} else {
+		newComponent = name
+	}
+	return &BNGJSONHandler{
+		inner:     h.inner,
+		component: newComponent,
+	}
+}
+
+func Get(name string) *slog.Logger {
+	if l, ok := loggerCache.Load(name); ok {
+		return l.(*slog.Logger)
 	}
 
 	var handler slog.Handler
 	if strings.ToLower(format) == "json" {
-		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-			Level: level,
-		})
+		handler = newJSONHandler(name)
 	} else {
-		handler = NewBNGTextHandler(os.Stdout, &slog.HandlerOptions{
-			Level: level,
-		})
+		handler = NewBNGTextHandler(os.Stdout, nil, name)
 	}
 
-	return slog.New(handler).With("component", name)
+	l := slog.New(handler)
+	loggerCache.Store(name, l)
+	return l
+}
+
+func SetComponentLevel(name string, level LogLevel) {
+	levelsMu.Lock()
+	componentLevels[name] = parseLevel(string(level))
+	levelsMu.Unlock()
+	loggerCache.Delete(name)
+}
+
+func ClearComponentLevel(name string) {
+	levelsMu.Lock()
+	delete(componentLevels, name)
+	levelsMu.Unlock()
+	loggerCache.Delete(name)
+}
+
+func GetComponentLevels() map[string]LogLevel {
+	levelsMu.RLock()
+	defer levelsMu.RUnlock()
+	result := make(map[string]LogLevel)
+	for name, level := range componentLevels {
+		result[name] = levelToLogLevel(level)
+	}
+	return result
+}
+
+func GetDefaultLevel() LogLevel {
+	return levelToLogLevel(defaultLevel)
+}
+
+func levelToLogLevel(level slog.Level) LogLevel {
+	switch level {
+	case slog.LevelDebug:
+		return LogLevelDebug
+	case slog.LevelInfo:
+		return LogLevelInfo
+	case slog.LevelWarn:
+		return LogLevelWarn
+	case slog.LevelError:
+		return LogLevelError
+	default:
+		return LogLevelInfo
+	}
 }
 
 type SessionAttrs struct {

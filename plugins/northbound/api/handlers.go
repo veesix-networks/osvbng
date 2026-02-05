@@ -38,13 +38,19 @@ func (c *Component) handlePaths(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *Component) handleShow(w http.ResponseWriter, r *http.Request) {
-	urlPath := r.PathValue("path")
-	if urlPath == "" {
+	path := r.PathValue("path")
+	if path == "" {
 		c.writeError(w, http.StatusBadRequest, "path required")
 		return
 	}
 
-	internalPath := strings.ReplaceAll(urlPath, "/", ".")
+	path = strings.ReplaceAll(path, "/", ".")
+
+	showPath, err := c.adapter.NormalizePath(path, c.adapter.GetAllShowPaths())
+	if err != nil {
+		c.writeError(w, http.StatusBadRequest, "failed to normalize path: "+err.Error())
+		return
+	}
 
 	options := make(map[string]string)
 	for key, values := range r.URL.Query() {
@@ -53,15 +59,15 @@ func (c *Component) handleShow(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	data, err := c.adapter.ExecuteShow(r.Context(), internalPath, options)
+	data, err := c.adapter.ExecuteShow(r.Context(), showPath, options)
 	if err != nil {
-		c.logger.Error("show handler failed", "path", internalPath, "error", err)
+		c.logger.Error("show handler failed", "path", showPath, "error", err)
 		c.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	resp := ShowResponse{
-		Path: internalPath,
+		Path: showPath,
 		Data: data,
 	}
 
@@ -69,7 +75,7 @@ func (c *Component) handleShow(w http.ResponseWriter, r *http.Request) {
 	c.writeJSON(w, resp)
 }
 
-func (c *Component) handleConfig(w http.ResponseWriter, r *http.Request) {
+func (c *Component) handleSet(w http.ResponseWriter, r *http.Request) {
 	path := r.PathValue("path")
 	if path == "" {
 		c.writeError(w, http.StatusBadRequest, "path required")
@@ -81,13 +87,6 @@ func (c *Component) handleConfig(w http.ResponseWriter, r *http.Request) {
 	normalizedPath, err := c.adapter.NormalizePath(path, c.adapter.GetAllConfPaths())
 	if err != nil {
 		c.writeError(w, http.StatusBadRequest, "failed to normalize path: "+err.Error())
-		return
-	}
-
-	c.logger.Info("NORMALIZATION", "original", path, "normalized", normalizedPath)
-
-	if c.adapter.HasOperHandler(normalizedPath) {
-		c.handleOper(w, r, normalizedPath)
 		return
 	}
 
@@ -109,10 +108,23 @@ func (c *Component) handleConfig(w http.ResponseWriter, r *http.Request) {
 	c.writeJSON(w, map[string]string{"status": "ok"})
 }
 
-func (c *Component) handleOper(w http.ResponseWriter, r *http.Request, operPath string) {
+func (c *Component) handleExec(w http.ResponseWriter, r *http.Request) {
+	path := r.PathValue("path")
+	if path == "" {
+		c.writeError(w, http.StatusBadRequest, "path required")
+		return
+	}
+
+	path = strings.ReplaceAll(path, "/", ".")
+
+	operPath, err := c.adapter.NormalizePath(path, c.adapter.GetAllOperPaths())
+	if err != nil {
+		c.writeError(w, http.StatusBadRequest, "failed to normalize path: "+err.Error())
+		return
+	}
+
 	var body []byte
 	if r.Body != nil {
-		var err error
 		body, err = io.ReadAll(r.Body)
 		if err != nil {
 			c.writeError(w, http.StatusBadRequest, "failed to read request body")

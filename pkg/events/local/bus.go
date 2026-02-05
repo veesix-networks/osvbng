@@ -35,7 +35,7 @@ func NewBus() events.Bus {
 		cancel:    cancel,
 		handlers:  make(map[string][]events.EventHandler),
 		publishCh: make(chan publishRequest, 10000),
-		logger:    logger.Component(logger.ComponentEvents),
+		logger:    logger.Get(logger.Events),
 	}
 
 	go b.publishLoop()

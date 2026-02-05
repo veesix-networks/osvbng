@@ -71,7 +71,7 @@ func NewAsyncWorker(conn *core.Connection, cfg AsyncWorkerConfig) (*AsyncWorker,
 		pending: list.New(),
 		ctx:     ctx,
 		cancel:  cancel,
-		logger:  logger.Component("vpp-async"),
+		logger:  logger.Get("vpp-async"),
 	}
 
 	return w, nil

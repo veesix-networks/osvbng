@@ -24,7 +24,7 @@ type MessageHandler struct {
 func NewMessageHandler(deps *deps.ConfDeps) conf.Handler {
 	return &MessageHandler{
 		deps:   deps,
-		logger: logger.Component("example.hello.conf"),
+		logger: logger.Get("example.hello.conf"),
 	}
 }
 

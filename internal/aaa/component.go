@@ -47,7 +47,7 @@ type Component struct {
 }
 
 func New(deps component.Dependencies, authProvider auth.AuthProvider) (component.Component, error) {
-	log := logger.Component(logger.ComponentAAA)
+	log := logger.Get(logger.AAA)
 
 	c := &Component{
 		Base:         component.NewBase("aaa"),

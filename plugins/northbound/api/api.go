@@ -46,7 +46,7 @@ func NewComponent(deps component.Dependencies) (component.Component, error) {
 
 	return &Component{
 		Base:   component.NewBase(Namespace),
-		logger: logger.Component(Namespace),
+		logger: logger.Get(Namespace),
 		addr:   addr,
 	}, nil
 }
@@ -104,8 +104,9 @@ func (c *Component) startServer() {
 
 	mux.HandleFunc("GET /api/running-config", c.handleRunningConfig)
 	mux.HandleFunc("GET /api/startup-config", c.handleStartupConfig)
-	mux.HandleFunc("GET /api/{path...}", c.handleShow)
-	mux.HandleFunc("POST /api/{path...}", c.handleConfig)
+	mux.HandleFunc("GET /api/show/{path...}", c.handleShow)
+	mux.HandleFunc("POST /api/set/{path...}", c.handleSet)
+	mux.HandleFunc("POST /api/exec/{path...}", c.handleExec)
 	mux.HandleFunc("GET /api", c.handlePaths)
 
 	c.server = &http.Server{

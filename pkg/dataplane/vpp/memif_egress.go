@@ -39,7 +39,7 @@ var framePool = sync.Pool{
 
 func NewMemifEgress() *MemifEgress {
 	return &MemifEgress{
-		logger: logger.Component(logger.ComponentEgress),
+		logger: logger.Get(logger.Egress),
 	}
 }
 

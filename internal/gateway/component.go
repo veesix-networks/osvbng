@@ -41,7 +41,7 @@ type Component struct {
 func New(deps component.Dependencies, showRegistry *show.Registry, operRegistry *oper.Registry, subscriberComp *subscriber.Component, configd *configmgr.ConfigManager, bindAddr string) (component.Component, error) {
 	return &Component{
 		Base:         component.NewBase("gateway"),
-		logger:       logger.Component(logger.ComponentGateway),
+		logger:       logger.Get(logger.Gateway),
 		showRegistry: showRegistry,
 		operRegistry: operRegistry,
 		bindAddr:     bindAddr,

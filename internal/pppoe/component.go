@@ -113,7 +113,7 @@ type SessionState struct {
 }
 
 func New(deps component.Dependencies, srgMgr *srg.Manager) (component.Component, error) {
-	log := logger.Component(logger.ComponentPPPoE)
+	log := logger.Get(logger.PPPoE)
 
 	cookieMgr, err := pppoe.NewCookieManager(cookieTTL)
 	if err != nil {

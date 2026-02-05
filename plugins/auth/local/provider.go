@@ -51,7 +51,7 @@ func New(cfg *config.Config) (auth.AuthProvider, error) {
 
 	p := &Provider{
 		db:       db,
-		logger:   logger.Component(Namespace),
+		logger:   logger.Get(Namespace),
 		allowAll: pluginCfg.AllowAll,
 	}
 

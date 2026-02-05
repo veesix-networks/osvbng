@@ -28,7 +28,7 @@ type SetUserEnabledHandler struct {
 func NewSetUserEnabledHandler(deps *deps.OperDeps) oper.OperHandler {
 	return &SetUserEnabledHandler{
 		deps:   deps,
-		logger: logger.Component(local.Namespace + ".oper"),
+		logger: logger.Get(local.Namespace).WithGroup("oper"),
 	}
 }
 

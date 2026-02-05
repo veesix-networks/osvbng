@@ -102,7 +102,7 @@ func DecodeInterfaceName(encoded string) string {
 func encodeValue(value string, wildcardType WildcardType) (string, error) {
 	switch wildcardType {
 	case WildcardGeneric, WildcardString:
-		return value, nil
+		return strings.ReplaceAll(value, ".", "_dot_"), nil
 
 	case WildcardIP, WildcardIPv4, WildcardIPv6:
 		ip := net.ParseIP(value)
@@ -139,7 +139,7 @@ func encodeValue(value string, wildcardType WildcardType) (string, error) {
 func decodeValue(value string, wildcardType WildcardType) (string, error) {
 	switch wildcardType {
 	case WildcardGeneric, WildcardString:
-		return value, nil
+		return strings.ReplaceAll(value, "_dot_", "."), nil
 
 	case WildcardIP, WildcardIPv4, WildcardIPv6:
 		if len(value) == 32 {

@@ -26,6 +26,7 @@ const (
 	SystemVersion              Path = "system.version"
 	SystemOpDBSessions         Path = "system.opdb.sessions"
 	SystemOpDBStatistics       Path = "system.opdb.statistics"
+	SystemLogging              Path = "system.logging"
 
 	VRFS Path = "vrfs"
 )

@@ -22,7 +22,7 @@ type Component struct {
 }
 
 func New(deps component.Dependencies) (component.Component, error) {
-	log := logger.Component(logger.ComponentRouting)
+	log := logger.Get(logger.Routing)
 
 	c := &Component{
 		Base:       component.NewBase("routing"),

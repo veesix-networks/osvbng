@@ -54,7 +54,7 @@ func New(cfg *config.Config) (auth.AuthProvider, error) {
 	p := &Provider{
 		cfg:       pluginCfg,
 		globalCfg: cfg,
-		logger:    logger.Component(Namespace),
+		logger:    logger.Get(Namespace),
 	}
 
 	client, err := p.buildHTTPClient()

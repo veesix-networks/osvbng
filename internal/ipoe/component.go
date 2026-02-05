@@ -87,7 +87,7 @@ type SessionState struct {
 }
 
 func New(deps component.Dependencies, srgMgr *srg.Manager, dhcp4Provider dhcp4.DHCPProvider, dhcp6Provider dhcp6.DHCPProvider) (component.Component, error) {
-	log := logger.Component(logger.ComponentIPoE)
+	log := logger.Get(logger.IPoE)
 
 	c := &Component{
 		Base:          component.NewBase("ipoe"),
@@ -178,7 +178,7 @@ func (c *Component) processDHCPPacket(pkt *dataplane.ParsedPacket) error {
 		return fmt.Errorf("missing DHCP message type")
 	}
 
-	c.logger.Debug("[DF] Received DHCP packet",
+	c.logger.WithGroup(logger.IPoEDHCP4).Debug("[DF] Received DHCP packet",
 		"message_type", msgType.String(),
 		"mac", pkt.MAC.String(),
 		"xid", fmt.Sprintf("0x%x", pkt.DHCPv4.Xid))
@@ -294,7 +294,7 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 
 	if sess == nil {
 		if err := c.checkSessionLimit(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN); err != nil {
-			c.logger.Info("DHCPDISCOVER rejected", "error", err)
+			c.logger.WithGroup(logger.IPoEDHCP4).Info("DHCPDISCOVER rejected", "error", err)
 			return nil
 		}
 
@@ -347,10 +347,10 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 	v6AaaPending := sess.PendingDHCPv6Solicit != nil || sess.PendingDHCPv6Request != nil
 	c.sessionMu.Unlock()
 
-	c.logger.Info("Session discovering", "session_id", sess.SessionID, "circuit_id", string(circuitID), "remote_id", string(remoteID))
+	c.logger.WithGroup(logger.IPoEDHCP4).Info("Session discovering", "session_id", sess.SessionID, "circuit_id", string(circuitID), "remote_id", string(remoteID))
 
 	if alreadyApproved && ipoeCreated {
-		c.logger.Info("Session already approved, forwarding DISCOVER to provider", "session_id", sess.SessionID)
+		c.logger.WithGroup(logger.IPoEDHCP4).Info("Session already approved, forwarding DISCOVER to provider", "session_id", sess.SessionID)
 		pkt := &dhcp4.Packet{
 			SessionID: sess.SessionID,
 			MAC:       sess.MAC.String(),
@@ -369,12 +369,12 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 	}
 
 	if alreadyApproved && !ipoeCreated {
-		c.logger.Info("DHCP DISCOVER received, AAA approved but IPoE session pending", "session_id", sess.SessionID)
+		c.logger.WithGroup(logger.IPoEDHCP4).Info("DHCP DISCOVER received, AAA approved but IPoE session pending", "session_id", sess.SessionID)
 		return nil
 	}
 
 	if v6AaaPending {
-		c.logger.Info("DHCP DISCOVER received, waiting for v6 AAA response", "session_id", sess.SessionID)
+		c.logger.WithGroup(logger.IPoEDHCP4).Info("DHCP DISCOVER received, waiting for v6 AAA response", "session_id", sess.SessionID)
 		return nil
 	}
 
@@ -401,11 +401,11 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 				Hostname:   hostname,
 			}
 			username = policy.ExpandFormat(ctx)
-			c.logger.Info("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
+			c.logger.WithGroup(logger.IPoEDHCP4).Info("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
 		}
 	}
 
-	c.logger.Info("Publishing AAA request for DISCOVER", "session_id", sess.SessionID, "username", username)
+	c.logger.WithGroup(logger.IPoEDHCP4).Info("Publishing AAA request for DISCOVER", "session_id", sess.SessionID, "username", username)
 	requestID := uuid.New().String()
 
 	aaaPayload := &models.AAARequest{
@@ -468,7 +468,7 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 	c.sessionMu.Unlock()
 
 	if alreadyApproved {
-		c.logger.Info("Session already AAA approved, processing REQUEST with DHCP provider", "session_id", sess.SessionID)
+		c.logger.WithGroup(logger.IPoEDHCP4).Info("Session already AAA approved, processing REQUEST with DHCP provider", "session_id", sess.SessionID)
 
 		buf := gopacket.NewSerializeBuffer()
 		opts := gopacket.SerializeOptions{
@@ -489,7 +489,7 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 
 		response, err := c.dhcp4Provider.HandlePacket(c.Ctx, dhcpPkt)
 		if err != nil {
-			c.logger.Error("DHCP provider failed for REQUEST", "session_id", sess.SessionID, "error", err)
+			c.logger.WithGroup(logger.IPoEDHCP4).Error("DHCP provider failed for REQUEST", "session_id", sess.SessionID, "error", err)
 			return fmt.Errorf("dhcp provider failed: %w", err)
 		}
 
@@ -520,7 +520,7 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 		return nil
 	}
 
-	c.logger.Info("Session requesting, waiting for AAA approval", "session_id", sess.SessionID)
+	c.logger.WithGroup(logger.IPoEDHCP4).Info("Session requesting, waiting for AAA approval", "session_id", sess.SessionID)
 
 	hostname := string(getDHCPOption(pkt.DHCPv4.Options, layers.DHCPOptHostname))
 	circuitID, remoteID := parseOption82(getDHCPOption(pkt.DHCPv4.Options, 82))
@@ -548,11 +548,11 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 				Hostname:   hostname,
 			}
 			username = policy.ExpandFormat(ctx)
-			c.logger.Info("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
+			c.logger.WithGroup(logger.IPoEDHCP4).Info("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
 		}
 	}
 
-	c.logger.Info("Publishing AAA request", "session_id", sess.SessionID, "username", username)
+	c.logger.WithGroup(logger.IPoEDHCP4).Info("Publishing AAA request", "session_id", sess.SessionID, "username", username)
 	requestID := uuid.New().String()
 
 	aaaPayload := &models.AAARequest{
@@ -773,14 +773,14 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 	ipoeSwIfIndex := sess.IPoESwIfIndex
 	c.sessionMu.Unlock()
 
-	c.logger.Info("Session bound", "session_id", sess.SessionID, "ipv4", sess.IPv4.String())
+	c.logger.WithGroup(logger.IPoEDHCP4).Info("Session bound", "session_id", sess.SessionID, "ipv4", sess.IPv4.String())
 
 	if c.vpp != nil && ipoeSwIfIndex != 0 {
 		if err := c.vpp.IPoESetSessionIPv4(ipoeSwIfIndex, sess.IPv4, true); err != nil {
-			c.logger.Error("Failed to bind IPv4 to IPoE session", "session_id", sess.SessionID, "error", err)
+			c.logger.WithGroup(logger.IPoEDHCP4).Error("Failed to bind IPv4 to IPoE session", "session_id", sess.SessionID, "error", err)
 			return fmt.Errorf("bind ipv4: %w", err)
 		}
-		c.logger.Info("Bound IPv4 to IPoE session", "session_id", sess.SessionID, "sw_if_index", ipoeSwIfIndex, "ipv4", sess.IPv4.String())
+		c.logger.WithGroup(logger.IPoEDHCP4).Info("Bound IPv4 to IPoE session", "session_id", sess.SessionID, "sw_if_index", ipoeSwIfIndex, "ipv4", sess.IPv4.String())
 	}
 
 	counterKey := fmt.Sprintf("osvbng:session_count:%s:%d:%d", mac.String(), svlan, cvlan)

@@ -26,7 +26,7 @@ type CreateUserHandler struct {
 func NewCreateUserHandler(deps *deps.OperDeps) oper.OperHandler {
 	return &CreateUserHandler{
 		deps:   deps,
-		logger: logger.Component(local.Namespace + ".oper"),
+		logger: logger.Get(local.Namespace).WithGroup("oper"),
 	}
 }
 

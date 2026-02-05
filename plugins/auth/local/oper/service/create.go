@@ -25,7 +25,7 @@ type CreateServiceHandler struct {
 func NewCreateServiceHandler(deps *deps.OperDeps) oper.OperHandler {
 	return &CreateServiceHandler{
 		deps:   deps,
-		logger: logger.Component(local.Namespace + ".oper"),
+		logger: logger.Get(local.Namespace).WithGroup("oper"),
 	}
 }
 

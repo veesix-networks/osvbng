@@ -26,7 +26,7 @@ type DeleteUserHandler struct {
 func NewDeleteUserHandler(deps *deps.OperDeps) oper.OperHandler {
 	return &DeleteUserHandler{
 		deps:   deps,
-		logger: logger.Component(local.Namespace + ".oper"),
+		logger: logger.Get(local.Namespace).WithGroup("oper"),
 	}
 }
 

@@ -30,7 +30,7 @@ type Adapter struct {
 
 func NewAdapter(showReg *show.Registry, confReg *conf.Registry, operReg *oper.Registry, configMgr *configmgr.ConfigManager) *Adapter {
 	return &Adapter{
-		logger:       logger.Component(logger.ComponentNorthbound),
+		logger:       logger.Get(logger.Northbound),
 		showRegistry: showReg,
 		confRegistry: confReg,
 		operRegistry: operReg,
