@@ -1,13 +1,13 @@
 package vrfs
 
 import (
-	"github.com/veesix-networks/osvbng/pkg/deps"
 	"context"
 	"fmt"
 
+	"github.com/veesix-networks/osvbng/pkg/config/ip"
+	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
-	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/models/vrf"
 	"github.com/veesix-networks/osvbng/pkg/operations"
 )
@@ -25,9 +25,9 @@ func NewVRFHandler(daemons *deps.ConfDeps) conf.Handler {
 }
 
 func (h *VRFHandler) Validate(ctx context.Context, hctx *conf.HandlerContext) error {
-	cfg, ok := hctx.NewValue.(*types.VRFSConfig)
+	cfg, ok := hctx.NewValue.(*ip.VRFSConfig)
 	if !ok {
-		return fmt.Errorf("expected *types.VRFSConfig, got %T", hctx.NewValue)
+		return fmt.Errorf("expected *ip.VRFSConfig, got %T", hctx.NewValue)
 	}
 
 	if err := vrf.ValidateVRFName(cfg.Name); err != nil {
