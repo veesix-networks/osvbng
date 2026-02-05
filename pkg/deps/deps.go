@@ -6,6 +6,7 @@ import (
 	"github.com/veesix-networks/osvbng/internal/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
+	"github.com/veesix-networks/osvbng/pkg/opdb"
 	"github.com/veesix-networks/osvbng/pkg/operations"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
@@ -15,6 +16,7 @@ type ShowDeps struct {
 	Southbound       *southbound.VPP
 	Routing          *routingcomp.Component
 	Cache            cache.Cache
+	OpDB             opdb.Store
 	PluginComponents map[string]component.Component
 }
 

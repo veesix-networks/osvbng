@@ -2,6 +2,7 @@ package pppoe
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -17,6 +18,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
+	"github.com/veesix-networks/osvbng/pkg/opdb"
 	"github.com/veesix-networks/osvbng/pkg/ppp"
 	"github.com/veesix-networks/osvbng/pkg/pppoe"
 	"github.com/veesix-networks/osvbng/pkg/session"
@@ -40,6 +42,7 @@ type Component struct {
 	cfgMgr   component.ConfigManager
 	vpp      *southbound.VPP
 	cache    cache.Cache
+	opdb     opdb.Store
 
 	acName        string
 	cookieMgr     *pppoe.CookieManager
@@ -81,7 +84,9 @@ type SessionState struct {
 	Username   string
 	Attributes map[string]string
 
+	LCPMagic  uint32
 	CreatedAt time.Time
+	BoundAt   time.Time
 	LastSeen  time.Time
 
 	lcp    *ppp.LCP
@@ -123,6 +128,7 @@ func New(deps component.Dependencies, srgMgr *srg.Manager) (component.Component,
 		cfgMgr:        deps.ConfigManager,
 		vpp:           deps.VPP,
 		cache:         deps.Cache,
+		opdb:          deps.OpDB,
 		acName:        defaultACName,
 		cookieMgr:     cookieMgr,
 		poolAllocator: NewPoolAllocator(),
@@ -140,6 +146,10 @@ func New(deps component.Dependencies, srgMgr *srg.Manager) (component.Component,
 func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
 	c.logger.Info("Starting PPPoE component", "ac_name", c.acName)
+
+	if err := c.restoreSessions(ctx); err != nil {
+		c.logger.Warn("Failed to restore sessions from OpDB", "error", err)
+	}
 
 	if err := c.eventBus.Subscribe(events.TopicAAAResponsePPPoE, c.handleAAAResponse); err != nil {
 		return fmt.Errorf("subscribe to aaa responses: %w", err)
@@ -543,4 +553,148 @@ func (c *Component) handleDeadPeer(sessionID uint16) {
 
 	c.sendPADT(sess)
 	sess.terminate()
+}
+
+func (c *Component) publishSessionLifecycle(payload models.SubscriberSession) error {
+	lifecycleEvent := models.Event{
+		Type:       models.EventTypeSessionLifecycle,
+		AccessType: payload.GetAccessType(),
+		Protocol:   payload.GetProtocol(),
+		SessionID:  payload.GetSessionID(),
+	}
+	lifecycleEvent.SetPayload(payload)
+	return c.eventBus.Publish(events.TopicSessionLifecycle, lifecycleEvent)
+}
+
+func (c *Component) checkpointSession(sess *SessionState) {
+	if c.opdb == nil {
+		return
+	}
+
+	data, err := json.Marshal(sess)
+	if err != nil {
+		c.logger.Warn("Failed to marshal session for checkpoint", "session_id", sess.SessionID, "error", err)
+		return
+	}
+
+	if err := c.opdb.Put(c.Ctx, opdb.NamespacePPPoESessions, sess.SessionID, data); err != nil {
+		c.logger.Warn("Failed to checkpoint session", "session_id", sess.SessionID, "error", err)
+	}
+}
+
+func (c *Component) deleteSessionCheckpoint(sessionID string) {
+	if c.opdb == nil {
+		return
+	}
+
+	if err := c.opdb.Delete(c.Ctx, opdb.NamespacePPPoESessions, sessionID); err != nil {
+		c.logger.Warn("Failed to delete session checkpoint", "session_id", sessionID, "error", err)
+	}
+}
+
+func (c *Component) restoreSessions(ctx context.Context) error {
+	if c.opdb == nil {
+		return nil
+	}
+
+	var count, expired int
+	now := time.Now()
+
+	err := c.opdb.Load(ctx, opdb.NamespacePPPoESessions, func(key string, value []byte) error {
+		var sess SessionState
+		if err := json.Unmarshal(value, &sess); err != nil {
+			c.logger.Warn("Failed to unmarshal session from opdb", "key", key, "error", err)
+			return nil
+		}
+
+		if c.isSessionExpired(&sess, now) {
+			c.opdb.Delete(ctx, opdb.NamespacePPPoESessions, key)
+			expired++
+			return nil
+		}
+
+		lookupKey := c.sessionKey(sess.MAC, sess.OuterVLAN, sess.InnerVLAN)
+
+		c.sessionMu.Lock()
+		sess.component = c
+		sess.initPPP()
+		if sess.LCPMagic != 0 {
+			sess.lcp.SetMagic(sess.LCPMagic)
+		}
+		c.sessions[lookupKey] = &sess
+		if sess.PPPoESessionID > 0 {
+			c.sidIndex[sess.PPPoESessionID] = &sess
+			if sess.PPPoESessionID >= c.nextSessionID {
+				c.nextSessionID = sess.PPPoESessionID + 1
+			}
+		}
+		c.sessionMu.Unlock()
+
+		if sess.Phase == ppp.PhaseOpen {
+			c.restoreSessionToCache(ctx, &sess, now)
+			if c.echoGen != nil {
+				c.echoGen.AddSession(sess.PPPoESessionID, sess.LCPMagic)
+			}
+		}
+
+		count++
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("restore pppoe sessions: %w", err)
+	}
+
+	c.logger.Info("Restored PPPoE sessions from OpDB", "count", count, "expired", expired)
+	return nil
+}
+
+func (c *Component) isSessionExpired(sess *SessionState, now time.Time) bool {
+	if sess.Phase != ppp.PhaseOpen {
+		return false
+	}
+
+	if sess.BoundAt.IsZero() {
+		return false
+	}
+
+	// PPPoE sessions don't have a lease time like DHCP, but we can use a reasonable timeout
+	// based on echo keepalive expectations. If the session hasn't been seen in a long time,
+	// consider it expired. Default to 24 hours if no recent activity.
+	maxAge := 24 * time.Hour
+	return now.Sub(sess.BoundAt) > maxAge
+}
+
+func (c *Component) restoreSessionToCache(ctx context.Context, sess *SessionState, now time.Time) {
+	cacheKey := fmt.Sprintf("osvbng:sessions:%s", sess.SessionID)
+
+	pppSess := &models.PPPSession{
+		SessionID:       sess.SessionID,
+		PPPSessionID:    sess.PPPoESessionID,
+		State:           models.SessionStateActive,
+		MAC:             sess.MAC,
+		OuterVLAN:       sess.OuterVLAN,
+		InnerVLAN:       sess.InnerVLAN,
+		IfIndex:         sess.SwIfIndex,
+		IPv4Address:     sess.IPv4Address,
+		IPv6Address:     sess.IPv6Address,
+		RADIUSSessionID: sess.AcctSessionID,
+	}
+
+	data, err := json.Marshal(pppSess)
+	if err != nil {
+		c.logger.Warn("Failed to marshal session for cache restore", "session_id", sess.SessionID, "error", err)
+		return
+	}
+
+	// PPPoE sessions don't have a lease TTL, use remaining time until max age
+	maxAge := 24 * time.Hour
+	ttl := maxAge - now.Sub(sess.BoundAt)
+	if ttl < 0 {
+		ttl = 0
+	}
+
+	if err := c.cache.Set(ctx, cacheKey, data, ttl); err != nil {
+		c.logger.Warn("Failed to restore session to cache", "session_id", sess.SessionID, "error", err)
+	}
 }

@@ -54,6 +54,7 @@ message Session {
   string state = 7;
   string ipv4_address = 8;
   string ipv6_address = 9;
+  string ipv6_prefix = 21;
   uint32 lease_time = 10;
   string hostname = 11;
   bytes circuit_id = 12;

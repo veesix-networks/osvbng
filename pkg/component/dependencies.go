@@ -5,6 +5,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
 	"github.com/veesix-networks/osvbng/pkg/events"
+	"github.com/veesix-networks/osvbng/pkg/opdb"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
 
@@ -18,6 +19,7 @@ type Dependencies struct {
 	Cache         cache.Cache
 	VPP           *southbound.VPP
 	ConfigManager ConfigManager
+	OpDB          opdb.Store
 
 	DHCPChan   <-chan *dataplane.ParsedPacket
 	DHCPv6Chan <-chan *dataplane.ParsedPacket

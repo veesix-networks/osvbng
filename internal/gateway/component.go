@@ -402,27 +402,38 @@ func (c *Component) GetSessions(ctx context.Context, req *pb.GetSessionsRequest)
 		return nil, err
 	}
 
-	sessions, ok := data.([]*models.DHCPv4Session)
+	sessions, ok := data.([]models.SubscriberSession)
 	if !ok {
 		return nil, fmt.Errorf("invalid data type from handler")
 	}
 
 	pbSessions := make([]*pb.Session, 0, len(sessions))
 	for _, sess := range sessions {
-		pbSessions = append(pbSessions, &pb.Session{
-			SessionId:     sess.SessionID,
-			AccessType:    sess.AccessType,
-			Protocol:      sess.Protocol,
-			Mac:           sess.MAC.String(),
-			OuterVlan:     uint32(sess.OuterVLAN),
-			InnerVlan:     uint32(sess.InnerVLAN),
-			State:         string(sess.State),
-			Ipv4Address:   sess.IPv4Address.String(),
-			Hostname:      sess.Hostname,
-			SwIfIndex:     uint32(sess.IfIndex),
-			LeaseTime:     sess.LeaseTime,
-			AcctSessionId: sess.RADIUSSessionID,
-		})
+		pbSess := &pb.Session{
+			SessionId:     sess.GetSessionID(),
+			AccessType:    string(sess.GetAccessType()),
+			Protocol:      string(sess.GetProtocol()),
+			Mac:           sess.GetMAC().String(),
+			OuterVlan:     uint32(sess.GetOuterVLAN()),
+			InnerVlan:     uint32(sess.GetInnerVLAN()),
+			State:         string(sess.GetState()),
+			AcctSessionId: sess.GetRADIUSSessionID(),
+			SwIfIndex:     sess.GetIfIndex(),
+		}
+
+		if ipv4 := sess.GetIPv4Address(); ipv4 != nil {
+			pbSess.Ipv4Address = ipv4.String()
+		}
+		if ipv6 := sess.GetIPv6Address(); ipv6 != nil {
+			pbSess.Ipv6Address = ipv6.String()
+		}
+
+		if ipoe, ok := sess.(*models.IPoESession); ok {
+			pbSess.Hostname = ipoe.Hostname
+			pbSess.LeaseTime = ipoe.LeaseTime
+		}
+
+		pbSessions = append(pbSessions, pbSess)
 	}
 
 	return &pb.GetSessionsResponse{Sessions: pbSessions}, nil
@@ -444,12 +455,12 @@ func (c *Component) GetSession(ctx context.Context, req *pb.GetSessionRequest) (
 		return nil, err
 	}
 
-	sess, ok := data.(*models.DHCPv4Session)
+	sess, ok := data.(*models.IPoESession)
 	if !ok {
 		return nil, fmt.Errorf("invalid data type from handler")
 	}
 
-	return &pb.Session{
+	pbSess := &pb.Session{
 		SessionId:     sess.SessionID,
 		AccessType:    sess.AccessType,
 		Protocol:      sess.Protocol,
@@ -457,12 +468,20 @@ func (c *Component) GetSession(ctx context.Context, req *pb.GetSessionRequest) (
 		OuterVlan:     uint32(sess.OuterVLAN),
 		InnerVlan:     uint32(sess.InnerVLAN),
 		State:         string(sess.State),
-		Ipv4Address:   sess.IPv4Address.String(),
 		Hostname:      sess.Hostname,
 		SwIfIndex:     uint32(sess.IfIndex),
 		LeaseTime:     sess.LeaseTime,
 		AcctSessionId: sess.RADIUSSessionID,
-	}, nil
+	}
+	if sess.IPv4Address != nil {
+		pbSess.Ipv4Address = sess.IPv4Address.String()
+	}
+	if sess.IPv6Address != nil {
+		pbSess.Ipv6Address = sess.IPv6Address.String()
+	}
+	pbSess.Ipv6Prefix = sess.IPv6Prefix
+
+	return pbSess, nil
 }
 
 func (c *Component) TerminateSession(ctx context.Context, req *pb.TerminateSessionRequest) (*pb.TerminateSessionResponse, error) {

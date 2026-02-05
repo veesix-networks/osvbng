@@ -34,6 +34,7 @@ import (
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/all"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/northbound"
+	"github.com/veesix-networks/osvbng/pkg/opdb/sqlite"
 	"github.com/veesix-networks/osvbng/pkg/operations"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"github.com/veesix-networks/osvbng/pkg/state"
@@ -183,11 +184,19 @@ func main() {
 	eventBus := local.NewBus()
 	cache := memory.New()
 
+	opdbStore, err := sqlite.Open("/var/lib/osvbng/opdb.db")
+	if err != nil {
+		log.Fatalf("Failed to open OpDB: %v", err)
+	}
+	defer opdbStore.Close()
+	mainLog.Info("OpDB initialized", "path", "/var/lib/osvbng/opdb.db")
+
 	coreDeps := component.Dependencies{
 		EventBus:      eventBus,
 		Cache:         cache,
 		VPP:           vpp,
 		ConfigManager: configd,
+		OpDB:          opdbStore,
 	}
 
 	dataplaneComp, err := dataplane.New(coreDeps)
@@ -362,6 +371,7 @@ func main() {
 		Southbound:       coreDeps.VPP,
 		Routing:          routingComp.(*routing.Component),
 		Cache:            cache,
+		OpDB:             opdbStore,
 		PluginComponents: pluginComponentsMap,
 	})
 

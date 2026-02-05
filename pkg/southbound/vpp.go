@@ -473,13 +473,13 @@ func (v *VPP) DeleteNeighbor(ipAddr, iface string) error {
 	return nil
 }
 
-func (v *VPP) ApplyQoS(iface string, upMbps, downMbps int) error {
-	v.logger.Debug("QoS not yet implemented", "interface", iface, "up_mbps", upMbps, "down_mbps", downMbps)
+func (v *VPP) ApplyQoS(swIfIndex uint32, upMbps, downMbps int) error {
+	v.logger.Debug("QoS not yet implemented", "sw_if_index", swIfIndex, "up_mbps", upMbps, "down_mbps", downMbps)
 	return nil
 }
 
-func (v *VPP) RemoveQoS(iface string) error {
-	v.logger.Debug("QoS removal not yet implemented", "interface", iface)
+func (v *VPP) RemoveQoS(swIfIndex uint32) error {
+	v.logger.Debug("QoS removal not yet implemented", "sw_if_index", swIfIndex)
 	return nil
 }
 
