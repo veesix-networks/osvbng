@@ -34,8 +34,7 @@ func (h *OpDBSessionsHandler) Collect(ctx context.Context, req *show.Request) (i
 	var sessions []OpDBSession
 
 	namespaces := []string{
-		opdb.NamespaceDHCPv4Sessions,
-		opdb.NamespaceDHCPv6Sessions,
+		opdb.NamespaceIPoESessions,
 		opdb.NamespacePPPoESessions,
 	}
 

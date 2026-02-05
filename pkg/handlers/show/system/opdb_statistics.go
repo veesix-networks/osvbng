@@ -14,14 +14,13 @@ type OpDBStatisticsHandler struct {
 }
 
 type OpDBStatistics struct {
-	DHCPv4Sessions int    `json:"dhcpv4_sessions"`
-	DHCPv6Sessions int    `json:"dhcpv6_sessions"`
-	PPPoESessions  int    `json:"pppoe_sessions"`
-	TotalEntries   int    `json:"total_entries"`
-	Puts           uint64 `json:"puts"`
-	Deletes        uint64 `json:"deletes"`
-	Loads          uint64 `json:"loads"`
-	Clears         uint64 `json:"clears"`
+	IPoESessions  int    `json:"ipoe_sessions"`
+	PPPoESessions int    `json:"pppoe_sessions"`
+	TotalEntries  int    `json:"total_entries"`
+	Puts          uint64 `json:"puts"`
+	Deletes       uint64 `json:"deletes"`
+	Loads         uint64 `json:"loads"`
+	Clears        uint64 `json:"clears"`
 }
 
 func init() {
@@ -37,10 +36,9 @@ func (h *OpDBStatisticsHandler) Collect(ctx context.Context, req *show.Request) 
 
 	stats := &OpDBStatistics{}
 
-	stats.DHCPv4Sessions, _ = h.deps.OpDB.Count(ctx, opdb.NamespaceDHCPv4Sessions)
-	stats.DHCPv6Sessions, _ = h.deps.OpDB.Count(ctx, opdb.NamespaceDHCPv6Sessions)
+	stats.IPoESessions, _ = h.deps.OpDB.Count(ctx, opdb.NamespaceIPoESessions)
 	stats.PPPoESessions, _ = h.deps.OpDB.Count(ctx, opdb.NamespacePPPoESessions)
-	stats.TotalEntries = stats.DHCPv4Sessions + stats.DHCPv6Sessions + stats.PPPoESessions
+	stats.TotalEntries = stats.IPoESessions + stats.PPPoESessions
 
 	ioStats := h.deps.OpDB.Stats()
 	stats.Puts = ioStats.Puts
