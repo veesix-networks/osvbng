@@ -57,6 +57,7 @@ type EgressPacketPayload struct {
 	SrcMAC    string `json:"src_mac"`
 	OuterVLAN uint16 `json:"outer_vlan"`
 	InnerVLAN uint16 `json:"inner_vlan"`
+	SwIfIndex uint32 `json:"sw_if_index"`
 }
 
 type EventType string

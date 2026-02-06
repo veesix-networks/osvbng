@@ -19,6 +19,7 @@ type Egress interface {
 }
 
 type EgressPacket struct {
+	SwIfIndex uint32
 	DstMAC    net.HardwareAddr
 	SrcMAC    net.HardwareAddr
 	OuterVLAN uint16

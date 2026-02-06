@@ -54,7 +54,7 @@ func (h *SubinterfaceHandler) Apply(ctx context.Context, hctx *conf.HandlerConte
 		return nil
 	}
 
-	return h.southbound.CreateSVLAN(uint16(subIfID), nil, nil)
+	return h.southbound.CreateSVLAN(parentIf, uint16(subIfID), nil, nil)
 }
 
 func (h *SubinterfaceHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) error {
