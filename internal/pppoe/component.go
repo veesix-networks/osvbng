@@ -16,6 +16,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
 	"github.com/veesix-networks/osvbng/pkg/events"
+	"github.com/veesix-networks/osvbng/pkg/ifmgr"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/opdb"
@@ -39,6 +40,7 @@ type Component struct {
 	logger   *slog.Logger
 	eventBus events.Bus
 	srgMgr   *srg.Manager
+	ifMgr    *ifmgr.Manager
 	cfgMgr   component.ConfigManager
 	vpp      *southbound.VPP
 	cache    cache.Cache
@@ -112,7 +114,7 @@ type SessionState struct {
 	mu        sync.Mutex
 }
 
-func New(deps component.Dependencies, srgMgr *srg.Manager) (component.Component, error) {
+func New(deps component.Dependencies, srgMgr *srg.Manager, ifMgr *ifmgr.Manager) (component.Component, error) {
 	log := logger.Get(logger.PPPoE)
 
 	cookieMgr, err := pppoe.NewCookieManager(cookieTTL)
@@ -125,6 +127,7 @@ func New(deps component.Dependencies, srgMgr *srg.Manager) (component.Component,
 		logger:        log,
 		eventBus:      deps.EventBus,
 		srgMgr:        srgMgr,
+		ifMgr:         ifMgr,
 		cfgMgr:        deps.ConfigManager,
 		vpp:           deps.VPP,
 		cache:         deps.Cache,
@@ -410,14 +413,20 @@ func (c *Component) sendDiscoveryPacket(pkt *dataplane.ParsedPacket, code layers
 	rawPPPoE := buf.Bytes()
 
 	var srcMAC string
+	var parentSwIfIndex uint32
 	if c.srgMgr != nil {
 		if vmac := c.srgMgr.GetVirtualMAC(pkt.OuterVLAN); vmac != nil {
 			srcMAC = vmac.String()
 		}
 	}
-	if srcMAC == "" && c.vpp != nil {
-		if ifMac := c.vpp.GetParentInterfaceMAC(); ifMac != nil {
-			srcMAC = ifMac.String()
+	if c.ifMgr != nil {
+		if iface := c.ifMgr.Get(pkt.SwIfIndex); iface != nil {
+			parentSwIfIndex = iface.SupSwIfIndex
+		}
+		if srcMAC == "" {
+			if parent := c.ifMgr.Get(parentSwIfIndex); parent != nil && len(parent.MAC) >= 6 {
+				srcMAC = net.HardwareAddr(parent.MAC[:6]).String()
+			}
 		}
 	}
 	if srcMAC == "" {
@@ -429,6 +438,7 @@ func (c *Component) sendDiscoveryPacket(pkt *dataplane.ParsedPacket, code layers
 		SrcMAC:    srcMAC,
 		OuterVLAN: pkt.OuterVLAN,
 		InnerVLAN: pkt.InnerVLAN,
+		SwIfIndex: parentSwIfIndex,
 		RawData:   rawPPPoE,
 	}
 

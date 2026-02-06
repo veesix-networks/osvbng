@@ -550,12 +550,16 @@ func (s *SessionState) checkOpen() {
 			})
 
 			if s.component.vpp != nil && s.IPv4Address != nil {
-				localMAC := s.component.vpp.GetParentInterfaceMAC()
-				encapIfIndex, err := s.component.vpp.GetParentSwIfIndex()
-				if err != nil {
-					s.component.logger.Error("Failed to get encap interface index",
+				var localMAC net.HardwareAddr
+				if s.component.ifMgr != nil {
+					if iface := s.component.ifMgr.Get(s.SwIfIndex); iface != nil && len(iface.MAC) >= 6 {
+						localMAC = net.HardwareAddr(iface.MAC[:6])
+					}
+				}
+				if localMAC == nil {
+					s.component.logger.Error("Failed to get local MAC",
 						"session_id", s.SessionID,
-						"error", err)
+						"sw_if_index", s.SwIfIndex)
 					return
 				}
 
@@ -564,7 +568,7 @@ func (s *SessionState) checkOpen() {
 					s.IPv4Address,
 					s.MAC,
 					localMAC,
-					encapIfIndex,
+					s.SwIfIndex,
 					s.OuterVLAN,
 					s.InnerVLAN,
 					0,
@@ -692,14 +696,20 @@ func (s *SessionState) sendPPPPacket(proto uint16, code, id uint8, data []byte) 
 	}
 
 	var srcMAC string
+	var parentSwIfIndex uint32
 	if s.component.srgMgr != nil {
 		if vmac := s.component.srgMgr.GetVirtualMAC(s.OuterVLAN); vmac != nil {
 			srcMAC = vmac.String()
 		}
 	}
-	if srcMAC == "" && s.component.vpp != nil {
-		if ifMac := s.component.vpp.GetParentInterfaceMAC(); ifMac != nil {
-			srcMAC = ifMac.String()
+	if s.component.ifMgr != nil {
+		if iface := s.component.ifMgr.Get(s.SwIfIndex); iface != nil {
+			parentSwIfIndex = iface.SupSwIfIndex
+		}
+		if srcMAC == "" {
+			if parent := s.component.ifMgr.Get(parentSwIfIndex); parent != nil && len(parent.MAC) >= 6 {
+				srcMAC = net.HardwareAddr(parent.MAC[:6]).String()
+			}
 		}
 	}
 	if srcMAC == "" {
@@ -712,6 +722,7 @@ func (s *SessionState) sendPPPPacket(proto uint16, code, id uint8, data []byte) 
 		SrcMAC:    srcMAC,
 		OuterVLAN: s.OuterVLAN,
 		InnerVLAN: s.InnerVLAN,
+		SwIfIndex: parentSwIfIndex,
 		RawData:   buf.Bytes(),
 	}
 

@@ -21,6 +21,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/dhcp4"
 	"github.com/veesix-networks/osvbng/pkg/dhcp6"
 	"github.com/veesix-networks/osvbng/pkg/events"
+	"github.com/veesix-networks/osvbng/pkg/ifmgr"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/opdb"
@@ -35,6 +36,7 @@ type Component struct {
 	logger        *slog.Logger
 	eventBus      events.Bus
 	srgMgr        *srg.Manager
+	ifMgr         *ifmgr.Manager
 	cfgMgr        component.ConfigManager
 	vpp           *southbound.VPP
 	cache         cache.Cache
@@ -86,7 +88,7 @@ type SessionState struct {
 	PendingDHCPv6Request []byte
 }
 
-func New(deps component.Dependencies, srgMgr *srg.Manager, dhcp4Provider dhcp4.DHCPProvider, dhcp6Provider dhcp6.DHCPProvider) (component.Component, error) {
+func New(deps component.Dependencies, srgMgr *srg.Manager, ifMgr *ifmgr.Manager, dhcp4Provider dhcp4.DHCPProvider, dhcp6Provider dhcp6.DHCPProvider) (component.Component, error) {
 	log := logger.Get(logger.IPoE)
 
 	c := &Component{
@@ -94,6 +96,7 @@ func New(deps component.Dependencies, srgMgr *srg.Manager, dhcp4Provider dhcp4.D
 		logger:        log,
 		eventBus:      deps.EventBus,
 		srgMgr:        srgMgr,
+		ifMgr:         ifMgr,
 		cfgMgr:        deps.ConfigManager,
 		vpp:           deps.VPP,
 		cache:         deps.Cache,
@@ -363,7 +366,7 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 			return fmt.Errorf("dhcp provider failed: %w", err)
 		}
 		if response != nil && len(response.Raw) > 0 {
-			return c.sendDHCPResponse(sess.SessionID, sess.OuterVLAN, sess.InnerVLAN, sess.MAC, response.Raw, "OFFER")
+			return c.sendDHCPResponse(sess.SessionID, sess.OuterVLAN, sess.InnerVLAN, sess.EncapIfIndex, sess.MAC, response.Raw, "OFFER")
 		}
 		return nil
 	}
@@ -494,7 +497,7 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 		}
 
 		if response != nil && len(response.Raw) > 0 {
-			if err := c.sendDHCPResponse(sess.SessionID, pkt.OuterVLAN, pkt.InnerVLAN, pkt.MAC, response.Raw, "ACK"); err != nil {
+			if err := c.sendDHCPResponse(sess.SessionID, pkt.OuterVLAN, pkt.InnerVLAN, sess.EncapIfIndex, pkt.MAC, response.Raw, "ACK"); err != nil {
 				return err
 			}
 
@@ -672,10 +675,19 @@ func (c *Component) handleServerResponse(pkt *dataplane.ParsedPacket) error {
 	c.logger.Debug("Forwarding DHCP to client", "message_type", msgType.String(), "mac", sess.MAC.String(), "session_id", sess.SessionID, "xid", fmt.Sprintf("0x%x", pkt.DHCPv4.Xid))
 
 	var vmac net.HardwareAddr
+	var parentSwIfIndex uint32
 	if c.srgMgr != nil {
 		vmac = c.srgMgr.GetVirtualMAC(sess.OuterVLAN)
-	} else {
-		vmac = c.vpp.GetParentInterfaceMAC()
+	}
+	if c.ifMgr != nil {
+		if iface := c.ifMgr.Get(sess.EncapIfIndex); iface != nil {
+			parentSwIfIndex = iface.SupSwIfIndex
+		}
+		if vmac == nil {
+			if parent := c.ifMgr.Get(parentSwIfIndex); parent != nil && len(parent.MAC) >= 6 {
+				vmac = net.HardwareAddr(parent.MAC[:6])
+			}
+		}
 	}
 	if vmac == nil {
 		return fmt.Errorf("no virtual MAC for S-VLAN %d", sess.OuterVLAN)
@@ -733,6 +745,7 @@ func (c *Component) handleServerResponse(pkt *dataplane.ParsedPacket) error {
 		SrcMAC:    vmac.String(),
 		OuterVLAN: sess.OuterVLAN,
 		InnerVLAN: sess.InnerVLAN,
+		SwIfIndex: parentSwIfIndex,
 		RawData:   finalBuf.Bytes(),
 	}
 
@@ -865,7 +878,7 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 		} else {
 			c.sessionMu.Unlock()
 
-			localMAC := c.getLocalMAC(svlan)
+			localMAC := c.getLocalMAC(svlan, encapIfIndex)
 			if localMAC == nil {
 				c.logger.Error("No local MAC available for IPoE session", "session_id", sessID, "svlan", svlan)
 				return fmt.Errorf("no local MAC for svlan %d", svlan)
@@ -928,7 +941,7 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 		}
 
 		if response != nil && len(response.Raw) > 0 {
-			if err := c.sendDHCPResponse(sessID, svlan, cvlan, mac, response.Raw, "OFFER"); err != nil {
+			if err := c.sendDHCPResponse(sessID, svlan, cvlan, encapIfIndex, mac, response.Raw, "OFFER"); err != nil {
 				return err
 			}
 		}
@@ -952,7 +965,7 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 		}
 
 		if response != nil && len(response.Raw) > 0 {
-			if err := c.sendDHCPResponse(sessID, svlan, cvlan, mac, response.Raw, "ACK"); err != nil {
+			if err := c.sendDHCPResponse(sessID, svlan, cvlan, encapIfIndex, mac, response.Raw, "ACK"); err != nil {
 				return err
 			}
 		}
@@ -1089,17 +1102,23 @@ func (c *Component) countExistingSessions(mac net.HardwareAddr, svlan, cvlan uin
 	return int(count), nil
 }
 
-func (c *Component) sendDHCPResponse(sessID string, svlan, cvlan uint16, mac net.HardwareAddr, rawData []byte, msgType string) error {
+func (c *Component) sendDHCPResponse(sessID string, svlan, cvlan uint16, encapIfIndex uint32, mac net.HardwareAddr, rawData []byte, msgType string) error {
 	var srcMAC string
+	var parentSwIfIndex uint32
 
 	if c.srgMgr != nil {
 		if vmac := c.srgMgr.GetVirtualMAC(svlan); vmac != nil {
 			srcMAC = vmac.String()
 		}
 	}
-	if srcMAC == "" && c.vpp != nil {
-		if ifMac := c.vpp.GetParentInterfaceMAC(); ifMac != nil {
-			srcMAC = ifMac.String()
+	if c.ifMgr != nil {
+		if iface := c.ifMgr.Get(encapIfIndex); iface != nil {
+			parentSwIfIndex = iface.SupSwIfIndex
+		}
+		if srcMAC == "" {
+			if parent := c.ifMgr.Get(parentSwIfIndex); parent != nil && len(parent.MAC) >= 6 {
+				srcMAC = net.HardwareAddr(parent.MAC[:6]).String()
+			}
 		}
 	}
 
@@ -1108,6 +1127,7 @@ func (c *Component) sendDHCPResponse(sessID string, svlan, cvlan uint16, mac net
 		SrcMAC:    srcMAC,
 		OuterVLAN: svlan,
 		InnerVLAN: cvlan,
+		SwIfIndex: parentSwIfIndex,
 		RawData:   rawData,
 	}
 
@@ -1174,14 +1194,16 @@ func (c *Component) cleanupSessions() {
 	}
 }
 
-func (c *Component) getLocalMAC(svlan uint16) net.HardwareAddr {
+func (c *Component) getLocalMAC(svlan uint16, encapIfIndex uint32) net.HardwareAddr {
 	if c.srgMgr != nil {
 		if vmac := c.srgMgr.GetVirtualMAC(svlan); vmac != nil {
 			return vmac
 		}
 	}
-	if c.vpp != nil {
-		return c.vpp.GetParentInterfaceMAC()
+	if c.ifMgr != nil {
+		if iface := c.ifMgr.Get(encapIfIndex); iface != nil && len(iface.MAC) >= 6 {
+			return net.HardwareAddr(iface.MAC[:6])
+		}
 	}
 	return nil
 }
@@ -1784,12 +1806,20 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, dhcp *layers.DHCPv6) e
 
 func (c *Component) sendDHCPv6Response(sess *SessionState, rawDHCPv6 []byte) error {
 	var srcMACBytes net.HardwareAddr
+	var parentSwIfIndex uint32
 
 	if c.srgMgr != nil {
 		srcMACBytes = c.srgMgr.GetVirtualMAC(sess.OuterVLAN)
 	}
-	if srcMACBytes == nil && c.vpp != nil {
-		srcMACBytes = c.vpp.GetParentInterfaceMAC()
+	if c.ifMgr != nil {
+		if iface := c.ifMgr.Get(sess.EncapIfIndex); iface != nil {
+			parentSwIfIndex = iface.SupSwIfIndex
+		}
+		if srcMACBytes == nil {
+			if parent := c.ifMgr.Get(parentSwIfIndex); parent != nil && len(parent.MAC) >= 6 {
+				srcMACBytes = net.HardwareAddr(parent.MAC[:6])
+			}
+		}
 	}
 	if srcMACBytes == nil {
 		return fmt.Errorf("no source MAC available")
@@ -1834,6 +1864,7 @@ func (c *Component) sendDHCPv6Response(sess *SessionState, rawDHCPv6 []byte) err
 		SrcMAC:    srcMAC,
 		OuterVLAN: sess.OuterVLAN,
 		InnerVLAN: sess.InnerVLAN,
+		SwIfIndex: parentSwIfIndex,
 		RawData:   buf.Bytes(),
 	}
 
