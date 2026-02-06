@@ -25,26 +25,24 @@ const _ = api.GoVppAPIPackageIsVersion2
 const (
 	APIFile    = "osvbng_punt"
 	APIVersion = "1.0.0"
-	VersionCrc = 0x81360d8f
+	VersionCrc = 0xa76f1cb9
 )
 
 // Enable/disable OSVBNG punt for a protocol on an interface
 //   - sw_if_index - interface index
 //   - protocol - protocol type (0=DHCPv4, 1=DHCPv6, 2=ARP, 3=PPPoE-Disc, 4=PPPoE-Sess, 5=IPv6-ND, 6=L2TP)
 //   - enable - true to enable, false to disable
-//   - socket_path - unix socket path for punted packets
 //
 // OsvbngPuntEnableDisable defines message 'osvbng_punt_enable_disable'.
 type OsvbngPuntEnableDisable struct {
-	SwIfIndex  interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
-	Protocol   uint8                          `binapi:"u8,name=protocol" json:"protocol,omitempty"`
-	Enable     bool                           `binapi:"bool,name=enable" json:"enable,omitempty"`
-	SocketPath string                         `binapi:"string[256],name=socket_path" json:"socket_path,omitempty"`
+	SwIfIndex interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
+	Protocol  uint8                          `binapi:"u8,name=protocol" json:"protocol,omitempty"`
+	Enable    bool                           `binapi:"bool,name=enable" json:"enable,omitempty"`
 }
 
 func (m *OsvbngPuntEnableDisable) Reset()               { *m = OsvbngPuntEnableDisable{} }
 func (*OsvbngPuntEnableDisable) GetMessageName() string { return "osvbng_punt_enable_disable" }
-func (*OsvbngPuntEnableDisable) GetCrcString() string   { return "28d700f9" }
+func (*OsvbngPuntEnableDisable) GetCrcString() string   { return "b0e90eac" }
 func (*OsvbngPuntEnableDisable) GetMessageType() api.MessageType {
 	return api.RequestMessage
 }
@@ -53,10 +51,9 @@ func (m *OsvbngPuntEnableDisable) Size() (size int) {
 	if m == nil {
 		return 0
 	}
-	size += 4   // m.SwIfIndex
-	size += 1   // m.Protocol
-	size += 1   // m.Enable
-	size += 256 // m.SocketPath
+	size += 4 // m.SwIfIndex
+	size += 1 // m.Protocol
+	size += 1 // m.Enable
 	return size
 }
 func (m *OsvbngPuntEnableDisable) Marshal(b []byte) ([]byte, error) {
@@ -67,7 +64,6 @@ func (m *OsvbngPuntEnableDisable) Marshal(b []byte) ([]byte, error) {
 	buf.EncodeUint32(uint32(m.SwIfIndex))
 	buf.EncodeUint8(m.Protocol)
 	buf.EncodeBool(m.Enable)
-	buf.EncodeString(m.SocketPath, 256)
 	return buf.Bytes(), nil
 }
 func (m *OsvbngPuntEnableDisable) Unmarshal(b []byte) error {
@@ -75,7 +71,6 @@ func (m *OsvbngPuntEnableDisable) Unmarshal(b []byte) error {
 	m.SwIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
 	m.Protocol = buf.DecodeUint8()
 	m.Enable = buf.DecodeBool()
-	m.SocketPath = buf.DecodeString(256)
 	return nil
 }
 
@@ -261,7 +256,7 @@ func (m *OsvbngPuntStatsDump) Unmarshal(b []byte) error {
 
 func init() { file_osvbng_punt_binapi_init() }
 func file_osvbng_punt_binapi_init() {
-	api.RegisterMessage((*OsvbngPuntEnableDisable)(nil), "osvbng_punt_enable_disable_28d700f9")
+	api.RegisterMessage((*OsvbngPuntEnableDisable)(nil), "osvbng_punt_enable_disable_b0e90eac")
 	api.RegisterMessage((*OsvbngPuntEnableDisableReply)(nil), "osvbng_punt_enable_disable_reply_e8d4e804")
 	api.RegisterMessage((*OsvbngPuntRegistrationDetails)(nil), "osvbng_punt_registration_details_b436106a")
 	api.RegisterMessage((*OsvbngPuntRegistrationDump)(nil), "osvbng_punt_registration_dump_51077d14")
