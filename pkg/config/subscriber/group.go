@@ -33,6 +33,7 @@ const (
 )
 
 type SubscriberGroup struct {
+	AccessType   string           `json:"access-type,omitempty" yaml:"access-type,omitempty"` // ipoe, pppoe, lac, lns
 	VLANs        []VLANRange      `json:"vlans,omitempty" yaml:"vlans,omitempty"`
 	AddressPools []*AddressPool   `json:"address-pools,omitempty" yaml:"address-pools,omitempty"`
 	IANAPool     string           `json:"iana-pool,omitempty" yaml:"iana-pool,omitempty"`

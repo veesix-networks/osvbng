@@ -12,6 +12,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
 	"github.com/veesix-networks/osvbng/pkg/events"
+	"github.com/veesix-networks/osvbng/pkg/ifmgr"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/srg"
@@ -20,17 +21,15 @@ import (
 type Component struct {
 	*component.Base
 
-	logger   *slog.Logger
-	eventBus events.Bus
-	srgMgr   *srg.Manager
-	vpp      interface {
-		GetParentInterfaceMAC() net.HardwareAddr
-	}
+	logger    *slog.Logger
+	eventBus  events.Bus
+	srgMgr    *srg.Manager
+	ifMgr     *ifmgr.Manager
 	configMgr component.ConfigManager
 	arpChan   <-chan *dataplane.ParsedPacket
 }
 
-func New(deps component.Dependencies, srgMgr *srg.Manager) (component.Component, error) {
+func New(deps component.Dependencies, srgMgr *srg.Manager, ifMgr *ifmgr.Manager) (component.Component, error) {
 	log := logger.Get(logger.ARP)
 
 	return &Component{
@@ -38,7 +37,7 @@ func New(deps component.Dependencies, srgMgr *srg.Manager) (component.Component,
 		logger:    log,
 		eventBus:  deps.EventBus,
 		srgMgr:    srgMgr,
-		vpp:       deps.VPP,
+		ifMgr:     ifMgr,
 		configMgr: deps.ConfigManager,
 		arpChan:   deps.ARPChan,
 	}, nil
@@ -108,11 +107,19 @@ func (c *Component) handlePacket(pkt *dataplane.ParsedPacket) error {
 	}
 
 	var gatewayMAC net.HardwareAddr
+	var parentSwIfIndex uint32
 	if c.srgMgr != nil {
 		gatewayMAC = c.srgMgr.GetVirtualMAC(0)
 	}
-	if gatewayMAC == nil && c.vpp != nil {
-		gatewayMAC = c.vpp.GetParentInterfaceMAC()
+	if c.ifMgr != nil {
+		if iface := c.ifMgr.Get(pkt.SwIfIndex); iface != nil {
+			parentSwIfIndex = iface.SupSwIfIndex
+		}
+		if gatewayMAC == nil {
+			if parent := c.ifMgr.Get(parentSwIfIndex); parent != nil && len(parent.MAC) >= 6 {
+				gatewayMAC = net.HardwareAddr(parent.MAC[:6])
+			}
+		}
 	}
 	if gatewayMAC == nil {
 		return fmt.Errorf("no gateway MAC available for ARP reply")
@@ -128,6 +135,7 @@ func (c *Component) handlePacket(pkt *dataplane.ParsedPacket) error {
 		SrcMAC:    gatewayMAC.String(),
 		OuterVLAN: pkt.OuterVLAN,
 		InnerVLAN: pkt.InnerVLAN,
+		SwIfIndex: parentSwIfIndex,
 		RawData:   arpReply,
 	}
 

@@ -26,6 +26,21 @@ type SubinterfaceConfig struct {
 	IPv6       *IPv6Config `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`
 	ARP        *ARPConfig  `json:"arp,omitempty" yaml:"arp,omitempty"`
 	Unnumbered string      `json:"unnumbered,omitempty" yaml:"unnumbered,omitempty"`
+	BNG        *BNGConfig  `json:"bng,omitempty" yaml:"bng,omitempty"`
+}
+
+type BNGMode string
+
+const (
+	BNGModeIPoE   BNGMode = "ipoe"    // IPoE: DHCPv4, DHCPv6, ARP
+	BNGModeIPoEL3 BNGMode = "ipoe-l3" // IPoE L3: DHCP relay
+	BNGModePPPoE  BNGMode = "pppoe"   // PPPoE local termination
+	BNGModeLAC    BNGMode = "lac"     // PPPoE -> L2TP tunnel to LNS
+	BNGModeLNS    BNGMode = "lns"     // L2TP tunnel termination
+)
+
+type BNGConfig struct {
+	Mode BNGMode `json:"mode" yaml:"mode"`
 }
 
 type IPv6Config struct {

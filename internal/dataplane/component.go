@@ -10,7 +10,7 @@ import (
 
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
-	"github.com/veesix-networks/osvbng/pkg/dataplane/vpp"
+	"github.com/veesix-networks/osvbng/pkg/dataplane/shm"
 	"github.com/veesix-networks/osvbng/pkg/ethernet"
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/logger"
@@ -21,12 +21,11 @@ import (
 type Component struct {
 	*component.Base
 
-	logger       *slog.Logger
-	eventBus     events.Bus
-	memifHandler *vpp.MemifHandler
-	ingress      *vpp.PuntSocketIngress
-	vpp          *southbound.VPP
-	virtualMAC   string
+	logger   *slog.Logger
+	eventBus events.Bus
+	ingress  *shm.Ingress
+	egress   *shm.Egress
+	vpp      *southbound.VPP
 
 	DHCPChan   chan *dataplane.ParsedPacket
 	DHCPv6Chan chan *dataplane.ParsedPacket
@@ -38,65 +37,26 @@ type Component struct {
 }
 
 func New(deps component.Dependencies) (component.Component, error) {
-	memifSocketPath := "/run/osvbng/memif.sock"
-	puntSocketPath := "/run/osvbng/punt.sock"
-	var accessIface string
-
-	if deps.ConfigManager != nil {
-		cfg, _ := deps.ConfigManager.GetStartup()
-		if cfg != nil {
-			if cfg.Dataplane.MemifSocketPath != "" {
-				memifSocketPath = cfg.Dataplane.MemifSocketPath
-			}
-			if cfg.Dataplane.PuntSocketPath != "" {
-				puntSocketPath = cfg.Dataplane.PuntSocketPath
-			}
-			if iface, err := cfg.GetAccessInterface(); err == nil {
-				accessIface = iface
-			}
-		}
-	}
-
 	log := logger.Get(logger.Dataplane)
-
-	virtualMAC := ""
-	if accessIface != "" {
-		swIfIndex, err := deps.VPP.GetInterfaceIndex(accessIface)
-		if err == nil {
-			mac, err := deps.VPP.GetInterfaceMAC(uint32(swIfIndex))
-			if err == nil {
-				virtualMAC = mac.String()
-				log.Info("Using access interface MAC for ARP replies", "interface", accessIface, "mac", virtualMAC)
-			}
-		}
-	}
 
 	c := &Component{
 		Base:       component.NewBase("dataplane"),
 		logger:     log,
 		eventBus:   deps.EventBus,
 		vpp:        deps.VPP,
-		virtualMAC: virtualMAC,
 		DHCPChan:   make(chan *dataplane.ParsedPacket, 1000),
 		DHCPv6Chan: make(chan *dataplane.ParsedPacket, 1000),
 		ARPChan:    make(chan *dataplane.ParsedPacket, 1000),
 		PPPoEChan:  make(chan *dataplane.ParsedPacket, 1000),
 	}
 
-	memifHandler, err := vpp.NewMemifHandler(virtualMAC, c.handleARPRequest)
-	if err != nil {
-		return nil, fmt.Errorf("create memif handler: %w", err)
-	}
-	if err := memifHandler.Init(memifSocketPath); err != nil {
-		return nil, fmt.Errorf("init memif handler: %w", err)
-	}
-	c.memifHandler = memifHandler
-
-	ingress := vpp.NewPuntSocketIngress(puntSocketPath)
+	ingress := shm.NewIngress()
 	if err := ingress.Init(""); err != nil {
-		return nil, fmt.Errorf("init punt socket ingress: %w", err)
+		return nil, fmt.Errorf("init shm ingress: %w", err)
 	}
 	c.ingress = ingress
+
+	c.egress = shm.NewEgress(ingress.Client())
 
 	return c, nil
 }
@@ -165,7 +125,7 @@ func (c *Component) readLoop() {
 			pktCount++
 			now := time.Now()
 			if now.Sub(lastLogTime) >= time.Second {
-				c.logger.Debug("Punt socket throughput", "packets_per_sec", pktCount, "dhcp_chan_len", len(c.DHCPChan), "ppp_chan_len", len(c.PPPoEChan))
+				c.logger.Debug("Ingress throughput", "packets_per_sec", pktCount, "dhcp_chan_len", len(c.DHCPChan), "ppp_chan_len", len(c.PPPoEChan))
 				pktCount = 0
 				lastLogTime = now
 			}
@@ -209,8 +169,8 @@ func (c *Component) readLoop() {
 func (c *Component) Stop(ctx context.Context) error {
 	c.logger.Info("Stopping dataplane component")
 
-	if err := c.memifHandler.Close(); err != nil {
-		c.logger.Error("Error closing memif handler", "error", err)
+	if err := c.egress.Close(); err != nil {
+		c.logger.Error("Error closing egress", "error", err)
 	}
 
 	if err := c.ingress.Close(); err != nil {
@@ -222,13 +182,6 @@ func (c *Component) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (c *Component) handleARPRequest(arp *vpp.ARPPacket) {
-	if arp.Operation == 1 {
-		if err := c.memifHandler.SendARPReply(arp); err != nil {
-			c.logger.Error("Failed to send ARP reply", "error", err)
-		}
-	}
-}
 
 func (c *Component) handleEgress(event models.Event) error {
 	var payload models.EgressPacketPayload
@@ -258,7 +211,15 @@ func (c *Component) handleEgress(event models.Event) error {
 		etherType = ethernet.EtherTypeIPv6
 	}
 
+	swIfIndex := payload.SwIfIndex
+	if payload.OuterVLAN > 0 && c.vpp != nil {
+		if iface := c.vpp.GetIfMgr().Get(payload.SwIfIndex); iface != nil && iface.HasParent() {
+			swIfIndex = iface.SupSwIfIndex
+		}
+	}
+
 	pkt := &dataplane.EgressPacket{
+		SwIfIndex: swIfIndex,
 		DstMAC:    dstMAC,
 		SrcMAC:    srcMAC,
 		OuterVLAN: payload.OuterVLAN,
@@ -267,13 +228,13 @@ func (c *Component) handleEgress(event models.Event) error {
 		Payload:   payload.RawData,
 	}
 
-	if err := c.memifHandler.SendPacket(pkt); err != nil {
+	if err := c.egress.SendPacket(pkt); err != nil {
 		c.egressErrors.Add(1)
 		return fmt.Errorf("send packet: %w", err)
 	}
 	c.egressCount.Add(1)
 
-	c.logger.Debug("Sent egress packet", "dst_mac", dstMAC.String(), "svlan", payload.OuterVLAN, "cvlan", payload.InnerVLAN)
+	c.logger.Debug("Sent egress packet", "sw_if_index", swIfIndex, "payload_sw_if_index", payload.SwIfIndex, "dst_mac", dstMAC.String(), "src_mac", srcMAC.String(), "svlan", payload.OuterVLAN, "cvlan", payload.InnerVLAN)
 
 	return nil
 }
