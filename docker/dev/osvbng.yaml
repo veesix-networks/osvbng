@@ -5,13 +5,13 @@ logging:
     format: text
     level: info
     components:
-        aaad: info
-        arpd: info
-        dpd: info
-        ipoed: info
-        pppoed: info
-        sb: info
-        subd: info
+        aaa: info
+        arp: info
+        dataplane: debug
+        ipoe: info
+        pppoe: info
+        southbound: info
+        subscriber: info
 subscriber-groups:
     groups:
         default:
@@ -63,8 +63,8 @@ dhcpv6:
         max_interval: 600
         min_interval: 200
 interfaces:
-    eth1:
-        name: eth1
+    eth0:
+        name: eth0
         description: Access Interface
         enabled: true
         bng_mode: access

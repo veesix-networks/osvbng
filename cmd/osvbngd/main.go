@@ -33,6 +33,7 @@ import (
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/oper/all"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/all"
+	"github.com/veesix-networks/osvbng/pkg/ifmgr"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/northbound"
 	"github.com/veesix-networks/osvbng/pkg/opdb/sqlite"
@@ -148,13 +149,19 @@ func main() {
 	mainLog.Info("Waiting for VPP LCP to sync interfaces...")
 	time.Sleep(5 * time.Second)
 
+	ifMgr := ifmgr.New()
+
 	vpp, err := southbound.NewVPP(southbound.VPPConfig{
-		Connection:      vppConn,
-		ParentInterface: accessInterface,
-		UseDPDK:         cfg.Dataplane.DPDK != nil && len(cfg.Dataplane.DPDK.Devices) > 0,
+		Connection: vppConn,
+		IfMgr:      ifMgr,
+		UseDPDK:    cfg.Dataplane.DPDK != nil && len(cfg.Dataplane.DPDK.Devices) > 0,
 	})
 	if err != nil {
 		log.Fatalf("Failed to create VPP southbound: %v", err)
+	}
+
+	if err := vpp.LoadInterfaces(); err != nil {
+		mainLog.Warn("Failed to load interfaces from dataplane", "error", err)
 	}
 
 	mainLog.Info("Loading dataplane state")
@@ -170,11 +177,6 @@ func main() {
 		Routing:          nil,
 		PluginComponents: nil,
 	})
-
-	if err := vpp.SetupMemifDataplane(0, accessInterface, cfg.Dataplane.MemifSocketPath); err != nil {
-		log.Fatalf("Failed to setup memif dataplane: %v", err)
-	}
-	mainLog.Info("Memif dataplane configured")
 
 	// VPP blackholes 255.255.255.255/32 as per default FIB implementation, this is a temp workaround for now, there are many better solutions but require more time
 	if err := vpp.AddLocalRoute("255.255.255.255/32"); err != nil {
@@ -216,7 +218,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create infrastructure session: %v", err)
 	}
-	if err := configd.ApplyInfrastructureConfig(infraSessionID, cfg, vpp.GetParentInterface()); err != nil {
+	if err := configd.ApplyInfrastructureConfig(infraSessionID, cfg, accessInterface); err != nil {
 		configd.CloseCandidateSession(infraSessionID)
 		log.Fatalf("Failed to apply infrastructure config: %v", err)
 	}
@@ -228,10 +230,6 @@ func main() {
 	}
 	configd.CloseCandidateSession(infraSessionID)
 	mainLog.Info("Infrastructure configuration applied")
-
-	if err := vpp.EnableDirectedBroadcast(accessInterface); err != nil {
-		mainLog.Warn("Failed to enable directed broadcast", "interface", accessInterface, "error", err)
-	}
 
 	authProviderName := cfg.AAA.AuthProvider
 	if authProviderName == "" {
@@ -281,7 +279,7 @@ func main() {
 		}
 	}
 
-	ipoeComp, err := ipoe.New(coreDeps, nil, dhcp4Provider, dhcp6Provider)
+	ipoeComp, err := ipoe.New(coreDeps, nil, ifMgr, dhcp4Provider, dhcp6Provider)
 	if err != nil {
 		log.Fatalf("Failed to create ipoe component: %v", err)
 	}
@@ -291,12 +289,12 @@ func main() {
 		log.Fatalf("Failed to create subscriber component: %v", err)
 	}
 
-	arpComp, err := arp.New(coreDeps, nil)
+	arpComp, err := arp.New(coreDeps, nil, ifMgr)
 	if err != nil {
 		log.Fatalf("Failed to create arp component: %v", err)
 	}
 
-	pppoeComp, err := pppoe.New(coreDeps, nil)
+	pppoeComp, err := pppoe.New(coreDeps, nil, ifMgr)
 	if err != nil {
 		log.Fatalf("Failed to create pppoe component: %v", err)
 	}
