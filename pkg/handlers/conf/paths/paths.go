@@ -30,6 +30,7 @@ const (
 	InterfaceSubinterfaceIPv6         Path = "interfaces.<*>.subinterfaces.<*>.ipv6"
 	InterfaceSubinterfaceARP          Path = "interfaces.<*>.subinterfaces.<*>.arp"
 	InterfaceSubinterfaceUnnumbered   Path = "interfaces.<*>.subinterfaces.<*>.unnumbered"
+	InterfaceSubinterfaceBNG          Path = "interfaces.<*>.subinterfaces.<*>.bng"
 
 	InterfaceIPv6          Path = "interfaces.<*>.ipv6"
 	InterfaceIPv6Enabled   Path = "interfaces.<*>.ipv6.enabled"

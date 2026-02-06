@@ -24,7 +24,7 @@ type PuntHandler struct {
 	dataplaneState operations.DataplaneStateReader
 	pathPattern    paths.Path
 	protocol       uint8
-	enableFunc     func(sb *southbound.VPP, ifName, socketPath string) error
+	enableFunc     func(sb *southbound.VPP, ifName string) error
 }
 
 func NewPuntARPHandler(d *deps.ConfDeps) conf.Handler {
@@ -94,7 +94,7 @@ func (h *PuntHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) erro
 		}
 	}
 
-	return h.enableFunc(h.southbound, ifName, cfg.SocketPath)
+	return h.enableFunc(h.southbound, ifName)
 }
 
 func (h *PuntHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) error {

@@ -6,8 +6,6 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
 	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
-	"github.com/veesix-networks/osvbng/pkg/operations"
-	"github.com/veesix-networks/osvbng/pkg/paths"
 )
 
 type Change struct {
@@ -18,19 +16,12 @@ type Change struct {
 type Autoconfig struct {
 	cfg             *config.Config
 	parentInterface string
-	puntSocketPath  string
 }
 
 func New(cfg *config.Config, parentInterface string) *Autoconfig {
-	puntSocketPath := "/run/osvbng/punt.sock"
-	if cfg.Dataplane.PuntSocketPath != "" {
-		puntSocketPath = cfg.Dataplane.PuntSocketPath
-	}
-
 	return &Autoconfig{
 		cfg:             cfg,
 		parentInterface: parentInterface,
-		puntSocketPath:  puntSocketPath,
 	}
 }
 
@@ -74,14 +65,19 @@ func (a *Autoconfig) deriveSVLANConfig(group *subscriber.SubscriberGroup, vlanRa
 	var changes []Change
 
 	loopback := vlanRange.Interface
-	encodedSubIfName := paths.EncodeInterfaceName(fmt.Sprintf("%s.%d", a.parentInterface, svlan))
 	raConfig := a.getRAConfig(group)
+
+	bngMode := a.getBNGMode(group)
 
 	changes = append(changes, Change{
 		Path: fmt.Sprintf("interfaces.%s.subinterfaces.%d", a.parentInterface, svlan),
 		Value: &interfaces.SubinterfaceConfig{
-			VLAN:    int(svlan),
-			Enabled: true,
+			VLAN:       int(svlan),
+			Enabled:    true,
+			Unnumbered: loopback,
+			BNG: &interfaces.BNGConfig{
+				Mode: bngMode,
+			},
 		},
 	})
 
@@ -120,38 +116,26 @@ func (a *Autoconfig) deriveSVLANConfig(group *subscriber.SubscriberGroup, vlanRa
 	})
 
 	changes = append(changes, Change{
-		Path: fmt.Sprintf("_internal.punt.%s.arp", encodedSubIfName),
-		Value: &operations.PuntConfig{
-			Enabled:    true,
-			SocketPath: a.puntSocketPath,
-		},
-	})
-
-	changes = append(changes, Change{
-		Path: fmt.Sprintf("_internal.punt.%s.dhcpv4", encodedSubIfName),
-		Value: &operations.PuntConfig{
-			Enabled:    true,
-			SocketPath: a.puntSocketPath,
-		},
-	})
-
-	changes = append(changes, Change{
-		Path: fmt.Sprintf("_internal.punt.%s.dhcpv6", encodedSubIfName),
-		Value: &operations.PuntConfig{
-			Enabled:    true,
-			SocketPath: a.puntSocketPath,
-		},
-	})
-
-	changes = append(changes, Change{
-		Path: fmt.Sprintf("_internal.punt.%s.pppoe", encodedSubIfName),
-		Value: &operations.PuntConfig{
-			Enabled:    true,
-			SocketPath: a.puntSocketPath,
+		Path: fmt.Sprintf("interfaces.%s.subinterfaces.%d.bng", a.parentInterface, svlan),
+		Value: &interfaces.BNGConfig{
+			Mode: bngMode,
 		},
 	})
 
 	return changes
+}
+
+func (a *Autoconfig) getBNGMode(group *subscriber.SubscriberGroup) interfaces.BNGMode {
+	if group.AccessType == "pppoe" {
+		return interfaces.BNGModePPPoE
+	}
+	if group.AccessType == "lac" {
+		return interfaces.BNGModeLAC
+	}
+	if group.AccessType == "lns" {
+		return interfaces.BNGModeLNS
+	}
+	return interfaces.BNGModeIPoE
 }
 
 type raConfig struct {
