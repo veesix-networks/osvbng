@@ -67,3 +67,7 @@ func (h *PluginsInfoHandler) PathPattern() paths.Path {
 func (h *PluginsInfoHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *PluginsInfoHandler) OutputType() interface{} {
+	return &PluginsInfo{}
+}

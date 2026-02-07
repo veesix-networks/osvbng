@@ -29,6 +29,12 @@ type OperHandler interface {
 	Dependencies() []paths.Path
 }
 
+type TypedOperHandler interface {
+	OperHandler
+	InputType() interface{}
+	OutputType() interface{}
+}
+
 type HandlerFactory func(deps *deps.OperDeps) OperHandler
 
 var factories []HandlerFactory
@@ -113,6 +119,14 @@ func matchPattern(pattern, path string) bool {
 
 func isWildcard(part string) bool {
 	return strings.HasPrefix(part, "<") && strings.HasSuffix(part, ">")
+}
+
+func (r *Registry) GetAllHandlers() map[string]OperHandler {
+	result := make(map[string]OperHandler, len(r.handlers))
+	for k, v := range r.handlers {
+		result[k] = v
+	}
+	return result
 }
 
 func (r *Registry) GetAllPaths() []paths.Path {

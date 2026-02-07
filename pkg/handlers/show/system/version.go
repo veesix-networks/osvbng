@@ -60,3 +60,7 @@ func (h *VersionHandler) PathPattern() paths.Path {
 func (h *VersionHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *VersionHandler) OutputType() interface{} {
+	return &VersionInfo{}
+}

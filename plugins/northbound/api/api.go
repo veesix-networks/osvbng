@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -22,6 +24,7 @@ type Component struct {
 	server   *http.Server
 	mu       sync.RWMutex
 	running  bool
+	specJSON []byte
 }
 
 func NewComponent(deps component.Dependencies) (component.Component, error) {
@@ -100,6 +103,15 @@ func (c *Component) GetStatus() *Status {
 }
 
 func (c *Component) startServer() {
+	spec := buildOpenAPISpec(c.adapter)
+	specData, err := json.MarshalIndent(spec, "", "  ")
+	if err != nil {
+		c.logger.Error("Failed to marshal OpenAPI spec", "error", err)
+	} else {
+		c.specJSON = specData
+		c.logger.Info("OpenAPI spec generated", "paths", spec.Paths.Len())
+	}
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/running-config", c.handleRunningConfig)
@@ -107,7 +119,16 @@ func (c *Component) startServer() {
 	mux.HandleFunc("GET /api/show/{path...}", c.handleShow)
 	mux.HandleFunc("POST /api/set/{path...}", c.handleSet)
 	mux.HandleFunc("POST /api/exec/{path...}", c.handleExec)
+	mux.HandleFunc("GET /api/openapi.json", c.handleOpenAPISpec)
 	mux.HandleFunc("GET /api", c.handlePaths)
+
+	swaggerFS, err := fs.Sub(swaggerUIAssets, "swagger-ui")
+	if err != nil {
+		c.logger.Error("Failed to create swagger UI sub-filesystem", "error", err)
+	} else {
+		mux.Handle("GET /api/docs/", http.StripPrefix("/api/docs/", http.FileServer(http.FS(swaggerFS))))
+	}
+	mux.HandleFunc("GET /api/docs", c.handleDocsRedirect)
 
 	c.server = &http.Server{
 		Addr:    c.addr,

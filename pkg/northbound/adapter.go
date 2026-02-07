@@ -38,6 +38,18 @@ func NewAdapter(showReg *show.Registry, confReg *conf.Registry, operReg *oper.Re
 	}
 }
 
+func (a *Adapter) GetAllShowHandlers() map[string]show.ShowHandler {
+	return a.showRegistry.GetAllHandlers()
+}
+
+func (a *Adapter) GetAllConfHandlers() map[string]conf.Handler {
+	return a.confRegistry.GetAllHandlers()
+}
+
+func (a *Adapter) GetAllOperHandlers() map[string]oper.OperHandler {
+	return a.operRegistry.GetAllHandlers()
+}
+
 func (a *Adapter) GetAllShowPaths() []showpaths.Path {
 	return a.showRegistry.GetAllPaths()
 }

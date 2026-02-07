@@ -183,3 +183,18 @@ func (c *Component) handleStartupConfig(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Type", "application/json")
 	c.writeJSON(w, cfg)
 }
+
+func (c *Component) handleOpenAPISpec(w http.ResponseWriter, r *http.Request) {
+	if c.specJSON == nil {
+		c.writeError(w, http.StatusInternalServerError, "OpenAPI spec not available")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Write(c.specJSON)
+}
+
+func (c *Component) handleDocsRedirect(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/api/docs/", http.StatusMovedPermanently)
+}

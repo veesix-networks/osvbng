@@ -45,3 +45,7 @@ func (h *LoggingHandler) PathPattern() paths.Path {
 func (h *LoggingHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *LoggingHandler) OutputType() interface{} {
+	return &LoggingInfo{}
+}
