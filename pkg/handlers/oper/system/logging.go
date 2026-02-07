@@ -66,3 +66,11 @@ func (h *SetLoggingLevelHandler) PathPattern() paths.Path {
 func (h *SetLoggingLevelHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *SetLoggingLevelHandler) InputType() interface{} {
+	return &SetLoggingLevelRequest{}
+}
+
+func (h *SetLoggingLevelHandler) OutputType() interface{} {
+	return &SetLoggingLevelResponse{}
+}
