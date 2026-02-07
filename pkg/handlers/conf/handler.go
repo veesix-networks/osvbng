@@ -96,6 +96,14 @@ func (r *Registry) MustRegister(handler Handler) {
 	}
 }
 
+func (r *Registry) GetAllHandlers() map[string]Handler {
+	result := make(map[string]Handler, len(r.handlers))
+	for k, v := range r.handlers {
+		result[k] = v
+	}
+	return result
+}
+
 func (r *Registry) GetAllPaths() []paths.Path {
 	paths := make([]paths.Path, 0, len(r.handlers))
 	for _, handler := range r.handlers {
