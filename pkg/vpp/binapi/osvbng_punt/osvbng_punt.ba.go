@@ -7,7 +7,7 @@
 // Package osvbng_punt contains generated bindings for API file osvbng_punt.api.
 //
 // Contents:
-// -  6 messages
+// -  8 messages
 package osvbng_punt
 
 import (
@@ -25,7 +25,7 @@ const _ = api.GoVppAPIPackageIsVersion2
 const (
 	APIFile    = "osvbng_punt"
 	APIVersion = "1.0.0"
-	VersionCrc = 0xa76f1cb9
+	VersionCrc = 0x21e3d419
 )
 
 // Enable/disable OSVBNG punt for a protocol on an interface
@@ -109,6 +109,87 @@ func (m *OsvbngPuntEnableDisableReply) Unmarshal(b []byte) error {
 	return nil
 }
 
+// Configure OSVBNG punt policer
+//   - protocol - protocol type
+//   - rate - packets per second (0 to disable)
+//   - burst - burst size in packets
+//
+// OsvbngPuntPolicerConfigure defines message 'osvbng_punt_policer_configure'.
+type OsvbngPuntPolicerConfigure struct {
+	Protocol uint8   `binapi:"u8,name=protocol" json:"protocol,omitempty"`
+	Rate     float64 `binapi:"f64,name=rate" json:"rate,omitempty"`
+	Burst    uint32  `binapi:"u32,name=burst" json:"burst,omitempty"`
+}
+
+func (m *OsvbngPuntPolicerConfigure) Reset()               { *m = OsvbngPuntPolicerConfigure{} }
+func (*OsvbngPuntPolicerConfigure) GetMessageName() string { return "osvbng_punt_policer_configure" }
+func (*OsvbngPuntPolicerConfigure) GetCrcString() string   { return "c5ef7127" }
+func (*OsvbngPuntPolicerConfigure) GetMessageType() api.MessageType {
+	return api.RequestMessage
+}
+
+func (m *OsvbngPuntPolicerConfigure) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 1 // m.Protocol
+	size += 8 // m.Rate
+	size += 4 // m.Burst
+	return size
+}
+func (m *OsvbngPuntPolicerConfigure) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeUint8(m.Protocol)
+	buf.EncodeFloat64(m.Rate)
+	buf.EncodeUint32(m.Burst)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngPuntPolicerConfigure) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.Protocol = buf.DecodeUint8()
+	m.Rate = buf.DecodeFloat64()
+	m.Burst = buf.DecodeUint32()
+	return nil
+}
+
+// OsvbngPuntPolicerConfigureReply defines message 'osvbng_punt_policer_configure_reply'.
+type OsvbngPuntPolicerConfigureReply struct {
+	Retval int32 `binapi:"i32,name=retval" json:"retval,omitempty"`
+}
+
+func (m *OsvbngPuntPolicerConfigureReply) Reset() { *m = OsvbngPuntPolicerConfigureReply{} }
+func (*OsvbngPuntPolicerConfigureReply) GetMessageName() string {
+	return "osvbng_punt_policer_configure_reply"
+}
+func (*OsvbngPuntPolicerConfigureReply) GetCrcString() string { return "e8d4e804" }
+func (*OsvbngPuntPolicerConfigureReply) GetMessageType() api.MessageType {
+	return api.ReplyMessage
+}
+
+func (m *OsvbngPuntPolicerConfigureReply) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.Retval
+	return size
+}
+func (m *OsvbngPuntPolicerConfigureReply) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeInt32(m.Retval)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngPuntPolicerConfigureReply) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.Retval = buf.DecodeInt32()
+	return nil
+}
+
 // OSVBNG punt registration details
 //   - sw_if_index - interface index
 //   - protocol - protocol type (0=DHCPv4, 1=DHCPv6, 2=ARP, 3=PPPoE-Disc, 4=PPPoE-Sess, 5=IPv6-ND, 6=L2TP)
@@ -184,17 +265,23 @@ func (m *OsvbngPuntRegistrationDump) Unmarshal(b []byte) error {
 //   - protocol - protocol type
 //   - packets_punted - number of packets successfully punted
 //   - packets_dropped - number of packets dropped (socket error)
+//   - packets_policed - number of packets dropped by policer
+//   - policer_rate - current policer rate (pps)
+//   - policer_burst - current policer burst size
 //
 // OsvbngPuntStatsDetails defines message 'osvbng_punt_stats_details'.
 type OsvbngPuntStatsDetails struct {
-	Protocol       uint8  `binapi:"u8,name=protocol" json:"protocol,omitempty"`
-	PacketsPunted  uint64 `binapi:"u64,name=packets_punted" json:"packets_punted,omitempty"`
-	PacketsDropped uint64 `binapi:"u64,name=packets_dropped" json:"packets_dropped,omitempty"`
+	Protocol       uint8   `binapi:"u8,name=protocol" json:"protocol,omitempty"`
+	PacketsPunted  uint64  `binapi:"u64,name=packets_punted" json:"packets_punted,omitempty"`
+	PacketsDropped uint64  `binapi:"u64,name=packets_dropped" json:"packets_dropped,omitempty"`
+	PacketsPoliced uint64  `binapi:"u64,name=packets_policed" json:"packets_policed,omitempty"`
+	PolicerRate    float64 `binapi:"f64,name=policer_rate" json:"policer_rate,omitempty"`
+	PolicerBurst   uint32  `binapi:"u32,name=policer_burst" json:"policer_burst,omitempty"`
 }
 
 func (m *OsvbngPuntStatsDetails) Reset()               { *m = OsvbngPuntStatsDetails{} }
 func (*OsvbngPuntStatsDetails) GetMessageName() string { return "osvbng_punt_stats_details" }
-func (*OsvbngPuntStatsDetails) GetCrcString() string   { return "1fa3c17c" }
+func (*OsvbngPuntStatsDetails) GetCrcString() string   { return "393afd80" }
 func (*OsvbngPuntStatsDetails) GetMessageType() api.MessageType {
 	return api.ReplyMessage
 }
@@ -206,6 +293,9 @@ func (m *OsvbngPuntStatsDetails) Size() (size int) {
 	size += 1 // m.Protocol
 	size += 8 // m.PacketsPunted
 	size += 8 // m.PacketsDropped
+	size += 8 // m.PacketsPoliced
+	size += 8 // m.PolicerRate
+	size += 4 // m.PolicerBurst
 	return size
 }
 func (m *OsvbngPuntStatsDetails) Marshal(b []byte) ([]byte, error) {
@@ -216,6 +306,9 @@ func (m *OsvbngPuntStatsDetails) Marshal(b []byte) ([]byte, error) {
 	buf.EncodeUint8(m.Protocol)
 	buf.EncodeUint64(m.PacketsPunted)
 	buf.EncodeUint64(m.PacketsDropped)
+	buf.EncodeUint64(m.PacketsPoliced)
+	buf.EncodeFloat64(m.PolicerRate)
+	buf.EncodeUint32(m.PolicerBurst)
 	return buf.Bytes(), nil
 }
 func (m *OsvbngPuntStatsDetails) Unmarshal(b []byte) error {
@@ -223,6 +316,9 @@ func (m *OsvbngPuntStatsDetails) Unmarshal(b []byte) error {
 	m.Protocol = buf.DecodeUint8()
 	m.PacketsPunted = buf.DecodeUint64()
 	m.PacketsDropped = buf.DecodeUint64()
+	m.PacketsPoliced = buf.DecodeUint64()
+	m.PolicerRate = buf.DecodeFloat64()
+	m.PolicerBurst = buf.DecodeUint32()
 	return nil
 }
 
@@ -258,9 +354,11 @@ func init() { file_osvbng_punt_binapi_init() }
 func file_osvbng_punt_binapi_init() {
 	api.RegisterMessage((*OsvbngPuntEnableDisable)(nil), "osvbng_punt_enable_disable_b0e90eac")
 	api.RegisterMessage((*OsvbngPuntEnableDisableReply)(nil), "osvbng_punt_enable_disable_reply_e8d4e804")
+	api.RegisterMessage((*OsvbngPuntPolicerConfigure)(nil), "osvbng_punt_policer_configure_c5ef7127")
+	api.RegisterMessage((*OsvbngPuntPolicerConfigureReply)(nil), "osvbng_punt_policer_configure_reply_e8d4e804")
 	api.RegisterMessage((*OsvbngPuntRegistrationDetails)(nil), "osvbng_punt_registration_details_b436106a")
 	api.RegisterMessage((*OsvbngPuntRegistrationDump)(nil), "osvbng_punt_registration_dump_51077d14")
-	api.RegisterMessage((*OsvbngPuntStatsDetails)(nil), "osvbng_punt_stats_details_1fa3c17c")
+	api.RegisterMessage((*OsvbngPuntStatsDetails)(nil), "osvbng_punt_stats_details_393afd80")
 	api.RegisterMessage((*OsvbngPuntStatsDump)(nil), "osvbng_punt_stats_dump_51077d14")
 }
 
@@ -269,6 +367,8 @@ func AllMessages() []api.Message {
 	return []api.Message{
 		(*OsvbngPuntEnableDisable)(nil),
 		(*OsvbngPuntEnableDisableReply)(nil),
+		(*OsvbngPuntPolicerConfigure)(nil),
+		(*OsvbngPuntPolicerConfigureReply)(nil),
 		(*OsvbngPuntRegistrationDetails)(nil),
 		(*OsvbngPuntRegistrationDump)(nil),
 		(*OsvbngPuntStatsDetails)(nil),

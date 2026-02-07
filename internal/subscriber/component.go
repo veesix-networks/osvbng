@@ -229,11 +229,7 @@ func (c *Component) GetStats(ctx context.Context) (map[string]uint32, error) {
 
 			dataStr := string(data)
 			if dataStr == "" {
-				dataBytes := data
-				if dataStr == "" {
-					continue
-				}
-				dataStr = string(dataBytes)
+				continue
 			}
 
 			var sessionData map[string]interface{}
@@ -243,17 +239,18 @@ func (c *Component) GetStats(ctx context.Context) (map[string]uint32, error) {
 
 			stats["total"]++
 
-			sessionID, _ := sessionData["session_id"].(string)
-			state, _ := sessionData["state"].(string)
+			accessType, _ := sessionData["AccessType"].(string)
+			protocol, _ := sessionData["Protocol"].(string)
+			state, _ := sessionData["State"].(string)
 
-			if sessionID != "" {
-				if len(sessionID) >= 7 && sessionID[:7] == "ipoe-v4" {
+			if accessType == "ipoe" {
+				if protocol == "dhcpv4" {
 					stats["ipoe_v4"]++
-				} else if len(sessionID) >= 7 && sessionID[:7] == "ipoe-v6" {
+				} else if protocol == "dhcpv6" {
 					stats["ipoe_v6"]++
-				} else if len(sessionID) >= 3 && sessionID[:3] == "ppp" {
-					stats["ppp"]++
 				}
+			} else if accessType == "pppoe" {
+				stats["ppp"]++
 			}
 
 			if state == "active" {

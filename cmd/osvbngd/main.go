@@ -362,6 +362,7 @@ func main() {
 		Southbound:       vpp,
 		AAA:              aaaComp.(*aaa.Component),
 		Routing:          routingComp.(*routing.Component),
+		CPPM:             dpComp.CPPM,
 		PluginComponents: pluginComponentsMap,
 	})
 
@@ -371,6 +372,7 @@ func main() {
 		Routing:          routingComp.(*routing.Component),
 		Cache:            cache,
 		OpDB:             opdbStore,
+		CPPM:             dpComp.CPPM,
 		PluginComponents: pluginComponentsMap,
 	})
 

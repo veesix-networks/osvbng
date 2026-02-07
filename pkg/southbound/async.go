@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"go.fd.io/govpp/api"
 	"go.fd.io/govpp/core"
@@ -23,9 +24,12 @@ type AsyncWorker struct {
 	conn    *core.Connection
 	stream  api.Stream
 	reqChan chan *AsyncRequest
+	cfg     AsyncWorkerConfig
 
 	pendingMu sync.Mutex
 	pending   *list.List
+
+	streamMu sync.Mutex
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -35,6 +39,7 @@ type AsyncWorker struct {
 	requestsSent   atomic.Uint64
 	repliesRecv    atomic.Uint64
 	errors         atomic.Uint64
+	reconnects     atomic.Uint64
 	queueHighWater atomic.Int64
 }
 
@@ -67,6 +72,7 @@ func NewAsyncWorker(conn *core.Connection, cfg AsyncWorkerConfig) (*AsyncWorker,
 	w := &AsyncWorker{
 		conn:    conn,
 		stream:  stream,
+		cfg:     cfg,
 		reqChan: make(chan *AsyncRequest, cfg.RequestQueueSize),
 		pending: list.New(),
 		ctx:     ctx,
@@ -87,11 +93,57 @@ func (w *AsyncWorker) Start() {
 func (w *AsyncWorker) Stop() {
 	w.cancel()
 	w.wg.Wait()
+	w.streamMu.Lock()
 	w.stream.Close()
+	w.streamMu.Unlock()
 	w.logger.Info("VPP async worker stopped",
 		"requests_sent", w.requestsSent.Load(),
 		"replies_recv", w.repliesRecv.Load(),
-		"errors", w.errors.Load())
+		"errors", w.errors.Load(),
+		"reconnects", w.reconnects.Load())
+}
+
+func (w *AsyncWorker) reconnect() error {
+	w.streamMu.Lock()
+	defer w.streamMu.Unlock()
+
+	w.stream.Close()
+
+	w.pendingMu.Lock()
+	dropped := w.pending.Len()
+	for elem := w.pending.Front(); elem != nil; elem = w.pending.Front() {
+		w.pending.Remove(elem)
+		req := elem.Value.(*AsyncRequest)
+		if req.Callback != nil {
+			req.Callback(nil, fmt.Errorf("connection reset"))
+		}
+	}
+	w.pendingMu.Unlock()
+
+	backoff := time.Duration(100) * time.Millisecond
+	reconnectCount := w.reconnects.Load()
+	if reconnectCount > 0 {
+		backoff = time.Duration(min(reconnectCount*100, 2000)) * time.Millisecond
+	}
+
+	select {
+	case <-w.ctx.Done():
+		return w.ctx.Err()
+	case <-time.After(backoff):
+	}
+
+	stream, err := w.conn.NewStream(w.ctx,
+		core.WithRequestSize(w.cfg.RequestBufSize),
+		core.WithReplySize(w.cfg.ReplyBufSize),
+	)
+	if err != nil {
+		return fmt.Errorf("create stream: %w", err)
+	}
+
+	w.stream = stream
+	w.reconnects.Add(1)
+	w.logger.Info("VPP async worker reconnected", "dropped_pending", dropped, "backoff_ms", backoff.Milliseconds())
+	return nil
 }
 
 func (w *AsyncWorker) sendLoop() {
@@ -107,11 +159,20 @@ func (w *AsyncWorker) sendLoop() {
 				w.queueHighWater.Store(int64(depth))
 			}
 
-			if err := w.stream.SendMsg(req.Message); err != nil {
+			w.streamMu.Lock()
+			err := w.stream.SendMsg(req.Message)
+			w.streamMu.Unlock()
+
+			if err != nil {
 				w.errors.Add(1)
 				w.logger.Error("Failed to send VPP message",
 					"msg_type", req.Message.GetMessageName(),
 					"error", err)
+
+				if reconnErr := w.reconnect(); reconnErr != nil {
+					w.logger.Error("Failed to reconnect VPP stream", "error", reconnErr)
+				}
+
 				if req.Callback != nil {
 					req.Callback(nil, fmt.Errorf("send failed: %w", err))
 				}
@@ -137,13 +198,17 @@ func (w *AsyncWorker) recvLoop() {
 		case <-w.ctx.Done():
 			return
 		default:
-			reply, err := w.stream.RecvMsg()
+			w.streamMu.Lock()
+			stream := w.stream
+			w.streamMu.Unlock()
+
+			reply, err := stream.RecvMsg()
 			if err != nil {
 				if w.ctx.Err() != nil {
 					return
 				}
 				w.errors.Add(1)
-				w.logger.Error("Failed to receive VPP message", "error", err)
+				w.logger.Debug("Receive error (stream may have reconnected)", "error", err)
 				continue
 			}
 

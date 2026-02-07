@@ -2444,6 +2444,201 @@ func (v *VPP) IPoESetDelegatedPrefix(swIfIndex uint32, prefix net.IPNet, nextHop
 	return nil
 }
 
+func (v *VPP) AddIPoESessionAsync(clientMAC net.HardwareAddr, localMAC net.HardwareAddr, encapIfIndex uint32, outerVLAN uint16, innerVLAN uint16, decapVrfID uint32, callback func(uint32, error)) {
+	var clientMacAddr ethernet_types.MacAddress
+	copy(clientMacAddr[:], clientMAC)
+
+	var localMacAddr ethernet_types.MacAddress
+	copy(localMacAddr[:], localMAC)
+
+	req := &osvbng_ipoe.OsvbngIpoeAddDelSession{
+		IsAdd:        true,
+		EncapIfIndex: interface_types.InterfaceIndex(encapIfIndex),
+		ClientMac:    clientMacAddr,
+		LocalMac:     localMacAddr,
+		OuterVlan:    outerVLAN,
+		InnerVlan:    innerVLAN,
+		DecapVrfID:   decapVrfID,
+	}
+
+	v.asyncWorker.SendAsync(req, func(reply api.Message, err error) {
+		if err != nil {
+			callback(0, err)
+			return
+		}
+		r, ok := reply.(*osvbng_ipoe.OsvbngIpoeAddDelSessionReply)
+		if !ok {
+			callback(0, fmt.Errorf("unexpected reply type: %T", reply))
+			return
+		}
+		if r.Retval != 0 {
+			callback(0, fmt.Errorf("VPP error: retval=%d", r.Retval))
+			return
+		}
+		v.logger.Debug("Added IPoE session (async)",
+			"client_mac", clientMAC.String(),
+			"local_mac", localMAC.String(),
+			"encap_if_index", encapIfIndex,
+			"outer_vlan", outerVLAN,
+			"inner_vlan", innerVLAN,
+			"sw_if_index", r.SwIfIndex)
+		callback(uint32(r.SwIfIndex), nil)
+	})
+}
+
+func (v *VPP) DeleteIPoESessionAsync(clientMAC net.HardwareAddr, encapIfIndex uint32, innerVLAN uint16, callback func(error)) {
+	var clientMacAddr ethernet_types.MacAddress
+	copy(clientMacAddr[:], clientMAC)
+
+	req := &osvbng_ipoe.OsvbngIpoeAddDelSession{
+		IsAdd:        false,
+		EncapIfIndex: interface_types.InterfaceIndex(encapIfIndex),
+		ClientMac:    clientMacAddr,
+		InnerVlan:    innerVLAN,
+	}
+
+	v.asyncWorker.SendAsync(req, func(reply api.Message, err error) {
+		if err != nil {
+			callback(err)
+			return
+		}
+		r, ok := reply.(*osvbng_ipoe.OsvbngIpoeAddDelSessionReply)
+		if !ok {
+			callback(fmt.Errorf("unexpected reply type: %T", reply))
+			return
+		}
+		if r.Retval != 0 {
+			callback(fmt.Errorf("VPP error: retval=%d", r.Retval))
+			return
+		}
+		v.logger.Debug("Deleted IPoE session (async)", "client_mac", clientMAC.String(), "encap_if_index", encapIfIndex, "inner_vlan", innerVLAN)
+		callback(nil)
+	})
+}
+
+func (v *VPP) IPoESetSessionIPv4Async(swIfIndex uint32, clientIP net.IP, isAdd bool, callback func(error)) {
+	ip4 := clientIP.To4()
+	if ip4 == nil {
+		callback(fmt.Errorf("invalid IPv4 address: %s", clientIP))
+		return
+	}
+
+	var clientAddr ip_types.IP4Address
+	copy(clientAddr[:], ip4)
+
+	req := &osvbng_ipoe.OsvbngIpoeSetSessionIPv4{
+		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+		ClientIP:  clientAddr,
+		IsAdd:     isAdd,
+	}
+
+	v.asyncWorker.SendAsync(req, func(reply api.Message, err error) {
+		if err != nil {
+			callback(err)
+			return
+		}
+		r, ok := reply.(*osvbng_ipoe.OsvbngIpoeSetSessionIPv4Reply)
+		if !ok {
+			callback(fmt.Errorf("unexpected reply type: %T", reply))
+			return
+		}
+		if r.Retval != 0 {
+			callback(fmt.Errorf("VPP error: retval=%d", r.Retval))
+			return
+		}
+		v.logger.Debug("Set IPoE session IPv4 (async)", "sw_if_index", swIfIndex, "client_ip", clientIP.String(), "is_add", isAdd)
+		callback(nil)
+	})
+}
+
+func (v *VPP) IPoESetSessionIPv6Async(swIfIndex uint32, clientIP net.IP, isAdd bool, callback func(error)) {
+	ip6 := clientIP.To16()
+	if ip6 == nil || clientIP.To4() != nil {
+		callback(fmt.Errorf("invalid IPv6 address: %s", clientIP))
+		return
+	}
+
+	var clientAddr ip_types.IP6Address
+	copy(clientAddr[:], ip6)
+
+	req := &osvbng_ipoe.OsvbngIpoeSetSessionIPv6{
+		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+		ClientIP:  clientAddr,
+		IsAdd:     isAdd,
+	}
+
+	v.asyncWorker.SendAsync(req, func(reply api.Message, err error) {
+		if err != nil {
+			callback(err)
+			return
+		}
+		r, ok := reply.(*osvbng_ipoe.OsvbngIpoeSetSessionIPv6Reply)
+		if !ok {
+			callback(fmt.Errorf("unexpected reply type: %T", reply))
+			return
+		}
+		if r.Retval != 0 {
+			callback(fmt.Errorf("VPP error: retval=%d", r.Retval))
+			return
+		}
+		v.logger.Debug("Set IPoE session IPv6 (async)", "sw_if_index", swIfIndex, "client_ip", clientIP.String(), "is_add", isAdd)
+		callback(nil)
+	})
+}
+
+func (v *VPP) IPoESetDelegatedPrefixAsync(swIfIndex uint32, prefix net.IPNet, nextHop net.IP, isAdd bool, callback func(error)) {
+	prefixLen, _ := prefix.Mask.Size()
+	ip6 := prefix.IP.To16()
+	if ip6 == nil || prefix.IP.To4() != nil {
+		callback(fmt.Errorf("invalid IPv6 prefix: %s", prefix.String()))
+		return
+	}
+
+	var prefixAddr ip_types.IP6Address
+	copy(prefixAddr[:], ip6)
+
+	var nextHopAddr ip_types.IP6Address
+	if nextHop != nil {
+		nh6 := nextHop.To16()
+		if nh6 == nil {
+			callback(fmt.Errorf("invalid IPv6 next-hop: %s", nextHop))
+			return
+		}
+		copy(nextHopAddr[:], nh6)
+	}
+
+	req := &osvbng_ipoe.OsvbngIpoeSetDelegatedPrefix{
+		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+		Prefix: ip_types.Prefix{
+			Address: ip_types.Address{
+				Af: ip_types.ADDRESS_IP6,
+				Un: ip_types.AddressUnionIP6(prefixAddr),
+			},
+			Len: uint8(prefixLen),
+		},
+		NextHop: nextHopAddr,
+		IsAdd:   isAdd,
+	}
+
+	v.asyncWorker.SendAsync(req, func(reply api.Message, err error) {
+		if err != nil {
+			callback(err)
+			return
+		}
+		r, ok := reply.(*osvbng_ipoe.OsvbngIpoeSetDelegatedPrefixReply)
+		if !ok {
+			callback(fmt.Errorf("unexpected reply type: %T", reply))
+			return
+		}
+		if r.Retval != 0 {
+			callback(fmt.Errorf("VPP error: retval=%d", r.Retval))
+			return
+		}
+		v.logger.Debug("Set IPoE delegated prefix (async)", "sw_if_index", swIfIndex, "prefix", prefix.String(), "next_hop", nextHop, "is_add", isAdd)
+		callback(nil)
+	})
+}
+
 func (v *VPP) DisableARPReply(ifaceName string) error {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
@@ -2801,7 +2996,11 @@ func (v *VPP) AddPPPoESessionAsync(sessionID uint16, clientIP net.IP, clientMAC 
 			callback(0, err)
 			return
 		}
-		r := reply.(*osvbng_pppoe.OsvbngPppoeAddDelSessionReply)
+		r, ok := reply.(*osvbng_pppoe.OsvbngPppoeAddDelSessionReply)
+		if !ok {
+			callback(0, fmt.Errorf("unexpected reply type: %T", reply))
+			return
+		}
 		if r.Retval != 0 {
 			callback(0, fmt.Errorf("VPP error: retval=%d", r.Retval))
 			return
@@ -2836,7 +3035,11 @@ func (v *VPP) DeletePPPoESessionAsync(sessionID uint16, clientIP net.IP, clientM
 			callback(err)
 			return
 		}
-		r := reply.(*osvbng_pppoe.OsvbngPppoeAddDelSessionReply)
+		r, ok := reply.(*osvbng_pppoe.OsvbngPppoeAddDelSessionReply)
+		if !ok {
+			callback(fmt.Errorf("unexpected reply type: %T", reply))
+			return
+		}
 		if r.Retval != 0 {
 			callback(fmt.Errorf("VPP error: retval=%d", r.Retval))
 			return
@@ -3036,6 +3239,15 @@ type IPv6RAInfo struct {
 type PuntRegistration struct {
 	SwIfIndex uint32
 	Protocol  uint8
+}
+
+type PuntStats struct {
+	Protocol       uint8
+	PacketsPunted  uint64
+	PacketsDropped uint64
+	PacketsPoliced uint64
+	PolicerRate    float64
+	PolicerBurst   uint32
 }
 
 type MrouteInfo struct {
@@ -3362,6 +3574,67 @@ func (v *VPP) DumpPuntRegistrations() ([]PuntRegistration, error) {
 
 	v.logger.Debug("Dumped punt registrations", "count", len(result))
 	return result, nil
+}
+
+func (v *VPP) GetPuntStats() ([]PuntStats, error) {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return nil, err
+	}
+	defer ch.Close()
+
+	req := &osvbng_punt.OsvbngPuntStatsDump{}
+	stream := ch.SendMultiRequest(req)
+	var result []PuntStats
+
+	for {
+		reply := &osvbng_punt.OsvbngPuntStatsDetails{}
+		stop, err := stream.ReceiveReply(reply)
+		if stop {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("dump punt stats: %w", err)
+		}
+
+		stats := PuntStats{
+			Protocol:       reply.Protocol,
+			PacketsPunted:  reply.PacketsPunted,
+			PacketsDropped: reply.PacketsDropped,
+			PacketsPoliced: reply.PacketsPoliced,
+			PolicerRate:    reply.PolicerRate,
+			PolicerBurst:   reply.PolicerBurst,
+		}
+		result = append(result, stats)
+	}
+
+	return result, nil
+}
+
+func (v *VPP) ConfigurePuntPolicer(protocol uint8, rate float64, burst uint32) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return err
+	}
+	defer ch.Close()
+
+	req := &osvbng_punt.OsvbngPuntPolicerConfigure{
+		Protocol: protocol,
+		Rate:     rate,
+		Burst:    burst,
+	}
+
+	reply := &osvbng_punt.OsvbngPuntPolicerConfigureReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("configure punt policer: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return fmt.Errorf("configure punt policer failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Debug("Configured punt policer", "protocol", protocol, "rate", rate, "burst", burst)
+	return nil
 }
 
 func (v *VPP) DumpMroutes() ([]MrouteInfo, error) {
