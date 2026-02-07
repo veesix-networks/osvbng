@@ -81,6 +81,9 @@ const (
 	InternalSVLAN           Path = "_internal.svlan.<*>.<*>"
 	InternalUnnumbered      Path = "_internal.unnumbered.<*>"
 	InternalDisableARPReply Path = "_internal.disable-arp-reply.<*>"
+
+	SystemCPPMDataplanePolicer    Path = "system.cppm.dataplane.policer.<*:protocol>"
+	SystemCPPMControlplanePolicer Path = "system.cppm.controlplane.policer.<*:protocol>"
 )
 
 func (p Path) String() string {

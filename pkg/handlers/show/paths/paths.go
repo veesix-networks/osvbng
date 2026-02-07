@@ -29,6 +29,9 @@ const (
 	SystemLogging              Path = "system.logging"
 
 	VRFS Path = "vrfs"
+
+	SystemCPPMDataplane    Path = "system.cppm.dataplane"
+	SystemCPPMControlplane Path = "system.cppm.controlplane"
 )
 
 func (p Path) String() string {
