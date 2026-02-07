@@ -75,6 +75,9 @@ type SessionState struct {
 	IPoESessionCreated  bool
 	PendingDHCPDiscover []byte
 	PendingDHCPRequest  []byte
+	PendingIPv4Binding  net.IP
+	PendingIPv6Binding  net.IP
+	PendingPDBinding    *net.IPNet
 
 	IPv6Address          net.IP
 	IPv6Prefix           *net.IPNet
@@ -621,16 +624,20 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 
 	if c.vpp != nil && ipoeSwIfIndex != 0 {
 		if ipv4 != nil {
-			if err := c.vpp.IPoESetSessionIPv4(ipoeSwIfIndex, ipv4, false); err != nil {
-				c.logger.Warn("Failed to unbind IPv4 from IPoE session", "session_id", sessID, "error", err)
-			}
+			c.vpp.IPoESetSessionIPv4Async(ipoeSwIfIndex, ipv4, false, func(err error) {
+				if err != nil {
+					c.logger.Warn("Failed to unbind IPv4 from IPoE session", "session_id", sessID, "error", err)
+				}
+			})
 		}
 		if deleteSession {
-			if err := c.vpp.DeleteIPoESession(mac, encapIfIndex, innerVLAN); err != nil {
-				c.logger.Warn("Failed to delete IPoE session", "session_id", sessID, "error", err)
-			} else {
-				c.logger.Info("Deleted IPoE session from VPP", "session_id", sessID, "sw_if_index", ipoeSwIfIndex)
-			}
+			c.vpp.DeleteIPoESessionAsync(mac, encapIfIndex, innerVLAN, func(err error) {
+				if err != nil {
+					c.logger.Warn("Failed to delete IPoE session", "session_id", sessID, "error", err)
+				} else {
+					c.logger.Info("Deleted IPoE session from VPP", "session_id", sessID, "sw_if_index", ipoeSwIfIndex)
+				}
+			})
 		}
 	}
 
@@ -788,12 +795,23 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 
 	c.logger.WithGroup(logger.IPoEDHCP4).Info("Session bound", "session_id", sess.SessionID, "ipv4", sess.IPv4.String())
 
-	if c.vpp != nil && ipoeSwIfIndex != 0 {
-		if err := c.vpp.IPoESetSessionIPv4(ipoeSwIfIndex, sess.IPv4, true); err != nil {
-			c.logger.WithGroup(logger.IPoEDHCP4).Error("Failed to bind IPv4 to IPoE session", "session_id", sess.SessionID, "error", err)
-			return fmt.Errorf("bind ipv4: %w", err)
+	if c.vpp != nil {
+		sessID := sess.SessionID
+		ipv4 := sess.IPv4
+		if ipoeSwIfIndex != 0 {
+			c.vpp.IPoESetSessionIPv4Async(ipoeSwIfIndex, ipv4, true, func(err error) {
+				if err != nil {
+					c.logger.WithGroup(logger.IPoEDHCP4).Error("Failed to bind IPv4 to IPoE session", "session_id", sessID, "error", err)
+					return
+				}
+				c.logger.WithGroup(logger.IPoEDHCP4).Info("Bound IPv4 to IPoE session", "session_id", sessID, "sw_if_index", ipoeSwIfIndex, "ipv4", ipv4.String())
+			})
+		} else {
+			c.sessionMu.Lock()
+			sess.PendingIPv4Binding = ipv4
+			c.sessionMu.Unlock()
+			c.logger.WithGroup(logger.IPoEDHCP4).Debug("IPoE session not ready, queued IPv4 binding", "session_id", sessID, "ipv4", ipv4.String())
 		}
-		c.logger.WithGroup(logger.IPoEDHCP4).Info("Bound IPv4 to IPoE session", "session_id", sess.SessionID, "sw_if_index", ipoeSwIfIndex, "ipv4", sess.IPv4.String())
 	}
 
 	counterKey := fmt.Sprintf("osvbng:session_count:%s:%d:%d", mac.String(), svlan, cvlan)
@@ -884,26 +902,61 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 				return fmt.Errorf("no local MAC for svlan %d", svlan)
 			}
 
-			swIfIndex, err := c.vpp.AddIPoESession(mac, localMAC, encapIfIndex, svlan, cvlan, 0)
-			if err != nil {
+			c.vpp.AddIPoESessionAsync(mac, localMAC, encapIfIndex, svlan, cvlan, 0, func(swIfIndex uint32, err error) {
 				c.sessionMu.Lock()
 				if sess.IPoESessionCreated {
 					c.sessionMu.Unlock()
-					c.logger.Debug("IPoE session created by concurrent handler", "session_id", sessID)
-				} else {
+					c.logger.Debug("IPoE session already created by concurrent handler", "session_id", sessID)
+					return
+				}
+				if err != nil {
 					c.sessionMu.Unlock()
 					c.logger.Error("Failed to create IPoE session in VPP", "session_id", sessID, "error", err)
-					return fmt.Errorf("create ipoe session: %w", err)
+					return
 				}
-			} else {
-				c.sessionMu.Lock()
 				sess.IPoESwIfIndex = swIfIndex
 				sess.IPoESessionCreated = true
+				pendingIPv4 := sess.PendingIPv4Binding
+				pendingIPv6 := sess.PendingIPv6Binding
+				pendingPD := sess.PendingPDBinding
+				sess.PendingIPv4Binding = nil
+				sess.PendingIPv6Binding = nil
+				sess.PendingPDBinding = nil
 				c.sessionMu.Unlock()
-
 				c.logger.Info("Created IPoE session in VPP", "session_id", sessID, "sw_if_index", swIfIndex)
-				// RA is configured once at bootstrap on the sub-interface, not per-subscriber
-			}
+
+				if pendingIPv4 != nil {
+					c.vpp.IPoESetSessionIPv4Async(swIfIndex, pendingIPv4, true, func(err error) {
+						if err != nil {
+							c.logger.Error("Failed to bind pending IPv4", "session_id", sessID, "error", err)
+							return
+						}
+						c.logger.Info("Bound pending IPv4 to IPoE session", "session_id", sessID, "ipv4", pendingIPv4.String())
+					})
+				}
+				if pendingIPv6 != nil {
+					c.vpp.IPoESetSessionIPv6Async(swIfIndex, pendingIPv6, true, func(err error) {
+						if err != nil {
+							c.logger.Error("Failed to bind pending IPv6", "session_id", sessID, "error", err)
+							return
+						}
+						c.logger.Info("Bound pending IPv6 to IPoE session", "session_id", sessID, "ipv6", pendingIPv6.String())
+					})
+				}
+				if pendingPD != nil {
+					nextHop := pendingIPv6
+					if nextHop == nil {
+						nextHop = net.ParseIP("::")
+					}
+					c.vpp.IPoESetDelegatedPrefixAsync(swIfIndex, *pendingPD, nextHop, true, func(err error) {
+						if err != nil {
+							c.logger.Error("Failed to bind pending delegated prefix", "session_id", sessID, "error", err)
+							return
+						}
+						c.logger.Info("Bound pending delegated prefix", "session_id", sessID, "prefix", pendingPD.String())
+					})
+				}
+			})
 		}
 	}
 
@@ -1182,12 +1235,19 @@ func (c *Component) cleanupSessions() {
 
 			for _, item := range toDelete {
 				if c.vpp != nil && item.sess.IPoESwIfIndex != 0 {
+					sessID := item.sess.SessionID
 					if item.sess.IPv4 != nil {
-						c.vpp.IPoESetSessionIPv4(item.sess.IPoESwIfIndex, item.sess.IPv4, false)
+						c.vpp.IPoESetSessionIPv4Async(item.sess.IPoESwIfIndex, item.sess.IPv4, false, func(err error) {
+							if err != nil {
+								c.logger.Warn("Failed to unbind IPv4 from stale IPoE session", "session_id", sessID, "error", err)
+							}
+						})
 					}
-					if err := c.vpp.DeleteIPoESession(item.sess.MAC, item.sess.EncapIfIndex, item.sess.InnerVLAN); err != nil {
-						c.logger.Warn("Failed to delete stale IPoE session", "session_id", item.sess.SessionID, "error", err)
-					}
+					c.vpp.DeleteIPoESessionAsync(item.sess.MAC, item.sess.EncapIfIndex, item.sess.InnerVLAN, func(err error) {
+						if err != nil {
+							c.logger.Warn("Failed to delete stale IPoE session", "session_id", sessID, "error", err)
+						}
+					})
 				}
 			}
 		}
@@ -1617,21 +1677,27 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
 
 	if c.vpp != nil && ipoeSwIfIndex != 0 {
 		if ipv6Address != nil {
-			if err := c.vpp.IPoESetSessionIPv6(ipoeSwIfIndex, ipv6Address, false); err != nil {
-				c.logger.Warn("Failed to unbind IPv6 from IPoE session", "session_id", sessID, "error", err)
-			}
+			c.vpp.IPoESetSessionIPv6Async(ipoeSwIfIndex, ipv6Address, false, func(err error) {
+				if err != nil {
+					c.logger.Warn("Failed to unbind IPv6 from IPoE session", "session_id", sessID, "error", err)
+				}
+			})
 		}
 		if ipv6Prefix != nil {
-			if err := c.vpp.IPoESetDelegatedPrefix(ipoeSwIfIndex, *ipv6Prefix, net.ParseIP("::"), false); err != nil {
-				c.logger.Warn("Failed to unbind delegated prefix from IPoE session", "session_id", sessID, "error", err)
-			}
+			c.vpp.IPoESetDelegatedPrefixAsync(ipoeSwIfIndex, *ipv6Prefix, net.ParseIP("::"), false, func(err error) {
+				if err != nil {
+					c.logger.Warn("Failed to unbind delegated prefix from IPoE session", "session_id", sessID, "error", err)
+				}
+			})
 		}
 		if deleteSession {
-			if err := c.vpp.DeleteIPoESession(mac, encapIfIndex, innerVLAN); err != nil {
-				c.logger.Warn("Failed to delete IPoE session", "session_id", sessID, "error", err)
-			} else {
-				c.logger.Info("Deleted IPoE session from VPP", "session_id", sessID, "sw_if_index", ipoeSwIfIndex)
-			}
+			c.vpp.DeleteIPoESessionAsync(mac, encapIfIndex, innerVLAN, func(err error) {
+				if err != nil {
+					c.logger.Warn("Failed to delete IPoE session", "session_id", sessID, "error", err)
+				} else {
+					c.logger.Info("Deleted IPoE session from VPP", "session_id", sessID, "sw_if_index", ipoeSwIfIndex)
+				}
+			})
 		}
 	}
 
@@ -1753,25 +1819,38 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, dhcp *layers.DHCPv6) e
 
 	c.logger.Info("DHCPv6 session bound", "session_id", sess.SessionID, "ipv6", ianaAddr, "prefix", pdPrefix)
 
-	if c.vpp != nil && ipoeSwIfIndex != 0 {
-		if ianaAddr != nil {
-			if err := c.vpp.IPoESetSessionIPv6(ipoeSwIfIndex, ianaAddr, true); err != nil {
-				c.logger.Error("Failed to bind IPv6 to IPoE session", "session_id", sess.SessionID, "error", err)
-			} else {
-				c.logger.Info("Bound IPv6 to IPoE session", "session_id", sess.SessionID, "ipv6", ianaAddr.String())
+	if c.vpp != nil {
+		sessID := sess.SessionID
+		if ipoeSwIfIndex != 0 {
+			if ianaAddr != nil {
+				c.vpp.IPoESetSessionIPv6Async(ipoeSwIfIndex, ianaAddr, true, func(err error) {
+					if err != nil {
+						c.logger.Error("Failed to bind IPv6 to IPoE session", "session_id", sessID, "error", err)
+					} else {
+						c.logger.Info("Bound IPv6 to IPoE session", "session_id", sessID, "ipv6", ianaAddr.String())
+					}
+				})
 			}
-		}
 
-		if pdPrefix != nil {
-			nextHop := ianaAddr
-			if nextHop == nil {
-				nextHop = net.ParseIP("::")
+			if pdPrefix != nil {
+				nextHop := ianaAddr
+				if nextHop == nil {
+					nextHop = net.ParseIP("::")
+				}
+				c.vpp.IPoESetDelegatedPrefixAsync(ipoeSwIfIndex, *pdPrefix, nextHop, true, func(err error) {
+					if err != nil {
+						c.logger.Error("Failed to set delegated prefix", "session_id", sessID, "error", err)
+					} else {
+						c.logger.Info("Set delegated prefix", "session_id", sessID, "prefix", pdPrefix.String())
+					}
+				})
 			}
-			if err := c.vpp.IPoESetDelegatedPrefix(ipoeSwIfIndex, *pdPrefix, nextHop, true); err != nil {
-				c.logger.Error("Failed to set delegated prefix", "session_id", sess.SessionID, "error", err)
-			} else {
-				c.logger.Info("Set delegated prefix", "session_id", sess.SessionID, "prefix", pdPrefix.String())
-			}
+		} else {
+			c.sessionMu.Lock()
+			sess.PendingIPv6Binding = ianaAddr
+			sess.PendingPDBinding = pdPrefix
+			c.sessionMu.Unlock()
+			c.logger.Debug("IPoE session not ready, queued IPv6 bindings", "session_id", sessID)
 		}
 	}
 

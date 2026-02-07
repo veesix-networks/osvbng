@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/component"
+	"github.com/veesix-networks/osvbng/pkg/cppm"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
 	"github.com/veesix-networks/osvbng/pkg/dataplane/shm"
 	"github.com/veesix-networks/osvbng/pkg/ethernet"
@@ -32,8 +34,11 @@ type Component struct {
 	ARPChan    chan *dataplane.ParsedPacket
 	PPPoEChan  chan *dataplane.ParsedPacket
 
+	CPPM *cppm.Manager
+
 	egressCount  atomic.Int64
 	egressErrors atomic.Int64
+	readLoopWg   sync.WaitGroup
 }
 
 func New(deps component.Dependencies) (component.Component, error) {
@@ -48,6 +53,7 @@ func New(deps component.Dependencies) (component.Component, error) {
 		DHCPv6Chan: make(chan *dataplane.ParsedPacket, 1000),
 		ARPChan:    make(chan *dataplane.ParsedPacket, 1000),
 		PPPoEChan:  make(chan *dataplane.ParsedPacket, 1000),
+		CPPM:       cppm.NewManager(cppm.DefaultConfig()),
 	}
 
 	ingress := shm.NewIngress()
@@ -73,15 +79,15 @@ func (c *Component) Start(ctx context.Context) error {
 		return fmt.Errorf("subscribe to session lifecycle: %w", err)
 	}
 
-	for i := 0; i < 4; i++ {
-		go c.readLoop()
-	}
+	c.readLoopWg.Add(2)
+	go c.readLoop()
 	go c.egressStatsLoop()
 
 	return nil
 }
 
 func (c *Component) egressStatsLoop() {
+	defer c.readLoopWg.Done()
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	var lastCount, lastErrors int64
@@ -102,6 +108,7 @@ func (c *Component) egressStatsLoop() {
 }
 
 func (c *Component) readLoop() {
+	defer c.readLoopWg.Done()
 	c.logger.Info("Starting dataplane readLoop")
 	ctx := c.Ctx
 	pktCount := 0
@@ -132,32 +139,50 @@ func (c *Component) readLoop() {
 
 			switch pkt.Protocol {
 			case models.ProtocolDHCPv4:
+				if !c.CPPM.Allow(cppm.ProtocolDHCPv4) {
+					continue
+				}
 				select {
 				case c.DHCPChan <- pkt:
 				default:
 					c.logger.Warn("DHCP channel full, dropping packet")
 				}
 			case models.ProtocolARP:
+				if !c.CPPM.Allow(cppm.ProtocolARP) {
+					continue
+				}
 				select {
 				case c.ARPChan <- pkt:
 				default:
 					c.logger.Warn("ARP channel full, dropping packet")
 				}
 			case models.ProtocolDHCPv6:
+				if !c.CPPM.Allow(cppm.ProtocolDHCPv6) {
+					continue
+				}
 				select {
 				case c.DHCPv6Chan <- pkt:
 				default:
 					c.logger.Warn("DHCPv6 channel full, dropping packet")
 				}
 			case models.ProtocolPPPoEDiscovery, models.ProtocolPPPoESession:
+				if !c.CPPM.Allow(cppm.ProtocolPPPoE) {
+					continue
+				}
 				select {
 				case c.PPPoEChan <- pkt:
 				default:
 					c.logger.Warn("PPPoE channel full, dropping packet")
 				}
 			case models.ProtocolIPv6ND:
+				if !c.CPPM.Allow(cppm.ProtocolIPv6ND) {
+					continue
+				}
 				c.logger.Debug("Received IPv6 ND packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
 			case models.ProtocolL2TP:
+				if !c.CPPM.Allow(cppm.ProtocolL2TP) {
+					continue
+				}
 				c.logger.Debug("Received L2TP packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
 			default:
 				c.logger.Warn("Unknown protocol", "protocol", pkt.Protocol)
@@ -169,6 +194,9 @@ func (c *Component) readLoop() {
 func (c *Component) Stop(ctx context.Context) error {
 	c.logger.Info("Stopping dataplane component")
 
+	c.StopContext()
+	c.readLoopWg.Wait()
+
 	if err := c.egress.Close(); err != nil {
 		c.logger.Error("Error closing egress", "error", err)
 	}
@@ -176,8 +204,6 @@ func (c *Component) Stop(ctx context.Context) error {
 	if err := c.ingress.Close(); err != nil {
 		c.logger.Error("Error closing ingress", "error", err)
 	}
-
-	c.StopContext()
 
 	return nil
 }
