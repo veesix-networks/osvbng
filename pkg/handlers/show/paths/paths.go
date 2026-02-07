@@ -32,6 +32,14 @@ const (
 
 	SystemCPPMDataplane    Path = "system.cppm.dataplane"
 	SystemCPPMControlplane Path = "system.cppm.controlplane"
+
+	SystemDataplaneStats     Path = "system.dataplane.stats"
+	SystemDataplaneSystem    Path = "system.dataplane.system"
+	SystemDataplaneMemory    Path = "system.dataplane.memory"
+	SystemDataplaneInterfaces Path = "system.dataplane.interfaces"
+	SystemDataplaneNodes     Path = "system.dataplane.nodes"
+	SystemDataplaneErrors    Path = "system.dataplane.errors"
+	SystemDataplaneBuffers   Path = "system.dataplane.buffers"
 )
 
 func (p Path) String() string {

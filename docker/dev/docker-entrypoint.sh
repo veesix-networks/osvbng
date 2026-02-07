@@ -1,15 +1,36 @@
 #!/bin/bash
 set -e
 
-if [ -z "$OSVBNG_ACCESS_INTERFACE" ]; then
-    for iface in $(ls /sys/class/net/ | grep eth); do
-        if ip link show "$iface" 2>/dev/null | grep -q "bng-access"; then
-            OSVBNG_ACCESS_INTERFACE="$iface"
-            break
+# Wait for dataplane interfaces (eth1 through eth$OSVBNG_ACCESS_INTERFACES)
+# eth0 is always management, eth1+ are dataplane
+OSVBNG_ACCESS_INTERFACES="${OSVBNG_ACCESS_INTERFACES:-1}"
+echo "Waiting for $OSVBNG_ACCESS_INTERFACES dataplane interface(s)..."
+
+WAIT_TIMEOUT=60
+WAIT_COUNT=0
+while true; do
+    FOUND=0
+    for i in $(seq 1 $OSVBNG_ACCESS_INTERFACES); do
+        if [ -e "/sys/class/net/eth$i" ]; then
+            FOUND=$((FOUND + 1))
         fi
     done
-    OSVBNG_ACCESS_INTERFACE="${OSVBNG_ACCESS_INTERFACE:-eth1}"
-fi
+
+    if [ $FOUND -eq $OSVBNG_ACCESS_INTERFACES ]; then
+        echo "All $OSVBNG_ACCESS_INTERFACES dataplane interface(s) ready"
+        break
+    fi
+
+    sleep 1
+    WAIT_COUNT=$((WAIT_COUNT + 1))
+    if [ $WAIT_COUNT -ge $WAIT_TIMEOUT ]; then
+        echo "ERROR: Timeout waiting for dataplane interfaces (found $FOUND of $OSVBNG_ACCESS_INTERFACES)"
+        exit 1
+    fi
+done
+
+# First dataplane interface is the primary access interface
+OSVBNG_ACCESS_INTERFACE="eth1"
 
 TOTAL_CORES=$(nproc)
 
@@ -58,7 +79,7 @@ mkdir -p /dev/hugepages
 mount -t hugetlbfs -o pagesize=2M none /dev/hugepages || true
 echo 512 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages || true
 
-echo "Using Docker-provided interface: $OSVBNG_ACCESS_INTERFACE"
+echo "Using dataplane interface: $OSVBNG_ACCESS_INTERFACE"
 ip link show $OSVBNG_ACCESS_INTERFACE
 
 echo "Creating runtime directories..."

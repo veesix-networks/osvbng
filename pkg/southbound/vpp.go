@@ -51,12 +51,14 @@ type VPP struct {
 	fibMux      sync.Mutex
 	useDPDK     bool
 	asyncWorker *AsyncWorker
+	statsClient *StatsClient
 }
 
 type VPPConfig struct {
-	Connection *core.Connection
-	IfMgr      *ifmgr.Manager
-	UseDPDK    bool
+	Connection      *core.Connection
+	IfMgr           *ifmgr.Manager
+	UseDPDK         bool
+	StatsSocketPath string
 }
 
 func NewVPP(cfg VPPConfig) (*VPP, error) {
@@ -80,6 +82,12 @@ func NewVPP(cfg VPPConfig) (*VPP, error) {
 		return nil, fmt.Errorf("create async worker: %w", err)
 	}
 
+	statsClient := NewStatsClient(cfg.StatsSocketPath)
+	if err := statsClient.Connect(); err != nil {
+		fibChan.Close()
+		return nil, fmt.Errorf("connect to stats: %w", err)
+	}
+
 	v := &VPP{
 		conn:        conn,
 		ifMgr:       cfg.IfMgr,
@@ -87,9 +95,11 @@ func NewVPP(cfg VPPConfig) (*VPP, error) {
 		fibChan:     fibChan,
 		useDPDK:     cfg.UseDPDK,
 		asyncWorker: asyncWorker,
+		statsClient: statsClient,
 	}
 
 	if err := v.LoadInterfaces(); err != nil {
+		statsClient.Disconnect()
 		fibChan.Close()
 		return nil, fmt.Errorf("load interfaces: %w", err)
 	}
@@ -190,11 +200,42 @@ func (v *VPP) Close() error {
 	if v.asyncWorker != nil {
 		v.asyncWorker.Stop()
 	}
+	if v.statsClient != nil {
+		v.statsClient.Disconnect()
+	}
 	if v.fibChan != nil {
 		v.fibChan.Close()
 	}
 	v.conn.Disconnect()
 	return nil
+}
+
+func (v *VPP) GetDataplaneStats() (*DataplaneStats, error) {
+	return v.statsClient.GetAllStats()
+}
+
+func (v *VPP) GetSystemStats() (*SystemStats, error) {
+	return v.statsClient.GetSystemStats()
+}
+
+func (v *VPP) GetMemoryStats() ([]MemoryStats, error) {
+	return v.statsClient.GetMemoryStats()
+}
+
+func (v *VPP) GetInterfaceStats() ([]InterfaceStats, error) {
+	return v.statsClient.GetInterfaceStats()
+}
+
+func (v *VPP) GetNodeStats() ([]NodeStats, error) {
+	return v.statsClient.GetNodeStats()
+}
+
+func (v *VPP) GetErrorStats() ([]ErrorStats, error) {
+	return v.statsClient.GetErrorStats()
+}
+
+func (v *VPP) GetBufferStats() ([]BufferStats, error) {
+	return v.statsClient.GetBufferStats()
 }
 
 func (v *VPP) GetVersion(ctx context.Context) (string, error) {

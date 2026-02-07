@@ -7,5 +7,6 @@ import (
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/protocols/bgp"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/subscriber"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/system"
+	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/system/dataplane"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/vrf"
 )
