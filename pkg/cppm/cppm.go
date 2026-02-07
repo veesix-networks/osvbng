@@ -12,7 +12,7 @@ const (
 	ProtocolDHCPv6 Protocol = "dhcpv6"
 	ProtocolARP    Protocol = "arp"
 	ProtocolPPPoE  Protocol = "pppoe"
-	ProtocolIPv6ND Protocol = "ipv6nd"
+	ProtocolIPv6ND Protocol = "ipv6-nd"
 	ProtocolL2TP   Protocol = "l2tp"
 )
 
@@ -31,7 +31,7 @@ func DefaultConfig() Config {
 			ProtocolDHCPv4: {Rate: 1000, Burst: 100},
 			ProtocolDHCPv6: {Rate: 1000, Burst: 100},
 			ProtocolARP:    {Rate: 500, Burst: 50},
-			ProtocolPPPoE:  {Rate: 1000, Burst: 100},
+			ProtocolPPPoE:  {Rate: 2000, Burst: 200},
 			ProtocolIPv6ND: {Rate: 500, Burst: 50},
 			ProtocolL2TP:   {Rate: 500, Burst: 50},
 		},
