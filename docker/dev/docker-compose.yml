@@ -1,13 +1,12 @@
 services:
   bngblaster:
     build:
-      context: ../../test-infra
+      context: .
       dockerfile: Dockerfile.bngblaster
     container_name: bng-blaster
     cap_add:
       - NET_ADMIN
-    networks:
-      b-access:
+    network_mode: none
     volumes:
       - ./bngblaster:/config
     stdin_open: true
@@ -25,11 +24,9 @@ services:
     sysctls:
       - net.unix.max_dgram_qlen=10000
     environment:
-      - OSVBNG_ACCESS_INTERFACE=eth0
+      - OSVBNG_ACCESS_INTERFACES=1
       - OSVBNG_LOG_LEVEL=info
-    networks:
-      b-access:
-      c-core:
+    network_mode: none
     volumes:
       - /sys/kernel/debug:/sys/kernel/debug:ro
       - /dev/hugepages:/dev/hugepages
@@ -50,20 +47,37 @@ services:
         soft: -1
         hard: -1
     shm_size: 2g
+    # Ports accessible via management IP (172.30.0.2): 8080, 9090, 50050
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    network_mode: host
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
     ports:
-      - 50050:50050
-      - 9090:9090
-      - 8080:8080
+      - 3000:3000
+    depends_on:
+      - prometheus
 
 volumes:
   bng-config-versions:
+  prometheus-data:
+  grafana-data:
 
-networks:
-  a-mgmt:
-    driver: bridge
-  b-access:
-    driver: bridge
-    driver_opts:
-      com.docker.network.bridge.name: bng-access
-  c-core:
-    driver: bridge
