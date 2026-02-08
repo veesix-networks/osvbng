@@ -3,6 +3,7 @@ package component
 import (
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/config"
+	"github.com/veesix-networks/osvbng/pkg/cppm"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/opdb"
@@ -20,6 +21,7 @@ type Dependencies struct {
 	VPP           *southbound.VPP
 	ConfigManager ConfigManager
 	OpDB          opdb.Store
+	CPPM          *cppm.Manager
 
 	DHCPChan   <-chan *dataplane.ParsedPacket
 	DHCPv6Chan <-chan *dataplane.ParsedPacket
