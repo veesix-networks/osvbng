@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -801,7 +802,11 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 		if ipoeSwIfIndex != 0 {
 			c.vpp.IPoESetSessionIPv4Async(ipoeSwIfIndex, ipv4, true, func(err error) {
 				if err != nil {
-					c.logger.WithGroup(logger.IPoEDHCP4).Error("Failed to bind IPv4 to IPoE session", "session_id", sessID, "error", err)
+					if errors.Is(err, southbound.ErrVPPUnavailable) {
+						c.logger.WithGroup(logger.IPoEDHCP4).Debug("VPP unavailable, cannot bind IPv4", "session_id", sessID)
+					} else {
+						c.logger.WithGroup(logger.IPoEDHCP4).Error("Failed to bind IPv4 to IPoE session", "session_id", sessID, "error", err)
+					}
 					return
 				}
 				c.logger.WithGroup(logger.IPoEDHCP4).Info("Bound IPv4 to IPoE session", "session_id", sessID, "sw_if_index", ipoeSwIfIndex, "ipv4", ipv4.String())
@@ -911,7 +916,11 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 				}
 				if err != nil {
 					c.sessionMu.Unlock()
-					c.logger.Error("Failed to create IPoE session in VPP", "session_id", sessID, "error", err)
+					if errors.Is(err, southbound.ErrVPPUnavailable) {
+						c.logger.Debug("VPP unavailable, cannot create IPoE session", "session_id", sessID)
+					} else {
+						c.logger.Error("Failed to create IPoE session in VPP", "session_id", sessID, "error", err)
+					}
 					return
 				}
 				sess.IPoESwIfIndex = swIfIndex
@@ -928,7 +937,11 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 				if pendingIPv4 != nil {
 					c.vpp.IPoESetSessionIPv4Async(swIfIndex, pendingIPv4, true, func(err error) {
 						if err != nil {
+							if errors.Is(err, southbound.ErrVPPUnavailable) {
+							c.logger.Debug("VPP unavailable, cannot bind pending IPv4", "session_id", sessID)
+						} else {
 							c.logger.Error("Failed to bind pending IPv4", "session_id", sessID, "error", err)
+						}
 							return
 						}
 						c.logger.Info("Bound pending IPv4 to IPoE session", "session_id", sessID, "ipv4", pendingIPv4.String())
@@ -937,7 +950,11 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 				if pendingIPv6 != nil {
 					c.vpp.IPoESetSessionIPv6Async(swIfIndex, pendingIPv6, true, func(err error) {
 						if err != nil {
+							if errors.Is(err, southbound.ErrVPPUnavailable) {
+							c.logger.Debug("VPP unavailable, cannot bind pending IPv6", "session_id", sessID)
+						} else {
 							c.logger.Error("Failed to bind pending IPv6", "session_id", sessID, "error", err)
+						}
 							return
 						}
 						c.logger.Info("Bound pending IPv6 to IPoE session", "session_id", sessID, "ipv6", pendingIPv6.String())
@@ -950,7 +967,11 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 					}
 					c.vpp.IPoESetDelegatedPrefixAsync(swIfIndex, *pendingPD, nextHop, true, func(err error) {
 						if err != nil {
+							if errors.Is(err, southbound.ErrVPPUnavailable) {
+							c.logger.Debug("VPP unavailable, cannot bind pending PD", "session_id", sessID)
+						} else {
 							c.logger.Error("Failed to bind pending delegated prefix", "session_id", sessID, "error", err)
+						}
 							return
 						}
 						c.logger.Info("Bound pending delegated prefix", "session_id", sessID, "prefix", pendingPD.String())
@@ -1825,7 +1846,11 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, dhcp *layers.DHCPv6) e
 			if ianaAddr != nil {
 				c.vpp.IPoESetSessionIPv6Async(ipoeSwIfIndex, ianaAddr, true, func(err error) {
 					if err != nil {
-						c.logger.Error("Failed to bind IPv6 to IPoE session", "session_id", sessID, "error", err)
+						if errors.Is(err, southbound.ErrVPPUnavailable) {
+							c.logger.Debug("VPP unavailable, cannot bind IPv6", "session_id", sessID)
+						} else {
+							c.logger.Error("Failed to bind IPv6 to IPoE session", "session_id", sessID, "error", err)
+						}
 					} else {
 						c.logger.Info("Bound IPv6 to IPoE session", "session_id", sessID, "ipv6", ianaAddr.String())
 					}
@@ -1839,7 +1864,11 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, dhcp *layers.DHCPv6) e
 				}
 				c.vpp.IPoESetDelegatedPrefixAsync(ipoeSwIfIndex, *pdPrefix, nextHop, true, func(err error) {
 					if err != nil {
-						c.logger.Error("Failed to set delegated prefix", "session_id", sessID, "error", err)
+						if errors.Is(err, southbound.ErrVPPUnavailable) {
+							c.logger.Debug("VPP unavailable, cannot set delegated prefix", "session_id", sessID)
+						} else {
+							c.logger.Error("Failed to set delegated prefix", "session_id", sessID, "error", err)
+						}
 					} else {
 						c.logger.Info("Set delegated prefix", "session_id", sessID, "prefix", pdPrefix.String())
 					}
