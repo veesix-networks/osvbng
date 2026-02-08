@@ -6,17 +6,18 @@
         "type": "ipoe",
 	      "vlan-mode": "1:1",
         "outer-vlan-min": 100,
-        "outer-vlan-max": 100,
-        "inner-vlan-min": 100,
+        "outer-vlan-max": 110,
+        "inner-vlan-min": 2,
         "inner-vlan-max": 4092
       }
     ]
   },
   "dhcp": {
-    "enable": true
+    "enable": true,
+    "retry": 25
   },
   "dhcpv6": {                                                                                                                                                         
-    "enable": true,
+    "enable": false,
     "ia-na": true,
     "ia-pd": true,
     "rapid-commit": false,
@@ -24,7 +25,13 @@
     "ldra": true                                                                                                                                          
   }, 
   "ipoe": {
-    "ipv6": true
+    "ipv6": false
+  },
+  "sessions": {
+    "count": 1000,
+    "max-outstanding": 400,
+    "start-rate": 200,
+    "stop-rate": 800
   },
   "access-line": {
     "agent-circuit-id": "eth 0/1/2/3/{session-global}:100.{session-global}",

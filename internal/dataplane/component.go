@@ -53,7 +53,7 @@ func New(deps component.Dependencies) (component.Component, error) {
 		DHCPv6Chan: make(chan *dataplane.ParsedPacket, 1000),
 		ARPChan:    make(chan *dataplane.ParsedPacket, 1000),
 		PPPoEChan:  make(chan *dataplane.ParsedPacket, 1000),
-		CPPM:       cppm.NewManager(cppm.DefaultConfig()),
+		CPPM:       deps.CPPM,
 	}
 
 	ingress := shm.NewIngress()

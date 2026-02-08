@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	syscfg "github.com/veesix-networks/osvbng/pkg/config/system"
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
@@ -35,15 +36,10 @@ func NewCPPMDataplanePolicerHandler(d *deps.ConfDeps) conf.Handler {
 	}
 }
 
-type DataplanePolicerConfig struct {
-	Rate  float64 `json:"rate"`
-	Burst uint32  `json:"burst"`
-}
-
 func (h *CPPMDataplanePolicerHandler) Validate(ctx context.Context, hctx *conf.HandlerContext) error {
-	cfg, ok := hctx.NewValue.(*DataplanePolicerConfig)
+	cfg, ok := hctx.NewValue.(*syscfg.CPPMPolicerConfig)
 	if !ok {
-		return fmt.Errorf("expected *DataplanePolicerConfig, got %T", hctx.NewValue)
+		return fmt.Errorf("expected *CPPMPolicerConfig, got %T", hctx.NewValue)
 	}
 
 	if cfg.Rate < 0 {
@@ -66,7 +62,7 @@ func (h *CPPMDataplanePolicerHandler) Validate(ctx context.Context, hctx *conf.H
 }
 
 func (h *CPPMDataplanePolicerHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error {
-	cfg := hctx.NewValue.(*DataplanePolicerConfig)
+	cfg := hctx.NewValue.(*syscfg.CPPMPolicerConfig)
 
 	values, err := paths.SystemCPPMDataplanePolicer.ExtractWildcards(hctx.Path, 1)
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -134,7 +135,11 @@ func (pc *prometheusCollector) Collect(ch chan<- prometheus.Metric) {
 	for _, handler := range pc.handlers {
 		pc.logger.Debug("Collecting from handler", "name", handler.Name())
 		if err := handler.Collect(ctx, pc.cache, ch); err != nil {
-			pc.logger.Error("Failed to collect metrics", "handler", handler.Name(), "error", err)
+			if strings.Contains(err.Error(), "key not found") {
+				pc.logger.Debug("No cached data for handler", "handler", handler.Name())
+			} else {
+				pc.logger.Error("Failed to collect metrics", "handler", handler.Name(), "error", err)
+			}
 		}
 	}
 	pc.logger.Debug("Collect complete")

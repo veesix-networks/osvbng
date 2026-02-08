@@ -66,9 +66,11 @@ linux-cp {
 }
 
 statseg {
-  default
-  per-node-counters on
-}
+{{ if and .StatsSegment .StatsSegment.Size }}  size {{ .StatsSegment.Size }}
+{{ else }}  default
+{{ end }}{{ if and .StatsSegment .StatsSegment.PageSize }}  page-size {{ .StatsSegment.PageSize }}
+{{ end }}{{ if and .StatsSegment .StatsSegment.PerNodeCounters }}  per-node-counters on
+{{ end }}}
 {{ if and .UseDPDK .DPDK }}
 dpdk {
 {{ if .DPDK.UIODriver }}  uio-driver {{ .DPDK.UIODriver }}

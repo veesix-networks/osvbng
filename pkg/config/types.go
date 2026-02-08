@@ -23,7 +23,12 @@ type Config struct {
 	Protocols        protocols.ProtocolConfig               `json:"protocols,omitempty" yaml:"protocols,omitempty"`
 	AAA              aaa.AAAConfig                          `json:"aaa,omitempty" yaml:"aaa,omitempty"`
 	VRFS             []ip.VRFSConfig                        `json:"vrfs,omitempty" yaml:"vrfs,omitempty"`
+	System           *SystemConfig                          `json:"system,omitempty" yaml:"system,omitempty"`
 	Plugins          map[string]interface{}                 `json:"plugins,omitempty" yaml:"plugins,omitempty"`
+}
+
+type SystemConfig struct {
+	CPPM *system.CPPMConfig `json:"cppm,omitempty" yaml:"cppm,omitempty"`
 }
 
 type DiffResult struct {

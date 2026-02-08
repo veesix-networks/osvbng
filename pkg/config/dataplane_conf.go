@@ -16,14 +16,15 @@ type DataplaneConf struct {
 }
 
 type DataplaneTemplateData struct {
-	MainCore    int
-	WorkerCores string
-	LogFile     string
-	CLISocket   string
-	APISocket   string
-	PuntSocket  string
-	UseDPDK     bool
-	DPDK        *system.DPDKConfig
+	MainCore     int
+	WorkerCores  string
+	LogFile      string
+	CLISocket    string
+	APISocket    string
+	PuntSocket   string
+	UseDPDK      bool
+	DPDK         *system.DPDKConfig
+	StatsSegment *system.StatsSegmentConfig
 }
 
 func NewDataplaneTemplateDataWithDefaults(cfg *Config, totalCores int) *DataplaneTemplateData {
@@ -46,15 +47,25 @@ func NewDataplaneTemplateDataWithDefaults(cfg *Config, totalCores int) *Dataplan
 
 	useDPDK := dpdk != nil && len(dpdk.Devices) > 0
 
+	statseg := cfg.Dataplane.StatsSegment
+	if statseg == nil {
+		statseg = &system.StatsSegmentConfig{
+			Size:            "256m",
+			PageSize:        "4k",
+			PerNodeCounters: false,
+		}
+	}
+
 	return &DataplaneTemplateData{
-		MainCore:    mainCore,
-		WorkerCores: workerCores,
-		LogFile:     "/var/log/osvbng/dataplane.log",
-		CLISocket:   "/run/osvbng/cli.sock",
-		APISocket:   "/run/osvbng/dataplane_api.sock",
-		PuntSocket:  "/run/osvbng/punt.sock",
-		UseDPDK:     useDPDK,
-		DPDK:        dpdk,
+		MainCore:     mainCore,
+		WorkerCores:  workerCores,
+		LogFile:      "/var/log/osvbng/dataplane.log",
+		CLISocket:    "/run/osvbng/cli.sock",
+		APISocket:    "/run/osvbng/dataplane_api.sock",
+		PuntSocket:   "/run/osvbng/punt.sock",
+		UseDPDK:      useDPDK,
+		DPDK:         dpdk,
+		StatsSegment: statseg,
 	}
 }
 
