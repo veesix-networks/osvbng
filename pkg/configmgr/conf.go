@@ -706,6 +706,31 @@ func (cd *ConfigManager) LoadConfig(id conf.SessionID, config *config.Config) er
 		}
 	}
 
+	if config.System != nil && config.System.CPPM != nil {
+		if config.System.CPPM.Dataplane != nil {
+			for proto, policer := range config.System.CPPM.Dataplane.Policer {
+				hctx := &conf.HandlerContext{
+					SessionID: id,
+					Path:      fmt.Sprintf("system.cppm.dataplane.policer.%s", proto),
+					OldValue:  nil,
+					NewValue:  policer,
+				}
+				sess.changes = append(sess.changes, hctx)
+			}
+		}
+		if config.System.CPPM.Controlplane != nil {
+			for proto, policer := range config.System.CPPM.Controlplane.Policer {
+				hctx := &conf.HandlerContext{
+					SessionID: id,
+					Path:      fmt.Sprintf("system.cppm.controlplane.policer.%s", proto),
+					OldValue:  nil,
+					NewValue:  policer,
+				}
+				sess.changes = append(sess.changes, hctx)
+			}
+		}
+	}
+
 	for _, change := range sess.changes {
 		handler, err := cd.registry.GetHandler(change.Path)
 		if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	syscfg "github.com/veesix-networks/osvbng/pkg/config/system"
 	"github.com/veesix-networks/osvbng/pkg/cppm"
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
@@ -33,15 +34,10 @@ func NewCPPMControlplanePolicerHandler(d *deps.ConfDeps) conf.Handler {
 	}
 }
 
-type ControlplanePolicerConfig struct {
-	Rate  float64 `json:"rate"`
-	Burst int     `json:"burst"`
-}
-
 func (h *CPPMControlplanePolicerHandler) Validate(ctx context.Context, hctx *conf.HandlerContext) error {
-	cfg, ok := hctx.NewValue.(*ControlplanePolicerConfig)
+	cfg, ok := hctx.NewValue.(*syscfg.CPPMPolicerConfig)
 	if !ok {
-		return fmt.Errorf("expected *ControlplanePolicerConfig, got %T", hctx.NewValue)
+		return fmt.Errorf("expected *CPPMPolicerConfig, got %T", hctx.NewValue)
 	}
 
 	if cfg.Rate < 0 {
@@ -68,7 +64,7 @@ func (h *CPPMControlplanePolicerHandler) Apply(ctx context.Context, hctx *conf.H
 		return fmt.Errorf("CPPM manager not available")
 	}
 
-	cfg := hctx.NewValue.(*ControlplanePolicerConfig)
+	cfg := hctx.NewValue.(*syscfg.CPPMPolicerConfig)
 
 	values, err := paths.SystemCPPMControlplanePolicer.ExtractWildcards(hctx.Path, 1)
 	if err != nil {
@@ -76,7 +72,7 @@ func (h *CPPMControlplanePolicerHandler) Apply(ctx context.Context, hctx *conf.H
 	}
 
 	protocol := cppmProtocolMap[values[0]]
-	h.cppm.Configure(protocol, cfg.Rate, cfg.Burst)
+	h.cppm.Configure(protocol, cfg.Rate, int(cfg.Burst))
 	return nil
 }
 

@@ -82,8 +82,8 @@ const (
 	InternalUnnumbered      Path = "_internal.unnumbered.<*>"
 	InternalDisableARPReply Path = "_internal.disable-arp-reply.<*>"
 
-	SystemCPPMDataplanePolicer    Path = "system.cppm.dataplane.policer.<*:protocol>"
-	SystemCPPMControlplanePolicer Path = "system.cppm.controlplane.policer.<*:protocol>"
+	SystemCPPMDataplanePolicer    Path = "system.cppm.dataplane.policer.<*>"
+	SystemCPPMControlplanePolicer Path = "system.cppm.controlplane.policer.<*>"
 )
 
 func (p Path) String() string {

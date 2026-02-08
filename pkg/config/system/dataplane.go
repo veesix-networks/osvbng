@@ -11,10 +11,17 @@ import (
 )
 
 type DataplaneConfig struct {
-	DPAPISocket     string      `json:"dp_api_socket,omitempty" yaml:"dp_api_socket,omitempty"`
-	PuntSocketPath  string      `json:"punt_socket_path,omitempty" yaml:"punt_socket_path,omitempty"`
-	MemifSocketPath string      `json:"memif_socket_path,omitempty" yaml:"memif_socket_path,omitempty"`
-	DPDK            *DPDKConfig `json:"dpdk,omitempty" yaml:"dpdk,omitempty"`
+	DPAPISocket     string              `json:"dp_api_socket,omitempty" yaml:"dp_api_socket,omitempty"`
+	PuntSocketPath  string              `json:"punt_socket_path,omitempty" yaml:"punt_socket_path,omitempty"`
+	MemifSocketPath string              `json:"memif_socket_path,omitempty" yaml:"memif_socket_path,omitempty"`
+	DPDK            *DPDKConfig         `json:"dpdk,omitempty" yaml:"dpdk,omitempty"`
+	StatsSegment    *StatsSegmentConfig `json:"statseg,omitempty" yaml:"statseg,omitempty"`
+}
+
+type StatsSegmentConfig struct {
+	Size            string `json:"size,omitempty" yaml:"size,omitempty"`
+	PageSize        string `json:"page-size,omitempty" yaml:"page-size,omitempty"`
+	PerNodeCounters bool   `json:"per-node-counters,omitempty" yaml:"per-node-counters,omitempty"`
 }
 
 type DPDKConfig struct {

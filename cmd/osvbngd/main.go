@@ -24,6 +24,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
+	"github.com/veesix-networks/osvbng/pkg/cppm"
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/dhcp4"
 	"github.com/veesix-networks/osvbng/pkg/dhcp6"
@@ -122,6 +123,19 @@ func main() {
 
 	vppDataplane := operations.NewVPPDataplane(vppConn)
 
+	ifMgr := ifmgr.New()
+
+	vpp, err := southbound.NewVPP(southbound.VPPConfig{
+		Connection: vppConn,
+		IfMgr:      ifMgr,
+		UseDPDK:    cfg.Dataplane.DPDK != nil && len(cfg.Dataplane.DPDK.Devices) > 0,
+	})
+	if err != nil {
+		log.Fatalf("Failed to create VPP southbound: %v", err)
+	}
+
+	cppmManager := cppm.NewManager(cppm.DefaultConfig())
+
 	if err := configd.LoadVersions(); err != nil {
 		mainLog.Warn("Failed to load config versions", "error", err)
 	}
@@ -129,13 +143,14 @@ func main() {
 	configd.AutoRegisterHandlers(&deps.ConfDeps{
 		Dataplane:        vppDataplane,
 		DataplaneState:   nil,
-		Southbound:       nil,
+		Southbound:       vpp,
 		AAA:              nil,
+		CPPM:             cppmManager,
 		Routing:          nil,
 		PluginComponents: nil,
 	})
 
-	mainLog.Info("Applying startup configuration (interfaces)")
+	mainLog.Info("Applying startup configuration")
 	if err := configd.ApplyLoadedConfig(); err != nil {
 		if err.Error() == "failed to commit: no changes to commit" {
 			mainLog.Info("No startup configuration changes to apply")
@@ -148,17 +163,6 @@ func main() {
 
 	mainLog.Info("Waiting for VPP LCP to sync interfaces...")
 	time.Sleep(5 * time.Second)
-
-	ifMgr := ifmgr.New()
-
-	vpp, err := southbound.NewVPP(southbound.VPPConfig{
-		Connection: vppConn,
-		IfMgr:      ifMgr,
-		UseDPDK:    cfg.Dataplane.DPDK != nil && len(cfg.Dataplane.DPDK.Devices) > 0,
-	})
-	if err != nil {
-		log.Fatalf("Failed to create VPP southbound: %v", err)
-	}
 
 	if err := vpp.LoadInterfaces(); err != nil {
 		mainLog.Warn("Failed to load interfaces from dataplane", "error", err)
@@ -200,6 +204,7 @@ func main() {
 		VPP:           vpp,
 		ConfigManager: configd,
 		OpDB:          opdbStore,
+		CPPM:          cppmManager,
 	}
 
 	dataplaneComp, err := dataplane.New(coreDeps)
@@ -362,7 +367,7 @@ func main() {
 		Southbound:       vpp,
 		AAA:              aaaComp.(*aaa.Component),
 		Routing:          routingComp.(*routing.Component),
-		CPPM:             dpComp.CPPM,
+		CPPM:             cppmManager,
 		PluginComponents: pluginComponentsMap,
 	})
 
@@ -372,7 +377,7 @@ func main() {
 		Routing:          routingComp.(*routing.Component),
 		Cache:            cache,
 		OpDB:             opdbStore,
-		CPPM:             dpComp.CPPM,
+		CPPM:             cppmManager,
 		PluginComponents: pluginComponentsMap,
 	})
 
