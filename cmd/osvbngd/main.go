@@ -217,6 +217,7 @@ func main() {
 	coreDeps.DHCPv6Chan = dpComp.DHCPv6Chan
 	coreDeps.ARPChan = dpComp.ARPChan
 	coreDeps.PPPChan = dpComp.PPPoEChan
+	coreDeps.IPv6NDChan = dpComp.IPv6NDChan
 
 	mainLog.Info("Applying infrastructure configuration")
 	infraSessionID, err := configd.CreateCandidateSession()

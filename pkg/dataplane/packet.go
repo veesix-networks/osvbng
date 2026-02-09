@@ -25,6 +25,7 @@ type ParsedPacket struct {
 	DHCPv4   *layers.DHCPv4
 	DHCPv6   *layers.DHCPv6
 	ARP      *layers.ARP
+	ICMPv6   *layers.ICMPv6
 	PPPoE    *layers.PPPoE
 	PPP      *layers.PPP
 
