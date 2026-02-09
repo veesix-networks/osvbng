@@ -17,12 +17,15 @@ case "${1:-start}" in
         echo "Waiting for containers..."
         until [ "$(docker inspect -f '{{.State.Running}}' osvbng 2>/dev/null)" = "true" ]; do sleep 1; done
         until [ "$(docker inspect -f '{{.State.Running}}' bng-blaster 2>/dev/null)" = "true" ]; do sleep 1; done
+        until [ "$(docker inspect -f '{{.State.Running}}' frr-peer 2>/dev/null)" = "true" ]; do sleep 1; done
 
         OSVBNG_PID=$(docker inspect -f '{{.State.Pid}}' osvbng)
         BLASTER_PID=$(docker inspect -f '{{.State.Pid}}' bng-blaster)
+        FRRPEER_PID=$(docker inspect -f '{{.State.Pid}}' frr-peer)
 
         sudo ip link del osvbng-mgmt 2>/dev/null || true
         sudo ip link del osvbng-access 2>/dev/null || true
+        sudo ip link del osvbng-core 2>/dev/null || true
 
         echo "Creating management network..."
         sudo ip link add osvbng-mgmt type veth peer name osvbng-mgmt-br
@@ -42,15 +45,24 @@ case "${1:-start}" in
         docker exec osvbng ip link set eth1 up
         docker exec bng-blaster ip link set eth0 up
 
+        echo "Creating core network (osvbng <-> frr-peer)..."
+        sudo ip link add osvbng-core type veth peer name peer-core
+        sudo ip link set osvbng-core netns $OSVBNG_PID name eth2
+        sudo ip link set peer-core netns $FRRPEER_PID name eth0
+        docker exec osvbng ip link set eth2 up
+        docker exec frr-peer ip link set eth0 up
+
         echo ""
         echo "Dev environment ready:"
-        echo "  osvbng: 172.30.0.2 (8080, 9090, 50050)"
+        echo "  osvbng:   172.30.0.2 (8080, 9090, 50050)"
+        echo "  frr-peer: 10.0.0.2 (core link to osvbng)"
         echo "  Prometheus: http://localhost:9090"
         echo "  Grafana: http://localhost:3000 (admin/admin)"
         ;;
     stop)
         docker compose down
         sudo ip link del osvbng-mgmt-br 2>/dev/null || true
+        sudo ip link del osvbng-core 2>/dev/null || true
         ;;
     logs)
         docker compose logs -f osvbng
