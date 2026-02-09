@@ -63,6 +63,9 @@ func (h *BNGHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error
 		if err := h.southbound.EnableARPPunt(subIfName); err != nil {
 			return fmt.Errorf("enable arp punt: %w", err)
 		}
+		if err := h.southbound.EnableIPv6NDPunt(subIfName); err != nil {
+			return fmt.Errorf("enable ipv6 nd punt: %w", err)
+		}
 
 	case interfaces.BNGModeIPoEL3:
 		if err := h.southbound.EnableDHCPv4Punt(subIfName); err != nil {
