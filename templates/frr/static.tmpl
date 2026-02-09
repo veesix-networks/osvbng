@@ -1,0 +1,16 @@
+{{ define "static" }}
+{{ if .Protocols }}
+{{ if .Protocols.Static }}
+{{ if .Protocols.Static.IPv4 }}
+{{ range $route := .Protocols.Static.IPv4 }}
+ip route {{ $route.Destination }}{{ if $route.NextHop }} {{ $route.NextHop }}{{ end }}{{ if $route.Device }} {{ $route.Device }}{{ end }}
+{{ end }}
+{{ end }}
+{{ if .Protocols.Static.IPv6 }}
+{{ range $route := .Protocols.Static.IPv6 }}
+ipv6 route {{ $route.Destination }}{{ if $route.NextHop }} {{ $route.NextHop }}{{ end }}{{ if $route.Device }} {{ $route.Device }}{{ end }}
+{{ end }}
+{{ end }}
+{{ end }}
+{{ end }}
+{{ end }}

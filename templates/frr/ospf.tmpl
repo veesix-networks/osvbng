@@ -1,0 +1,82 @@
+{{ define "ospf" }}
+{{ if .Protocols }}
+{{ if .Protocols.OSPF }}
+{{ if .Protocols.OSPF.Enabled }}
+router ospf
+{{ if .Protocols.OSPF.RouterID }}
+ ospf router-id {{ .Protocols.OSPF.RouterID }}
+{{ end }}
+{{ if .Protocols.OSPF.LogAdjacencyChanges }}
+ log-adjacency-changes
+{{ end }}
+{{ if .Protocols.OSPF.AutoCostRefBandwidth }}
+ auto-cost reference-bandwidth {{ .Protocols.OSPF.AutoCostRefBandwidth }}
+{{ end }}
+{{ if .Protocols.OSPF.MaximumPaths }}
+ maximum-paths {{ .Protocols.OSPF.MaximumPaths }}
+{{ end }}
+{{ if .Protocols.OSPF.DefaultMetric }}
+ default-metric {{ .Protocols.OSPF.DefaultMetric }}
+{{ end }}
+{{ if .Protocols.OSPF.Distance }}
+ distance {{ .Protocols.OSPF.Distance }}
+{{ end }}
+{{ range $area, $areaConfig := .Protocols.OSPF.Areas }}
+{{ if $areaConfig.Authentication }}
+ area {{ $area }} authentication{{ if eq $areaConfig.Authentication "message-digest" }} message-digest{{ end }}
+{{ end }}
+{{ end }}
+{{ if .Protocols.OSPF.Redistribute }}
+{{ if .Protocols.OSPF.Redistribute.Connected }}
+ redistribute connected
+{{ end }}
+{{ if .Protocols.OSPF.Redistribute.Static }}
+ redistribute static
+{{ end }}
+{{ if .Protocols.OSPF.Redistribute.BGP }}
+ redistribute bgp
+{{ end }}
+{{ end }}
+{{ if .Protocols.OSPF.DefaultInformation }}
+{{ if .Protocols.OSPF.DefaultInformation.Originate }}
+ default-information originate{{ if .Protocols.OSPF.DefaultInformation.Always }} always{{ end }}{{ if .Protocols.OSPF.DefaultInformation.Metric }} metric {{ .Protocols.OSPF.DefaultInformation.Metric }}{{ end }}{{ if .Protocols.OSPF.DefaultInformation.MetricType }} metric-type {{ .Protocols.OSPF.DefaultInformation.MetricType }}{{ end }}
+{{ end }}
+{{ end }}
+!
+{{ range $area, $areaConfig := .Protocols.OSPF.Areas }}
+{{ range $iface, $ifConfig := $areaConfig.Interfaces }}
+interface {{ $iface }}
+ ip ospf area {{ $area }}
+{{ if $ifConfig }}
+{{ if $ifConfig.Passive }}
+ ip ospf passive
+{{ end }}
+{{ if $ifConfig.Cost }}
+ ip ospf cost {{ $ifConfig.Cost }}
+{{ end }}
+{{ if $ifConfig.Network }}
+ ip ospf network {{ $ifConfig.Network }}
+{{ end }}
+{{ if $ifConfig.BFD }}
+ ip ospf bfd
+{{ end }}
+{{ if $ifConfig.HelloInterval }}
+ ip ospf hello-interval {{ $ifConfig.HelloInterval }}
+{{ end }}
+{{ if $ifConfig.DeadInterval }}
+ ip ospf dead-interval {{ $ifConfig.DeadInterval }}
+{{ end }}
+{{ if $ifConfig.MTUIgnore }}
+ ip ospf mtu-ignore
+{{ end }}
+{{ if $ifConfig.Priority }}
+ ip ospf priority {{ $ifConfig.Priority }}
+{{ end }}
+{{ end }}
+!
+{{ end }}
+{{ end }}
+{{ end }}
+{{ end }}
+{{ end }}
+{{ end }}

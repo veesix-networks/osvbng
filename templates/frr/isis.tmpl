@@ -1,0 +1,100 @@
+{{ define "isis" }}
+{{ if .Protocols }}
+{{ if .Protocols.ISIS }}
+{{ if .Protocols.ISIS.Enabled }}
+router isis osvbng-isis
+{{ if .Protocols.ISIS.NET }}
+ net {{ .Protocols.ISIS.NET }}
+{{ end }}
+{{ if .Protocols.ISIS.IsType }}
+ is-type {{ .Protocols.ISIS.IsType }}
+{{ end }}
+{{ if .Protocols.ISIS.MetricStyle }}
+ metric-style {{ .Protocols.ISIS.MetricStyle }}
+{{ end }}
+{{ if .Protocols.ISIS.LogAdjacencyChanges }}
+ log-adjacency-changes
+{{ end }}
+{{ if .Protocols.ISIS.DynamicHostname }}
+ hostname dynamic
+{{ end }}
+{{ if .Protocols.ISIS.SetOverloadBit }}
+ set-overload-bit
+{{ end }}
+{{ if .Protocols.ISIS.LSPMTU }}
+ lsp-mtu {{ .Protocols.ISIS.LSPMTU }}
+{{ end }}
+{{ if .Protocols.ISIS.LSPGenInterval }}
+ lsp-gen-interval {{ .Protocols.ISIS.LSPGenInterval }}
+{{ end }}
+{{ if .Protocols.ISIS.LSPRefreshInterval }}
+ lsp-refresh-interval {{ .Protocols.ISIS.LSPRefreshInterval }}
+{{ end }}
+{{ if .Protocols.ISIS.MaxLSPLifetime }}
+ max-lsp-lifetime {{ .Protocols.ISIS.MaxLSPLifetime }}
+{{ end }}
+{{ if .Protocols.ISIS.SPFInterval }}
+ spf-interval {{ .Protocols.ISIS.SPFInterval }}
+{{ end }}
+{{ if .Protocols.ISIS.AreaPassword }}
+ area-password clear {{ .Protocols.ISIS.AreaPassword }}
+{{ end }}
+{{ if .Protocols.ISIS.DomainPassword }}
+ domain-password clear {{ .Protocols.ISIS.DomainPassword }}
+{{ end }}
+{{ if .Protocols.ISIS.Redistribute }}
+{{ if .Protocols.ISIS.Redistribute.IPv4Connected }}
+ redistribute ipv4 connected level-2
+{{ end }}
+{{ if .Protocols.ISIS.Redistribute.IPv4Static }}
+ redistribute ipv4 static level-2
+{{ end }}
+{{ if .Protocols.ISIS.Redistribute.IPv6Connected }}
+ redistribute ipv6 connected level-2
+{{ end }}
+{{ if .Protocols.ISIS.Redistribute.IPv6Static }}
+ redistribute ipv6 static level-2
+{{ end }}
+{{ end }}
+{{ if .Protocols.ISIS.DefaultInformation }}
+{{ if .Protocols.ISIS.DefaultInformation.Originate }}
+ default-information originate ipv4
+{{ end }}
+{{ end }}
+!
+{{ range $iface, $ifConfig := .Protocols.ISIS.Interfaces }}
+interface {{ $iface }}
+ ip router isis osvbng-isis
+ ipv6 router isis osvbng-isis
+{{ if $ifConfig }}
+{{ if $ifConfig.Passive }}
+ isis passive
+{{ end }}
+{{ if $ifConfig.Metric }}
+ isis metric {{ $ifConfig.Metric }}
+{{ end }}
+{{ if $ifConfig.Network }}
+ isis network {{ $ifConfig.Network }}
+{{ end }}
+{{ if $ifConfig.BFD }}
+ isis bfd
+{{ end }}
+{{ if $ifConfig.CircuitType }}
+ isis circuit-type {{ $ifConfig.CircuitType }}
+{{ end }}
+{{ if $ifConfig.HelloInterval }}
+ isis hello-interval {{ $ifConfig.HelloInterval }}
+{{ end }}
+{{ if $ifConfig.HelloMultiplier }}
+ isis hello-multiplier {{ $ifConfig.HelloMultiplier }}
+{{ end }}
+{{ if $ifConfig.Priority }}
+ isis priority {{ $ifConfig.Priority }}
+{{ end }}
+{{ end }}
+!
+{{ end }}
+{{ end }}
+{{ end }}
+{{ end }}
+{{ end }}

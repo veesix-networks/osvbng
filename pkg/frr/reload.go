@@ -36,16 +36,22 @@ func NewConfig() *Config {
 }
 
 func (c *Config) GenerateConfig(config *config.Config) (string, error) {
-	templatePath := filepath.Join(c.TemplateDir, "frr.conf.tmpl")
+	subTemplates := filepath.Join(c.TemplateDir, "frr", "*.tmpl")
+	masterPath := filepath.Join(c.TemplateDir, "frr.conf.tmpl")
 
-	tmplContent, err := os.ReadFile(templatePath)
+	masterContent, err := os.ReadFile(masterPath)
 	if err != nil {
-		return "", fmt.Errorf("read template: %w", err)
+		return "", fmt.Errorf("read master template: %w", err)
 	}
 
-	tmpl, err := template.New("frr").Parse(string(tmplContent))
+	tmpl, err := template.New("frr.conf.tmpl").ParseGlob(subTemplates)
 	if err != nil {
-		return "", fmt.Errorf("parse template: %w", err)
+		return "", fmt.Errorf("parse sub-templates: %w", err)
+	}
+
+	tmpl, err = tmpl.Parse(string(masterContent))
+	if err != nil {
+		return "", fmt.Errorf("parse master template: %w", err)
 	}
 
 	var buf bytes.Buffer
