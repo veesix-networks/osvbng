@@ -29,10 +29,11 @@ type Component struct {
 	egress   *shm.Egress
 	vpp      *southbound.VPP
 
-	DHCPChan   chan *dataplane.ParsedPacket
-	DHCPv6Chan chan *dataplane.ParsedPacket
-	ARPChan    chan *dataplane.ParsedPacket
-	PPPoEChan  chan *dataplane.ParsedPacket
+	DHCPChan    chan *dataplane.ParsedPacket
+	DHCPv6Chan  chan *dataplane.ParsedPacket
+	ARPChan     chan *dataplane.ParsedPacket
+	PPPoEChan   chan *dataplane.ParsedPacket
+	IPv6NDChan  chan *dataplane.ParsedPacket
 
 	CPPM *cppm.Manager
 
@@ -49,10 +50,11 @@ func New(deps component.Dependencies) (component.Component, error) {
 		logger:     log,
 		eventBus:   deps.EventBus,
 		vpp:        deps.VPP,
-		DHCPChan:   make(chan *dataplane.ParsedPacket, 1000),
-		DHCPv6Chan: make(chan *dataplane.ParsedPacket, 1000),
-		ARPChan:    make(chan *dataplane.ParsedPacket, 1000),
-		PPPoEChan:  make(chan *dataplane.ParsedPacket, 1000),
+		DHCPChan:    make(chan *dataplane.ParsedPacket, 1000),
+		DHCPv6Chan:  make(chan *dataplane.ParsedPacket, 1000),
+		ARPChan:     make(chan *dataplane.ParsedPacket, 1000),
+		PPPoEChan:   make(chan *dataplane.ParsedPacket, 1000),
+		IPv6NDChan:  make(chan *dataplane.ParsedPacket, 1000),
 		CPPM:       deps.CPPM,
 	}
 
@@ -178,7 +180,11 @@ func (c *Component) readLoop() {
 				if !c.CPPM.Allow(cppm.ProtocolIPv6ND) {
 					continue
 				}
-				c.logger.Debug("Received IPv6 ND packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
+				select {
+				case c.IPv6NDChan <- pkt:
+				default:
+					c.logger.Warn("IPv6 ND channel full, dropping packet")
+				}
 			case models.ProtocolL2TP:
 				if !c.CPPM.Allow(cppm.ProtocolL2TP) {
 					continue

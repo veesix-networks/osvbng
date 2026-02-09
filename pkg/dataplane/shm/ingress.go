@@ -167,6 +167,12 @@ func (i *Ingress) parsePacket(pkt *PuntPacket) (*dataplane.ParsedPacket, error) 
 		}
 	case ProtoIPv6ND:
 		parsed.Protocol = models.ProtocolIPv6ND
+		if ipv6Layer := packet.Layer(layers.LayerTypeIPv6); ipv6Layer != nil {
+			parsed.IPv6 = ipv6Layer.(*layers.IPv6)
+		}
+		if icmpv6Layer := packet.Layer(layers.LayerTypeICMPv6); icmpv6Layer != nil {
+			parsed.ICMPv6 = icmpv6Layer.(*layers.ICMPv6)
+		}
 	case ProtoL2TP:
 		parsed.Protocol = models.ProtocolL2TP
 	default:

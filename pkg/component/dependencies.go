@@ -23,8 +23,9 @@ type Dependencies struct {
 	OpDB          opdb.Store
 	CPPM          *cppm.Manager
 
-	DHCPChan   <-chan *dataplane.ParsedPacket
-	DHCPv6Chan <-chan *dataplane.ParsedPacket
-	ARPChan    <-chan *dataplane.ParsedPacket
-	PPPChan    <-chan *dataplane.ParsedPacket
+	DHCPChan    <-chan *dataplane.ParsedPacket
+	DHCPv6Chan  <-chan *dataplane.ParsedPacket
+	ARPChan     <-chan *dataplane.ParsedPacket
+	PPPChan     <-chan *dataplane.ParsedPacket
+	IPv6NDChan  <-chan *dataplane.ParsedPacket
 }

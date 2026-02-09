@@ -17,7 +17,7 @@
     "retry": 25
   },
   "dhcpv6": {                                                                                                                                                         
-    "enable": false,
+    "enable": true,
     "ia-na": true,
     "ia-pd": true,
     "rapid-commit": false,
@@ -25,7 +25,7 @@
     "ldra": true                                                                                                                                          
   }, 
   "ipoe": {
-    "ipv6": false
+    "ipv6": true
   },
   "sessions": {
     "count": 1000,

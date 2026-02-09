@@ -50,8 +50,9 @@ type Component struct {
 	sessionIndex  map[string]*SessionState
 	sessionMu     sync.RWMutex
 
-	dhcpChan   <-chan *dataplane.ParsedPacket
-	dhcp6Chan  <-chan *dataplane.ParsedPacket
+	dhcpChan    <-chan *dataplane.ParsedPacket
+	dhcp6Chan   <-chan *dataplane.ParsedPacket
+	ipv6NDChan  <-chan *dataplane.ParsedPacket
 }
 
 type SessionState struct {
@@ -92,6 +93,12 @@ type SessionState struct {
 	PendingDHCPv6Request []byte
 }
 
+type raPrefixInfo struct {
+	network       string
+	validTime     uint32
+	preferredTime uint32
+}
+
 func New(deps component.Dependencies, srgMgr *srg.Manager, ifMgr *ifmgr.Manager, dhcp4Provider dhcp4.DHCPProvider, dhcp6Provider dhcp6.DHCPProvider) (component.Component, error) {
 	log := logger.Get(logger.IPoE)
 
@@ -113,6 +120,7 @@ func New(deps component.Dependencies, srgMgr *srg.Manager, ifMgr *ifmgr.Manager,
 		sessionIndex:  make(map[string]*SessionState),
 		dhcpChan:      deps.DHCPChan,
 		dhcp6Chan:     deps.DHCPv6Chan,
+		ipv6NDChan:    deps.IPv6NDChan,
 	}
 
 	return c, nil
@@ -133,6 +141,7 @@ func (c *Component) Start(ctx context.Context) error {
 	c.Go(c.cleanupSessions)
 	c.Go(c.consumeDHCPPackets)
 	c.Go(c.consumeDHCPv6Packets)
+	c.Go(c.consumeIPv6NDPackets)
 
 	return nil
 }
@@ -1303,100 +1312,6 @@ func (c *Component) getSessionMode(svlan uint16) subscriber.SessionMode {
 	return group.GetSessionMode()
 }
 
-func (c *Component) configureSubscriberRA(swIfIndex uint32, svlan uint16) error {
-	cfg, err := c.cfgMgr.GetRunning()
-	if err != nil || cfg == nil {
-		return nil
-	}
-
-	if cfg.DHCPv6.Provider == "" {
-		return nil
-	}
-
-	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(svlan)
-
-	raConfig := southbound.IPv6RAConfig{
-		Managed:        true,
-		Other:          true,
-		RouterLifetime: 1800,
-		MaxInterval:    600,
-		MinInterval:    200,
-	}
-
-	if cfg.DHCPv6.RA != nil {
-		raConfig.Managed = cfg.DHCPv6.RA.GetManaged()
-		raConfig.Other = cfg.DHCPv6.RA.GetOther()
-		raConfig.RouterLifetime = cfg.DHCPv6.RA.GetRouterLifetime()
-		raConfig.MaxInterval = cfg.DHCPv6.RA.GetMaxInterval()
-		raConfig.MinInterval = cfg.DHCPv6.RA.GetMinInterval()
-	}
-
-	if group != nil && group.IPv6 != nil && group.IPv6.RA != nil {
-		groupRA := group.IPv6.RA
-		if groupRA.Managed != nil {
-			raConfig.Managed = *groupRA.Managed
-		}
-		if groupRA.Other != nil {
-			raConfig.Other = *groupRA.Other
-		}
-		if groupRA.RouterLifetime != 0 {
-			raConfig.RouterLifetime = groupRA.RouterLifetime
-		}
-		if groupRA.MaxInterval != 0 {
-			raConfig.MaxInterval = groupRA.MaxInterval
-		}
-		if groupRA.MinInterval != 0 {
-			raConfig.MinInterval = groupRA.MinInterval
-		}
-	}
-
-	var loopbackName string
-	if group != nil {
-		vlanCfg := group.FindVLANConfig(svlan)
-		if vlanCfg != nil {
-			loopbackName = vlanCfg.Interface
-		}
-	}
-
-	if loopbackName == "" {
-		c.logger.Debug("No loopback configured for RA", "svlan", svlan)
-		return nil
-	}
-
-	if err := c.vpp.ConfigureIPv6RA(loopbackName, raConfig); err != nil {
-		return fmt.Errorf("configure ra on %s: %w", loopbackName, err)
-	}
-
-	var ianaPoolName string
-	if group != nil {
-		ianaPoolName = group.IANAPool
-	}
-
-	for _, pool := range cfg.DHCPv6.IANAPools {
-		if ianaPoolName != "" && pool.Name != ianaPoolName {
-			continue
-		}
-
-		prefixConfig := southbound.IPv6RAPrefixConfig{
-			Prefix:            pool.Network,
-			OnLink:            true,
-			Autonomous:        false,
-			ValidLifetime:     pool.ValidTime,
-			PreferredLifetime: pool.PreferredTime,
-		}
-
-		if err := c.vpp.AddIPv6RAPrefix(loopbackName, prefixConfig); err != nil {
-			return fmt.Errorf("add ra prefix %s: %w", pool.Network, err)
-		}
-
-		if ianaPoolName != "" {
-			break
-		}
-	}
-
-	c.logger.Debug("Configured RA on loopback", "loopback", loopbackName, "managed", raConfig.Managed, "other", raConfig.Other)
-	return nil
-}
 
 func (c *Component) makeSessionKeyV4(mac net.HardwareAddr, svlan, cvlan uint16) string {
 	mode := c.getSessionMode(svlan)
@@ -2042,6 +1957,259 @@ func (c *Component) getLoopbackIPv6(svlan uint16) net.IP {
 	}
 
 	return nil
+}
+
+func (c *Component) consumeIPv6NDPackets() {
+	if c.ipv6NDChan == nil {
+		c.logger.Debug("IPv6 ND channel not configured, skipping IPv6 ND consumer")
+		return
+	}
+
+	for {
+		select {
+		case <-c.Ctx.Done():
+			return
+		case pkt := <-c.ipv6NDChan:
+			go func(pkt *dataplane.ParsedPacket) {
+				if err := c.processRSPacket(pkt); err != nil {
+					c.logger.Error("Error processing RS packet", "error", err)
+				}
+			}(pkt)
+		}
+	}
+}
+
+func (c *Component) processRSPacket(pkt *dataplane.ParsedPacket) error {
+	if pkt.ICMPv6 == nil {
+		return fmt.Errorf("no ICMPv6 layer")
+	}
+
+	if pkt.ICMPv6.TypeCode.Type() != layers.ICMPv6TypeRouterSolicitation {
+		return nil
+	}
+
+	if pkt.IPv6 == nil {
+		return fmt.Errorf("no IPv6 layer")
+	}
+
+	if pkt.OuterVLAN == 0 {
+		return fmt.Errorf("packet rejected: S-VLAN required")
+	}
+
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil {
+		return fmt.Errorf("no running config available")
+	}
+
+	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(pkt.OuterVLAN)
+
+	raConfig := southbound.IPv6RAConfig{
+		Managed:        true,
+		Other:          true,
+		RouterLifetime: 1800,
+		MaxInterval:    600,
+		MinInterval:    200,
+	}
+
+	if cfg.DHCPv6.RA != nil {
+		raConfig.Managed = cfg.DHCPv6.RA.GetManaged()
+		raConfig.Other = cfg.DHCPv6.RA.GetOther()
+		raConfig.RouterLifetime = cfg.DHCPv6.RA.GetRouterLifetime()
+		raConfig.MaxInterval = cfg.DHCPv6.RA.GetMaxInterval()
+		raConfig.MinInterval = cfg.DHCPv6.RA.GetMinInterval()
+	}
+
+	if group != nil && group.IPv6 != nil && group.IPv6.RA != nil {
+		groupRA := group.IPv6.RA
+		if groupRA.Managed != nil {
+			raConfig.Managed = *groupRA.Managed
+		}
+		if groupRA.Other != nil {
+			raConfig.Other = *groupRA.Other
+		}
+		if groupRA.RouterLifetime != 0 {
+			raConfig.RouterLifetime = groupRA.RouterLifetime
+		}
+		if groupRA.MaxInterval != 0 {
+			raConfig.MaxInterval = groupRA.MaxInterval
+		}
+		if groupRA.MinInterval != 0 {
+			raConfig.MinInterval = groupRA.MinInterval
+		}
+	}
+
+	var ianaPoolName string
+	if group != nil {
+		ianaPoolName = group.IANAPool
+	}
+
+	var prefixes []raPrefixInfo
+
+	for _, pool := range cfg.DHCPv6.IANAPools {
+		if ianaPoolName != "" && pool.Name != ianaPoolName {
+			continue
+		}
+
+		prefixes = append(prefixes, raPrefixInfo{
+			network:       pool.Network,
+			validTime:     pool.ValidTime,
+			preferredTime: pool.PreferredTime,
+		})
+
+		if ianaPoolName != "" {
+			break
+		}
+	}
+
+	c.logger.Debug("Processing RS packet",
+		"mac", pkt.MAC.String(),
+		"svlan", pkt.OuterVLAN,
+		"cvlan", pkt.InnerVLAN,
+		"src_ip", pkt.IPv6.SrcIP,
+		"managed", raConfig.Managed,
+		"other", raConfig.Other,
+		"prefixes", len(prefixes),
+	)
+
+	return c.sendRAResponse(pkt, raConfig, prefixes)
+}
+
+func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbound.IPv6RAConfig, prefixes []raPrefixInfo) error {
+	var srcMACBytes net.HardwareAddr
+	var parentSwIfIndex uint32
+
+	if c.srgMgr != nil {
+		srcMACBytes = c.srgMgr.GetVirtualMAC(pkt.OuterVLAN)
+	}
+	if c.ifMgr != nil {
+		if iface := c.ifMgr.Get(pkt.SwIfIndex); iface != nil {
+			parentSwIfIndex = iface.SupSwIfIndex
+		}
+		if srcMACBytes == nil {
+			if parent := c.ifMgr.Get(parentSwIfIndex); parent != nil && len(parent.MAC) >= 6 {
+				srcMACBytes = net.HardwareAddr(parent.MAC[:6])
+			}
+		}
+	}
+	if srcMACBytes == nil {
+		return fmt.Errorf("no source MAC available")
+	}
+
+	srcIP := c.getLoopbackIPv6(pkt.OuterVLAN)
+	if srcIP == nil {
+		return fmt.Errorf("no IPv6 source address available for S-VLAN %d", pkt.OuterVLAN)
+	}
+
+	dstIP := pkt.IPv6.SrcIP
+	if dstIP.IsUnspecified() {
+		dstIP = net.ParseIP("ff02::1")
+	}
+
+	var raFlags uint8
+	if raConfig.Managed {
+		raFlags |= 0x80
+	}
+	if raConfig.Other {
+		raFlags |= 0x40
+	}
+
+	var raOptions layers.ICMPv6Options
+	raOptions = append(raOptions, layers.ICMPv6Option{
+		Type: layers.ICMPv6OptSourceAddress,
+		Data: srcMACBytes,
+	})
+
+	for _, prefix := range prefixes {
+		_, ipNet, err := net.ParseCIDR(prefix.network)
+		if err != nil {
+			c.logger.Warn("Invalid prefix in RA config", "prefix", prefix.network, "error", err)
+			continue
+		}
+
+		prefixLen, _ := ipNet.Mask.Size()
+
+		validLifetime := prefix.validTime
+		if validLifetime == 0 {
+			validLifetime = 2592000
+		}
+		preferredLifetime := prefix.preferredTime
+		if preferredLifetime == 0 {
+			preferredLifetime = 604800
+		}
+
+		prefixData := make([]byte, 30)
+		prefixData[0] = byte(prefixLen)
+		prefixData[1] = 0x80 // L (on-link) flag
+		binary.BigEndian.PutUint32(prefixData[2:6], validLifetime)
+		binary.BigEndian.PutUint32(prefixData[6:10], preferredLifetime)
+		// 4 bytes reserved (10:14)
+		copy(prefixData[14:30], ipNet.IP.To16())
+
+		raOptions = append(raOptions, layers.ICMPv6Option{
+			Type: layers.ICMPv6OptPrefixInfo,
+			Data: prefixData,
+		})
+	}
+
+	raLayer := &layers.ICMPv6RouterAdvertisement{
+		HopLimit:       64,
+		Flags:          raFlags,
+		RouterLifetime: uint16(raConfig.RouterLifetime),
+		ReachableTime:  0,
+		RetransTimer:   0,
+		Options:        raOptions,
+	}
+
+	icmpv6Layer := &layers.ICMPv6{
+		TypeCode: layers.CreateICMPv6TypeCode(layers.ICMPv6TypeRouterAdvertisement, 0),
+	}
+
+	ipv6Layer := &layers.IPv6{
+		Version:    6,
+		HopLimit:   255,
+		NextHeader: layers.IPProtocolICMPv6,
+		SrcIP:      srcIP,
+		DstIP:      dstIP,
+	}
+
+	icmpv6Layer.SetNetworkLayerForChecksum(ipv6Layer)
+
+	buf := gopacket.NewSerializeBuffer()
+	opts := gopacket.SerializeOptions{
+		ComputeChecksums: true,
+		FixLengths:       true,
+	}
+
+	if err := gopacket.SerializeLayers(buf, opts, ipv6Layer, icmpv6Layer, raLayer); err != nil {
+		return fmt.Errorf("serialize RA: %w", err)
+	}
+
+	egressPayload := &models.EgressPacketPayload{
+		DstMAC:    pkt.MAC.String(),
+		SrcMAC:    srcMACBytes.String(),
+		OuterVLAN: pkt.OuterVLAN,
+		InnerVLAN: pkt.InnerVLAN,
+		SwIfIndex: parentSwIfIndex,
+		RawData:   buf.Bytes(),
+	}
+
+	egressEvent := models.Event{
+		Type:       models.EventTypeEgress,
+		AccessType: models.AccessTypeIPoE,
+		Protocol:   models.ProtocolIPv6ND,
+	}
+	egressEvent.SetPayload(egressPayload)
+
+	c.logger.Debug("Sending RA response",
+		"dst_mac", pkt.MAC.String(),
+		"src_mac", srcMACBytes.String(),
+		"svlan", pkt.OuterVLAN,
+		"cvlan", pkt.InnerVLAN,
+		"managed", raConfig.Managed,
+		"other", raConfig.Other,
+	)
+
+	return c.eventBus.Publish(events.TopicEgress, egressEvent)
 }
 
 func (c *Component) publishSessionLifecycle(payload models.SubscriberSession) error {

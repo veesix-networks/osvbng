@@ -17,6 +17,7 @@ func init() {
 	conf.RegisterFactory(NewPuntDHCPv4Handler)
 	conf.RegisterFactory(NewPuntDHCPv6Handler)
 	conf.RegisterFactory(NewPuntPPPoEHandler)
+	conf.RegisterFactory(NewPuntIPv6NDHandler)
 }
 
 type PuntHandler struct {
@@ -64,6 +65,16 @@ func NewPuntPPPoEHandler(d *deps.ConfDeps) conf.Handler {
 		pathPattern:    paths.InternalPuntPPPoE,
 		protocol:       operations.PuntProtoPPPoEDisc,
 		enableFunc:     (*southbound.VPP).EnablePPPoEPunt,
+	}
+}
+
+func NewPuntIPv6NDHandler(d *deps.ConfDeps) conf.Handler {
+	return &PuntHandler{
+		southbound:     d.Southbound,
+		dataplaneState: d.DataplaneState,
+		pathPattern:    paths.InternalPuntIPv6ND,
+		protocol:       operations.PuntProtoIPv6ND,
+		enableFunc:     (*southbound.VPP).EnableIPv6NDPunt,
 	}
 }
 
