@@ -58,6 +58,7 @@ nav:
       - Supported NICs: architecture/SUPPORTED_NICS.md
   - Contributing:
     - Getting Started: contributing/please_read_first.md
+    - Commit Messages: contributing/commit-messages.md
     - Guidelines: contributing/guidelines.md
   - Author: https://github.com/veesix-networks
 markdown_extensions:

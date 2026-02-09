@@ -58,8 +58,8 @@ make test
 2. Create a branch (`git checkout -b my-feature`)
 3. Make your changes
 4. Run `make lint` and `make test`
-5. Commit and push
-6. Open a PR against `main`
+5. Commit using [Conventional Commits](commit-messages.md) format and push
+6. Open a PR against `main` — the PR title must follow Conventional Commits format (PRs are squash-merged)
 
 !!! important "Documentation"
     Any contribution that adds, modifies, or removes behaviour must include corresponding documentation updates.
