@@ -49,6 +49,16 @@ services:
     shm_size: 2g
     # Ports accessible via management IP (172.30.0.2): 8080, 9090, 50050
 
+  frr-peer:
+    build:
+      context: .
+      dockerfile: Dockerfile.frr-peer
+    container_name: frr-peer
+    privileged: true
+    network_mode: none
+    stdin_open: true
+    tty: true
+
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus

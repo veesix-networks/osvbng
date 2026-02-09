@@ -64,6 +64,14 @@ interfaces:
         description: Access Interface
         enabled: true
         bng_mode: access
+    eth2:
+        description: Core Link (frr-peer)
+        enabled: true
+        address:
+            ipv4:
+                - 10.0.0.1/30
+            ipv6:
+                - 2001:db8:c0:e::1/64
     loop100:
         description: Subscriber Gateway Loopback
         enabled: true
@@ -77,6 +85,34 @@ protocols:
     bgp:
         asn: 65000
         router-id: 10.255.0.1
+    ospf:
+        enabled: true
+        router-id: 10.0.0.1
+        log-adjacency-changes: true
+        areas:
+            "0.0.0.0":
+                interfaces:
+                    eth2:
+                        network: point-to-point
+    ospf6:
+        enabled: true
+        router-id: 10.0.0.1
+        log-adjacency-changes: true
+        areas:
+            "0.0.0.0":
+                interfaces:
+                    eth2:
+                        network: point-to-point
+    isis:
+        enabled: true
+        net: "49.0001.0100.0000.0001.00"
+        is-type: level-2-only
+        metric-style: wide
+        log-adjacency-changes: true
+        interfaces:
+            eth2:
+                network: point-to-point
+                circuit-type: level-2-only
 aaa:
     auth_provider: local
     nas_identifier: osvbng

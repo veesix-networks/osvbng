@@ -1,0 +1,31 @@
+FROM debian:12-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    gnupg \
+    lsb-release \
+    iproute2 \
+    iputils-ping \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -s https://deb.frrouting.org/frr/keys.gpg | tee /usr/share/keyrings/frrouting.gpg > /dev/null \
+    && echo "deb [signed-by=/usr/share/keyrings/frrouting.gpg] https://deb.frrouting.org/frr $(lsb_release -s -c) frr-stable" | tee /etc/apt/sources.list.d/frr.list
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    frr \
+    frr-pythontools \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get purge -y curl gnupg lsb-release \
+    && apt-get autoremove -y \
+    && apt-get clean
+
+COPY frr-peer/daemons /etc/frr/daemons
+COPY frr-peer/frr.conf /etc/frr/frr.conf
+COPY frr-peer/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]

@@ -3,11 +3,9 @@ package operations
 import (
 	"fmt"
 	"log/slog"
-	"net"
 	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
-	"github.com/veesix-networks/osvbng/pkg/config/protocols"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/af_packet"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/ethernet_types"
@@ -232,71 +230,6 @@ func (d *VPPDataplane) DelIPv6Address(ifName, address string) error {
 	}
 
 	d.logger.Info("Deleted IPv6 address", "interface", ifName, "address", address)
-	return nil
-}
-
-func (d *VPPDataplane) AddRoute(route *protocols.StaticRoute) error {
-	_, dst, err := net.ParseCIDR(route.Destination)
-	if err != nil {
-		return fmt.Errorf("parse destination: %w", err)
-	}
-
-	nlRoute := &netlink.Route{
-		Dst: dst,
-	}
-
-	if route.NextHop != "" {
-		nlRoute.Gw = net.ParseIP(route.NextHop)
-	}
-
-	if route.Device != "" {
-		link, err := netlink.LinkByName(route.Device)
-		if err != nil {
-			return fmt.Errorf("get device %s: %w", route.Device, err)
-		}
-		nlRoute.LinkIndex = link.Attrs().Index
-	}
-
-	if err := netlink.RouteAdd(nlRoute); err != nil {
-		if err.Error() == "file exists" {
-			d.logger.Info("Route already exists", "destination", route.Destination, "next_hop", route.NextHop, "device", route.Device)
-			return nil
-		}
-		return fmt.Errorf("add route: %w", err)
-	}
-
-	d.logger.Info("Added static route", "destination", route.Destination, "next_hop", route.NextHop, "device", route.Device)
-	return nil
-}
-
-// DelRoute removes a static route from Linux routing table
-func (d *VPPDataplane) DelRoute(route *protocols.StaticRoute) error {
-	_, dst, err := net.ParseCIDR(route.Destination)
-	if err != nil {
-		return fmt.Errorf("parse destination: %w", err)
-	}
-
-	nlRoute := &netlink.Route{
-		Dst: dst,
-	}
-
-	if route.NextHop != "" {
-		nlRoute.Gw = net.ParseIP(route.NextHop)
-	}
-
-	if route.Device != "" {
-		link, err := netlink.LinkByName(route.Device)
-		if err != nil {
-			return fmt.Errorf("get device %s: %w", route.Device, err)
-		}
-		nlRoute.LinkIndex = link.Attrs().Index
-	}
-
-	if err := netlink.RouteDel(nlRoute); err != nil {
-		return fmt.Errorf("delete route: %w", err)
-	}
-
-	d.logger.Info("Deleted static route", "destination", route.Destination, "next_hop", route.NextHop, "device", route.Device)
 	return nil
 }
 

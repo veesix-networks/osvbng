@@ -1,0 +1,74 @@
+{{ define "ospf6" }}
+{{ if .Protocols }}
+{{ if .Protocols.OSPF6 }}
+{{ if .Protocols.OSPF6.Enabled }}
+router ospf6
+{{ if .Protocols.OSPF6.RouterID }}
+ ospf6 router-id {{ .Protocols.OSPF6.RouterID }}
+{{ end }}
+{{ if .Protocols.OSPF6.LogAdjacencyChanges }}
+ log-adjacency-changes
+{{ end }}
+{{ if .Protocols.OSPF6.AutoCostRefBandwidth }}
+ auto-cost reference-bandwidth {{ .Protocols.OSPF6.AutoCostRefBandwidth }}
+{{ end }}
+{{ if .Protocols.OSPF6.MaximumPaths }}
+ maximum-paths {{ .Protocols.OSPF6.MaximumPaths }}
+{{ end }}
+{{ if .Protocols.OSPF6.Distance }}
+ distance {{ .Protocols.OSPF6.Distance }}
+{{ end }}
+{{ if .Protocols.OSPF6.Redistribute }}
+{{ if .Protocols.OSPF6.Redistribute.Connected }}
+ redistribute connected
+{{ end }}
+{{ if .Protocols.OSPF6.Redistribute.Static }}
+ redistribute static
+{{ end }}
+{{ if .Protocols.OSPF6.Redistribute.BGP }}
+ redistribute bgp
+{{ end }}
+{{ end }}
+{{ if .Protocols.OSPF6.DefaultInformation }}
+{{ if .Protocols.OSPF6.DefaultInformation.Originate }}
+ default-information originate{{ if .Protocols.OSPF6.DefaultInformation.Always }} always{{ end }}{{ if .Protocols.OSPF6.DefaultInformation.Metric }} metric {{ .Protocols.OSPF6.DefaultInformation.Metric }}{{ end }}{{ if .Protocols.OSPF6.DefaultInformation.MetricType }} metric-type {{ .Protocols.OSPF6.DefaultInformation.MetricType }}{{ end }}
+{{ end }}
+{{ end }}
+!
+{{ range $area, $areaConfig := .Protocols.OSPF6.Areas }}
+{{ range $iface, $ifConfig := $areaConfig.Interfaces }}
+interface {{ $iface }}
+ ipv6 ospf6 area {{ $area }}
+{{ if $ifConfig }}
+{{ if $ifConfig.Passive }}
+ ipv6 ospf6 passive
+{{ end }}
+{{ if $ifConfig.Cost }}
+ ipv6 ospf6 cost {{ $ifConfig.Cost }}
+{{ end }}
+{{ if $ifConfig.Network }}
+ ipv6 ospf6 network {{ $ifConfig.Network }}
+{{ end }}
+{{ if $ifConfig.BFD }}
+ ipv6 ospf6 bfd
+{{ end }}
+{{ if $ifConfig.HelloInterval }}
+ ipv6 ospf6 hello-interval {{ $ifConfig.HelloInterval }}
+{{ end }}
+{{ if $ifConfig.DeadInterval }}
+ ipv6 ospf6 dead-interval {{ $ifConfig.DeadInterval }}
+{{ end }}
+{{ if $ifConfig.MTUIgnore }}
+ ipv6 ospf6 mtu-ignore
+{{ end }}
+{{ if $ifConfig.Priority }}
+ ipv6 ospf6 priority {{ $ifConfig.Priority }}
+{{ end }}
+{{ end }}
+!
+{{ end }}
+{{ end }}
+{{ end }}
+{{ end }}
+{{ end }}
+{{ end }}

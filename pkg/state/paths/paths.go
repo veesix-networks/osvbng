@@ -7,6 +7,9 @@ const (
 	ProtocolsBGPStatistics     Path = "protocols.bgp.statistics"
 	ProtocolsBGPIPv6Statistics Path = "protocols.bgp.ipv6.statistics"
 	ProtocolsBGPNeighbors      Path = "protocols.bgp.neighbors.<*:ip>"
+	ProtocolsOSPFNeighbors  Path = "protocols.ospf.neighbors"
+	ProtocolsOSPF6Neighbors Path = "protocols.ospf6.neighbors"
+	ProtocolsISISNeighbors  Path = "protocols.isis.neighbors"
 	SubscriberSessions         Path = "subscriber.sessions"
 
 	SystemDataplaneSystem     Path = "system.dataplane.system"

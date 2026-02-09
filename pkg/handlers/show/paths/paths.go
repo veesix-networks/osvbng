@@ -28,6 +28,10 @@ const (
 	SystemOpDBStatistics       Path = "system.opdb.statistics"
 	SystemLogging              Path = "system.logging"
 
+	ProtocolsOSPFNeighbors  Path = "protocols.ospf.neighbors"
+	ProtocolsOSPF6Neighbors Path = "protocols.ospf6.neighbors"
+	ProtocolsISISNeighbors  Path = "protocols.isis.neighbors"
+
 	VRFS Path = "vrfs"
 
 	SystemCPPMDataplane    Path = "system.cppm.dataplane"
