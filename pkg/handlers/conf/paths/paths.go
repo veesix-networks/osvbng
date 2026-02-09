@@ -111,6 +111,7 @@ const (
 	InternalPuntDHCPv4      Path = "_internal.punt.<*>.dhcpv4"
 	InternalPuntDHCPv6      Path = "_internal.punt.<*>.dhcpv6"
 	InternalPuntPPPoE       Path = "_internal.punt.<*>.pppoe"
+	InternalPuntIPv6ND      Path = "_internal.punt.<*>.ipv6nd"
 	InternalIPv6Enabled     Path = "_internal.ipv6.<*>.enabled"
 	InternalIPv6RA          Path = "_internal.ipv6.<*>.ra"
 	InternalIPv6Multicast   Path = "_internal.ipv6.<*>.multicast"

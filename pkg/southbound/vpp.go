@@ -1750,6 +1750,37 @@ func (v *VPP) EnableDHCPv6Punt(ifaceName string) error {
 	return nil
 }
 
+func (v *VPP) EnableIPv6NDPunt(ifaceName string) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	idx, err := v.GetInterfaceIndex(ifaceName)
+	if err != nil {
+		return fmt.Errorf("get interface index: %w", err)
+	}
+
+	req := &osvbng_punt.OsvbngPuntEnableDisable{
+		SwIfIndex: interface_types.InterfaceIndex(idx),
+		Protocol:  5, // IPv6 ND
+		Enable:    true,
+	}
+
+	reply := &osvbng_punt.OsvbngPuntEnableDisableReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("enable ipv6 nd punt: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return fmt.Errorf("enable ipv6 nd punt failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Debug("Enabled IPv6 ND punt", "interface", ifaceName, "sw_if_index", idx)
+	return nil
+}
+
 func (v *VPP) EnableL2TPPunt(ifaceName string) error {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
