@@ -8,7 +8,6 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
-	"github.com/veesix-networks/osvbng/pkg/operations"
 )
 
 func init() {
@@ -17,22 +16,36 @@ func init() {
 }
 
 type RouteHandler struct {
-	dataplane   operations.Dataplane
 	pathPattern paths.Path
+	callbacks   *conf.Callbacks
 }
 
-func NewIPv4RouteHandler(daemons *deps.ConfDeps) conf.Handler {
-	return &RouteHandler{
-		dataplane:   daemons.Dataplane,
+func NewIPv4RouteHandler(deps *deps.ConfDeps) conf.Handler {
+	h := &RouteHandler{
 		pathPattern: paths.ProtocolsStaticIPv4Route,
 	}
+	h.callbacks = &conf.Callbacks{
+		OnAfterApply: func(hctx *conf.HandlerContext, err error) {
+			if err == nil {
+				hctx.MarkFRRReloadNeeded()
+			}
+		},
+	}
+	return h
 }
 
-func NewIPv6RouteHandler(daemons *deps.ConfDeps) conf.Handler {
-	return &RouteHandler{
-		dataplane:   daemons.Dataplane,
+func NewIPv6RouteHandler(deps *deps.ConfDeps) conf.Handler {
+	h := &RouteHandler{
 		pathPattern: paths.ProtocolsStaticIPv6Route,
 	}
+	h.callbacks = &conf.Callbacks{
+		OnAfterApply: func(hctx *conf.HandlerContext, err error) {
+			if err == nil {
+				hctx.MarkFRRReloadNeeded()
+			}
+		},
+	}
+	return h
 }
 
 func (h *RouteHandler) Validate(ctx context.Context, hctx *conf.HandlerContext) error {
@@ -44,13 +57,11 @@ func (h *RouteHandler) Validate(ctx context.Context, hctx *conf.HandlerContext) 
 }
 
 func (h *RouteHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error {
-	route := hctx.NewValue.(*protocols.StaticRoute)
-	return h.dataplane.AddRoute(route)
+	return nil
 }
 
 func (h *RouteHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) error {
-	route := hctx.NewValue.(*protocols.StaticRoute)
-	return h.dataplane.DelRoute(route)
+	return nil
 }
 
 func (h *RouteHandler) PathPattern() paths.Path {
@@ -62,5 +73,5 @@ func (h *RouteHandler) Dependencies() []paths.Path {
 }
 
 func (h *RouteHandler) Callbacks() *conf.Callbacks {
-	return nil
+	return h.callbacks
 }
