@@ -2,7 +2,6 @@ package operations
 
 import (
 	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
-	"github.com/veesix-networks/osvbng/pkg/config/protocols"
 )
 
 type Dataplane interface {
@@ -15,8 +14,6 @@ type Dataplane interface {
 	DelIPv4Address(ifName, address string) error
 	AddIPv6Address(ifName, address string) error
 	DelIPv6Address(ifName, address string) error
-	AddRoute(route *protocols.StaticRoute) error
-	DelRoute(route *protocols.StaticRoute) error
 }
 
 const (
