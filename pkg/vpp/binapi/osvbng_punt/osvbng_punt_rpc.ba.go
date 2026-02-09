@@ -14,6 +14,7 @@ import (
 // RPCService defines RPC service osvbng_punt.
 type RPCService interface {
 	OsvbngPuntEnableDisable(ctx context.Context, in *OsvbngPuntEnableDisable) (*OsvbngPuntEnableDisableReply, error)
+	OsvbngPuntPolicerConfigure(ctx context.Context, in *OsvbngPuntPolicerConfigure) (*OsvbngPuntPolicerConfigureReply, error)
 	OsvbngPuntRegistrationDump(ctx context.Context, in *OsvbngPuntRegistrationDump) (RPCService_OsvbngPuntRegistrationDumpClient, error)
 	OsvbngPuntStatsDump(ctx context.Context, in *OsvbngPuntStatsDump) (RPCService_OsvbngPuntStatsDumpClient, error)
 }
@@ -28,6 +29,15 @@ func NewServiceClient(conn api.Connection) RPCService {
 
 func (c *serviceClient) OsvbngPuntEnableDisable(ctx context.Context, in *OsvbngPuntEnableDisable) (*OsvbngPuntEnableDisableReply, error) {
 	out := new(OsvbngPuntEnableDisableReply)
+	err := c.conn.Invoke(ctx, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, api.RetvalToVPPApiError(out.Retval)
+}
+
+func (c *serviceClient) OsvbngPuntPolicerConfigure(ctx context.Context, in *OsvbngPuntPolicerConfigure) (*OsvbngPuntPolicerConfigureReply, error) {
+	out := new(OsvbngPuntPolicerConfigureReply)
 	err := c.conn.Invoke(ctx, in, out)
 	if err != nil {
 		return nil, err
