@@ -99,21 +99,9 @@ func (c *Cache) Scan(ctx context.Context, cursor uint64, pattern string, count i
 	defer c.mu.RUnlock()
 
 	keys := make([]string, 0)
-	matched := 0
-	skipped := 0
-
 	for key := range c.items {
-		if uint64(skipped) < cursor {
-			skipped++
-			continue
-		}
-
 		if matchPattern(pattern, key) {
 			keys = append(keys, key)
-			matched++
-			if int64(matched) >= count {
-				return keys, cursor + uint64(matched), nil
-			}
 		}
 	}
 
