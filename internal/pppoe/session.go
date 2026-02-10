@@ -546,6 +546,7 @@ func (s *SessionState) checkOpen() {
 				IfIndex:         s.SwIfIndex,
 				IPv4Address:     s.IPv4Address,
 				IPv6Address:     s.IPv6Address,
+				Username:        s.Username,
 				RADIUSSessionID: s.AcctSessionID,
 			})
 
@@ -784,6 +785,7 @@ func (s *SessionState) terminate() {
 		MAC:             s.MAC,
 		OuterVLAN:       s.OuterVLAN,
 		InnerVLAN:       s.InnerVLAN,
+		Username:        s.Username,
 		RADIUSSessionID: s.AcctSessionID,
 	})
 }

@@ -360,7 +360,7 @@ func (c *Component) handleSessionLifecycle(event models.Event) error {
 		return nil
 	}
 
-	c.logger.Debug("[DF] Processing session", "session_id", sessionID, "state", state)
+	c.logger.Debug("[DF] Processing session", "session_id", sessionID, "state", state, "username", sess.GetUsername())
 
 	if err := c.persistSession(sess); err != nil {
 		return fmt.Errorf("persist session: %w", err)
