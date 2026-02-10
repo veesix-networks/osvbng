@@ -43,10 +43,20 @@ nav:
     - Interfaces: configuration/interfaces.md
     - Subscriber Groups: configuration/subscriber-groups.md
     - DHCP: configuration/dhcp.md
+    - DHCPv6: configuration/dhcpv6.md
     - AAA: configuration/aaa.md
+    - VRFs: configuration/vrfs.md
     - Protocols: configuration/protocols.md
+    - MPLS: configuration/mpls.md
+    - System: configuration/system.md
     - Monitoring: configuration/monitoring.md
-    - Plugins: configuration/plugins.md
+    - Plugins:
+      - Overview: configuration/plugins.md
+      - subscriber.auth.local: configuration/plugins/auth-local.md
+      - subscriber.auth.http: configuration/plugins/auth-http.md
+      - exporter.prometheus: configuration/plugins/exporter-prometheus.md
+      - northbound.api: configuration/plugins/northbound-api.md
+      - example.hello: configuration/plugins/example-hello.md
   - Architecture:
     - High Level: architecture/HIGH_LEVEL.md
     - Low Level:

@@ -1,49 +1,20 @@
 # Plugins
 
-Plugin-specific configuration. Each key under `plugins` is a plugin name with its own configuration.
+Plugin-specific configuration. Each key under `plugins` is a plugin namespace with its own configuration.
 
-## Available Plugins
+## Auth Providers
 
-### subscriber.auth.local
+- [subscriber.auth.local](plugins/auth-local.md) - Local subscriber authentication
+- [subscriber.auth.http](plugins/auth-http.md) - HTTP-based subscriber authentication
 
-Local subscriber authentication.
+## Exporters
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `database_path` | string | SQLite database path |
-| `allow_all` | bool | Allow all subscribers without authentication |
+- [exporter.prometheus](plugins/exporter-prometheus.md) - Prometheus metrics exporter
 
-### exporter.prometheus
+## Northbound
 
-Prometheus metrics exporter.
+- [northbound.api](plugins/northbound-api.md) - REST API for management
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `enabled` | bool | Enable the exporter |
-| `listen_address` | string | Listen address (e.g., `:9090`) |
+## Miscellaneous
 
-### northbound.api
-
-REST API for management.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `enabled` | bool | Enable the API |
-| `listen_address` | string | Listen address (e.g., `:8080`) |
-
-## Example
-
-```yaml
-plugins:
-  subscriber.auth.local:
-    database_path: /var/lib/osvbng/subscribers.db
-    allow_all: false
-
-  exporter.prometheus:
-    enabled: true
-    listen_address: ":9090"
-
-  northbound.api:
-    enabled: true
-    listen_address: ":8080"
-```
+- [example.hello](plugins/example-hello.md) - Community example plugin

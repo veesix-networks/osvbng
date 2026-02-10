@@ -2,26 +2,22 @@
 
 DHCP provider configuration.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `provider` | string | DHCP provider: `local` |
-| `default_server` | string | Default DHCP server name |
-| `pools` | array | Local DHCP pools |
-
+| Field | Type | Description | Example |
+|-------|------|-------------|---------|
+| `provider` | string | DHCP provider: `local` | `local` |
+| `pools` | [DHCPPool](#dhcp-pools) | Local DHCP pools | |
 
 ## DHCP Pools
 
-For local mode, configure address pools.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | string | Pool name |
-| `network` | string | Network CIDR |
-| `range_start` | string | First IP in range |
-| `range_end` | string | Last IP in range |
-| `gateway` | string | Default gateway |
-| `dns_servers` | array | DNS server IPs |
-| `lease_time` | int | Lease time in seconds |
+| Field | Type | Description | Example |
+|-------|------|-------------|---------|
+| `name` | string | Pool name | `residential` |
+| `network` | string | Network CIDR | `10.100.0.0/16` |
+| `range_start` | string | First IP in range | `10.100.1.1` |
+| `range_end` | string | Last IP in range | `10.100.255.254` |
+| `gateway` | string | Default gateway | `10.100.0.1` |
+| `dns_servers` | array | DNS server IPs | `[192.168.100.10, 192.168.101.10]` |
+| `lease_time` | int | Lease time in seconds | `3600` |
 
 ## Example
 
@@ -35,8 +31,8 @@ dhcp:
       range_end: 10.100.255.254
       gateway: 10.100.0.1
       dns_servers:
-        - 8.8.8.8
-        - 8.8.4.4
+        - 192.168.100.10
+        - 192.168.101.10
       lease_time: 3600
 ```
 
