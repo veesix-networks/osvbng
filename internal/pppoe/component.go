@@ -66,10 +66,11 @@ type SessionState struct {
 	AcctSessionID  string
 	PPPoESessionID uint16
 
-	MAC       net.HardwareAddr
-	OuterVLAN uint16
-	InnerVLAN uint16
-	SwIfIndex uint32
+	MAC          net.HardwareAddr
+	OuterVLAN    uint16
+	InnerVLAN    uint16
+	SwIfIndex    uint32
+	EncapIfIndex uint32
 
 	Phase          ppp.Phase
 	ServiceName    string
@@ -285,6 +286,7 @@ func (c *Component) handlePADR(pkt *dataplane.ParsedPacket) error {
 		OuterVLAN:      pkt.OuterVLAN,
 		InnerVLAN:      pkt.InnerVLAN,
 		SwIfIndex:      pkt.SwIfIndex,
+		EncapIfIndex:   pkt.SwIfIndex,
 		Phase:          ppp.PhaseDead,
 		ServiceName:    tags.ServiceName,
 		HostUniq:       tags.HostUniq,
