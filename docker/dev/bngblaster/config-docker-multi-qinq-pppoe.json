@@ -39,7 +39,7 @@
       "enable": true
     },
     "ip6cp": {
-      "enable": false
+      "enable": true
     }                                                                                                                                                
   },                                                                                                                                                                  
   "access-line": {
