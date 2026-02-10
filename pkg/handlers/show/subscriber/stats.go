@@ -7,10 +7,14 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
+	"github.com/veesix-networks/osvbng/pkg/state"
+	statepaths "github.com/veesix-networks/osvbng/pkg/state/paths"
 )
 
 func init() {
 	show.RegisterFactory(NewStatsHandler)
+
+	state.RegisterMetric(statepaths.SubscriberStats, paths.SubscriberStats)
 }
 
 type StatsHandler struct {
