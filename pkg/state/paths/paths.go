@@ -11,6 +11,7 @@ const (
 	ProtocolsOSPF6Neighbors Path = "protocols.ospf6.neighbors"
 	ProtocolsISISNeighbors  Path = "protocols.isis.neighbors"
 	SubscriberSessions         Path = "subscriber.sessions"
+	SubscriberStats            Path = "subscriber.stats"
 
 	SystemDataplaneSystem     Path = "system.dataplane.system"
 	SystemDataplaneMemory     Path = "system.dataplane.memory"
