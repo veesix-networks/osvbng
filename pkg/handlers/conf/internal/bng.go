@@ -76,11 +76,17 @@ func (h *BNGHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error
 		}
 
 	case interfaces.BNGModePPPoE:
+		if err := h.southbound.SetInterfacePromiscuous(parentIface, true); err != nil {
+			return fmt.Errorf("set promiscuous on %s: %w", parentIface, err)
+		}
 		if err := h.southbound.EnablePPPoEPunt(subIfName); err != nil {
 			return fmt.Errorf("enable pppoe punt: %w", err)
 		}
 
 	case interfaces.BNGModeLAC:
+		if err := h.southbound.SetInterfacePromiscuous(parentIface, true); err != nil {
+			return fmt.Errorf("set promiscuous on %s: %w", parentIface, err)
+		}
 		if err := h.southbound.EnablePPPoEPunt(subIfName); err != nil {
 			return fmt.Errorf("enable pppoe punt: %w", err)
 		}

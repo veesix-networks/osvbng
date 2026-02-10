@@ -552,14 +552,14 @@ func (s *SessionState) checkOpen() {
 			if s.component.vpp != nil && s.IPv4Address != nil {
 				var localMAC net.HardwareAddr
 				if s.component.ifMgr != nil {
-					if iface := s.component.ifMgr.Get(s.SwIfIndex); iface != nil && len(iface.MAC) >= 6 {
+					if iface := s.component.ifMgr.Get(s.EncapIfIndex); iface != nil && len(iface.MAC) >= 6 {
 						localMAC = net.HardwareAddr(iface.MAC[:6])
 					}
 				}
 				if localMAC == nil {
 					s.component.logger.Error("Failed to get local MAC",
 						"session_id", s.SessionID,
-						"sw_if_index", s.SwIfIndex)
+						"sw_if_index", s.EncapIfIndex)
 					return
 				}
 
@@ -568,7 +568,7 @@ func (s *SessionState) checkOpen() {
 					s.IPv4Address,
 					s.MAC,
 					localMAC,
-					s.SwIfIndex,
+					s.EncapIfIndex,
 					s.OuterVLAN,
 					s.InnerVLAN,
 					0,
@@ -703,7 +703,7 @@ func (s *SessionState) sendPPPPacket(proto uint16, code, id uint8, data []byte) 
 		}
 	}
 	if s.component.ifMgr != nil {
-		if iface := s.component.ifMgr.Get(s.SwIfIndex); iface != nil {
+		if iface := s.component.ifMgr.Get(s.EncapIfIndex); iface != nil {
 			parentSwIfIndex = iface.SupSwIfIndex
 		}
 		if srcMAC == "" {

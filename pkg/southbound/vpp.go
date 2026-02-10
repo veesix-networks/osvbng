@@ -777,6 +777,49 @@ func (v *VPP) SetInterfaceMAC(swIfIndex interface_types.InterfaceIndex, mac net.
 	return nil
 }
 
+func (v *VPP) SetInterfacePromiscuous(ifaceName string, on bool) error {
+	// For af-packet interfaces, VPP may report a zero MAC. Set the Linux
+	// interface MAC on the VPP side so ethernet-input accepts unicast traffic,
+	// and enable Linux promiscuous mode for future SRG/VRRP virtual MACs.
+
+	link, err := netlink.LinkByName(ifaceName)
+	if err != nil {
+		return fmt.Errorf("find linux interface %s: %w", ifaceName, err)
+	}
+	if on {
+		if err := netlink.SetPromiscOn(link); err != nil {
+			return fmt.Errorf("set promiscuous on %s: %w", ifaceName, err)
+		}
+	} else {
+		if err := netlink.SetPromiscOff(link); err != nil {
+			return fmt.Errorf("set promiscuous off %s: %w", ifaceName, err)
+		}
+	}
+
+	idx, err := v.GetInterfaceIndex(ifaceName)
+	if err != nil {
+		v.logger.Warn("Could not find VPP interface for MAC sync", "interface", ifaceName, "error", err)
+		return nil
+	}
+
+	linuxIf, err := net.InterfaceByName(ifaceName)
+	if err != nil {
+		v.logger.Warn("Could not get Linux interface MAC", "interface", ifaceName, "error", err)
+		return nil
+	}
+
+	if len(linuxIf.HardwareAddr) >= 6 {
+		if err := v.SetInterfaceMAC(interface_types.InterfaceIndex(idx), linuxIf.HardwareAddr); err != nil {
+			v.logger.Warn("Failed to set VPP interface MAC from Linux", "interface", ifaceName, "error", err)
+		} else {
+			v.logger.Debug("Synced VPP interface MAC from Linux", "interface", ifaceName, "mac", linuxIf.HardwareAddr)
+		}
+	}
+
+	v.logger.Debug("Set interface promiscuous", "interface", ifaceName, "on", on)
+	return nil
+}
+
 func (v *VPP) GetLCPHostInterface(vppIfaceName string) (string, error) {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
