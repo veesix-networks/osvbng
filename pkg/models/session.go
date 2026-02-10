@@ -22,6 +22,7 @@ type SubscriberSession interface {
 	GetIfIndex() uint32
 	GetVLANCount() int
 	GetInterfaceName() string
+	GetUsername() string
 }
 
 type IPoESession struct {
@@ -51,6 +52,8 @@ type IPoESession struct {
 	IPv6LeaseTime uint32
 	DUID          []byte
 
+	Username string
+
 	RADIUSSessionID  string
 	RADIUSAttributes map[string]string
 
@@ -76,6 +79,7 @@ func (s *IPoESession) GetIPv6Prefix() string      { return s.IPv6Prefix }
 func (s *IPoESession) GetIfIndex() uint32         { return s.IfIndex }
 func (s *IPoESession) GetVLANCount() int          { return s.VLANCount }
 func (s *IPoESession) GetInterfaceName() string   { return s.InterfaceName }
+func (s *IPoESession) GetUsername() string         { return s.Username }
 
 func (s *IPoESession) IsDualStack() bool {
 	return s.IPv4Address != nil && (s.IPv6Address != nil || s.IPv6Prefix != "")
@@ -154,6 +158,8 @@ type PPPSession struct {
 	IPCPState   string
 	IPv6CPState string
 
+	Username string
+
 	RADIUSSessionID  string
 	RADIUSAttributes map[string]string
 
@@ -179,6 +185,7 @@ func (s *PPPSession) GetIPv6Prefix() string      { return s.IPv6Prefix }
 func (s *PPPSession) GetIfIndex() uint32         { return s.IfIndex }
 func (s *PPPSession) GetVLANCount() int          { return s.VLANCount }
 func (s *PPPSession) GetInterfaceName() string   { return s.InterfaceName }
+func (s *PPPSession) GetUsername() string         { return s.Username }
 
 func (s *PPPSession) RedisKey() string {
 	return fmt.Sprintf("osvbng:sessions:%s", s.SessionID)

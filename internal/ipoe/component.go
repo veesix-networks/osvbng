@@ -91,6 +91,8 @@ type SessionState struct {
 	IPv6Bound            bool
 	PendingDHCPv6Solicit []byte
 	PendingDHCPv6Request []byte
+
+	Username string
 }
 
 type raPrefixInfo struct {
@@ -421,6 +423,8 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 		}
 	}
 
+	sess.Username = username
+
 	c.logger.WithGroup(logger.IPoEDHCP4).Info("Publishing AAA request for DISCOVER", "session_id", sess.SessionID, "username", username)
 	requestID := uuid.New().String()
 
@@ -568,6 +572,8 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 		}
 	}
 
+	sess.Username = username
+
 	c.logger.WithGroup(logger.IPoEDHCP4).Info("Publishing AAA request", "session_id", sess.SessionID, "username", username)
 	requestID := uuid.New().String()
 
@@ -673,6 +679,7 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 		MAC:              mac,
 		OuterVLAN:        pkt.OuterVLAN,
 		InnerVLAN:        pkt.InnerVLAN,
+		Username:         sess.Username,
 		RADIUSAttributes: make(map[string]string),
 	})
 }
@@ -857,6 +864,7 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 		IPv6Address:      sess.IPv6Address,
 		IPv6LeaseTime:    sess.IPv6LeaseTime,
 		DUID:             sess.DHCPv6DUID,
+		Username:         sess.Username,
 		RADIUSSessionID:  sess.AcctSessionID,
 		RADIUSAttributes: make(map[string]string),
 	}
@@ -1508,6 +1516,8 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, relayInterf
 		}
 	}
 
+	sess.Username = username
+
 	requestID := uuid.New().String()
 	aaaPayload := &models.AAARequest{
 		RequestID:     requestID,
@@ -1660,6 +1670,7 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
 			IfIndex:         ipoeSwIfIndex,
 			IPv6Address:     ipv6Address,
 			IPv6Prefix:      prefixStr,
+			Username:        sess.Username,
 			RADIUSSessionID: "",
 		})
 	}
@@ -1821,6 +1832,7 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, dhcp *layers.DHCPv6) e
 		IPv6Prefix:      prefixStr,
 		IPv6LeaseTime:   sess.IPv6LeaseTime,
 		DUID:            sess.DHCPv6DUID,
+		Username:        sess.Username,
 		RADIUSSessionID: sess.AcctSessionID,
 	}
 
