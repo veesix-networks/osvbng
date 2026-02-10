@@ -2,10 +2,10 @@
 
 Metrics collection configuration.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `disabled_collectors` | array | Collectors to disable |
-| `collect_interval` | duration | Collection interval (e.g., `10s`) |
+| Field | Type | Description | Example |
+|-------|------|-------------|---------|
+| `disabled_collectors` | array | Collectors to disable | `[memory]` |
+| `collect_interval` | duration | Collection interval | `10s` |
 
 ## Example
 
