@@ -2309,6 +2309,16 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 			if err == nil {
 				c.opdb.Put(ctx, opdb.NamespaceIPoESessions, sess.SessionID, data)
 			}
+		} else if sess.AAAApproved && !sess.IPoESessionCreated {
+			c.logger.Info("Session approved but IPoE never created, resetting AAA state",
+				"session_id", sess.SessionID)
+			sess.AAAApproved = false
+			stale++
+
+			data, err := json.Marshal(&sess)
+			if err == nil {
+				c.opdb.Put(ctx, opdb.NamespaceIPoESessions, sess.SessionID, data)
+			}
 		}
 
 		lookupKey := c.makeSessionKeyV4(sess.MAC, sess.OuterVLAN, sess.InnerVLAN)
