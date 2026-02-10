@@ -240,13 +240,16 @@ func (c *Component) GetStats(ctx context.Context) (map[string]uint32, error) {
 			stats["total"]++
 
 			accessType, _ := sessionData["AccessType"].(string)
-			protocol, _ := sessionData["Protocol"].(string)
 			state, _ := sessionData["State"].(string)
 
 			if accessType == "ipoe" {
-				if protocol == "dhcpv4" {
+				v4Addr, _ := sessionData["IPv4Address"].(string)
+				v6Addr, _ := sessionData["IPv6Address"].(string)
+				v6Prefix, _ := sessionData["IPv6Prefix"].(string)
+				if v4Addr != "" {
 					stats["ipoe_v4"]++
-				} else if protocol == "dhcpv6" {
+				}
+				if v6Addr != "" || v6Prefix != "" {
 					stats["ipoe_v6"]++
 				}
 			} else if accessType == "pppoe" {
