@@ -1,10 +1,8 @@
 name: Publish Docker Image
 
 on:
-  push:
-    tags:
-      - 'v*'
-      - 'docker-v*'
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       version:
@@ -45,10 +43,8 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION="${{ github.event.inputs.version }}"
           else
-            VERSION="${GITHUB_REF#refs/tags/}"
+            VERSION="${{ github.event.release.tag_name }}"
           fi
-          # Strip docker- prefix if present
-          VERSION="${VERSION#docker-}"
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
       - uses: docker/metadata-action@v5
