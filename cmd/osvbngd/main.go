@@ -383,6 +383,7 @@ func main() {
 	})
 
 	operRegistry.AutoRegisterAll(&deps.OperDeps{
+		Subscriber:       subscriberComp.(*subscriber.Component),
 		PluginComponents: pluginComponentsMap,
 	})
 

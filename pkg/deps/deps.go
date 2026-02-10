@@ -23,6 +23,7 @@ type ShowDeps struct {
 }
 
 type OperDeps struct {
+	Subscriber       *subscriber.Component
 	PluginComponents map[string]component.Component
 }
 

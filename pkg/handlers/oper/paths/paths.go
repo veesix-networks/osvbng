@@ -7,7 +7,8 @@ import (
 type Path string
 
 const (
-	SystemLoggingLevel Path = "system.logging.level.<*>"
+	SystemLoggingLevel     Path = "system.logging.level.<*>"
+	SubscriberSessionClear Path = "subscriber.session.clear"
 )
 
 func (p Path) String() string {

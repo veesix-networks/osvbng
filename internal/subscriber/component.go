@@ -277,24 +277,10 @@ func (c *Component) TerminateSession(ctx context.Context, sessionID string) erro
 
 	sess.State = models.SessionStateReleased
 
-	var accessType models.AccessType
-	var protocol models.Protocol
-
-	if len(sessionID) >= 7 && sessionID[:7] == "ipoe-v4" {
-		accessType = models.AccessTypeIPoE
-		protocol = models.ProtocolDHCPv4
-	} else if len(sessionID) >= 7 && sessionID[:7] == "ipoe-v6" {
-		accessType = models.AccessTypeIPoE
-		protocol = models.ProtocolDHCPv6
-	} else if len(sessionID) >= 3 && sessionID[:3] == "ppp" {
-		accessType = models.AccessTypePPPoE
-		protocol = models.ProtocolPPP
-	}
-
 	releaseEvent := models.Event{
 		Type:       models.EventTypeSessionLifecycle,
-		AccessType: accessType,
-		Protocol:   protocol,
+		AccessType: models.AccessType(sess.AccessType),
+		Protocol:   models.Protocol(sess.Protocol),
 		SessionID:  sessionID,
 	}
 	releaseEvent.SetPayload(sess)
