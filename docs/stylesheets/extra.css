@@ -3,3 +3,182 @@
     --md-primary-fg-color--light: #4c9c2d;
     --md-primary-fg-color--dark:  #4c9c2d;
   }
+
+/* ── Vertical Packet Diagram ──────────────────────────────────── */
+
+.packet-diagram--vertical {
+  display: grid;
+  margin: 1em 0;
+}
+
+.packet-v-fields {
+  grid-column: 1;
+  display: grid;
+  grid-template-rows: subgrid;
+  border: 1px solid var(--pkt-border, #bdbdbd);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.packet-v-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5em 0.8em;
+  border-bottom: 1px solid var(--pkt-border, #bdbdbd);
+}
+
+.packet-v-row:last-child {
+  border-bottom: none;
+}
+
+.packet-v-row__label {
+  font-weight: 600;
+  font-size: 0.85em;
+  line-height: 1.2;
+}
+
+.packet-v-row__size {
+  font-size: 0.75em;
+  opacity: 0.65;
+  margin-left: 1em;
+  white-space: nowrap;
+}
+
+/* Variable-length field stripe pattern */
+.packet-field--variable {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    var(--pkt-stripe, rgba(0, 0, 0, 0.04)) 4px,
+    var(--pkt-stripe, rgba(0, 0, 0, 0.04)) 8px
+  );
+}
+
+.packet-field--variable.packet-field--payload {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    var(--pkt-stripe) 4px,
+    var(--pkt-stripe) 8px
+  );
+  background-color: var(--pkt-payload-bg);
+}
+
+/* ── Bracket annotations (right-side) ─────────────────────────── */
+
+.packet-v-bracket {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-left: 10px;
+}
+
+.packet-v-bracket__line {
+  width: 10px;
+  align-self: stretch;
+  border-right: 2px solid var(--pkt-bracket, #777);
+  border-top: 2px solid var(--pkt-bracket, #777);
+  border-bottom: 2px solid var(--pkt-bracket, #777);
+  border-top-right-radius: 4px;
+  border-bottom-right-radius: 4px;
+}
+
+.packet-v-bracket__label {
+  font-size: 0.8em;
+  font-weight: 500;
+  padding-left: 6px;
+  white-space: nowrap;
+  color: var(--pkt-bracket-fg, #444);
+}
+
+/* ── Light mode (default) ───────────────────────────────────────── */
+
+:root,
+[data-md-color-scheme="default"] {
+  --pkt-border: #bdbdbd;
+  --pkt-stripe: rgba(0, 0, 0, 0.05);
+  --pkt-bracket: #777;
+  --pkt-bracket-fg: #444;
+  --pkt-ethernet-bg: #e3f2fd;
+  --pkt-ethernet-fg: #1565c0;
+  --pkt-ethertype-bg: #f3e5f5;
+  --pkt-ethertype-fg: #7b1fa2;
+  --pkt-vlan-bg: #fff3e0;
+  --pkt-vlan-fg: #e65100;
+  --pkt-protocol-bg: #e8f5e9;
+  --pkt-protocol-fg: #2e7d32;
+  --pkt-payload-bg: #f5f5f5;
+  --pkt-payload-fg: #424242;
+  --pkt-default-bg: #fafafa;
+  --pkt-default-fg: #424242;
+}
+
+/* ── Dark mode ──────────────────────────────────────────────────── */
+
+[data-md-color-scheme="slate"] {
+  --pkt-border: #555;
+  --pkt-stripe: rgba(255, 255, 255, 0.05);
+  --pkt-bracket: #999;
+  --pkt-bracket-fg: #bbb;
+  --pkt-ethernet-bg: #1a3a5c;
+  --pkt-ethernet-fg: #90caf9;
+  --pkt-ethertype-bg: #3c1f56;
+  --pkt-ethertype-fg: #ce93d8;
+  --pkt-vlan-bg: #4e2e0a;
+  --pkt-vlan-fg: #ffcc80;
+  --pkt-protocol-bg: #1b3a20;
+  --pkt-protocol-fg: #a5d6a7;
+  --pkt-payload-bg: #2c2c2c;
+  --pkt-payload-fg: #bdbdbd;
+  --pkt-default-bg: #333;
+  --pkt-default-fg: #bdbdbd;
+}
+
+/* ── Color categories ───────────────────────────────────────────── */
+
+.packet-field--ethernet {
+  background-color: var(--pkt-ethernet-bg);
+  color: var(--pkt-ethernet-fg);
+}
+
+.packet-field--ethertype {
+  background-color: var(--pkt-ethertype-bg);
+  color: var(--pkt-ethertype-fg);
+}
+
+.packet-field--vlan {
+  background-color: var(--pkt-vlan-bg);
+  color: var(--pkt-vlan-fg);
+}
+
+.packet-field--protocol {
+  background-color: var(--pkt-protocol-bg);
+  color: var(--pkt-protocol-fg);
+}
+
+.packet-field--payload {
+  background-color: var(--pkt-payload-bg);
+  color: var(--pkt-payload-fg);
+}
+
+.packet-field--default {
+  background-color: var(--pkt-default-bg);
+  color: var(--pkt-default-fg);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+  .packet-v-row {
+    padding: 0.4em 0.6em;
+  }
+  .packet-v-row__label {
+    font-size: 0.78em;
+  }
+  .packet-v-bracket__label {
+    font-size: 0.7em;
+  }
+}
