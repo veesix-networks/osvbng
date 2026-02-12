@@ -66,11 +66,17 @@ nav:
       - Handlers: architecture/HANDLERS.md
       - Plugins: architecture/PLUGINS.md
       - Supported NICs: architecture/SUPPORTED_NICS.md
+      - Reference Deployment Methods: architecture/REFERENCE_DEPLOYMENT_METHODS.md
   - Contributing:
     - Getting Started: contributing/please_read_first.md
     - Commit Messages: contributing/commit-messages.md
     - Guidelines: contributing/guidelines.md
+  - Roadmap:
+    - Overview: roadmap/overview.md
+    - Year 2026: roadmap/2026.md
   - Author: https://github.com/veesix-networks
+hooks:
+  - docs/hooks/packet_diagram.py
 markdown_extensions:
   - admonition
   - pymdownx.details
