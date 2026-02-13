@@ -111,6 +111,8 @@ type SessionState struct {
 	pendingPAPID         uint8
 	pendingCHAPID        uint8
 
+	OuterTPID uint16
+
 	component *Component
 	mu        sync.Mutex
 }
@@ -145,6 +147,27 @@ func New(deps component.Dependencies, srgMgr *srg.Manager, ifMgr *ifmgr.Manager)
 	c.echoGen = NewEchoGenerator(DefaultEchoConfig(), c.sendEchoRequest, c.handleDeadPeer)
 
 	return c, nil
+}
+
+func (c *Component) resolveOuterTPID(svlan uint16) uint16 {
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+		return 0x88A8
+	}
+	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(svlan)
+	if group == nil {
+		return 0x88A8
+	}
+	return group.GetOuterTPID()
+}
+
+func (c *Component) getSessionOuterTPID(sess *SessionState) uint16 {
+	if sess.OuterTPID != 0 {
+		return sess.OuterTPID
+	}
+	tpid := c.resolveOuterTPID(sess.OuterVLAN)
+	sess.OuterTPID = tpid
+	return tpid
 }
 
 func (c *Component) Start(ctx context.Context) error {
@@ -440,6 +463,7 @@ func (c *Component) sendDiscoveryPacket(pkt *dataplane.ParsedPacket, code layers
 		SrcMAC:    srcMAC,
 		OuterVLAN: pkt.OuterVLAN,
 		InnerVLAN: pkt.InnerVLAN,
+		OuterTPID: c.resolveOuterTPID(pkt.OuterVLAN),
 		SwIfIndex: parentSwIfIndex,
 		RawData:   rawPPPoE,
 	}

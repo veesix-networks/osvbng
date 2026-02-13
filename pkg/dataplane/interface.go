@@ -24,6 +24,7 @@ type EgressPacket struct {
 	SrcMAC    net.HardwareAddr
 	OuterVLAN uint16
 	InnerVLAN uint16
+	OuterTPID uint16
 	EtherType uint16
 	Payload   []byte
 }
