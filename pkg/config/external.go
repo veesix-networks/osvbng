@@ -131,8 +131,7 @@ func GenerateExternalConfigs(configPath string) error {
 	}
 
 	if _, err := os.Stat(rc.ConfigPath); os.IsNotExist(err) {
-		emptyConfig := &Config{}
-		if err := rc.WriteConfig(emptyConfig); err != nil {
+		if err := rc.WriteConfig(cfg); err != nil {
 			return fmt.Errorf("write routing config: %w", err)
 		}
 		log.Printf("Generated %s", rc.ConfigPath)
