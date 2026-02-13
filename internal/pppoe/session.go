@@ -723,6 +723,7 @@ func (s *SessionState) sendPPPPacket(proto uint16, code, id uint8, data []byte) 
 		SrcMAC:    srcMAC,
 		OuterVLAN: s.OuterVLAN,
 		InnerVLAN: s.InnerVLAN,
+		OuterTPID: s.component.getSessionOuterTPID(s),
 		SwIfIndex: parentSwIfIndex,
 		RawData:   buf.Bytes(),
 	}

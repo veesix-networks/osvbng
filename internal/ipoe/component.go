@@ -92,7 +92,29 @@ type SessionState struct {
 	PendingDHCPv6Solicit []byte
 	PendingDHCPv6Request []byte
 
-	Username string
+	Username   string
+	OuterTPID  uint16
+}
+
+func (c *Component) resolveOuterTPID(svlan uint16) uint16 {
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+		return 0x88A8
+	}
+	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(svlan)
+	if group == nil {
+		return 0x88A8
+	}
+	return group.GetOuterTPID()
+}
+
+func (c *Component) getSessionOuterTPID(sess *SessionState) uint16 {
+	if sess.OuterTPID != 0 {
+		return sess.OuterTPID
+	}
+	tpid := c.resolveOuterTPID(sess.OuterVLAN)
+	sess.OuterTPID = tpid
+	return tpid
 }
 
 type raPrefixInfo struct {
@@ -769,6 +791,7 @@ func (c *Component) handleServerResponse(pkt *dataplane.ParsedPacket) error {
 		SrcMAC:    vmac.String(),
 		OuterVLAN: sess.OuterVLAN,
 		InnerVLAN: sess.InnerVLAN,
+		OuterTPID: c.getSessionOuterTPID(sess),
 		SwIfIndex: parentSwIfIndex,
 		RawData:   finalBuf.Bytes(),
 	}
@@ -1196,6 +1219,16 @@ func (c *Component) countExistingSessions(mac net.HardwareAddr, svlan, cvlan uin
 func (c *Component) sendDHCPResponse(sessID string, svlan, cvlan uint16, encapIfIndex uint32, mac net.HardwareAddr, rawData []byte, msgType string) error {
 	var srcMAC string
 	var parentSwIfIndex uint32
+	var outerTPID uint16
+
+	c.sessionMu.RLock()
+	if sess := c.sessionIndex[sessID]; sess != nil {
+		outerTPID = c.getSessionOuterTPID(sess)
+	}
+	c.sessionMu.RUnlock()
+	if outerTPID == 0 {
+		outerTPID = c.resolveOuterTPID(svlan)
+	}
 
 	if c.srgMgr != nil {
 		if vmac := c.srgMgr.GetVirtualMAC(svlan); vmac != nil {
@@ -1218,6 +1251,7 @@ func (c *Component) sendDHCPResponse(sessID string, svlan, cvlan uint16, encapIf
 		SrcMAC:    srcMAC,
 		OuterVLAN: svlan,
 		InnerVLAN: cvlan,
+		OuterTPID: outerTPID,
 		SwIfIndex: parentSwIfIndex,
 		RawData:   rawData,
 	}
@@ -1899,6 +1933,7 @@ func (c *Component) sendDHCPv6Response(sess *SessionState, rawDHCPv6 []byte) err
 		SrcMAC:    srcMAC,
 		OuterVLAN: sess.OuterVLAN,
 		InnerVLAN: sess.InnerVLAN,
+		OuterTPID: c.getSessionOuterTPID(sess),
 		SwIfIndex: parentSwIfIndex,
 		RawData:   buf.Bytes(),
 	}
@@ -2201,6 +2236,7 @@ func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbo
 		SrcMAC:    srcMACBytes.String(),
 		OuterVLAN: pkt.OuterVLAN,
 		InnerVLAN: pkt.InnerVLAN,
+		OuterTPID: c.resolveOuterTPID(pkt.OuterVLAN),
 		SwIfIndex: parentSwIfIndex,
 		RawData:   buf.Bytes(),
 	}

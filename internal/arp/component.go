@@ -43,6 +43,18 @@ func New(deps component.Dependencies, srgMgr *srg.Manager, ifMgr *ifmgr.Manager)
 	}, nil
 }
 
+func (c *Component) resolveOuterTPID(svlan uint16) uint16 {
+	cfg, err := c.configMgr.GetRunning()
+	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+		return 0x88A8
+	}
+	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(svlan)
+	if group == nil {
+		return 0x88A8
+	}
+	return group.GetOuterTPID()
+}
+
 func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
 	c.logger.Info("Starting ARP component")
@@ -135,6 +147,7 @@ func (c *Component) handlePacket(pkt *dataplane.ParsedPacket) error {
 		SrcMAC:    gatewayMAC.String(),
 		OuterVLAN: pkt.OuterVLAN,
 		InnerVLAN: pkt.InnerVLAN,
+		OuterTPID: c.resolveOuterTPID(pkt.OuterVLAN),
 		SwIfIndex: parentSwIfIndex,
 		RawData:   arpReply,
 	}

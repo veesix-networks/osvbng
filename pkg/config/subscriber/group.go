@@ -39,11 +39,19 @@ type SubscriberGroup struct {
 	IANAPool     string           `json:"iana-pool,omitempty" yaml:"iana-pool,omitempty"`
 	PDPool       string           `json:"pd-pool,omitempty" yaml:"pd-pool,omitempty"`
 	SessionMode  SessionMode      `json:"session-mode,omitempty" yaml:"session-mode,omitempty"`
+	VLANProtocol string           `json:"vlan-protocol,omitempty" yaml:"vlan-protocol,omitempty"`
 	DHCP         *SubscriberDHCP  `json:"dhcp,omitempty" yaml:"dhcp,omitempty"`
 	IPv6         *SubscriberIPv6  `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`
 	BGP          *SubscriberBGP   `json:"bgp,omitempty" yaml:"bgp,omitempty"`
 	VRF          string           `json:"vrf,omitempty" yaml:"vrf,omitempty"`
 	AAAPolicy    string           `json:"aaa-policy,omitempty" yaml:"aaa-policy,omitempty"`
+}
+
+func (sg *SubscriberGroup) GetOuterTPID() uint16 {
+	if sg.VLANProtocol == "802.1q" {
+		return 0x8100
+	}
+	return 0x88A8
 }
 
 // GetSessionMode returns the configured session mode, defaulting to unified

@@ -256,6 +256,7 @@ func (c *Component) handleEgress(event models.Event) error {
 		SrcMAC:    srcMAC,
 		OuterVLAN: payload.OuterVLAN,
 		InnerVLAN: payload.InnerVLAN,
+		OuterTPID: payload.OuterTPID,
 		EtherType: etherType,
 		Payload:   payload.RawData,
 	}

@@ -101,7 +101,13 @@ func (e *Egress) buildFrame(pkt *dataplane.EgressPacket) []byte {
 	}
 
 	if pkt.OuterVLAN > 0 && pkt.InnerVLAN > 0 {
-		frame = append(frame, 0x81, 0x00)
+		outerTPID := pkt.OuterTPID
+		if outerTPID == 0 {
+			outerTPID = 0x88A8
+		}
+		tpid := make([]byte, 2)
+		binary.BigEndian.PutUint16(tpid, outerTPID)
+		frame = append(frame, tpid...)
 		vlan := make([]byte, 2)
 		binary.BigEndian.PutUint16(vlan, pkt.OuterVLAN)
 		frame = append(frame, vlan...)
