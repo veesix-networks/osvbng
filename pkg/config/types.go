@@ -22,7 +22,7 @@ type Config struct {
 	Interfaces       map[string]*interfaces.InterfaceConfig `json:"interfaces,omitempty" yaml:"interfaces,omitempty"`
 	Protocols        protocols.ProtocolConfig               `json:"protocols,omitempty" yaml:"protocols,omitempty"`
 	AAA              aaa.AAAConfig                          `json:"aaa,omitempty" yaml:"aaa,omitempty"`
-	VRFS             []ip.VRFSConfig                        `json:"vrfs,omitempty" yaml:"vrfs,omitempty"`
+	VRFS             map[string]*ip.VRFSConfig               `json:"vrfs,omitempty" yaml:"vrfs,omitempty"`
 	System           *SystemConfig                          `json:"system,omitempty" yaml:"system,omitempty"`
 	Plugins          map[string]interface{}                 `json:"plugins,omitempty" yaml:"plugins,omitempty"`
 }

@@ -1,0 +1,7 @@
+{{ define "vrf" -}}
+{{ range $vrfName, $vrfConfig := .VRFS -}}
+vrf {{ $vrfName }}
+ exit-vrf
+!
+{{ end -}}
+{{ end -}}

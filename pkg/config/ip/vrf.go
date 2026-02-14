@@ -1,7 +1,6 @@
 package ip
 
 type VRFSConfig struct {
-	Name               string                 `json:"name" yaml:"name"`
 	Description        string                 `json:"description,omitempty" yaml:"description,omitempty"`
 	RouteDistinguisher string                 `json:"rd,omitempty" yaml:"rd,omitempty"`
 	ImportRouteTargets []string               `json:"import-route-targets,omitempty" yaml:"import-route-targets,omitempty"`
@@ -10,16 +9,12 @@ type VRFSConfig struct {
 }
 
 type VRFAddressFamilyConfig struct {
-	IPv4Unicast *IPv4UnicastConfig `json:"ipv4-unicast,omitempty" yaml:"ipv4-unicast,omitempty"`
-	IPv6Unicast *IPv6UnicastConfig `json:"ipv6-unicast,omitempty" yaml:"ipv6-unicast,omitempty"`
+	IPv4Unicast *VRFAFConfig `json:"ipv4-unicast,omitempty" yaml:"ipv4-unicast,omitempty"`
+	IPv6Unicast *VRFAFConfig `json:"ipv6-unicast,omitempty" yaml:"ipv6-unicast,omitempty"`
 }
 
-type IPv4UnicastConfig struct {
-	ImportRoutePolicy string `json:"import-route-policy,omitempty" yaml:"import-route-policy,omitempty"`
-	ExportRoutePolicy string `json:"export-route-policy,omitempty" yaml:"export-route-policy,omitempty"`
-}
-
-type IPv6UnicastConfig struct {
+type VRFAFConfig struct {
+	Enabled           bool   `json:"enabled,omitempty" yaml:"enabled,omitempty"`
 	ImportRoutePolicy string `json:"import-route-policy,omitempty" yaml:"import-route-policy,omitempty"`
 	ExportRoutePolicy string `json:"export-route-policy,omitempty" yaml:"export-route-policy,omitempty"`
 }
