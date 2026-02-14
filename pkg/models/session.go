@@ -38,6 +38,7 @@ type IPoESession struct {
 
 	InterfaceName string
 	IfIndex       uint32
+	VRF           string
 
 	IPv4Address net.IP
 	LeaseTime   uint32
@@ -150,6 +151,7 @@ type PPPSession struct {
 
 	InterfaceName string
 	IfIndex       uint32
+	VRF           string
 
 	IPv4Address net.IP
 	IPv6Address net.IP

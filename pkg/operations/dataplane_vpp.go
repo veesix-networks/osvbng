@@ -17,9 +17,10 @@ import (
 )
 
 type VPPDataplane struct {
-	conn       *core.Connection
-	ifaceCache map[string]interface_types.InterfaceIndex
-	logger     *slog.Logger
+	conn        *core.Connection
+	ifaceCache  map[string]interface_types.InterfaceIndex
+	logger      *slog.Logger
+	vrfResolver func(string) (uint32, error)
 }
 
 func NewVPPDataplane(conn *core.Connection) *VPPDataplane {
@@ -28,6 +29,10 @@ func NewVPPDataplane(conn *core.Connection) *VPPDataplane {
 		ifaceCache: make(map[string]interface_types.InterfaceIndex),
 		logger:     logger.Get(logger.Dataplane),
 	}
+}
+
+func (d *VPPDataplane) SetVRFResolver(resolver func(string) (uint32, error)) {
+	d.vrfResolver = resolver
 }
 
 func (d *VPPDataplane) CreateInterface(cfg *interfaces.InterfaceConfig) error {
@@ -103,6 +108,12 @@ func (d *VPPDataplane) createLoopback(cfg *interfaces.InterfaceConfig) error {
 		time.Sleep(100 * time.Millisecond)
 		if cfg.Description != "" {
 			d.SetInterfaceDescription(cfg.Name, cfg.Description)
+		}
+	}
+
+	if cfg.VRF != "" {
+		if err := d.bindInterfaceToVRF(vppIfName, cfg.Name, cfg.VRF, cfg.LCP); err != nil {
+			return fmt.Errorf("bind to VRF: %w", err)
 		}
 	}
 
@@ -427,6 +438,91 @@ func (d *VPPDataplane) setInterfaceState(name string, enabled bool) error {
 	}
 
 	d.logger.Info("Set interface state", "interface", name, "enabled", enabled)
+	return nil
+}
+
+func (d *VPPDataplane) bindInterfaceToVRF(vppIfName, linuxIfName, vrfName string, hasLCP bool) error {
+	if d.vrfResolver == nil {
+		return fmt.Errorf("VRF resolver not configured")
+	}
+
+	tableID, err := d.vrfResolver(vrfName)
+	if err != nil {
+		return fmt.Errorf("resolve VRF %q: %w", vrfName, err)
+	}
+
+	if err := d.setInterfaceTable(vppIfName, tableID); err != nil {
+		return fmt.Errorf("set VPP table: %w", err)
+	}
+
+	if hasLCP {
+		if err := d.setLinuxInterfaceVRF(linuxIfName, vrfName); err != nil {
+			return fmt.Errorf("set Linux VRF: %w", err)
+		}
+	}
+
+	d.logger.Info("Bound interface to VRF", "vpp_iface", vppIfName, "linux_iface", linuxIfName, "vrf", vrfName, "table_id", tableID)
+	return nil
+}
+
+func (d *VPPDataplane) setInterfaceTable(name string, tableID uint32) error {
+	ch, err := d.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	swIfIndex, err := d.getInterfaceIndex(name)
+	if err != nil {
+		return fmt.Errorf("get interface index: %w", err)
+	}
+
+	// Set IPv4 table
+	req4 := &vppinterfaces.SwInterfaceSetTable{
+		SwIfIndex: swIfIndex,
+		IsIPv6:    false,
+		VrfID:     tableID,
+	}
+	reply4 := &vppinterfaces.SwInterfaceSetTableReply{}
+	if err := ch.SendRequest(req4).ReceiveReply(reply4); err != nil {
+		return fmt.Errorf("set IPv4 table: %w", err)
+	}
+	if reply4.Retval != 0 {
+		return fmt.Errorf("set IPv4 table failed: retval=%d", reply4.Retval)
+	}
+
+	// Set IPv6 table
+	req6 := &vppinterfaces.SwInterfaceSetTable{
+		SwIfIndex: swIfIndex,
+		IsIPv6:    true,
+		VrfID:     tableID,
+	}
+	reply6 := &vppinterfaces.SwInterfaceSetTableReply{}
+	if err := ch.SendRequest(req6).ReceiveReply(reply6); err != nil {
+		return fmt.Errorf("set IPv6 table: %w", err)
+	}
+	if reply6.Retval != 0 {
+		return fmt.Errorf("set IPv6 table failed: retval=%d", reply6.Retval)
+	}
+
+	return nil
+}
+
+func (d *VPPDataplane) setLinuxInterfaceVRF(ifName, vrfName string) error {
+	vrfLink, err := netlink.LinkByName(vrfName)
+	if err != nil {
+		return fmt.Errorf("VRF device %q not found: %w", vrfName, err)
+	}
+
+	tapLink, err := netlink.LinkByName(ifName)
+	if err != nil {
+		return fmt.Errorf("interface %q not found: %w", ifName, err)
+	}
+
+	if err := netlink.LinkSetMaster(tapLink, vrfLink); err != nil {
+		return fmt.Errorf("enslave %q to VRF %q: %w", ifName, vrfName, err)
+	}
+
 	return nil
 }
 

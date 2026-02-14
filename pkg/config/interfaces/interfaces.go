@@ -12,6 +12,7 @@ type InterfaceConfig struct {
 	VLANID  int         `json:"vlan-id,omitempty" yaml:"vlan-id,omitempty"`
 	Bond    *BondConfig `json:"bond,omitempty" yaml:"bond,omitempty"`
 	LCP     bool        `json:"lcp,omitempty" yaml:"lcp,omitempty"`
+	VRF     string      `json:"vrf,omitempty" yaml:"vrf,omitempty"`
 	BNGMode string      `json:"bng_mode,omitempty" yaml:"bng_mode,omitempty"`
 
 	Subinterfaces map[string]*SubinterfaceConfig `json:"subinterfaces,omitempty" yaml:"subinterfaces,omitempty"`

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -397,8 +398,16 @@ func (cd *ConfigManager) sortChangesByDependencies(changes []*conf.HandlerContex
 	var sorted []*conf.HandlerContext
 	queue := make([]int, 0)
 
-	for idx, degree := range inDegree {
-		if degree == 0 {
+	// Collect and sort indices to preserve insertion order for changes at the
+	// same dependency level. This ensures deterministic ordering — e.g., VRFs
+	// (emitted first in LoadConfig) are processed before interfaces.
+	indices := make([]int, 0, len(inDegree))
+	for idx := range inDegree {
+		indices = append(indices, idx)
+	}
+	sort.Ints(indices)
+	for _, idx := range indices {
+		if inDegree[idx] == 0 {
 			queue = append(queue, idx)
 		}
 	}
@@ -640,6 +649,16 @@ func (cd *ConfigManager) LoadConfig(id conf.SessionID, config *config.Config) er
 	}
 
 	sess.changes = make([]*conf.HandlerContext, 0)
+
+	for name, vrfCfg := range config.VRFS {
+		hctx := &conf.HandlerContext{
+			SessionID: id,
+			Path:      fmt.Sprintf("vrfs.%s", name),
+			OldValue:  nil,
+			NewValue:  vrfCfg,
+		}
+		sess.changes = append(sess.changes, hctx)
+	}
 
 	for name, iface := range config.Interfaces {
 		hctx := &conf.HandlerContext{

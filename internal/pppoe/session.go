@@ -339,6 +339,15 @@ func (s *SessionState) onAuthResult(allowed bool, attributes map[string]interfac
 
 		s.extractIPFromAttributes()
 
+		if s.VRF == "" {
+			cfg, _ := s.component.cfgMgr.GetRunning()
+			if cfg != nil && cfg.SubscriberGroups != nil {
+				if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(s.OuterVLAN); group != nil {
+					s.VRF = group.VRF
+				}
+			}
+		}
+
 		if s.pendingAuthType == "pap" {
 			s.sendPAPAck(s.pendingPAPID)
 		} else if s.pendingAuthType == "chap" {
@@ -391,6 +400,11 @@ func (s *SessionState) extractIPFromAttributes() {
 			s.IPv6Prefix = ipnet
 			s.component.logger.Debug("Got IPv6 prefix from AAA", "prefix", prefix)
 		}
+	}
+
+	if vrfName, ok := s.Attributes["vrf"]; ok && vrfName != "" {
+		s.VRF = vrfName
+		s.component.logger.Debug("Got VRF from AAA", "vrf", vrfName)
 	}
 }
 
@@ -544,6 +558,7 @@ func (s *SessionState) checkOpen() {
 				OuterVLAN:       s.OuterVLAN,
 				InnerVLAN:       s.InnerVLAN,
 				IfIndex:         s.SwIfIndex,
+				VRF:             s.VRF,
 				IPv4Address:     s.IPv4Address,
 				IPv6Address:     s.IPv6Address,
 				Username:        s.Username,
@@ -564,6 +579,19 @@ func (s *SessionState) checkOpen() {
 					return
 				}
 
+				var decapVrfID uint32
+				if s.VRF != "" && s.component.vrfMgr != nil {
+					tableID, err := s.component.vrfMgr.ResolveVRF(s.VRF)
+					if err != nil {
+						s.component.logger.Error("Failed to resolve VRF for session",
+							"session_id", s.SessionID,
+							"vrf", s.VRF,
+							"error", err)
+						return
+					}
+					decapVrfID = tableID
+				}
+
 				s.component.vpp.AddPPPoESessionAsync(
 					s.PPPoESessionID,
 					s.IPv4Address,
@@ -572,7 +600,7 @@ func (s *SessionState) checkOpen() {
 					s.EncapIfIndex,
 					s.OuterVLAN,
 					s.InnerVLAN,
-					0,
+					decapVrfID,
 					s.onVPPSessionCreated,
 				)
 			} else if s.component.echoGen != nil {

@@ -2,20 +2,20 @@ package ip
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
+	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
 )
 
 type VRFHandler struct {
-	daemons *deps.ShowDeps
+	vrfMgr *vrfmgr.Manager
 }
 
 func init() {
 	show.RegisterFactory(func(daemons *deps.ShowDeps) show.ShowHandler {
-		return &VRFHandler{daemons: daemons}
+		return &VRFHandler{vrfMgr: daemons.VRFManager}
 	})
 }
 
@@ -28,5 +28,5 @@ func (h *VRFHandler) Dependencies() []paths.Path {
 }
 
 func (h *VRFHandler) Collect(ctx context.Context, req *show.Request) (interface{}, error) {
-	return nil, fmt.Errorf("Router component not yet implemented")
+	return h.vrfMgr.GetVRFs(), nil
 }
