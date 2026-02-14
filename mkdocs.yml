@@ -45,6 +45,7 @@ nav:
     - DHCP: configuration/dhcp.md
     - DHCPv6: configuration/dhcpv6.md
     - AAA: configuration/aaa.md
+    - Service Groups: configuration/service-groups.md
     - VRFs: configuration/vrfs.md
     - Protocols: configuration/protocols.md
     - MPLS: configuration/mpls.md

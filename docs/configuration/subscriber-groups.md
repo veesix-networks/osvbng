@@ -15,7 +15,8 @@ Defines how subscribers are grouped and configured based on VLAN.
 | `dhcp` | [GroupDHCP](#group-dhcp) | DHCP settings for this group | |
 | `ipv6` | [GroupIPv6](#group-ipv6) | IPv6 settings for this group | |
 | `bgp` | [GroupBGP](#group-bgp) | BGP settings for this group | |
-| `vrf` | string | VRF name for this group (not yet supported) | `customers` |
+| `vrf` | string | VRF name for this group (legacy, prefer `default-service-group`) | `customers` |
+| `default-service-group` | string | Default [service group](service-groups.md) for subscribers in this group | `cgnat-residential` |
 | `aaa-policy` | string | Default AAA policy name | `default-policy` |
 
 ## VLAN Rules
@@ -67,7 +68,7 @@ Defines how subscribers are grouped and configured based on VLAN.
 | `enabled` | bool | Enable BGP for this group | `true` |
 | `advertise-pools` | bool | Advertise address pools via BGP | `true` |
 | `redistribute-connected` | bool | Redistribute connected routes | `false` |
-| `vrf` | string | VRF name for BGP advertisements (not yet supported) | `customers` |
+| `vrf` | string | VRF name for BGP advertisements | `customers` |
 
 !!! info "Auto-generation"
     When `dhcp.auto-generate: true` and `bgp.advertise-pools: true` are set, osvbng automatically:
@@ -110,5 +111,6 @@ subscriber-groups:
       bgp:
         enabled: true
         advertise-pools: true
+      default-service-group: cgnat-residential
       aaa-policy: default-policy
 ```
