@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/veesix-networks/osvbng/pkg/config/aaa"
 	"github.com/veesix-networks/osvbng/pkg/events"
+	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/ppp"
 )
@@ -338,15 +339,15 @@ func (s *SessionState) onAuthResult(allowed bool, attributes map[string]interfac
 		}
 
 		s.extractIPFromAttributes()
+		resolved := s.resolveServiceGroup(attributes)
+		s.VRF = resolved.VRF
+		s.ServiceGroup = resolved
 
-		if s.VRF == "" {
-			cfg, _ := s.component.cfgMgr.GetRunning()
-			if cfg != nil && cfg.SubscriberGroups != nil {
-				if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(s.OuterVLAN); group != nil {
-					s.VRF = group.VRF
-				}
-			}
+		logArgs := []any{"session_id", s.SessionID}
+		for _, attr := range resolved.LogAttrs() {
+			logArgs = append(logArgs, attr.Key, attr.Value.Any())
 		}
+		s.component.logger.Info("Resolved service group", logArgs...)
 
 		if s.pendingAuthType == "pap" {
 			s.sendPAPAck(s.pendingPAPID)
@@ -402,10 +403,25 @@ func (s *SessionState) extractIPFromAttributes() {
 		}
 	}
 
-	if vrfName, ok := s.Attributes["vrf"]; ok && vrfName != "" {
-		s.VRF = vrfName
-		s.component.logger.Debug("Got VRF from AAA", "vrf", vrfName)
+}
+
+func (s *SessionState) resolveServiceGroup(aaaAttrs map[string]interface{}) svcgroup.ServiceGroup {
+	var sgName string
+	if v, ok := aaaAttrs["service-group"]; ok {
+		if str, ok := v.(string); ok {
+			sgName = str
+		}
 	}
+
+	var defaultSG string
+	cfg, _ := s.component.cfgMgr.GetRunning()
+	if cfg != nil && cfg.SubscriberGroups != nil {
+		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(s.OuterVLAN); group != nil {
+			defaultSG = group.DefaultServiceGroup
+		}
+	}
+
+	return s.component.svcGroupResolver.Resolve(sgName, defaultSG, aaaAttrs)
 }
 
 func (s *SessionState) sendPAPAck(id uint8) {

@@ -660,6 +660,16 @@ func (cd *ConfigManager) LoadConfig(id conf.SessionID, config *config.Config) er
 		sess.changes = append(sess.changes, hctx)
 	}
 
+	for name, sgCfg := range config.ServiceGroups {
+		hctx := &conf.HandlerContext{
+			SessionID: id,
+			Path:      fmt.Sprintf("service-groups.%s", name),
+			OldValue:  nil,
+			NewValue:  sgCfg,
+		}
+		sess.changes = append(sess.changes, hctx)
+	}
+
 	for name, iface := range config.Interfaces {
 		hctx := &conf.HandlerContext{
 			SessionID: id,
