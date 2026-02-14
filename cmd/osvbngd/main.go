@@ -207,6 +207,7 @@ func main() {
 		EventBus:      eventBus,
 		Cache:         cache,
 		VPP:           vpp,
+		VRFManager:    vrfMgr,
 		ConfigManager: configd,
 		OpDB:          opdbStore,
 		CPPM:          cppmManager,

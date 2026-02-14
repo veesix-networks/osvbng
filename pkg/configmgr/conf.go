@@ -641,6 +641,16 @@ func (cd *ConfigManager) LoadConfig(id conf.SessionID, config *config.Config) er
 
 	sess.changes = make([]*conf.HandlerContext, 0)
 
+	for name, vrfCfg := range config.VRFS {
+		hctx := &conf.HandlerContext{
+			SessionID: id,
+			Path:      fmt.Sprintf("vrfs.%s", name),
+			OldValue:  nil,
+			NewValue:  vrfCfg,
+		}
+		sess.changes = append(sess.changes, hctx)
+	}
+
 	for name, iface := range config.Interfaces {
 		hctx := &conf.HandlerContext{
 			SessionID: id,
