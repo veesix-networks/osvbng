@@ -104,6 +104,10 @@ func NewVPP(cfg VPPConfig) (*VPP, error) {
 		return nil, fmt.Errorf("load interfaces: %w", err)
 	}
 
+	if err := v.LoadIPState(); err != nil {
+		v.logger.Warn("Failed to load IP state at startup", "error", err)
+	}
+
 	asyncWorker.Start()
 
 	v.logger.Debug("Connected to VPP", "interfaces_loaded", len(v.ifMgr.List()))
@@ -1013,6 +1017,7 @@ func (v *VPP) CreateLoopback(name string, ipv4 []string, ipv6 []string) error {
 		if err := netlink.AddrAdd(link, addr); err != nil && !os.IsExist(err) {
 			return fmt.Errorf("add ipv4 %s to linux interface: %w", normalizedCIDR, err)
 		}
+		v.ifMgr.AddIPv4Address(uint32(reply.SwIfIndex), addr.IP)
 		v.logger.Debug("Added IPv4 to Linux interface (nl plugin will sync to VPP)", "interface", name, "addr", normalizedCIDR)
 	}
 
@@ -1028,6 +1033,7 @@ func (v *VPP) CreateLoopback(name string, ipv4 []string, ipv6 []string) error {
 		if err := netlink.AddrAdd(link, addr); err != nil && !os.IsExist(err) {
 			v.logger.Warn("Failed to add IPv6 address to linux interface", "address", normalizedCIDR, "error", err)
 		} else {
+			v.ifMgr.AddIPv6Address(uint32(reply.SwIfIndex), addr.IP)
 			v.logger.Debug("Added IPv6 to Linux interface (nl plugin will sync to VPP)", "interface", name, "addr", normalizedCIDR)
 		}
 	}
@@ -1085,6 +1091,13 @@ func (v *VPP) reconcileLoopbackIPs(name string, desiredIPv4 []string, desiredIPv
 				v.logger.Warn("Failed to remove extra IP from interface", "interface", name, "addr", cidrStr, "error", err)
 			} else {
 				v.logger.Debug("Removed extra IP from Linux interface (not in config)", "interface", name, "addr", cidrStr)
+				if iface := v.ifMgr.GetByName(name); iface != nil {
+					if addr.IP.To4() != nil {
+						v.ifMgr.RemoveIPv4Address(iface.SwIfIndex, addr.IP)
+					} else {
+						v.ifMgr.RemoveIPv6Address(iface.SwIfIndex, addr.IP)
+					}
+				}
 			}
 		}
 	}
@@ -1400,7 +1413,17 @@ func (v *VPP) addIPAddress(ch api.Channel, swIfIndex interface_types.InterfaceIn
 	}
 
 	reply := &interfaces.SwInterfaceAddDelAddressReply{}
-	return ch.SendRequest(req).ReceiveReply(reply)
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return err
+	}
+
+	if isIPv6 {
+		v.ifMgr.AddIPv6Address(uint32(swIfIndex), addr)
+	} else {
+		v.ifMgr.AddIPv4Address(uint32(swIfIndex), addr)
+	}
+
+	return nil
 }
 
 func (v *VPP) BuildL2Rewrite(dstMAC, srcMAC string, outerVLAN, innerVLAN uint16) []byte {
@@ -1697,7 +1720,27 @@ func (v *VPP) DeleteHostRoute(ipAddr string, fibID uint32) error {
 }
 
 func (v *VPP) GetFIBIDForInterface(swIfIndex uint32) (uint32, error) {
-	return 0, nil
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return 0, fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	req := &interfaces.SwInterfaceGetTable{
+		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+		IsIPv6:    false,
+	}
+
+	reply := &interfaces.SwInterfaceGetTableReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return 0, fmt.Errorf("get interface table: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return 0, fmt.Errorf("get interface table failed: retval=%d", reply.Retval)
+	}
+
+	return reply.VrfID, nil
 }
 
 func (v *VPP) EnableARPPunt(ifaceName string) error {
@@ -2284,6 +2327,16 @@ func (v *VPP) AddPPPoESession(sessionID uint16, clientIP net.IP, clientMAC net.H
 		return 0, fmt.Errorf("add pppoe session failed: retval=%d", reply.Retval)
 	}
 
+	swIdx := uint32(reply.SwIfIndex)
+	v.ifMgr.Add(&ifmgr.Interface{
+		SwIfIndex:    swIdx,
+		SupSwIfIndex: encapIfIndex,
+		Name:         fmt.Sprintf("pppoe-session-%d", sessionID),
+		Type:         ifmgr.IfTypeP2P,
+		AdminUp:      true,
+		FIBTableID:   decapVrfID,
+	})
+
 	v.logger.Debug("Added PPPoE session to VPP",
 		"session_id", sessionID,
 		"client_ip", clientIP.String(),
@@ -2294,7 +2347,7 @@ func (v *VPP) AddPPPoESession(sessionID uint16, clientIP net.IP, clientMAC net.H
 		"inner_vlan", innerVLAN,
 		"sw_if_index", reply.SwIfIndex)
 
-	return uint32(reply.SwIfIndex), nil
+	return swIdx, nil
 }
 
 func (v *VPP) DeletePPPoESession(sessionID uint16, clientIP net.IP, clientMAC net.HardwareAddr) error {
@@ -2329,6 +2382,8 @@ func (v *VPP) DeletePPPoESession(sessionID uint16, clientIP net.IP, clientMAC ne
 	if reply.Retval != 0 {
 		return fmt.Errorf("delete pppoe session failed: retval=%d", reply.Retval)
 	}
+
+	v.ifMgr.Remove(uint32(reply.SwIfIndex))
 
 	v.logger.Debug("Deleted PPPoE session from VPP",
 		"session_id", sessionID,
@@ -2399,6 +2454,16 @@ func (v *VPP) AddIPoESession(clientMAC net.HardwareAddr, localMAC net.HardwareAd
 		return 0, fmt.Errorf("add ipoe session failed: retval=%d", reply.Retval)
 	}
 
+	swIdx := uint32(reply.SwIfIndex)
+	v.ifMgr.Add(&ifmgr.Interface{
+		SwIfIndex:    swIdx,
+		SupSwIfIndex: encapIfIndex,
+		Name:         fmt.Sprintf("ipoe-session-%s", clientMAC.String()),
+		Type:         ifmgr.IfTypeP2P,
+		AdminUp:      true,
+		FIBTableID:   decapVrfID,
+	})
+
 	v.logger.Debug("Added IPoE session",
 		"client_mac", clientMAC.String(),
 		"local_mac", localMAC.String(),
@@ -2407,7 +2472,7 @@ func (v *VPP) AddIPoESession(clientMAC net.HardwareAddr, localMAC net.HardwareAd
 		"inner_vlan", innerVLAN,
 		"sw_if_index", reply.SwIfIndex)
 
-	return uint32(reply.SwIfIndex), nil
+	return swIdx, nil
 }
 
 func (v *VPP) DeleteIPoESession(clientMAC net.HardwareAddr, encapIfIndex uint32, innerVLAN uint16) error {
@@ -2435,6 +2500,8 @@ func (v *VPP) DeleteIPoESession(clientMAC net.HardwareAddr, encapIfIndex uint32,
 	if reply.Retval != 0 {
 		return fmt.Errorf("delete ipoe session failed: retval=%d", reply.Retval)
 	}
+
+	v.ifMgr.Remove(uint32(reply.SwIfIndex))
 
 	v.logger.Debug("Deleted IPoE session", "client_mac", clientMAC.String(), "encap_if_index", encapIfIndex, "inner_vlan", innerVLAN)
 	return nil
@@ -2470,6 +2537,12 @@ func (v *VPP) IPoESetSessionIPv4(swIfIndex uint32, clientIP net.IP, isAdd bool) 
 		return fmt.Errorf("set ipoe session ipv4 failed: retval=%d", reply.Retval)
 	}
 
+	if isAdd {
+		v.ifMgr.AddIPv4Address(swIfIndex, clientIP)
+	} else {
+		v.ifMgr.RemoveIPv4Address(swIfIndex, clientIP)
+	}
+
 	v.logger.Debug("Set IPoE session IPv4", "sw_if_index", swIfIndex, "client_ip", clientIP.String(), "is_add", isAdd)
 	return nil
 }
@@ -2502,6 +2575,12 @@ func (v *VPP) IPoESetSessionIPv6(swIfIndex uint32, clientIP net.IP, isAdd bool) 
 
 	if reply.Retval != 0 {
 		return fmt.Errorf("set ipoe session ipv6 failed: retval=%d", reply.Retval)
+	}
+
+	if isAdd {
+		v.ifMgr.AddIPv6Address(swIfIndex, clientIP)
+	} else {
+		v.ifMgr.RemoveIPv6Address(swIfIndex, clientIP)
 	}
 
 	v.logger.Debug("Set IPoE session IPv6", "sw_if_index", swIfIndex, "client_ip", clientIP.String(), "is_add", isAdd)
@@ -2590,6 +2669,15 @@ func (v *VPP) AddIPoESessionAsync(clientMAC net.HardwareAddr, localMAC net.Hardw
 			callback(0, fmt.Errorf("VPP error: retval=%d", r.Retval))
 			return
 		}
+		swIdx := uint32(r.SwIfIndex)
+		v.ifMgr.Add(&ifmgr.Interface{
+			SwIfIndex:    swIdx,
+			SupSwIfIndex: encapIfIndex,
+			Name:         fmt.Sprintf("ipoe-session-%s", clientMAC.String()),
+			Type:         ifmgr.IfTypeP2P,
+			AdminUp:      true,
+			FIBTableID:   decapVrfID,
+		})
 		v.logger.Debug("Added IPoE session (async)",
 			"client_mac", clientMAC.String(),
 			"local_mac", localMAC.String(),
@@ -2597,7 +2685,7 @@ func (v *VPP) AddIPoESessionAsync(clientMAC net.HardwareAddr, localMAC net.Hardw
 			"outer_vlan", outerVLAN,
 			"inner_vlan", innerVLAN,
 			"sw_if_index", r.SwIfIndex)
-		callback(uint32(r.SwIfIndex), nil)
+		callback(swIdx, nil)
 	})
 }
 
@@ -2626,6 +2714,7 @@ func (v *VPP) DeleteIPoESessionAsync(clientMAC net.HardwareAddr, encapIfIndex ui
 			callback(fmt.Errorf("VPP error: retval=%d", r.Retval))
 			return
 		}
+		v.ifMgr.Remove(uint32(r.SwIfIndex))
 		v.logger.Debug("Deleted IPoE session (async)", "client_mac", clientMAC.String(), "encap_if_index", encapIfIndex, "inner_vlan", innerVLAN)
 		callback(nil)
 	})
@@ -2661,6 +2750,11 @@ func (v *VPP) IPoESetSessionIPv4Async(swIfIndex uint32, clientIP net.IP, isAdd b
 			callback(fmt.Errorf("VPP error: retval=%d", r.Retval))
 			return
 		}
+		if isAdd {
+			v.ifMgr.AddIPv4Address(swIfIndex, clientIP)
+		} else {
+			v.ifMgr.RemoveIPv4Address(swIfIndex, clientIP)
+		}
 		v.logger.Debug("Set IPoE session IPv4 (async)", "sw_if_index", swIfIndex, "client_ip", clientIP.String(), "is_add", isAdd)
 		callback(nil)
 	})
@@ -2695,6 +2789,11 @@ func (v *VPP) IPoESetSessionIPv6Async(swIfIndex uint32, clientIP net.IP, isAdd b
 		if r.Retval != 0 {
 			callback(fmt.Errorf("VPP error: retval=%d", r.Retval))
 			return
+		}
+		if isAdd {
+			v.ifMgr.AddIPv6Address(swIfIndex, clientIP)
+		} else {
+			v.ifMgr.RemoveIPv6Address(swIfIndex, clientIP)
 		}
 		v.logger.Debug("Set IPoE session IPv6 (async)", "sw_if_index", swIfIndex, "client_ip", clientIP.String(), "is_add", isAdd)
 		callback(nil)
@@ -3167,11 +3266,20 @@ func (v *VPP) AddPPPoESessionAsync(sessionID uint16, clientIP net.IP, clientMAC 
 			callback(0, fmt.Errorf("VPP error: retval=%d", r.Retval))
 			return
 		}
+		swIdx := uint32(r.SwIfIndex)
+		v.ifMgr.Add(&ifmgr.Interface{
+			SwIfIndex:    swIdx,
+			SupSwIfIndex: encapIfIndex,
+			Name:         fmt.Sprintf("pppoe-session-%d", sessionID),
+			Type:         ifmgr.IfTypeP2P,
+			AdminUp:      true,
+			FIBTableID:   decapVrfID,
+		})
 		v.logger.Debug("Added PPPoE session to VPP (async)",
 			"session_id", sessionID,
 			"client_ip", clientIP.String(),
 			"sw_if_index", r.SwIfIndex)
-		callback(uint32(r.SwIfIndex), nil)
+		callback(swIdx, nil)
 	})
 }
 
@@ -3206,6 +3314,7 @@ func (v *VPP) DeletePPPoESessionAsync(sessionID uint16, clientIP net.IP, clientM
 			callback(fmt.Errorf("VPP error: retval=%d", r.Retval))
 			return
 		}
+		v.ifMgr.Remove(uint32(r.SwIfIndex))
 		v.logger.Debug("Deleted PPPoE session from VPP (async)",
 			"session_id", sessionID,
 			"client_ip", clientIP.String())
@@ -3514,6 +3623,41 @@ func (v *VPP) LoadInterfaces() error {
 	}
 
 	v.logger.Debug("Loaded interfaces into ifMgr", "count", len(v.ifMgr.List()))
+	return nil
+}
+
+func (v *VPP) LoadIPState() error {
+	addrs, err := v.DumpIPAddresses()
+	if err != nil {
+		return fmt.Errorf("dump IP addresses: %w", err)
+	}
+
+	seenIndices := make(map[uint32]bool)
+	for _, info := range addrs {
+		ipAddr, _, err := net.ParseCIDR(info.Address)
+		if err != nil {
+			v.logger.Warn("Failed to parse IP from dump", "address", info.Address, "error", err)
+			continue
+		}
+
+		if info.IsIPv6 {
+			v.ifMgr.AddIPv6Address(info.SwIfIndex, ipAddr)
+		} else {
+			v.ifMgr.AddIPv4Address(info.SwIfIndex, ipAddr)
+		}
+		seenIndices[info.SwIfIndex] = true
+	}
+
+	for idx := range seenIndices {
+		tableID, err := v.GetFIBIDForInterface(idx)
+		if err != nil {
+			v.logger.Warn("Failed to get FIB table for interface", "sw_if_index", idx, "error", err)
+			continue
+		}
+		v.ifMgr.SetFIBTableID(idx, tableID)
+	}
+
+	v.logger.Debug("Loaded IP state into ifMgr", "addresses", len(addrs), "interfaces", len(seenIndices))
 	return nil
 }
 
