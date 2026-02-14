@@ -136,6 +136,7 @@ func main() {
 	}
 
 	vrfMgr := vrfmgr.New(vpp)
+	vppDataplane.SetVRFResolver(vrfMgr.ResolveVRF)
 
 	cppmManager := cppm.NewManager(cppm.DefaultConfig())
 
