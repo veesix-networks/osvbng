@@ -17,6 +17,7 @@ osvbngd config > /etc/osvbng/osvbng.yaml
 - [DHCP](dhcp.md) - DHCPv4 provider and pools
 - [DHCPv6](dhcpv6.md) - DHCPv6 provider, IANA pools, and prefix delegation
 - [AAA](aaa.md) - Authentication and policies
+- [Service Groups](service-groups.md) - Named per-subscriber attribute bundles (VRF, ACL, QoS)
 - [VRFs](vrfs.md) - Virtual Routing and Forwarding instances
 - [Protocols](protocols.md) - BGP, OSPF, OSPFv3, IS-IS, static routes
 - [MPLS](mpls.md) - LDP, Segment Routing, SRv6 (in development)
