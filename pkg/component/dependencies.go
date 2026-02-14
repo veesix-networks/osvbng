@@ -8,6 +8,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/opdb"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
 )
 
@@ -20,7 +21,8 @@ type Dependencies struct {
 	EventBus      events.Bus
 	Cache         cache.Cache
 	VPP           *southbound.VPP
-	VRFManager    *vrfmgr.Manager
+	VRFManager       *vrfmgr.Manager
+	SvcGroupResolver *svcgroup.Resolver
 	ConfigManager ConfigManager
 	OpDB          opdb.Store
 	CPPM          *cppm.Manager

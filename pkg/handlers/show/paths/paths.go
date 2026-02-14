@@ -32,7 +32,8 @@ const (
 	ProtocolsOSPF6Neighbors Path = "protocols.ospf6.neighbors"
 	ProtocolsISISNeighbors  Path = "protocols.isis.neighbors"
 
-	VRFS Path = "vrfs"
+	ServiceGroups Path = "service-groups"
+	VRFS          Path = "vrfs"
 
 	SystemCPPMDataplane    Path = "system.cppm.dataplane"
 	SystemCPPMControlplane Path = "system.cppm.controlplane"
