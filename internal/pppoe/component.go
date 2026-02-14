@@ -25,6 +25,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/session"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"github.com/veesix-networks/osvbng/pkg/srg"
+	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
 )
 
 const (
@@ -43,6 +44,7 @@ type Component struct {
 	ifMgr    *ifmgr.Manager
 	cfgMgr   component.ConfigManager
 	vpp      *southbound.VPP
+	vrfMgr   *vrfmgr.Manager
 	cache    cache.Cache
 	opdb     opdb.Store
 
@@ -112,6 +114,7 @@ type SessionState struct {
 	pendingCHAPID        uint8
 
 	OuterTPID uint16
+	VRF       string
 
 	component *Component
 	mu        sync.Mutex
@@ -133,6 +136,7 @@ func New(deps component.Dependencies, srgMgr *srg.Manager, ifMgr *ifmgr.Manager)
 		ifMgr:         ifMgr,
 		cfgMgr:        deps.ConfigManager,
 		vpp:           deps.VPP,
+		vrfMgr:        deps.VRFManager,
 		cache:         deps.Cache,
 		opdb:          deps.OpDB,
 		acName:        defaultACName,

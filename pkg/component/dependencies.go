@@ -8,6 +8,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/opdb"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
 )
 
 type ConfigManager interface {
@@ -19,6 +20,7 @@ type Dependencies struct {
 	EventBus      events.Bus
 	Cache         cache.Cache
 	VPP           *southbound.VPP
+	VRFManager    *vrfmgr.Manager
 	ConfigManager ConfigManager
 	OpDB          opdb.Store
 	CPPM          *cppm.Manager
