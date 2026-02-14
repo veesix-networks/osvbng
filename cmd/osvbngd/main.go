@@ -35,6 +35,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/all"
 	"github.com/veesix-networks/osvbng/pkg/ifmgr"
+	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/northbound"
 	"github.com/veesix-networks/osvbng/pkg/opdb/sqlite"
@@ -134,6 +135,8 @@ func main() {
 		log.Fatalf("Failed to create VPP southbound: %v", err)
 	}
 
+	vrfMgr := vrfmgr.New(vpp)
+
 	cppmManager := cppm.NewManager(cppm.DefaultConfig())
 
 	if err := configd.LoadVersions(); err != nil {
@@ -147,6 +150,7 @@ func main() {
 		AAA:              nil,
 		CPPM:             cppmManager,
 		Routing:          nil,
+		VRFManager:       vrfMgr,
 		PluginComponents: nil,
 	})
 
@@ -179,6 +183,7 @@ func main() {
 		Southbound:       vpp,
 		AAA:              nil,
 		Routing:          nil,
+		VRFManager:       vrfMgr,
 		PluginComponents: nil,
 	})
 
@@ -368,6 +373,7 @@ func main() {
 		Southbound:       vpp,
 		AAA:              aaaComp.(*aaa.Component),
 		Routing:          routingComp.(*routing.Component),
+		VRFManager:       vrfMgr,
 		CPPM:             cppmManager,
 		PluginComponents: pluginComponentsMap,
 	})
@@ -376,6 +382,7 @@ func main() {
 		Subscriber:       subscriberComp.(*subscriber.Component),
 		Southbound:       coreDeps.VPP,
 		Routing:          routingComp.(*routing.Component),
+		VRFManager:       vrfMgr,
 		Cache:            cache,
 		OpDB:             opdbStore,
 		CPPM:             cppmManager,

@@ -3081,6 +3081,53 @@ func (v *VPP) GetNextAvailableGlobalTableId() (uint32, error) {
 	return 0, fmt.Errorf("no available table IDs")
 }
 
+func (v *VPP) AddIPTable(tableID uint32, isIPv6 bool, name string) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	req := &ip.IPTableAddDel{
+		IsAdd: true,
+		Table: ip.IPTable{
+			TableID: tableID,
+			IsIP6:   isIPv6,
+			Name:    name,
+		},
+	}
+
+	reply := &ip.IPTableAddDelReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("add IP table %d (ipv6=%v): %w", tableID, isIPv6, err)
+	}
+
+	return nil
+}
+
+func (v *VPP) DelIPTable(tableID uint32, isIPv6 bool) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	req := &ip.IPTableAddDel{
+		IsAdd: false,
+		Table: ip.IPTable{
+			TableID: tableID,
+			IsIP6:   isIPv6,
+		},
+	}
+
+	reply := &ip.IPTableAddDelReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("delete IP table %d (ipv6=%v): %w", tableID, isIPv6, err)
+	}
+
+	return nil
+}
+
 func (v *VPP) AddPPPoESessionAsync(sessionID uint16, clientIP net.IP, clientMAC net.HardwareAddr, localMAC net.HardwareAddr, encapIfIndex uint32, outerVLAN uint16, innerVLAN uint16, decapVrfID uint32, callback func(uint32, error)) {
 	clientAddr, err := v.toAddress(clientIP)
 	if err != nil {
