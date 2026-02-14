@@ -29,6 +29,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/session"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"github.com/veesix-networks/osvbng/pkg/srg"
+	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
 )
 
 type Component struct {
@@ -40,6 +41,7 @@ type Component struct {
 	ifMgr         *ifmgr.Manager
 	cfgMgr        component.ConfigManager
 	vpp           *southbound.VPP
+	vrfMgr        *vrfmgr.Manager
 	cache         cache.Cache
 	opdb          opdb.Store
 	dhcp4Provider dhcp4.DHCPProvider
@@ -94,6 +96,25 @@ type SessionState struct {
 
 	Username   string
 	OuterTPID  uint16
+	VRF        string
+}
+
+func (c *Component) resolveSessionVRF(svlan uint16, aaaAttrs map[string]interface{}) string {
+	if v, ok := aaaAttrs["vrf"]; ok {
+		if vrfName, ok := v.(string); ok && vrfName != "" {
+			return vrfName
+		}
+	}
+
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+		return ""
+	}
+	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(svlan)
+	if group == nil {
+		return ""
+	}
+	return group.VRF
 }
 
 func (c *Component) resolveOuterTPID(svlan uint16) uint16 {
@@ -132,6 +153,7 @@ func New(deps component.Dependencies, srgMgr *srg.Manager, ifMgr *ifmgr.Manager,
 		eventBus:      deps.EventBus,
 		srgMgr:        srgMgr,
 		ifMgr:         ifMgr,
+		vrfMgr:        deps.VRFManager,
 		cfgMgr:        deps.ConfigManager,
 		vpp:           deps.VPP,
 		cache:         deps.Cache,
@@ -701,6 +723,7 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 		MAC:              mac,
 		OuterVLAN:        pkt.OuterVLAN,
 		InnerVLAN:        pkt.InnerVLAN,
+		VRF:              sess.VRF,
 		Username:         sess.Username,
 		RADIUSAttributes: make(map[string]string),
 	})
@@ -882,6 +905,7 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 		InnerVLAN:        sess.InnerVLAN,
 		VLANCount:        c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
 		IfIndex:          ipoeSwIfIndex,
+		VRF:              sess.VRF,
 		IPv4Address:      sess.IPv4,
 		LeaseTime:        sess.LeaseTime,
 		IPv6Address:      sess.IPv6Address,
@@ -933,6 +957,22 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 
 	c.logger.Info("Session AAA approved", "session_id", sessID)
 
+	vrfName := c.resolveSessionVRF(svlan, payload.Attributes)
+	var decapVrfID uint32
+	if vrfName != "" {
+		if c.vrfMgr != nil {
+			tableID, err := c.vrfMgr.ResolveVRF(vrfName)
+			if err != nil {
+				c.logger.Error("Failed to resolve VRF for session", "session_id", sessID, "vrf", vrfName, "error", err)
+				return fmt.Errorf("resolve VRF %q: %w", vrfName, err)
+			}
+			decapVrfID = tableID
+		}
+		c.sessionMu.Lock()
+		sess.VRF = vrfName
+		c.sessionMu.Unlock()
+	}
+
 	if !ipoeCreated && c.vpp != nil {
 		c.sessionMu.Lock()
 		if sess.IPoESessionCreated {
@@ -947,7 +987,7 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 				return fmt.Errorf("no local MAC for svlan %d", svlan)
 			}
 
-			c.vpp.AddIPoESessionAsync(mac, localMAC, encapIfIndex, svlan, cvlan, 0, func(swIfIndex uint32, err error) {
+			c.vpp.AddIPoESessionAsync(mac, localMAC, encapIfIndex, svlan, cvlan, decapVrfID, func(swIfIndex uint32, err error) {
 				c.sessionMu.Lock()
 				if sess.IPoESessionCreated {
 					c.sessionMu.Unlock()
@@ -1702,6 +1742,7 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
 			OuterVLAN:       pkt.OuterVLAN,
 			InnerVLAN:       pkt.InnerVLAN,
 			IfIndex:         ipoeSwIfIndex,
+			VRF:             sess.VRF,
 			IPv6Address:     ipv6Address,
 			IPv6Prefix:      prefixStr,
 			Username:        sess.Username,
@@ -1860,6 +1901,7 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, dhcp *layers.DHCPv6) e
 		InnerVLAN:       sess.InnerVLAN,
 		VLANCount:       c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
 		IfIndex:         ipoeSwIfIndex,
+		VRF:             sess.VRF,
 		IPv4Address:     sess.IPv4,
 		LeaseTime:       sess.LeaseTime,
 		IPv6Address:     ianaAddr,
@@ -2430,6 +2472,7 @@ func (c *Component) restoreSessionToCache(ctx context.Context, sess *SessionStat
 		InnerVLAN:       sess.InnerVLAN,
 		VLANCount:       c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
 		IfIndex:         sess.IPoESwIfIndex,
+		VRF:             sess.VRF,
 		IPv4Address:     sess.IPv4,
 		LeaseTime:       sess.LeaseTime,
 		IPv6Address:     sess.IPv6Address,
