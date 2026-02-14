@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
+	"github.com/veesix-networks/osvbng/pkg/ifmgr"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/af_packet"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/ethernet_types"
@@ -21,6 +22,7 @@ type VPPDataplane struct {
 	ifaceCache  map[string]interface_types.InterfaceIndex
 	logger      *slog.Logger
 	vrfResolver func(string) (uint32, error)
+	ifMgr       *ifmgr.Manager
 }
 
 func NewVPPDataplane(conn *core.Connection) *VPPDataplane {
@@ -33,6 +35,10 @@ func NewVPPDataplane(conn *core.Connection) *VPPDataplane {
 
 func (d *VPPDataplane) SetVRFResolver(resolver func(string) (uint32, error)) {
 	d.vrfResolver = resolver
+}
+
+func (d *VPPDataplane) SetIfMgr(m *ifmgr.Manager) {
+	d.ifMgr = m
 }
 
 func (d *VPPDataplane) CreateInterface(cfg *interfaces.InterfaceConfig) error {
@@ -179,6 +185,12 @@ func (d *VPPDataplane) AddIPv4Address(ifName, address string) error {
 		return fmt.Errorf("add address: %w", err)
 	}
 
+	if d.ifMgr != nil {
+		if swIfIndex, ok := d.ifMgr.GetSwIfIndex(ifName); ok {
+			d.ifMgr.AddIPv4Address(swIfIndex, addr.IP)
+		}
+	}
+
 	d.logger.Info("Added IPv4 address", "interface", ifName, "address", address)
 	return nil
 }
@@ -196,6 +208,12 @@ func (d *VPPDataplane) DelIPv4Address(ifName, address string) error {
 
 	if err := netlink.AddrDel(link, addr); err != nil {
 		return fmt.Errorf("del address: %w", err)
+	}
+
+	if d.ifMgr != nil {
+		if swIfIndex, ok := d.ifMgr.GetSwIfIndex(ifName); ok {
+			d.ifMgr.RemoveIPv4Address(swIfIndex, addr.IP)
+		}
 	}
 
 	d.logger.Info("Deleted IPv4 address", "interface", ifName, "address", address)
@@ -221,6 +239,12 @@ func (d *VPPDataplane) AddIPv6Address(ifName, address string) error {
 		return fmt.Errorf("add address: %w", err)
 	}
 
+	if d.ifMgr != nil {
+		if swIfIndex, ok := d.ifMgr.GetSwIfIndex(ifName); ok {
+			d.ifMgr.AddIPv6Address(swIfIndex, addr.IP)
+		}
+	}
+
 	d.logger.Info("Added IPv6 address", "interface", ifName, "address", address)
 	return nil
 }
@@ -238,6 +262,12 @@ func (d *VPPDataplane) DelIPv6Address(ifName, address string) error {
 
 	if err := netlink.AddrDel(link, addr); err != nil {
 		return fmt.Errorf("del address: %w", err)
+	}
+
+	if d.ifMgr != nil {
+		if swIfIndex, ok := d.ifMgr.GetSwIfIndex(ifName); ok {
+			d.ifMgr.RemoveIPv6Address(swIfIndex, addr.IP)
+		}
 	}
 
 	d.logger.Info("Deleted IPv6 address", "interface", ifName, "address", address)
@@ -503,6 +533,10 @@ func (d *VPPDataplane) setInterfaceTable(name string, tableID uint32) error {
 	}
 	if reply6.Retval != 0 {
 		return fmt.Errorf("set IPv6 table failed: retval=%d", reply6.Retval)
+	}
+
+	if d.ifMgr != nil {
+		d.ifMgr.SetFIBTableID(uint32(swIfIndex), tableID)
 	}
 
 	return nil

@@ -1,5 +1,7 @@
 package ifmgr
 
+import "net"
+
 type IfType uint32
 
 const (
@@ -25,6 +27,9 @@ type Interface struct {
 	OuterVlanID     uint16
 	InnerVlanID     uint16
 	Tag             string
+	IPv4Addresses   []net.IP
+	IPv6Addresses   []net.IP
+	FIBTableID      uint32
 }
 
 func (i *Interface) IsSubinterface() bool {

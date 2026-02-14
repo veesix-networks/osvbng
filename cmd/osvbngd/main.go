@@ -138,6 +138,7 @@ func main() {
 
 	vrfMgr := vrfmgr.New(vpp)
 	vppDataplane.SetVRFResolver(vrfMgr.ResolveVRF)
+	vppDataplane.SetIfMgr(ifMgr)
 
 	svcGroupResolver := svcgroup.New()
 
