@@ -18,6 +18,7 @@ const (
 	Config     = "confmgr"
 	Gateway    = "gateway"
 	Northbound = "nb"
+	SvcGroup   = "svcgroup"
 
 	IPoEDHCP4   = "dhcp4"
 	IPoEDHCP6   = "dhcp6"

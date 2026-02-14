@@ -7,6 +7,7 @@ import (
 type Path string
 
 const (
+	ServiceGroups               Path = "service-groups.<*>"
 	VRFS                        Path = "vrfs.<*>"
 	VRFSName                    Path = "vrfs.<*>.name"
 	VRFSDescription             Path = "vrfs.<*>.description"

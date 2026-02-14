@@ -25,6 +25,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/session"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"github.com/veesix-networks/osvbng/pkg/srg"
+	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
 )
 
@@ -44,7 +45,8 @@ type Component struct {
 	ifMgr    *ifmgr.Manager
 	cfgMgr   component.ConfigManager
 	vpp      *southbound.VPP
-	vrfMgr   *vrfmgr.Manager
+	vrfMgr           *vrfmgr.Manager
+	svcGroupResolver *svcgroup.Resolver
 	cache    cache.Cache
 	opdb     opdb.Store
 
@@ -115,6 +117,7 @@ type SessionState struct {
 
 	OuterTPID uint16
 	VRF       string
+	ServiceGroup svcgroup.ServiceGroup
 
 	component *Component
 	mu        sync.Mutex
@@ -136,7 +139,8 @@ func New(deps component.Dependencies, srgMgr *srg.Manager, ifMgr *ifmgr.Manager)
 		ifMgr:         ifMgr,
 		cfgMgr:        deps.ConfigManager,
 		vpp:           deps.VPP,
-		vrfMgr:        deps.VRFManager,
+		vrfMgr:           deps.VRFManager,
+		svcGroupResolver: deps.SvcGroupResolver,
 		cache:         deps.Cache,
 		opdb:          deps.OpDB,
 		acName:        defaultACName,
