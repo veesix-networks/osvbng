@@ -29,6 +29,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/session"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"github.com/veesix-networks/osvbng/pkg/srg"
+	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
 )
 
@@ -41,7 +42,8 @@ type Component struct {
 	ifMgr         *ifmgr.Manager
 	cfgMgr        component.ConfigManager
 	vpp           *southbound.VPP
-	vrfMgr        *vrfmgr.Manager
+	vrfMgr           *vrfmgr.Manager
+	svcGroupResolver *svcgroup.Resolver
 	cache         cache.Cache
 	opdb          opdb.Store
 	dhcp4Provider dhcp4.DHCPProvider
@@ -94,27 +96,29 @@ type SessionState struct {
 	PendingDHCPv6Solicit []byte
 	PendingDHCPv6Request []byte
 
-	Username   string
-	OuterTPID  uint16
-	VRF        string
+	Username string
+	OuterTPID uint16
+	VRF       string
+	ServiceGroup svcgroup.ServiceGroup
 }
 
-func (c *Component) resolveSessionVRF(svlan uint16, aaaAttrs map[string]interface{}) string {
-	if v, ok := aaaAttrs["vrf"]; ok {
-		if vrfName, ok := v.(string); ok && vrfName != "" {
-			return vrfName
+func (c *Component) resolveServiceGroup(svlan uint16, aaaAttrs map[string]interface{}) svcgroup.ServiceGroup {
+	var sgName string
+	if v, ok := aaaAttrs["service-group"]; ok {
+		if s, ok := v.(string); ok {
+			sgName = s
 		}
 	}
 
+	var defaultSG string
 	cfg, err := c.cfgMgr.GetRunning()
-	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
-		return ""
+	if err == nil && cfg != nil && cfg.SubscriberGroups != nil {
+		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(svlan); group != nil {
+			defaultSG = group.DefaultServiceGroup
+		}
 	}
-	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(svlan)
-	if group == nil {
-		return ""
-	}
-	return group.VRF
+
+	return c.svcGroupResolver.Resolve(sgName, defaultSG, aaaAttrs)
 }
 
 func (c *Component) resolveOuterTPID(svlan uint16) uint16 {
@@ -153,7 +157,8 @@ func New(deps component.Dependencies, srgMgr *srg.Manager, ifMgr *ifmgr.Manager,
 		eventBus:      deps.EventBus,
 		srgMgr:        srgMgr,
 		ifMgr:         ifMgr,
-		vrfMgr:        deps.VRFManager,
+		vrfMgr:           deps.VRFManager,
+		svcGroupResolver: deps.SvcGroupResolver,
 		cfgMgr:        deps.ConfigManager,
 		vpp:           deps.VPP,
 		cache:         deps.Cache,
@@ -957,7 +962,15 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 
 	c.logger.Info("Session AAA approved", "session_id", sessID)
 
-	vrfName := c.resolveSessionVRF(svlan, payload.Attributes)
+	resolved := c.resolveServiceGroup(svlan, payload.Attributes)
+
+	logArgs := []any{"session_id", sessID}
+	for _, attr := range resolved.LogAttrs() {
+		logArgs = append(logArgs, attr.Key, attr.Value.Any())
+	}
+	c.logger.Info("Resolved service group", logArgs...)
+
+	vrfName := resolved.VRF
 	var decapVrfID uint32
 	if vrfName != "" {
 		if c.vrfMgr != nil {
@@ -970,6 +983,7 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 		}
 		c.sessionMu.Lock()
 		sess.VRF = vrfName
+		sess.ServiceGroup = resolved
 		c.sessionMu.Unlock()
 	}
 

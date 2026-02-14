@@ -35,6 +35,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/all"
 	"github.com/veesix-networks/osvbng/pkg/ifmgr"
+	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/northbound"
@@ -138,6 +139,8 @@ func main() {
 	vrfMgr := vrfmgr.New(vpp)
 	vppDataplane.SetVRFResolver(vrfMgr.ResolveVRF)
 
+	svcGroupResolver := svcgroup.New()
+
 	cppmManager := cppm.NewManager(cppm.DefaultConfig())
 
 	if err := configd.LoadVersions(); err != nil {
@@ -152,6 +155,7 @@ func main() {
 		CPPM:             cppmManager,
 		Routing:          nil,
 		VRFManager:       vrfMgr,
+		SvcGroupResolver: svcGroupResolver,
 		PluginComponents: nil,
 	})
 
@@ -185,6 +189,7 @@ func main() {
 		AAA:              nil,
 		Routing:          nil,
 		VRFManager:       vrfMgr,
+		SvcGroupResolver: svcGroupResolver,
 		PluginComponents: nil,
 	})
 
@@ -205,13 +210,14 @@ func main() {
 	mainLog.Info("OpDB initialized", "path", "/var/lib/osvbng/opdb.db")
 
 	coreDeps := component.Dependencies{
-		EventBus:      eventBus,
-		Cache:         cache,
-		VPP:           vpp,
-		VRFManager:    vrfMgr,
-		ConfigManager: configd,
-		OpDB:          opdbStore,
-		CPPM:          cppmManager,
+		EventBus:         eventBus,
+		Cache:            cache,
+		VPP:              vpp,
+		VRFManager:       vrfMgr,
+		SvcGroupResolver: svcGroupResolver,
+		ConfigManager:    configd,
+		OpDB:             opdbStore,
+		CPPM:             cppmManager,
 	}
 
 	dataplaneComp, err := dataplane.New(coreDeps)
@@ -376,6 +382,7 @@ func main() {
 		AAA:              aaaComp.(*aaa.Component),
 		Routing:          routingComp.(*routing.Component),
 		VRFManager:       vrfMgr,
+		SvcGroupResolver: svcGroupResolver,
 		CPPM:             cppmManager,
 		PluginComponents: pluginComponentsMap,
 	})
@@ -385,6 +392,7 @@ func main() {
 		Southbound:       coreDeps.VPP,
 		Routing:          routingComp.(*routing.Component),
 		VRFManager:       vrfMgr,
+		SvcGroupResolver: svcGroupResolver,
 		Cache:            cache,
 		OpDB:             opdbStore,
 		CPPM:             cppmManager,

@@ -10,6 +10,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/opdb"
 	"github.com/veesix-networks/osvbng/pkg/operations"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
 )
 
@@ -18,6 +19,7 @@ type ShowDeps struct {
 	Southbound       *southbound.VPP
 	Routing          *routingcomp.Component
 	VRFManager       *vrfmgr.Manager
+	SvcGroupResolver *svcgroup.Resolver
 	Cache            cache.Cache
 	OpDB             opdb.Store
 	CPPM             *cppm.Manager
@@ -36,6 +38,7 @@ type ConfDeps struct {
 	AAA              *aaacomp.Component
 	Routing          *routingcomp.Component
 	VRFManager       *vrfmgr.Manager
+	SvcGroupResolver *svcgroup.Resolver
 	CPPM             *cppm.Manager
 	PluginComponents map[string]component.Component
 }
