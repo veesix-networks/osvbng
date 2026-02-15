@@ -99,7 +99,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "Starting dataplane..."
-/usr/bin/vpp -c /etc/osvbng/dataplane.conf &
+/usr/bin/vpp -c /etc/osvbng/dataplane.conf > /var/log/osvbng/dataplane-stderr.log 2>&1 &
 DATAPLANE_PID=$!
 
 echo "Checking dataplane process status..."
@@ -123,6 +123,10 @@ echo "Setting dataplane API socket permissions..."
 chmod 660 /run/osvbng/dataplane_api.sock || true
 chown root:osvbng /run/osvbng/dataplane_api.sock || true
 
+echo "Configuring kernel MPLS..."
+sysctl -w net.mpls.platform_labels=1048575 || true
+sysctl -w net.mpls.conf.lo.input=1 || true
+
 echo "Linking FRR configs to osvbng directory..."
 ln -sf /etc/osvbng/routing-daemons /etc/frr/daemons
 ln -sf /etc/osvbng/frr.conf /etc/frr/frr.conf
@@ -139,6 +143,15 @@ echo "Routing daemon status:"
 /usr/lib/frr/frrinit.sh status || true
 
 sleep 5
+
+if ! kill -0 $DATAPLANE_PID 2>/dev/null; then
+    echo "ERROR: VPP crashed before osvbng could start"
+    echo "====== VPP stderr ======"
+    cat /var/log/osvbng/dataplane-stderr.log 2>/dev/null
+    echo "====== dmesg (last 20) ======"
+    dmesg | tail -20 2>/dev/null || true
+    exit 1
+fi
 
 echo "Starting osvbng..."
 
