@@ -120,6 +120,14 @@ protocols:
             eth2:
                 network: point-to-point
                 circuit-type: level-2-only
+    mpls:
+        enabled: true
+    ldp:
+        enabled: true
+        router-id: 10.0.0.1
+        address-families:
+            ipv4:
+                transport-address: 10.0.0.1
 aaa:
     auth_provider: local
     nas_identifier: osvbng

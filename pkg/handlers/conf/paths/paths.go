@@ -103,6 +103,19 @@ const (
 	ProtocolsStaticIPv4Route Path = "protocols.static.ipv4.<*:prefix>"
 	ProtocolsStaticIPv6Route Path = "protocols.static.ipv6.<*:prefix>"
 
+	MPLSEnabled        Path = "protocols.mpls.enabled"
+	MPLSPlatformLabels Path = "protocols.mpls.platform-labels"
+
+	LDPEnabled             Path = "protocols.ldp.enabled"
+	LDPRouterID            Path = "protocols.ldp.router-id"
+	LDPOrderedControl      Path = "protocols.ldp.ordered-control"
+	LDPDiscoveryHelloHold  Path = "protocols.ldp.discovery-hello-holdtime"
+	LDPDiscoveryHelloIntv  Path = "protocols.ldp.discovery-hello-interval"
+	LDPDualStackPreferIPv4 Path = "protocols.ldp.dual-stack-prefer-ipv4"
+	LDPNeighbor            Path = "protocols.ldp.neighbors.<*>"
+	LDPIPv4                Path = "protocols.ldp.address-families.ipv4"
+	LDPIPv6                Path = "protocols.ldp.address-families.ipv6"
+
 	AAARADIUSServer  Path = "aaa.radius.servers.<*>"
 	AAARADIUSGroup   Path = "aaa.radius.groups.<*>"
 	AAANASIdentifier Path = "aaa.nas_identifier"

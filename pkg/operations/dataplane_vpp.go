@@ -70,6 +70,15 @@ func (d *VPPDataplane) createPhysicalInterface(cfg *interfaces.InterfaceConfig) 
 		if idx, lookupErr := d.getInterfaceIndex("host-" + cfg.Name); lookupErr == nil {
 			d.logger.Info("Host-interface already exists in VPP, skipping creation", "interface", cfg.Name)
 			d.ifaceCache[cfg.Name] = idx
+			if d.ifMgr != nil {
+				d.ifMgr.Add(&ifmgr.Interface{
+					SwIfIndex:    uint32(idx),
+					SupSwIfIndex: uint32(idx),
+					Name:         "host-" + cfg.Name,
+					DevType:      "af_packet",
+					Type:         ifmgr.IfTypeHardware,
+				})
+			}
 			vppIfName = cfg.Name
 		} else {
 			return fmt.Errorf("create VPP host-interface: %w", err)
@@ -301,6 +310,16 @@ func (d *VPPDataplane) createVPPHostInterface(linuxIface string) (string, error)
 
 	vppIfName := linuxIface
 	d.ifaceCache[vppIfName] = afReply.SwIfIndex
+
+	if d.ifMgr != nil {
+		d.ifMgr.Add(&ifmgr.Interface{
+			SwIfIndex:    uint32(afReply.SwIfIndex),
+			SupSwIfIndex: uint32(afReply.SwIfIndex),
+			Name:         "host-" + linuxIface,
+			DevType:      "af_packet",
+			Type:         ifmgr.IfTypeHardware,
+		})
+	}
 
 	rxModeReq := &vppinterfaces.SwInterfaceSetRxMode{
 		SwIfIndex: afReply.SwIfIndex,

@@ -13,8 +13,17 @@ while [ ! -e /sys/class/net/eth0 ]; do
     fi
 done
 
-echo "eth0 ready, starting FRR..."
+echo "eth0 ready, configuring MPLS..."
+sysctl -w net.mpls.platform_labels=1048575 || true
+sysctl -w net.mpls.conf.lo.input=1 || true
+
+echo "Starting FRR..."
 /usr/lib/frr/frrinit.sh start
+
+sleep 2
+
+echo "Reloading FRR config (ensures ldpd picks up mpls ldp block)..."
+/usr/lib/frr/frr-reload.py --reload /etc/frr/frr.conf 2>&1 || true
 
 echo "FRR peer router started"
 /usr/lib/frr/frrinit.sh status || true

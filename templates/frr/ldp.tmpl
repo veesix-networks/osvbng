@@ -1,0 +1,87 @@
+{{ define "ldp" -}}
+{{ if .Protocols -}}
+{{ if .Protocols.LDP -}}
+{{ if .Protocols.LDP.Enabled -}}
+mpls ldp
+{{ if .Protocols.LDP.RouterID -}}
+ router-id {{ .Protocols.LDP.RouterID }}
+{{ end -}}
+{{ if .Protocols.LDP.OrderedControl -}}
+ ordered-control
+{{ end -}}
+{{ if .Protocols.LDP.DualStackPreferIPv4 -}}
+ dual-stack transport-connection prefer ipv4
+{{ end -}}
+{{ if .Protocols.LDP.DiscoveryHelloHold -}}
+ discovery hello holdtime {{ .Protocols.LDP.DiscoveryHelloHold }}
+{{ end -}}
+{{ if .Protocols.LDP.DiscoveryHelloIntv -}}
+ discovery hello interval {{ .Protocols.LDP.DiscoveryHelloIntv }}
+{{ end -}}
+{{ range $addr, $ncfg := .Protocols.LDP.Neighbors -}}
+{{ if $ncfg.Password -}}
+ neighbor {{ $addr }} password {{ $ncfg.Password }}
+{{ end -}}
+{{ if $ncfg.HoldTime -}}
+ neighbor {{ $addr }} session holdtime {{ $ncfg.HoldTime }}
+{{ end -}}
+{{ end -}}
+{{ if .Protocols.LDP.AddressFamilies -}}
+{{ if .Protocols.LDP.AddressFamilies.IPv4 -}}
+ address-family ipv4
+{{ if .Protocols.LDP.AddressFamilies.IPv4.TransportAddress -}}
+  discovery transport-address {{ .Protocols.LDP.AddressFamilies.IPv4.TransportAddress }}
+{{ end -}}
+{{ if .Protocols.LDP.AddressFamilies.IPv4.LabelLocalAdvertise -}}
+  label local advertise {{ .Protocols.LDP.AddressFamilies.IPv4.LabelLocalAdvertise }}
+{{ end -}}
+{{ if $.Protocols.OSPF }}{{ if $.Protocols.OSPF.Enabled -}}
+{{ range $area, $areaConfig := $.Protocols.OSPF.Areas -}}
+{{ range $iface, $ifConfig := $areaConfig.Interfaces -}}
+{{ if not (and $ifConfig $ifConfig.Passive) -}}
+  interface {{ $iface }}
+{{ end -}}
+{{ end -}}
+{{ end -}}
+{{ end }}{{ end -}}
+{{ if $.Protocols.ISIS }}{{ if $.Protocols.ISIS.Enabled -}}
+{{ range $iface, $ifConfig := $.Protocols.ISIS.Interfaces -}}
+{{ if not (and $ifConfig $ifConfig.Passive) -}}
+  interface {{ $iface }}
+{{ end -}}
+{{ end -}}
+{{ end }}{{ end -}}
+  exit-address-family
+{{ end -}}
+{{ if .Protocols.LDP.AddressFamilies.IPv6 -}}
+ address-family ipv6
+{{ if .Protocols.LDP.AddressFamilies.IPv6.TransportAddress -}}
+  discovery transport-address {{ .Protocols.LDP.AddressFamilies.IPv6.TransportAddress }}
+{{ end -}}
+{{ if .Protocols.LDP.AddressFamilies.IPv6.LabelLocalAdvertise -}}
+  label local advertise {{ .Protocols.LDP.AddressFamilies.IPv6.LabelLocalAdvertise }}
+{{ end -}}
+{{ if $.Protocols.OSPF }}{{ if $.Protocols.OSPF.Enabled -}}
+{{ range $area, $areaConfig := $.Protocols.OSPF.Areas -}}
+{{ range $iface, $ifConfig := $areaConfig.Interfaces -}}
+{{ if not (and $ifConfig $ifConfig.Passive) -}}
+  interface {{ $iface }}
+{{ end -}}
+{{ end -}}
+{{ end -}}
+{{ end }}{{ end -}}
+{{ if $.Protocols.ISIS }}{{ if $.Protocols.ISIS.Enabled -}}
+{{ range $iface, $ifConfig := $.Protocols.ISIS.Interfaces -}}
+{{ if not (and $ifConfig $ifConfig.Passive) -}}
+  interface {{ $iface }}
+{{ end -}}
+{{ end -}}
+{{ end }}{{ end -}}
+  exit-address-family
+{{ end -}}
+{{ end -}}
+!
+{{ end -}}
+{{ end -}}
+{{ end -}}
+{{ end -}}

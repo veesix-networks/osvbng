@@ -24,6 +24,7 @@ services:
     sysctls:
       - net.unix.max_dgram_qlen=10000
     environment:
+      - OSVBNG_NUM_INTERFACES=3
       - OSVBNG_ACCESS_INTERFACES=1
       - OSVBNG_LOG_LEVEL=info
     network_mode: none
@@ -36,6 +37,7 @@ services:
       - ../../bin/osvbngd:/usr/local/bin/osvbngd:ro
       - ../../bin/osvbngcli:/usr/local/bin/osvbngcli:ro
       - ../../templates:/usr/share/osvbng/templates:ro
+      - ./logs:/var/log/osvbng
     cap_add:
       - SYS_ADMIN
       - NET_ADMIN

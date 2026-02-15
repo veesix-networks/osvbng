@@ -6,4 +6,6 @@ type ProtocolConfig struct {
 	OSPF6  *OSPF6Config  `json:"ospf6,omitempty" yaml:"ospf6,omitempty"`
 	ISIS   *ISISConfig   `json:"isis,omitempty" yaml:"isis,omitempty"`
 	Static *StaticConfig `json:"static,omitempty" yaml:"static,omitempty"`
+	MPLS   *MPLSConfig   `json:"mpls,omitempty" yaml:"mpls,omitempty"`
+	LDP    *LDPConfig    `json:"ldp,omitempty" yaml:"ldp,omitempty"`
 }
