@@ -2,6 +2,7 @@ package arp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
+	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
 	"github.com/veesix-networks/osvbng/pkg/events"
@@ -16,6 +18,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/srg"
+	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
 )
 
 type Component struct {
@@ -23,8 +26,10 @@ type Component struct {
 
 	logger    *slog.Logger
 	eventBus  events.Bus
+	cache     cache.Cache
 	srgMgr    *srg.Manager
 	ifMgr     *ifmgr.Manager
+	vrfMgr    *vrfmgr.Manager
 	configMgr component.ConfigManager
 	arpChan   <-chan *dataplane.ParsedPacket
 }
@@ -36,8 +41,10 @@ func New(deps component.Dependencies, srgMgr *srg.Manager, ifMgr *ifmgr.Manager)
 		Base:      component.NewBase("arp"),
 		logger:    log,
 		eventBus:  deps.EventBus,
+		cache:     deps.Cache,
 		srgMgr:    srgMgr,
 		ifMgr:     ifMgr,
+		vrfMgr:    deps.VRFManager,
 		configMgr: deps.ConfigManager,
 		arpChan:   deps.ARPChan,
 	}, nil
@@ -87,7 +94,7 @@ func (c *Component) handlePacket(pkt *dataplane.ParsedPacket) error {
 	start := time.Now()
 	defer func() {
 		duration := time.Since(start)
-		c.logger.Warn("ARP packet processing time",
+		c.logger.Debug("ARP packet processing time",
 			"duration_us", duration.Microseconds(),
 			"sw_if_index", pkt.SwIfIndex)
 	}()
@@ -103,18 +110,27 @@ func (c *Component) handlePacket(pkt *dataplane.ParsedPacket) error {
 	}
 
 	srcMAC := net.HardwareAddr(arp.SourceHwAddress)
-	srcIP := net.IP(arp.SourceProtAddress)
 	dstIP := net.IP(arp.DstProtAddress)
 
 	c.logger.Debug("ARP request",
 		"sw_if_index", pkt.SwIfIndex,
 		"src_mac", srcMAC.String(),
-		"src_ip", srcIP.String(),
 		"dst_ip", dstIP.String(),
 	)
 
-	if !c.isOwnedIP(dstIP) {
-		c.logger.Debug("Ignoring ARP request for non-owned IP", "dst_ip", dstIP.String())
+	sess := c.lookupSubscriberSession(pkt)
+	if sess == nil {
+		c.logger.Debug("Dropping ARP from unknown subscriber",
+			"src_mac", srcMAC.String(),
+			"outer_vlan", pkt.OuterVLAN,
+			"inner_vlan", pkt.InnerVLAN)
+		return nil
+	}
+
+	if !c.isOwnedIP(dstIP, sess.VRF) {
+		c.logger.Debug("Ignoring ARP request for IP not in subscriber VRF",
+			"dst_ip", dstIP.String(),
+			"vrf", sess.VRF)
 		return nil
 	}
 
@@ -167,30 +183,52 @@ func (c *Component) handlePacket(pkt *dataplane.ParsedPacket) error {
 	return nil
 }
 
-func (c *Component) isOwnedIP(ip net.IP) bool {
-	if c.configMgr == nil {
+func (c *Component) lookupSubscriberSession(pkt *dataplane.ParsedPacket) *models.IPoESession {
+	if c.cache == nil {
+		return nil
+	}
+
+	srcMAC := net.HardwareAddr(pkt.ARP.SourceHwAddress)
+	lookupKey := fmt.Sprintf("osvbng:lookup:ipoe:%s:%d:%d", srcMAC.String(), pkt.OuterVLAN, pkt.InnerVLAN)
+
+	sessionIDBytes, err := c.cache.Get(c.Ctx, lookupKey)
+	if err != nil || len(sessionIDBytes) == 0 {
+		return nil
+	}
+
+	sessionID := string(sessionIDBytes)
+	sessionKey := fmt.Sprintf("osvbng:sessions:%s", sessionID)
+
+	sessionData, err := c.cache.Get(c.Ctx, sessionKey)
+	if err != nil || len(sessionData) == 0 {
+		return nil
+	}
+
+	var sess models.IPoESession
+	if err := json.Unmarshal(sessionData, &sess); err != nil {
+		c.logger.Debug("Failed to unmarshal session", "session_id", sessionID, "error", err)
+		return nil
+	}
+
+	return &sess
+}
+
+func (c *Component) isOwnedIP(ip net.IP, vrfName string) bool {
+	if c.ifMgr == nil {
 		return false
 	}
 
-	cfg, err := c.configMgr.GetRunning()
-	if err != nil || cfg == nil || cfg.Interfaces == nil {
+	if c.vrfMgr == nil {
 		return false
 	}
 
-	ipStr := ip.String()
-	for _, iface := range cfg.Interfaces {
-		if iface.Address == nil {
-			continue
-		}
-		for _, addr := range iface.Address.IPv4 {
-			ip, _, err := net.ParseCIDR(addr)
-			if err == nil && ip.String() == ipStr {
-				return true
-			}
-		}
+	tableID, err := c.vrfMgr.ResolveVRF(vrfName)
+	if err != nil {
+		c.logger.Debug("Failed to resolve VRF", "vrf", vrfName, "error", err)
+		return false
 	}
 
-	return false
+	return c.ifMgr.HasIPv4InFIB(ip, tableID)
 }
 
 func (c *Component) buildARPReply(req *layers.ARP, targetIP net.IP, gatewayMAC net.HardwareAddr) []byte {
