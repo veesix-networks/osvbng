@@ -97,8 +97,20 @@ const (
 	ProtocolsBGPIPv6UnicastRedistribute  Path = "protocols.bgp.ipv6-unicast.redistribute"
 	ProtocolsBGPVRFIPv4UnicastNetwork    Path = "protocols.bgp.vrf.<*>.ipv4-unicast.networks.<*:prefix>"
 	ProtocolsBGPVRFIPv4UnicastRedistribute Path = "protocols.bgp.vrf.<*>.ipv4-unicast.redistribute"
-	ProtocolsBGPVRFIPv6UnicastNetwork    Path = "protocols.bgp.vrf.<*>.ipv6-unicast.networks.<*:prefix>"
+	ProtocolsBGPVRFIPv6UnicastNetwork      Path = "protocols.bgp.vrf.<*>.ipv6-unicast.networks.<*:prefix>"
 	ProtocolsBGPVRFIPv6UnicastRedistribute Path = "protocols.bgp.vrf.<*>.ipv6-unicast.redistribute"
+
+	ProtocolsBGPIPv4VPN         Path = "protocols.bgp.ipv4-vpn"
+	ProtocolsBGPIPv4VPNNeighbor Path = "protocols.bgp.ipv4-vpn.neighbors.<*:address>"
+	ProtocolsBGPIPv6VPN         Path = "protocols.bgp.ipv6-vpn"
+	ProtocolsBGPIPv6VPNNeighbor Path = "protocols.bgp.ipv6-vpn.neighbors.<*:address>"
+
+	ProtocolsBGPVRFIPv4UnicastLabelVPN  Path = "protocols.bgp.vrf.<*>.ipv4-unicast.label-vpn"
+	ProtocolsBGPVRFIPv4UnicastExportVPN Path = "protocols.bgp.vrf.<*>.ipv4-unicast.export-vpn"
+	ProtocolsBGPVRFIPv4UnicastImportVPN Path = "protocols.bgp.vrf.<*>.ipv4-unicast.import-vpn"
+	ProtocolsBGPVRFIPv6UnicastLabelVPN  Path = "protocols.bgp.vrf.<*>.ipv6-unicast.label-vpn"
+	ProtocolsBGPVRFIPv6UnicastExportVPN Path = "protocols.bgp.vrf.<*>.ipv6-unicast.export-vpn"
+	ProtocolsBGPVRFIPv6UnicastImportVPN Path = "protocols.bgp.vrf.<*>.ipv6-unicast.import-vpn"
 
 	ProtocolsStaticIPv4Route Path = "protocols.static.ipv4.<*:prefix>"
 	ProtocolsStaticIPv6Route Path = "protocols.static.ipv6.<*:prefix>"
