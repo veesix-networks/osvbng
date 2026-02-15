@@ -178,6 +178,10 @@ func main() {
 		mainLog.Warn("Failed to load interfaces from dataplane", "error", err)
 	}
 
+	if err := vpp.LoadIPState(); err != nil {
+		mainLog.Warn("Failed to load IP state from dataplane", "error", err)
+	}
+
 	mainLog.Info("Loading dataplane state")
 	if err := configd.LoadFromDataplane(vpp); err != nil {
 		log.Fatalf("Failed to load dataplane state: %v", err)
