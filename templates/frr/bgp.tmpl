@@ -132,13 +132,76 @@ router bgp {{ .Protocols.BGP.ASN }}
  exit-address-family
 !
 {{ end }}
+{{ if .Protocols.BGP.IPv4VPN }}
+ address-family ipv4 vpn
+{{ range $addr, $neighbor := $.Protocols.BGP.Neighbors }}
+{{ if (index $.Protocols.BGP.IPv4VPN.Neighbors $addr) }}
+  neighbor {{ $addr }} activate
+{{ $nCfg := index $.Protocols.BGP.IPv4VPN.Neighbors $addr }}
+{{ if $nCfg.NextHopSelf }}
+  neighbor {{ $addr }} next-hop-self
+{{ end }}
+{{ if $nCfg.SendCommunity }}
+  neighbor {{ $addr }} send-community {{ $nCfg.SendCommunity }}
+{{ end }}
+{{ if $nCfg.RouteMapIn }}
+  neighbor {{ $addr }} route-map {{ $nCfg.RouteMapIn }} in
+{{ end }}
+{{ if $nCfg.RouteMapOut }}
+  neighbor {{ $addr }} route-map {{ $nCfg.RouteMapOut }} out
+{{ end }}
+{{ end }}
+{{ end }}
+{{ range $name, $peerGroup := $.Protocols.BGP.PeerGroups }}
+{{ if (index $.Protocols.BGP.IPv4VPN.Neighbors $name) }}
+  neighbor {{ $name }} activate
+{{ $pgCfg := index $.Protocols.BGP.IPv4VPN.Neighbors $name }}
+{{ if $pgCfg.SendCommunity }}
+  neighbor {{ $name }} send-community {{ $pgCfg.SendCommunity }}
+{{ end }}
+{{ end }}
+{{ end }}
+ exit-address-family
+!
+{{ end }}
+{{ if .Protocols.BGP.IPv6VPN }}
+ address-family ipv6 vpn
+{{ range $addr, $neighbor := $.Protocols.BGP.Neighbors }}
+{{ if (index $.Protocols.BGP.IPv6VPN.Neighbors $addr) }}
+  neighbor {{ $addr }} activate
+{{ $nCfg := index $.Protocols.BGP.IPv6VPN.Neighbors $addr }}
+{{ if $nCfg.NextHopSelf }}
+  neighbor {{ $addr }} next-hop-self
+{{ end }}
+{{ if $nCfg.SendCommunity }}
+  neighbor {{ $addr }} send-community {{ $nCfg.SendCommunity }}
+{{ end }}
+{{ if $nCfg.RouteMapIn }}
+  neighbor {{ $addr }} route-map {{ $nCfg.RouteMapIn }} in
+{{ end }}
+{{ if $nCfg.RouteMapOut }}
+  neighbor {{ $addr }} route-map {{ $nCfg.RouteMapOut }} out
+{{ end }}
+{{ end }}
+{{ end }}
+{{ range $name, $peerGroup := $.Protocols.BGP.PeerGroups }}
+{{ if (index $.Protocols.BGP.IPv6VPN.Neighbors $name) }}
+  neighbor {{ $name }} activate
+{{ $pgCfg := index $.Protocols.BGP.IPv6VPN.Neighbors $name }}
+{{ if $pgCfg.SendCommunity }}
+  neighbor {{ $name }} send-community {{ $pgCfg.SendCommunity }}
+{{ end }}
+{{ end }}
+{{ end }}
+ exit-address-family
+!
+{{ end }}
+exit
+!
 {{ range $vrfName, $vrfConfig := .Protocols.BGP.VRF }}
 router bgp {{ $.Protocols.BGP.ASN }} vrf {{ $vrfName }}
 {{ if $vrfConfig.RouterID }}
  bgp router-id {{ $vrfConfig.RouterID }}
-{{ end }}
-{{ if $vrfConfig.RD }}
- rd {{ $vrfConfig.RD }}
 {{ end }}
 !
 {{ if $vrfConfig.IPv4Unicast }}
@@ -151,6 +214,35 @@ router bgp {{ $.Protocols.BGP.ASN }} vrf {{ $vrfName }}
 {{ end }}
 {{ range $network, $config := $vrfConfig.IPv4Unicast.Networks }}
   network {{ $network }}{{ if $config.RouteMap }} route-map {{ $config.RouteMap }}{{ end }}
+{{ end }}
+{{ if $vrfConfig.IPv4Unicast.Redistribute }}
+{{ if $vrfConfig.IPv4Unicast.Redistribute.Connected }}
+  redistribute connected
+{{ end }}
+{{ if $vrfConfig.IPv4Unicast.Redistribute.Static }}
+  redistribute static
+{{ end }}
+{{ end }}
+{{ $vrf := index $.VRFS $vrfName }}
+{{ if $vrf }}
+{{ if $vrf.RouteDistinguisher }}
+  rd vpn export {{ $vrf.RouteDistinguisher }}
+{{ end }}
+{{ range $rt := $vrf.ImportRouteTargets }}
+  rt vpn import {{ $rt }}
+{{ end }}
+{{ range $rt := $vrf.ExportRouteTargets }}
+  rt vpn export {{ $rt }}
+{{ end }}
+{{ end }}
+{{ if $vrfConfig.IPv4Unicast.LabelVPN }}
+  label vpn export {{ $vrfConfig.IPv4Unicast.LabelVPN }}
+{{ end }}
+{{ if $vrfConfig.IPv4Unicast.ExportVPN }}
+  export vpn
+{{ end }}
+{{ if $vrfConfig.IPv4Unicast.ImportVPN }}
+  import vpn
 {{ end }}
  exit-address-family
 !
@@ -166,9 +258,40 @@ router bgp {{ $.Protocols.BGP.ASN }} vrf {{ $vrfName }}
 {{ range $network, $config := $vrfConfig.IPv6Unicast.Networks }}
   network {{ $network }}{{ if $config.RouteMap }} route-map {{ $config.RouteMap }}{{ end }}
 {{ end }}
+{{ if $vrfConfig.IPv6Unicast.Redistribute }}
+{{ if $vrfConfig.IPv6Unicast.Redistribute.Connected }}
+  redistribute connected
+{{ end }}
+{{ if $vrfConfig.IPv6Unicast.Redistribute.Static }}
+  redistribute static
+{{ end }}
+{{ end }}
+{{ $vrf := index $.VRFS $vrfName }}
+{{ if $vrf }}
+{{ if $vrf.RouteDistinguisher }}
+  rd vpn export {{ $vrf.RouteDistinguisher }}
+{{ end }}
+{{ range $rt := $vrf.ImportRouteTargets }}
+  rt vpn import {{ $rt }}
+{{ end }}
+{{ range $rt := $vrf.ExportRouteTargets }}
+  rt vpn export {{ $rt }}
+{{ end }}
+{{ end }}
+{{ if $vrfConfig.IPv6Unicast.LabelVPN }}
+  label vpn export {{ $vrfConfig.IPv6Unicast.LabelVPN }}
+{{ end }}
+{{ if $vrfConfig.IPv6Unicast.ExportVPN }}
+  export vpn
+{{ end }}
+{{ if $vrfConfig.IPv6Unicast.ImportVPN }}
+  import vpn
+{{ end }}
  exit-address-family
 !
 {{ end }}
+exit
+!
 {{ end }}
 {{ end }}
 {{ end }}
