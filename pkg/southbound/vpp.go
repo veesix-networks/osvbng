@@ -3627,38 +3627,99 @@ func (v *VPP) LoadInterfaces() error {
 }
 
 func (v *VPP) LoadIPState() error {
-	addrs, err := v.DumpIPAddresses()
-	if err != nil {
-		return fmt.Errorf("dump IP addresses: %w", err)
-	}
+	ifaces := v.ifMgr.List()
+	totalAddrs := 0
 
-	seenIndices := make(map[uint32]bool)
-	for _, info := range addrs {
-		ipAddr, _, err := net.ParseCIDR(info.Address)
+	for _, iface := range ifaces {
+		addrs, err := v.dumpIPAddressesForInterface(iface.SwIfIndex)
 		if err != nil {
-			v.logger.Warn("Failed to parse IP from dump", "address", info.Address, "error", err)
+			v.logger.Warn("Failed to dump IPs for interface", "sw_if_index", iface.SwIfIndex, "name", iface.Name, "error", err)
 			continue
 		}
 
-		if info.IsIPv6 {
-			v.ifMgr.AddIPv6Address(info.SwIfIndex, ipAddr)
-		} else {
-			v.ifMgr.AddIPv4Address(info.SwIfIndex, ipAddr)
+		for _, info := range addrs {
+			ipAddr, _, err := net.ParseCIDR(info.Address)
+			if err != nil {
+				v.logger.Warn("Failed to parse IP from dump", "address", info.Address, "error", err)
+				continue
+			}
+
+			if info.IsIPv6 {
+				v.ifMgr.AddIPv6Address(info.SwIfIndex, ipAddr)
+			} else {
+				v.ifMgr.AddIPv4Address(info.SwIfIndex, ipAddr)
+			}
+			totalAddrs++
 		}
-		seenIndices[info.SwIfIndex] = true
+
+		if len(addrs) > 0 {
+			tableID, err := v.GetFIBIDForInterface(iface.SwIfIndex)
+			if err != nil {
+				v.logger.Warn("Failed to get FIB table for interface", "sw_if_index", iface.SwIfIndex, "error", err)
+				continue
+			}
+			v.ifMgr.SetFIBTableID(iface.SwIfIndex, tableID)
+		}
 	}
 
-	for idx := range seenIndices {
-		tableID, err := v.GetFIBIDForInterface(idx)
-		if err != nil {
-			v.logger.Warn("Failed to get FIB table for interface", "sw_if_index", idx, "error", err)
-			continue
-		}
-		v.ifMgr.SetFIBTableID(idx, tableID)
-	}
-
-	v.logger.Debug("Loaded IP state into ifMgr", "addresses", len(addrs), "interfaces", len(seenIndices))
+	v.logger.Info("Loaded IP state into ifMgr", "addresses", totalAddrs, "interfaces", len(ifaces))
 	return nil
+}
+
+func (v *VPP) dumpIPAddressesForInterface(swIfIndex uint32) ([]IPAddressInfo, error) {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return nil, err
+	}
+	defer ch.Close()
+
+	var result []IPAddressInfo
+
+	reqV4 := &ip.IPAddressDump{
+		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+		IsIPv6:    false,
+	}
+	streamV4 := ch.SendMultiRequest(reqV4)
+	for {
+		reply := &ip.IPAddressDetails{}
+		stop, err := streamV4.ReceiveReply(reply)
+		if stop {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("dump ipv4 addresses: %w", err)
+		}
+		addr := fmt.Sprintf("%s/%d", reply.Prefix.Address.Un.GetIP4().String(), reply.Prefix.Len)
+		result = append(result, IPAddressInfo{
+			SwIfIndex: uint32(reply.SwIfIndex),
+			Address:   addr,
+			IsIPv6:    false,
+		})
+	}
+
+	reqV6 := &ip.IPAddressDump{
+		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+		IsIPv6:    true,
+	}
+	streamV6 := ch.SendMultiRequest(reqV6)
+	for {
+		reply := &ip.IPAddressDetails{}
+		stop, err := streamV6.ReceiveReply(reply)
+		if stop {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("dump ipv6 addresses: %w", err)
+		}
+		addr := fmt.Sprintf("%s/%d", reply.Prefix.Address.Un.GetIP6().String(), reply.Prefix.Len)
+		result = append(result, IPAddressInfo{
+			SwIfIndex: uint32(reply.SwIfIndex),
+			Address:   addr,
+			IsIPv6:    true,
+		})
+	}
+
+	return result, nil
 }
 
 func (v *VPP) GetIfMgr() *ifmgr.Manager {

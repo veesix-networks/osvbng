@@ -190,6 +190,25 @@ func (m *Manager) SetFIBTableID(swIfIndex uint32, tableID uint32) {
 	}
 }
 
+func (m *Manager) HasIPv4(ip net.IP) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	v4 := ip.To4()
+	if v4 == nil {
+		return false
+	}
+
+	for _, iface := range m.bySwIfIndex {
+		for _, addr := range iface.IPv4Addresses {
+			if addr.Equal(v4) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (m *Manager) HasIPv4InFIB(ip net.IP, tableID uint32) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

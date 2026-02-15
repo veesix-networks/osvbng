@@ -118,20 +118,20 @@ func (c *Component) handlePacket(pkt *dataplane.ParsedPacket) error {
 		"dst_ip", dstIP.String(),
 	)
 
-	sess := c.lookupSubscriberSession(pkt)
-	if sess == nil {
-		c.logger.Debug("Dropping ARP from unknown subscriber",
-			"src_mac", srcMAC.String(),
-			"outer_vlan", pkt.OuterVLAN,
-			"inner_vlan", pkt.InnerVLAN)
+	if c.ifMgr == nil || !c.ifMgr.HasIPv4(dstIP) {
+		c.logger.Debug("Ignoring ARP request for non-owned IP",
+			"dst_ip", dstIP.String())
 		return nil
 	}
 
-	if !c.isOwnedIP(dstIP, sess.VRF) {
-		c.logger.Debug("Ignoring ARP request for IP not in subscriber VRF",
-			"dst_ip", dstIP.String(),
-			"vrf", sess.VRF)
-		return nil
+	sess := c.lookupSubscriberSession(pkt)
+	if sess != nil && sess.VRF != "" {
+		if !c.isOwnedIPInVRF(dstIP, sess.VRF) {
+			c.logger.Debug("Ignoring ARP request for IP not in subscriber VRF",
+				"dst_ip", dstIP.String(),
+				"vrf", sess.VRF)
+			return nil
+		}
 	}
 
 	var gatewayMAC net.HardwareAddr
@@ -213,12 +213,8 @@ func (c *Component) lookupSubscriberSession(pkt *dataplane.ParsedPacket) *models
 	return &sess
 }
 
-func (c *Component) isOwnedIP(ip net.IP, vrfName string) bool {
-	if c.ifMgr == nil {
-		return false
-	}
-
-	if c.vrfMgr == nil {
+func (c *Component) isOwnedIPInVRF(ip net.IP, vrfName string) bool {
+	if c.ifMgr == nil || c.vrfMgr == nil {
 		return false
 	}
 
