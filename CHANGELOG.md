@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.2.0](https://github.com/veesix-networks/osvbng/compare/v0.1.2...v0.2.0) (2026-02-15)
+
+
+### Features
+
+* **bgp:** add VPNv4/VPNv6 address family config model and templates ([#97](https://github.com/veesix-networks/osvbng/issues/97)) ([8ecbeb9](https://github.com/veesix-networks/osvbng/commit/8ecbeb9fe598893fa21446c8d0eef9d3d7cfda6b))
+* **bgp:** add VPNv4/VPNv6 and L3VPN configuration and show handlers ([#98](https://github.com/veesix-networks/osvbng/issues/98)) ([958a7fe](https://github.com/veesix-networks/osvbng/commit/958a7fe7ab144be76c904a9c181728f88403696e))
+* **ifmgr:** track interface IP addresses and FIB table IDs ([#93](https://github.com/veesix-networks/osvbng/issues/93)) ([8cfc5f2](https://github.com/veesix-networks/osvbng/commit/8cfc5f2d2176d296b4813dff5af2f88381f3a653))
+* **mpls:** add MPLS/LDP southbound API, config model, and FRR templates ([#96](https://github.com/veesix-networks/osvbng/issues/96)) ([5f314a0](https://github.com/veesix-networks/osvbng/commit/5f314a09be790eef7339258003ff3025168e4796))
+* **routing:** add VRF assignment to IPoE and PPPoE subscriber sessions ([bbbb6b7](https://github.com/veesix-networks/osvbng/commit/bbbb6b789ecf9d2ec218210ce392d531174217d6))
+* **routing:** add VRF manager with Linux VRF and VPP table lifecycle ([1334211](https://github.com/veesix-networks/osvbng/commit/133421170a3995f1500cb0cb60a79b4956d0f7fc))
+* **routing:** add VRF manager with Linux VRF and VPP table lifecycle ([#89](https://github.com/veesix-networks/osvbng/issues/89)) ([6c43cfe](https://github.com/veesix-networks/osvbng/commit/6c43cfe476e55ad73425410efd0e764a37e44b03))
+* **routing:** bind infrastructure interfaces to VRF during creation ([3b838cd](https://github.com/veesix-networks/osvbng/commit/3b838cd332210d93445ebaf2a34e5d2cb838e688))
+* **routing:** wire VRF manager into application startup and config loading ([c6b9546](https://github.com/veesix-networks/osvbng/commit/c6b95467b268dab3951765415f1045da9bd98002))
+* **svcgroup:** add service group resolver with three-layer merge resolution ([33f679f](https://github.com/veesix-networks/osvbng/commit/33f679fb00fed4f76409d51f21ff2ebdf81d75c6))
+* **svcgroup:** added support for service groups ([aa02eb8](https://github.com/veesix-networks/osvbng/commit/aa02eb8281ab051a3413f0401646fa7cdf7113de))
+* **svcgroup:** added support for service groups ([#91](https://github.com/veesix-networks/osvbng/issues/91)) ([aa02eb8](https://github.com/veesix-networks/osvbng/commit/aa02eb8281ab051a3413f0401646fa7cdf7113de))
+
+
+### Bug Fixes
+
+* **arp:** enforce VRF-aware ARP response filtering ([#94](https://github.com/veesix-networks/osvbng/issues/94)) ([bf7bb78](https://github.com/veesix-networks/osvbng/commit/bf7bb78f91415089541b9f0f2d4a01fac2a0cfbe))
+* **arp:** use per-interface IP dump and ifmgr cache ([#95](https://github.com/veesix-networks/osvbng/issues/95)) ([65dea39](https://github.com/veesix-networks/osvbng/commit/65dea39741bf490da6e43bf31b27d6ec9250385c))
+* **config:** stabilize topological sort for deterministic change ordering ([5074cb3](https://github.com/veesix-networks/osvbng/commit/5074cb361e23518c8a0fd89fffe20e3f8eae2b05))
+
 ## [0.1.2](https://github.com/veesix-networks/osvbng/compare/v0.1.1...v0.1.2) (2026-02-13)
 
 
