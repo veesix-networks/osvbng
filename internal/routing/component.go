@@ -220,6 +220,38 @@ func (c *Component) GetBGPNeighbor(neighborIP string) (interface{}, error) {
 	return resultMap, nil
 }
 
+func (c *Component) GetBGPVPNv4Routes() (json.RawMessage, error) {
+	output, err := c.execVtysh("-c", "show bgp ipv4 vpn json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
+func (c *Component) GetBGPVPNv6Routes() (json.RawMessage, error) {
+	output, err := c.execVtysh("-c", "show bgp ipv6 vpn json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
+func (c *Component) GetBGPVPNv4Summary() (json.RawMessage, error) {
+	output, err := c.execVtysh("-c", "show bgp ipv4 vpn summary json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
+func (c *Component) GetBGPVPNv6Summary() (json.RawMessage, error) {
+	output, err := c.execVtysh("-c", "show bgp ipv6 vpn summary json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
 type bgpStatisticsEntry struct {
 	Instance                string  `json:"instance"`
 	TotalPrefixes           int     `json:"totalPrefixes"`
