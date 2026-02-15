@@ -51,7 +51,10 @@ func (m *Manager) GetByName(name string) *Interface {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	return m.byName[name]
+	if iface, ok := m.byName[name]; ok {
+		return iface
+	}
+	return m.byName["host-"+name]
 }
 
 func (m *Manager) GetSupSwIfIndex(swIfIndex uint32) (uint32, bool) {
@@ -69,6 +72,9 @@ func (m *Manager) GetSwIfIndex(name string) (uint32, bool) {
 	defer m.mu.RUnlock()
 
 	if iface, ok := m.byName[name]; ok {
+		return iface.SwIfIndex, true
+	}
+	if iface, ok := m.byName["host-"+name]; ok {
 		return iface.SwIfIndex, true
 	}
 	return 0, false
