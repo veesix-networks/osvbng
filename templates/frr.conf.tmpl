@@ -4,10 +4,12 @@ ip forwarding
 ipv6 forwarding
 !
 {{ template "vrf" . }}
+{{ template "mpls" . }}
 {{ template "bgp" . }}
 {{ template "ospf" . }}
 {{ template "ospf6" . }}
 {{ template "isis" . }}
+{{ template "ldp" . }}
 {{ template "static" . }}
 line vty
 !

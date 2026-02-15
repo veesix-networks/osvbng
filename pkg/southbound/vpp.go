@@ -3150,6 +3150,70 @@ type MPLSTableInfo struct {
 	Name    string
 }
 
+func (v *VPP) CreateMPLSTable() error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	req := &mpls.MplsTableAddDel{
+		MtIsAdd: true,
+		MtTable: mpls.MplsTable{
+			MtTableID: 0,
+			MtName:    "default-mpls",
+		},
+	}
+
+	reply := &mpls.MplsTableAddDelReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("create MPLS table: %w", err)
+	}
+
+	v.logger.Info("Created MPLS FIB table", "table_id", 0)
+	return nil
+}
+
+func (v *VPP) EnableMPLS(swIfIndex uint32) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	req := &mpls.SwInterfaceSetMplsEnable{
+		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+		Enable:    true,
+	}
+
+	reply := &mpls.SwInterfaceSetMplsEnableReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("enable MPLS on sw_if_index %d: %w", swIfIndex, err)
+	}
+
+	return nil
+}
+
+func (v *VPP) DisableMPLS(swIfIndex uint32) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	req := &mpls.SwInterfaceSetMplsEnable{
+		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+		Enable:    false,
+	}
+
+	reply := &mpls.SwInterfaceSetMplsEnableReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("disable MPLS on sw_if_index %d: %w", swIfIndex, err)
+	}
+
+	return nil
+}
+
 func (v *VPP) GetNextAvailableGlobalTableId() (uint32, error) {
 	usedIDs := make(map[uint32]bool)
 

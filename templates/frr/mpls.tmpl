@@ -1,0 +1,24 @@
+{{ define "mpls" -}}
+{{ if .Protocols -}}
+{{ if .Protocols.MPLS -}}
+{{ if .Protocols.MPLS.Enabled -}}
+{{ if .Protocols.OSPF }}{{ if .Protocols.OSPF.Enabled -}}
+{{ range $area, $areaConfig := .Protocols.OSPF.Areas -}}
+{{ range $iface, $_ := $areaConfig.Interfaces -}}
+interface {{ $iface }}
+ mpls enable
+!
+{{ end -}}
+{{ end -}}
+{{ end }}{{ end -}}
+{{ if .Protocols.ISIS }}{{ if .Protocols.ISIS.Enabled -}}
+{{ range $iface, $_ := .Protocols.ISIS.Interfaces -}}
+interface {{ $iface }}
+ mpls enable
+!
+{{ end -}}
+{{ end }}{{ end -}}
+{{ end -}}
+{{ end -}}
+{{ end -}}
+{{ end -}}
