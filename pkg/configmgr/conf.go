@@ -239,6 +239,7 @@ func (cd *ConfigManager) Commit(id conf.SessionID) error {
 	appliedChanges := make([]*conf.HandlerContext, 0)
 	frrReloadNeeded := false
 	for _, change := range sortedChanges {
+		change.Config = sess.config
 		handler, err := cd.registry.GetHandler(change.Path)
 		if err != nil {
 			cd.rollbackChanges(appliedChanges)
@@ -730,6 +731,77 @@ func (cd *ConfigManager) LoadConfig(id conf.SessionID, config *config.Config) er
 				Path:      fmt.Sprintf("protocols.static.ipv6.%d", i),
 				OldValue:  nil,
 				NewValue:  route,
+			}
+			sess.changes = append(sess.changes, hctx)
+		}
+	}
+
+	if config.Protocols.MPLS != nil && config.Protocols.MPLS.Enabled {
+		hctx := &conf.HandlerContext{
+			SessionID: id,
+			Path:      "protocols.mpls.enabled",
+			OldValue:  nil,
+			NewValue:  true,
+		}
+		sess.changes = append(sess.changes, hctx)
+
+		if config.Protocols.MPLS.PlatformLabels > 0 {
+			hctx := &conf.HandlerContext{
+				SessionID: id,
+				Path:      "protocols.mpls.platform-labels",
+				OldValue:  nil,
+				NewValue:  config.Protocols.MPLS.PlatformLabels,
+			}
+			sess.changes = append(sess.changes, hctx)
+		}
+	}
+
+	if config.Protocols.LDP != nil && config.Protocols.LDP.Enabled {
+		hctx := &conf.HandlerContext{
+			SessionID: id,
+			Path:      "protocols.ldp.enabled",
+			OldValue:  nil,
+			NewValue:  true,
+		}
+		sess.changes = append(sess.changes, hctx)
+
+		if config.Protocols.LDP.RouterID != "" {
+			hctx := &conf.HandlerContext{
+				SessionID: id,
+				Path:      "protocols.ldp.router-id",
+				OldValue:  nil,
+				NewValue:  config.Protocols.LDP.RouterID,
+			}
+			sess.changes = append(sess.changes, hctx)
+		}
+
+		if config.Protocols.LDP.AddressFamilies != nil {
+			if config.Protocols.LDP.AddressFamilies.IPv4 != nil {
+				hctx := &conf.HandlerContext{
+					SessionID: id,
+					Path:      "protocols.ldp.address-families.ipv4",
+					OldValue:  nil,
+					NewValue:  config.Protocols.LDP.AddressFamilies.IPv4,
+				}
+				sess.changes = append(sess.changes, hctx)
+			}
+			if config.Protocols.LDP.AddressFamilies.IPv6 != nil {
+				hctx := &conf.HandlerContext{
+					SessionID: id,
+					Path:      "protocols.ldp.address-families.ipv6",
+					OldValue:  nil,
+					NewValue:  config.Protocols.LDP.AddressFamilies.IPv6,
+				}
+				sess.changes = append(sess.changes, hctx)
+			}
+		}
+
+		for addr, neighborCfg := range config.Protocols.LDP.Neighbors {
+			hctx := &conf.HandlerContext{
+				SessionID: id,
+				Path:      fmt.Sprintf("protocols.ldp.neighbors.%s", addr),
+				OldValue:  nil,
+				NewValue:  neighborCfg,
 			}
 			sess.changes = append(sess.changes, hctx)
 		}

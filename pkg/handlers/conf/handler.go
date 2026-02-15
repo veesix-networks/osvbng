@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
 )
@@ -16,6 +17,7 @@ type HandlerContext struct {
 	Path      string
 	OldValue  interface{}
 	NewValue  interface{}
+	Config    *config.Config
 
 	frrReloadNeeded bool
 }
