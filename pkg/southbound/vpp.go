@@ -3214,6 +3214,118 @@ func (v *VPP) DisableMPLS(swIfIndex uint32) error {
 	return nil
 }
 
+type MPLSRouteEntry struct {
+	Label       uint32          `json:"label"`
+	Eos         bool            `json:"eos"`
+	EosProto    uint8           `json:"eos_proto"`
+	IsMulticast bool            `json:"is_multicast"`
+	Paths       []MPLSRoutePath `json:"paths"`
+}
+
+type MPLSRoutePath struct {
+	SwIfIndex  uint32   `json:"sw_if_index"`
+	Interface  string   `json:"interface,omitempty"`
+	NextHop    string   `json:"next_hop,omitempty"`
+	Weight     uint8    `json:"weight"`
+	Preference uint8    `json:"preference"`
+	Labels     []uint32 `json:"labels,omitempty"`
+}
+
+func (v *VPP) GetMPLSRoutes() ([]*MPLSRouteEntry, error) {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return nil, fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	req := &mpls.MplsRouteDump{
+		Table: mpls.MplsTable{MtTableID: 0},
+	}
+	reqCtx := ch.SendMultiRequest(req)
+
+	var routes []*MPLSRouteEntry
+	for {
+		reply := &mpls.MplsRouteDetails{}
+		stop, err := reqCtx.ReceiveReply(reply)
+		if stop {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("receive MPLS route details: %w", err)
+		}
+
+		entry := &MPLSRouteEntry{
+			Label:       reply.MrRoute.MrLabel,
+			Eos:         reply.MrRoute.MrEos == 1,
+			EosProto:    reply.MrRoute.MrEosProto,
+			IsMulticast: reply.MrRoute.MrIsMulticast,
+		}
+
+		for _, p := range reply.MrRoute.MrPaths {
+			path := MPLSRoutePath{
+				SwIfIndex:  p.SwIfIndex,
+				Weight:     p.Weight,
+				Preference: p.Preference,
+			}
+
+			if iface := v.ifMgr.Get(p.SwIfIndex); iface != nil {
+				path.Interface = iface.Name
+			}
+
+			for i := uint8(0); i < p.NLabels; i++ {
+				path.Labels = append(path.Labels, p.LabelStack[i].Label)
+			}
+
+			entry.Paths = append(entry.Paths, path)
+		}
+
+		routes = append(routes, entry)
+	}
+
+	return routes, nil
+}
+
+type MPLSInterfaceInfo struct {
+	SwIfIndex uint32 `json:"sw_if_index"`
+	Name      string `json:"name,omitempty"`
+}
+
+func (v *VPP) GetMPLSInterfaces() ([]*MPLSInterfaceInfo, error) {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return nil, fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	req := &mpls.MplsInterfaceDump{
+		SwIfIndex: interface_types.InterfaceIndex(^uint32(0)),
+	}
+	reqCtx := ch.SendMultiRequest(req)
+
+	var ifaces []*MPLSInterfaceInfo
+	for {
+		reply := &mpls.MplsInterfaceDetails{}
+		stop, err := reqCtx.ReceiveReply(reply)
+		if stop {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("receive MPLS interface details: %w", err)
+		}
+
+		info := &MPLSInterfaceInfo{
+			SwIfIndex: uint32(reply.SwIfIndex),
+		}
+		if iface := v.ifMgr.Get(uint32(reply.SwIfIndex)); iface != nil {
+			info.Name = iface.Name
+		}
+
+		ifaces = append(ifaces, info)
+	}
+
+	return ifaces, nil
+}
+
 func (v *VPP) GetNextAvailableGlobalTableId() (uint32, error) {
 	usedIDs := make(map[uint32]bool)
 

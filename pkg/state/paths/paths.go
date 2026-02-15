@@ -10,6 +10,11 @@ const (
 	ProtocolsOSPFNeighbors  Path = "protocols.ospf.neighbors"
 	ProtocolsOSPF6Neighbors Path = "protocols.ospf6.neighbors"
 	ProtocolsISISNeighbors  Path = "protocols.isis.neighbors"
+	ProtocolsMPLSTable      Path = "protocols.mpls.table"
+	ProtocolsMPLSInterfaces Path = "protocols.mpls.interfaces"
+	ProtocolsLDPNeighbors   Path = "protocols.ldp.neighbors"
+	ProtocolsLDPBindings    Path = "protocols.ldp.bindings"
+	ProtocolsLDPDiscovery   Path = "protocols.ldp.discovery"
 	SubscriberSessions         Path = "subscriber.sessions"
 	SubscriberStats            Path = "subscriber.stats"
 

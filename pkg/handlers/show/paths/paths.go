@@ -32,6 +32,12 @@ const (
 	ProtocolsOSPF6Neighbors Path = "protocols.ospf6.neighbors"
 	ProtocolsISISNeighbors  Path = "protocols.isis.neighbors"
 
+	ProtocolsMPLSTable      Path = "protocols.mpls.table"
+	ProtocolsMPLSInterfaces Path = "protocols.mpls.interfaces"
+	ProtocolsLDPNeighbors   Path = "protocols.ldp.neighbors"
+	ProtocolsLDPBindings    Path = "protocols.ldp.bindings"
+	ProtocolsLDPDiscovery   Path = "protocols.ldp.discovery"
+
 	ServiceGroups Path = "service-groups"
 	VRFS          Path = "vrfs"
 
