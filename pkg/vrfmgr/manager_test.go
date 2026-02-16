@@ -50,12 +50,15 @@ func TestResolveVRFEmpty(t *testing.T) {
 		vrfs: make(map[string]*vrfEntry),
 	}
 
-	tableID, err := m.ResolveVRF("")
+	tableID, ipv4, ipv6, err := m.ResolveVRF("")
 	if err != nil {
 		t.Fatalf("ResolveVRF(\"\") error: %v", err)
 	}
 	if tableID != 0 {
 		t.Fatalf("expected 0 for empty VRF, got %d", tableID)
+	}
+	if ipv4 || ipv6 {
+		t.Fatalf("expected false/false for empty VRF, got %v/%v", ipv4, ipv6)
 	}
 }
 
@@ -64,7 +67,7 @@ func TestResolveVRFNotFound(t *testing.T) {
 		vrfs: make(map[string]*vrfEntry),
 	}
 
-	_, err := m.ResolveVRF("nonexistent")
+	_, _, _, err := m.ResolveVRF("nonexistent")
 	if err == nil {
 		t.Fatal("expected error for nonexistent VRF")
 	}
@@ -77,12 +80,40 @@ func TestResolveVRFFound(t *testing.T) {
 		},
 	}
 
-	tableID, err := m.ResolveVRF("customers")
+	tableID, ipv4, ipv6, err := m.ResolveVRF("customers")
 	if err != nil {
 		t.Fatalf("ResolveVRF(\"customers\") error: %v", err)
 	}
 	if tableID != 100 {
 		t.Fatalf("expected 100, got %d", tableID)
+	}
+	if !ipv4 || !ipv6 {
+		t.Fatalf("expected true/true, got %v/%v", ipv4, ipv6)
+	}
+}
+
+func TestResolveVRFAddressFamilies(t *testing.T) {
+	m := &Manager{
+		vrfs: map[string]*vrfEntry{
+			"v4only": {Name: "v4only", TableID: 200, IPv4: true, IPv6: false},
+			"v6only": {Name: "v6only", TableID: 201, IPv4: false, IPv6: true},
+		},
+	}
+
+	_, ipv4, ipv6, err := m.ResolveVRF("v4only")
+	if err != nil {
+		t.Fatalf("ResolveVRF(\"v4only\") error: %v", err)
+	}
+	if !ipv4 || ipv6 {
+		t.Fatalf("v4only: expected true/false, got %v/%v", ipv4, ipv6)
+	}
+
+	_, ipv4, ipv6, err = m.ResolveVRF("v6only")
+	if err != nil {
+		t.Fatalf("ResolveVRF(\"v6only\") error: %v", err)
+	}
+	if ipv4 || !ipv6 {
+		t.Fatalf("v6only: expected false/true, got %v/%v", ipv4, ipv6)
 	}
 }
 

@@ -974,7 +974,7 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 	var decapVrfID uint32
 	if vrfName != "" {
 		if c.vrfMgr != nil {
-			tableID, err := c.vrfMgr.ResolveVRF(vrfName)
+			tableID, _, _, err := c.vrfMgr.ResolveVRF(vrfName)
 			if err != nil {
 				c.logger.Error("Failed to resolve VRF for session", "session_id", sessID, "vrf", vrfName, "error", err)
 				return fmt.Errorf("resolve VRF %q: %w", vrfName, err)

@@ -28,6 +28,17 @@ func (m *Manager) Add(iface *Interface) {
 	}
 }
 
+func (m *Manager) Rename(oldName, newName string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if iface, ok := m.byName[oldName]; ok {
+		delete(m.byName, oldName)
+		iface.Name = newName
+		m.byName[newName] = iface
+	}
+}
+
 func (m *Manager) Remove(swIfIndex uint32) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

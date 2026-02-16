@@ -74,6 +74,7 @@ interfaces:
     eth2:
         description: Core Link (frr-peer)
         enabled: true
+        lcp: true
         address:
             ipv4:
                 - 10.0.0.1/30
@@ -110,16 +111,6 @@ protocols:
                 interfaces:
                     eth2:
                         network: point-to-point
-    isis:
-        enabled: true
-        net: "49.0001.0100.0000.0001.00"
-        is-type: level-2-only
-        metric-style: wide
-        log-adjacency-changes: true
-        interfaces:
-            eth2:
-                network: point-to-point
-                circuit-type: level-2-only
     mpls:
         enabled: true
     ldp:
@@ -212,8 +203,9 @@ logging:
         pppoe: info
         southbound: info
         subscriber: info
-dataplane:                                                                                                                                                         
-    statseg:                                                                                                                                                         
-        size: "512m"                                                                                                                                                   
-        page-size: "4k"                                                                                                                                              
+dataplane:
+    lcp-netns: dataplane
+    statseg:
+        size: "512m"
+        page-size: "4k"
         per-node-counters: false
