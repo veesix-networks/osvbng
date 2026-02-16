@@ -13,7 +13,15 @@ while [ ! -e /sys/class/net/eth0 ]; do
     fi
 done
 
-echo "eth0 ready, configuring MPLS..."
+echo "eth0 ready, creating L3VPN VRF..."
+ip link add CUSTOMER-A type vrf table 100
+ip link set CUSTOMER-A up
+ip link add dummy-custa type dummy
+ip link set dummy-custa master CUSTOMER-A
+ip link set dummy-custa up
+ip addr add 192.168.100.1/24 dev dummy-custa
+
+echo "Configuring MPLS..."
 sysctl -w net.mpls.platform_labels=1048575 || true
 sysctl -w net.mpls.conf.lo.input=1 || true
 
