@@ -27,7 +27,7 @@ type Component struct {
 	eventBus events.Bus
 	ingress  *shm.Ingress
 	egress   *shm.Egress
-	vpp      *southbound.VPP
+	vpp      southbound.Southbound
 
 	DHCPChan    chan *dataplane.ParsedPacket
 	DHCPv6Chan  chan *dataplane.ParsedPacket
@@ -49,7 +49,7 @@ func New(deps component.Dependencies) (component.Component, error) {
 		Base:       component.NewBase("dataplane"),
 		logger:     log,
 		eventBus:   deps.EventBus,
-		vpp:        deps.VPP,
+		vpp:        deps.Southbound,
 		DHCPChan:    make(chan *dataplane.ParsedPacket, 1000),
 		DHCPv6Chan:  make(chan *dataplane.ParsedPacket, 1000),
 		ARPChan:     make(chan *dataplane.ParsedPacket, 1000),

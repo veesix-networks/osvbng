@@ -17,7 +17,7 @@ func init() {
 }
 
 type BuffersHandler struct {
-	southbound *southbound.VPP
+	southbound southbound.Southbound
 }
 
 func NewBuffersHandler(deps *deps.ShowDeps) show.ShowHandler {

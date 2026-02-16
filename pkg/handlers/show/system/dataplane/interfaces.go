@@ -17,7 +17,7 @@ func init() {
 }
 
 type InterfacesHandler struct {
-	southbound *southbound.VPP
+	southbound southbound.Southbound
 }
 
 func NewInterfacesHandler(deps *deps.ShowDeps) show.ShowHandler {

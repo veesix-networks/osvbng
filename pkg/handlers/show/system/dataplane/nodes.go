@@ -17,7 +17,7 @@ func init() {
 }
 
 type NodesHandler struct {
-	southbound *southbound.VPP
+	southbound southbound.Southbound
 }
 
 func NewNodesHandler(deps *deps.ShowDeps) show.ShowHandler {

@@ -17,7 +17,7 @@ func init() {
 }
 
 type ARPHandler struct {
-	southbound   *southbound.VPP
+	southbound   southbound.Southbound
 	pathPattern  paths.Path
 	dependencies []paths.Path
 }

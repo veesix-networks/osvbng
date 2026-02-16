@@ -21,12 +21,12 @@ func init() {
 }
 
 type OSPFEnabledHandler struct {
-	vpp *southbound.VPP
+	southbound southbound.Southbound
 }
 
 func NewOSPFEnabledHandler(deps *deps.ConfDeps) conf.Handler {
 	return &OSPFEnabledHandler{
-		vpp: deps.Southbound,
+		southbound: deps.Southbound,
 	}
 }
 
@@ -44,7 +44,7 @@ func (h *OSPFEnabledHandler) Apply(ctx context.Context, hctx *conf.HandlerContex
 	}
 
 	for _, group := range ospfMulticastGroups {
-		if err := h.vpp.AddMfibLocalReceiveAllInterfaces(group, 0); err != nil {
+		if err := h.southbound.AddMfibLocalReceiveAllInterfaces(group, 0); err != nil {
 			return fmt.Errorf("add OSPF mfib local receive for %s: %w", group, err)
 		}
 	}

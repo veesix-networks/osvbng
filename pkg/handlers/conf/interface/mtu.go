@@ -8,6 +8,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
 	"github.com/veesix-networks/osvbng/pkg/operations"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
 
 func init() {
@@ -16,7 +17,7 @@ func init() {
 }
 
 type MTUHandler struct {
-	dataplane      operations.Dataplane
+	southbound     southbound.Southbound
 	dataplaneState operations.DataplaneStateReader
 	pathPattern    paths.Path
 	dependencies   []paths.Path
@@ -24,7 +25,7 @@ type MTUHandler struct {
 
 func NewInterfaceMTUHandler(d *deps.ConfDeps) conf.Handler {
 	return &MTUHandler{
-		dataplane:      d.Dataplane,
+		southbound:     d.Southbound,
 		dataplaneState: d.DataplaneState,
 		pathPattern:    paths.InterfaceMTU,
 		dependencies:   []paths.Path{paths.Interface},
@@ -33,7 +34,7 @@ func NewInterfaceMTUHandler(d *deps.ConfDeps) conf.Handler {
 
 func NewSubinterfaceMTUHandler(d *deps.ConfDeps) conf.Handler {
 	return &MTUHandler{
-		dataplane:      d.Dataplane,
+		southbound:     d.Southbound,
 		dataplaneState: d.DataplaneState,
 		pathPattern:    paths.InterfaceSubinterfaceMTU,
 		dependencies:   []paths.Path{paths.InterfaceSubinterface},
@@ -94,7 +95,7 @@ func (h *MTUHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error
 		}
 	}
 
-	return h.dataplane.SetInterfaceMTU(ifName, mtu)
+	return h.southbound.SetInterfaceMTU(ifName, mtu)
 }
 
 func (h *MTUHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) error {
@@ -117,7 +118,7 @@ func (h *MTUHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) er
 		oldMTU = int(v)
 	}
 
-	return h.dataplane.SetInterfaceMTU(ifName, oldMTU)
+	return h.southbound.SetInterfaceMTU(ifName, oldMTU)
 }
 
 func (h *MTUHandler) PathPattern() paths.Path {

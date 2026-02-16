@@ -17,7 +17,7 @@ func init() {
 }
 
 type ErrorsHandler struct {
-	southbound *southbound.VPP
+	southbound southbound.Southbound
 }
 
 func NewErrorsHandler(deps *deps.ShowDeps) show.ShowHandler {

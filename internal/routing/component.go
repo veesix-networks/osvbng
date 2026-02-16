@@ -18,7 +18,7 @@ import (
 type Component struct {
 	*component.Base
 	logger     *slog.Logger
-	southbound *southbound.VPP
+	southbound southbound.Southbound
 }
 
 func New(deps component.Dependencies) (component.Component, error) {
@@ -27,7 +27,7 @@ func New(deps component.Dependencies) (component.Component, error) {
 	c := &Component{
 		Base:       component.NewBase("routing"),
 		logger:     log,
-		southbound: deps.VPP,
+		southbound: deps.Southbound,
 	}
 
 	return c, nil

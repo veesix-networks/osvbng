@@ -17,7 +17,7 @@ func init() {
 }
 
 type MemoryHandler struct {
-	southbound *southbound.VPP
+	southbound southbound.Southbound
 }
 
 func NewMemoryHandler(deps *deps.ShowDeps) show.ShowHandler {

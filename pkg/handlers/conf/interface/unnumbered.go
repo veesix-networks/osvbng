@@ -17,7 +17,7 @@ func init() {
 }
 
 type UnnumberedHandler struct {
-	southbound     *southbound.VPP
+	southbound     southbound.Southbound
 	dataplaneState operations.DataplaneStateReader
 	pathPattern    paths.Path
 	dependencies   []paths.Path

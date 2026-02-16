@@ -9,6 +9,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
 	"github.com/veesix-networks/osvbng/pkg/operations"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
 
 func init() {
@@ -16,13 +17,13 @@ func init() {
 }
 
 type InterfaceHandler struct {
-	dataplane      operations.Dataplane
+	southbound     southbound.Southbound
 	dataplaneState operations.DataplaneStateReader
 }
 
 func NewInterfaceHandler(daemons *deps.ConfDeps) conf.Handler {
 	return &InterfaceHandler{
-		dataplane:      daemons.Dataplane,
+		southbound:     daemons.Southbound,
 		dataplaneState: daemons.DataplaneState,
 	}
 }
@@ -42,12 +43,12 @@ func (h *InterfaceHandler) Apply(ctx context.Context, hctx *conf.HandlerContext)
 		return nil
 	}
 
-	return h.dataplane.CreateInterface(cfg)
+	return h.southbound.CreateInterface(cfg)
 }
 
 func (h *InterfaceHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) error {
 	cfg := hctx.NewValue.(*interfaces.InterfaceConfig)
-	return h.dataplane.DeleteInterface(cfg.Name)
+	return h.southbound.DeleteInterface(cfg.Name)
 }
 
 func (h *InterfaceHandler) PathPattern() paths.Path {
