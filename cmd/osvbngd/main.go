@@ -42,7 +42,6 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/northbound"
 	"github.com/veesix-networks/osvbng/pkg/opdb/sqlite"
-	"github.com/veesix-networks/osvbng/pkg/operations"
 	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
 	"github.com/veesix-networks/osvbng/pkg/state"
 	"github.com/veesix-networks/osvbng/pkg/version"
@@ -125,8 +124,6 @@ func main() {
 		log.Fatalf("Invalid access interface configuration: %v", err)
 	}
 
-	vppDataplane := operations.NewVPPDataplane(vppConn)
-
 	ifMgr := ifmgr.New()
 
 	vpp, err := vpp.NewVPP(vpp.VPPConfig{
@@ -139,11 +136,10 @@ func main() {
 	}
 
 	vrfMgr := vrfmgr.New(vpp)
-	vppDataplane.SetVRFResolver(vrfMgr.ResolveVRF)
-	vppDataplane.SetIfMgr(ifMgr)
+	vpp.SetVRFResolver(vrfMgr.ResolveVRF)
 
 	if cfg.Dataplane.LCPNetNs != "" {
-		if err := vppDataplane.SetLCPNetNs(cfg.Dataplane.LCPNetNs); err != nil {
+		if err := vpp.SetLCPNetNs(cfg.Dataplane.LCPNetNs); err != nil {
 			mainLog.Warn("LCP netns not available, LCP interfaces will use default namespace", "ns", cfg.Dataplane.LCPNetNs, "error", err)
 		}
 
@@ -170,7 +166,7 @@ func main() {
 	}
 
 	configd.AutoRegisterHandlers(&deps.ConfDeps{
-		Dataplane:        vppDataplane,
+		Dataplane:        vpp,
 		DataplaneState:   nil,
 		Southbound:       vpp,
 		AAA:              nil,
@@ -209,7 +205,7 @@ func main() {
 	}
 
 	configd.AutoRegisterHandlers(&deps.ConfDeps{
-		Dataplane:        vppDataplane,
+		Dataplane:        vpp,
 		DataplaneState:   configd.GetDataplaneState(),
 		Southbound:       vpp,
 		AAA:              nil,
@@ -402,7 +398,7 @@ func main() {
 	}
 
 	configd.AutoRegisterHandlers(&deps.ConfDeps{
-		Dataplane:        vppDataplane,
+		Dataplane:        vpp,
 		DataplaneState:   configd.GetDataplaneState(),
 		Southbound:       vpp,
 		AAA:              aaaComp.(*aaa.Component),
