@@ -2,7 +2,7 @@ zebra=yes
 bgpd=yes
 ospfd=yes
 ospf6d=yes
-isisd=yes
+isisd=no
 ldpd=yes
 staticd=yes
 

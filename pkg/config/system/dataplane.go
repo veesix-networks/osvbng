@@ -16,6 +16,7 @@ type DataplaneConfig struct {
 	MemifSocketPath string              `json:"memif_socket_path,omitempty" yaml:"memif_socket_path,omitempty"`
 	DPDK            *DPDKConfig         `json:"dpdk,omitempty" yaml:"dpdk,omitempty"`
 	StatsSegment    *StatsSegmentConfig `json:"statseg,omitempty" yaml:"statseg,omitempty"`
+	LCPNetNs        string              `json:"lcp-netns,omitempty" yaml:"lcp-netns,omitempty"`
 }
 
 type StatsSegmentConfig struct {

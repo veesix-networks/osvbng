@@ -14,6 +14,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/interface_types"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/lcp"
 	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netns"
 	"go.fd.io/govpp/core"
 )
 
@@ -21,8 +22,9 @@ type VPPDataplane struct {
 	conn        *core.Connection
 	ifaceCache  map[string]interface_types.InterfaceIndex
 	logger      *slog.Logger
-	vrfResolver func(string) (uint32, error)
+	vrfResolver func(string) (uint32, bool, bool, error)
 	ifMgr       *ifmgr.Manager
+	lcpNs       *netlink.Handle
 }
 
 func NewVPPDataplane(conn *core.Connection) *VPPDataplane {
@@ -33,12 +35,92 @@ func NewVPPDataplane(conn *core.Connection) *VPPDataplane {
 	}
 }
 
-func (d *VPPDataplane) SetVRFResolver(resolver func(string) (uint32, error)) {
+func (d *VPPDataplane) SetVRFResolver(resolver func(string) (uint32, bool, bool, error)) {
 	d.vrfResolver = resolver
 }
 
 func (d *VPPDataplane) SetIfMgr(m *ifmgr.Manager) {
 	d.ifMgr = m
+}
+
+func (d *VPPDataplane) SetLCPNetNs(nsName string) error {
+	nsHandle, err := netns.GetFromName(nsName)
+	if err != nil {
+		return fmt.Errorf("get netns %q: %w", nsName, err)
+	}
+
+	h, err := netlink.NewHandleAt(nsHandle)
+	if err != nil {
+		nsHandle.Close()
+		return fmt.Errorf("create netlink handle for netns %q: %w", nsName, err)
+	}
+
+	d.lcpNs = h
+	d.logger.Info("LCP namespace configured", "netns", nsName)
+	return nil
+}
+
+func (d *VPPDataplane) findLink(name string) (netlink.Link, *netlink.Handle, error) {
+	if d.lcpNs != nil {
+		if link, err := d.lcpNs.LinkByName(name); err == nil {
+			return link, d.lcpNs, nil
+		}
+	}
+
+	link, err := netlink.LinkByName(name)
+	if err != nil {
+		return nil, nil, fmt.Errorf("interface %q not found: %w", name, err)
+	}
+	return link, nil, nil
+}
+
+func (d *VPPDataplane) addrAdd(h *netlink.Handle, link netlink.Link, addr *netlink.Addr) error {
+	if h != nil {
+		return h.AddrAdd(link, addr)
+	}
+	return netlink.AddrAdd(link, addr)
+}
+
+func (d *VPPDataplane) addrDel(h *netlink.Handle, link netlink.Link, addr *netlink.Addr) error {
+	if h != nil {
+		return h.AddrDel(link, addr)
+	}
+	return netlink.AddrDel(link, addr)
+}
+
+func (d *VPPDataplane) renameVPPInterface(oldName, newName string) error {
+	ch, err := d.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	swIfIndex, err := d.getInterfaceIndex(oldName)
+	if err != nil {
+		return fmt.Errorf("get interface index for %q: %w", oldName, err)
+	}
+
+	req := &vppinterfaces.SwInterfaceSetInterfaceName{
+		SwIfIndex: swIfIndex,
+		Name:      newName,
+	}
+	reply := &vppinterfaces.SwInterfaceSetInterfaceNameReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("rename interface: %w", err)
+	}
+	if reply.Retval != 0 {
+		return fmt.Errorf("rename interface failed: retval=%d", reply.Retval)
+	}
+
+	delete(d.ifaceCache, oldName)
+	d.ifaceCache[newName] = swIfIndex
+
+	if d.ifMgr != nil {
+		d.ifMgr.Rename(oldName, newName)
+	}
+
+	d.logger.Info("Renamed VPP interface", "old_name", oldName, "new_name", newName)
+	return nil
 }
 
 func (d *VPPDataplane) CreateInterface(cfg *interfaces.InterfaceConfig) error {
@@ -54,7 +136,7 @@ func (d *VPPDataplane) CreateInterface(cfg *interfaces.InterfaceConfig) error {
 }
 
 func (d *VPPDataplane) createPhysicalInterface(cfg *interfaces.InterfaceConfig) error {
-	// DPDK interface exist already so we don't need to build host
+	// DPDK path: interface already exists in VPP (no AF_PACKET creation needed)
 	if _, err := d.getInterfaceIndex(cfg.Name); err == nil {
 		d.logger.Info("Interface already exists in VPP, skipping creation", "interface", cfg.Name)
 		if cfg.Enabled {
@@ -62,14 +144,33 @@ func (d *VPPDataplane) createPhysicalInterface(cfg *interfaces.InterfaceConfig) 
 				d.logger.Warn("Failed to set interface up", "interface", cfg.Name, "error", err)
 			}
 		}
+
+		if cfg.LCP {
+			if err := d.createLCPPair(cfg.Name, cfg.Name, lcp.LCP_API_ITF_HOST_TAP); err != nil {
+				return fmt.Errorf("create LCP pair: %w", err)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+
+		if cfg.Description != "" {
+			d.SetInterfaceDescription(cfg.Name, cfg.Description)
+		}
+
+		if cfg.VRF != "" {
+			if err := d.bindInterfaceToVRF(cfg.Name, cfg.Name, cfg.VRF, cfg.LCP); err != nil {
+				return fmt.Errorf("bind to VRF: %w", err)
+			}
+		}
+
 		return nil
 	}
 
+	// AF_PACKET path: create host-interface, then rename
 	vppIfName, err := d.createVPPHostInterface(cfg.Name)
 	if err != nil {
 		if idx, lookupErr := d.getInterfaceIndex("host-" + cfg.Name); lookupErr == nil {
 			d.logger.Info("Host-interface already exists in VPP, skipping creation", "interface", cfg.Name)
-			d.ifaceCache[cfg.Name] = idx
+			d.ifaceCache["host-"+cfg.Name] = idx
 			if d.ifMgr != nil {
 				d.ifMgr.Add(&ifmgr.Interface{
 					SwIfIndex:    uint32(idx),
@@ -79,9 +180,26 @@ func (d *VPPDataplane) createPhysicalInterface(cfg *interfaces.InterfaceConfig) 
 					Type:         ifmgr.IfTypeHardware,
 				})
 			}
-			vppIfName = cfg.Name
+			vppIfName = "host-" + cfg.Name
 		} else {
 			return fmt.Errorf("create VPP host-interface: %w", err)
+		}
+	}
+
+	// Rename VPP interface from "host-ethX" to "ethX"
+	if err := d.renameVPPInterface(vppIfName, cfg.Name); err != nil {
+		d.logger.Warn("Failed to rename VPP interface, continuing with original name",
+			"old_name", vppIfName, "new_name", cfg.Name, "error", err)
+	} else {
+		vppIfName = cfg.Name
+	}
+
+	// Match VPP interface MTU to underlying Linux interface
+	if hostMTU, err := d.getLinuxInterfaceMTU(cfg.Name); err == nil && hostMTU > 0 {
+		if err := d.setVPPInterfaceHWMtu(vppIfName, uint16(hostMTU)); err != nil {
+			d.logger.Warn("Failed to set VPP interface MTU", "interface", vppIfName, "mtu", hostMTU, "error", err)
+		} else {
+			d.logger.Info("Set VPP interface MTU to match host", "interface", vppIfName, "mtu", hostMTU)
 		}
 	}
 
@@ -91,8 +209,21 @@ func (d *VPPDataplane) createPhysicalInterface(cfg *interfaces.InterfaceConfig) 
 		}
 	}
 
+	if cfg.LCP {
+		if err := d.createLCPPair(vppIfName, cfg.Name, lcp.LCP_API_ITF_HOST_TAP); err != nil {
+			return fmt.Errorf("create LCP pair: %w", err)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
 	if cfg.Description != "" {
 		d.SetInterfaceDescription(cfg.Name, cfg.Description)
+	}
+
+	if cfg.VRF != "" {
+		if err := d.bindInterfaceToVRF(vppIfName, cfg.Name, cfg.VRF, cfg.LCP); err != nil {
+			return fmt.Errorf("bind to VRF: %w", err)
+		}
 	}
 
 	return nil
@@ -147,20 +278,61 @@ func (d *VPPDataplane) DeleteInterface(name string) error {
 }
 
 func (d *VPPDataplane) SetInterfaceDescription(name, description string) error {
-	link, err := netlink.LinkByName(name)
+	link, h, err := d.findLink(name)
 	if err != nil {
 		return fmt.Errorf("LCP interface %s not found: %w", name, err)
 	}
 
+	if h != nil {
+		return h.LinkSetAlias(link, description)
+	}
 	return netlink.LinkSetAlias(link, description)
 }
 
-func (d *VPPDataplane) SetInterfaceMTU(name string, mtu int) error {
+func (d *VPPDataplane) getLinuxInterfaceMTU(name string) (int, error) {
 	link, err := netlink.LinkByName(name)
+	if err != nil {
+		return 0, fmt.Errorf("interface %q not found: %w", name, err)
+	}
+	return link.Attrs().MTU, nil
+}
+
+func (d *VPPDataplane) setVPPInterfaceHWMtu(name string, mtu uint16) error {
+	ch, err := d.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	swIfIndex, err := d.getInterfaceIndex(name)
+	if err != nil {
+		return fmt.Errorf("get interface index: %w", err)
+	}
+
+	req := &vppinterfaces.HwInterfaceSetMtu{
+		SwIfIndex: swIfIndex,
+		Mtu:       mtu,
+	}
+	reply := &vppinterfaces.HwInterfaceSetMtuReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("set HW MTU: %w", err)
+	}
+	if reply.Retval != 0 {
+		return fmt.Errorf("set HW MTU failed: retval=%d", reply.Retval)
+	}
+
+	return nil
+}
+
+func (d *VPPDataplane) SetInterfaceMTU(name string, mtu int) error {
+	link, h, err := d.findLink(name)
 	if err != nil {
 		return fmt.Errorf("interface %s not found: %w", name, err)
 	}
 
+	if h != nil {
+		return h.LinkSetMTU(link, mtu)
+	}
 	return netlink.LinkSetMTU(link, mtu)
 }
 
@@ -176,7 +348,7 @@ func (d *VPPDataplane) SetInterfaceEnabled(name string, enabled bool) error {
 }
 
 func (d *VPPDataplane) AddIPv4Address(ifName, address string) error {
-	link, err := netlink.LinkByName(ifName)
+	link, h, err := d.findLink(ifName)
 	if err != nil {
 		return fmt.Errorf("get interface %s: %w", ifName, err)
 	}
@@ -186,7 +358,7 @@ func (d *VPPDataplane) AddIPv4Address(ifName, address string) error {
 		return fmt.Errorf("parse address %s: %w", address, err)
 	}
 
-	if err := netlink.AddrAdd(link, addr); err != nil {
+	if err := d.addrAdd(h, link, addr); err != nil {
 		if err.Error() == "file exists" {
 			d.logger.Info("IPv4 address already exists", "interface", ifName, "address", address)
 			return nil
@@ -205,7 +377,7 @@ func (d *VPPDataplane) AddIPv4Address(ifName, address string) error {
 }
 
 func (d *VPPDataplane) DelIPv4Address(ifName, address string) error {
-	link, err := netlink.LinkByName(ifName)
+	link, h, err := d.findLink(ifName)
 	if err != nil {
 		return fmt.Errorf("get interface %s: %w", ifName, err)
 	}
@@ -215,7 +387,7 @@ func (d *VPPDataplane) DelIPv4Address(ifName, address string) error {
 		return fmt.Errorf("parse address %s: %w", address, err)
 	}
 
-	if err := netlink.AddrDel(link, addr); err != nil {
+	if err := d.addrDel(h, link, addr); err != nil {
 		return fmt.Errorf("del address: %w", err)
 	}
 
@@ -230,7 +402,7 @@ func (d *VPPDataplane) DelIPv4Address(ifName, address string) error {
 }
 
 func (d *VPPDataplane) AddIPv6Address(ifName, address string) error {
-	link, err := netlink.LinkByName(ifName)
+	link, h, err := d.findLink(ifName)
 	if err != nil {
 		return fmt.Errorf("get interface %s: %w", ifName, err)
 	}
@@ -240,7 +412,7 @@ func (d *VPPDataplane) AddIPv6Address(ifName, address string) error {
 		return fmt.Errorf("parse address %s: %w", address, err)
 	}
 
-	if err := netlink.AddrAdd(link, addr); err != nil {
+	if err := d.addrAdd(h, link, addr); err != nil {
 		if err.Error() == "file exists" {
 			d.logger.Info("IPv6 address already exists", "interface", ifName, "address", address)
 			return nil
@@ -259,7 +431,7 @@ func (d *VPPDataplane) AddIPv6Address(ifName, address string) error {
 }
 
 func (d *VPPDataplane) DelIPv6Address(ifName, address string) error {
-	link, err := netlink.LinkByName(ifName)
+	link, h, err := d.findLink(ifName)
 	if err != nil {
 		return fmt.Errorf("get interface %s: %w", ifName, err)
 	}
@@ -269,7 +441,7 @@ func (d *VPPDataplane) DelIPv6Address(ifName, address string) error {
 		return fmt.Errorf("parse address %s: %w", address, err)
 	}
 
-	if err := netlink.AddrDel(link, addr); err != nil {
+	if err := d.addrDel(h, link, addr); err != nil {
 		return fmt.Errorf("del address: %w", err)
 	}
 
@@ -308,14 +480,14 @@ func (d *VPPDataplane) createVPPHostInterface(linuxIface string) (string, error)
 		return "", fmt.Errorf("create host-interface failed: retval=%d", afReply.Retval)
 	}
 
-	vppIfName := linuxIface
+	vppIfName := "host-" + linuxIface
 	d.ifaceCache[vppIfName] = afReply.SwIfIndex
 
 	if d.ifMgr != nil {
 		d.ifMgr.Add(&ifmgr.Interface{
 			SwIfIndex:    uint32(afReply.SwIfIndex),
 			SupSwIfIndex: uint32(afReply.SwIfIndex),
-			Name:         "host-" + linuxIface,
+			Name:         vppIfName,
 			DevType:      "af_packet",
 			Type:         ifmgr.IfTypeHardware,
 		})
@@ -495,12 +667,12 @@ func (d *VPPDataplane) bindInterfaceToVRF(vppIfName, linuxIfName, vrfName string
 		return fmt.Errorf("VRF resolver not configured")
 	}
 
-	tableID, err := d.vrfResolver(vrfName)
+	tableID, hasIPv4, hasIPv6, err := d.vrfResolver(vrfName)
 	if err != nil {
 		return fmt.Errorf("resolve VRF %q: %w", vrfName, err)
 	}
 
-	if err := d.setInterfaceTable(vppIfName, tableID); err != nil {
+	if err := d.setInterfaceTable(vppIfName, tableID, hasIPv4, hasIPv6); err != nil {
 		return fmt.Errorf("set VPP table: %w", err)
 	}
 
@@ -514,7 +686,7 @@ func (d *VPPDataplane) bindInterfaceToVRF(vppIfName, linuxIfName, vrfName string
 	return nil
 }
 
-func (d *VPPDataplane) setInterfaceTable(name string, tableID uint32) error {
+func (d *VPPDataplane) setInterfaceTable(name string, tableID uint32, ipv4, ipv6 bool) error {
 	ch, err := d.conn.NewAPIChannel()
 	if err != nil {
 		return fmt.Errorf("create API channel: %w", err)
@@ -526,32 +698,34 @@ func (d *VPPDataplane) setInterfaceTable(name string, tableID uint32) error {
 		return fmt.Errorf("get interface index: %w", err)
 	}
 
-	// Set IPv4 table
-	req4 := &vppinterfaces.SwInterfaceSetTable{
-		SwIfIndex: swIfIndex,
-		IsIPv6:    false,
-		VrfID:     tableID,
-	}
-	reply4 := &vppinterfaces.SwInterfaceSetTableReply{}
-	if err := ch.SendRequest(req4).ReceiveReply(reply4); err != nil {
-		return fmt.Errorf("set IPv4 table: %w", err)
-	}
-	if reply4.Retval != 0 {
-		return fmt.Errorf("set IPv4 table failed: retval=%d", reply4.Retval)
+	if ipv4 {
+		req4 := &vppinterfaces.SwInterfaceSetTable{
+			SwIfIndex: swIfIndex,
+			IsIPv6:    false,
+			VrfID:     tableID,
+		}
+		reply4 := &vppinterfaces.SwInterfaceSetTableReply{}
+		if err := ch.SendRequest(req4).ReceiveReply(reply4); err != nil {
+			return fmt.Errorf("set IPv4 table: %w", err)
+		}
+		if reply4.Retval != 0 {
+			return fmt.Errorf("set IPv4 table failed: retval=%d", reply4.Retval)
+		}
 	}
 
-	// Set IPv6 table
-	req6 := &vppinterfaces.SwInterfaceSetTable{
-		SwIfIndex: swIfIndex,
-		IsIPv6:    true,
-		VrfID:     tableID,
-	}
-	reply6 := &vppinterfaces.SwInterfaceSetTableReply{}
-	if err := ch.SendRequest(req6).ReceiveReply(reply6); err != nil {
-		return fmt.Errorf("set IPv6 table: %w", err)
-	}
-	if reply6.Retval != 0 {
-		return fmt.Errorf("set IPv6 table failed: retval=%d", reply6.Retval)
+	if ipv6 {
+		req6 := &vppinterfaces.SwInterfaceSetTable{
+			SwIfIndex: swIfIndex,
+			IsIPv6:    true,
+			VrfID:     tableID,
+		}
+		reply6 := &vppinterfaces.SwInterfaceSetTableReply{}
+		if err := ch.SendRequest(req6).ReceiveReply(reply6); err != nil {
+			return fmt.Errorf("set IPv6 table: %w", err)
+		}
+		if reply6.Retval != 0 {
+			return fmt.Errorf("set IPv6 table failed: retval=%d", reply6.Retval)
+		}
 	}
 
 	if d.ifMgr != nil {
@@ -562,21 +736,26 @@ func (d *VPPDataplane) setInterfaceTable(name string, tableID uint32) error {
 }
 
 func (d *VPPDataplane) setLinuxInterfaceVRF(ifName, vrfName string) error {
-	vrfLink, err := netlink.LinkByName(vrfName)
+	vrfLink, vrfH, err := d.findLink(vrfName)
 	if err != nil {
 		return fmt.Errorf("VRF device %q not found: %w", vrfName, err)
 	}
 
-	tapLink, err := netlink.LinkByName(ifName)
+	tapLink, tapH, err := d.findLink(ifName)
 	if err != nil {
 		return fmt.Errorf("interface %q not found: %w", ifName, err)
 	}
 
-	if err := netlink.LinkSetMaster(tapLink, vrfLink); err != nil {
-		return fmt.Errorf("enslave %q to VRF %q: %w", ifName, vrfName, err)
+	// Use the handle from whichever link was found in a namespace (prefer tap's handle)
+	h := tapH
+	if h == nil {
+		h = vrfH
 	}
 
-	return nil
+	if h != nil {
+		return h.LinkSetMaster(tapLink, vrfLink)
+	}
+	return netlink.LinkSetMaster(tapLink, vrfLink)
 }
 
 func inferInterfaceType(cfg *interfaces.InterfaceConfig) string {

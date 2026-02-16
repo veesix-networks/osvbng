@@ -597,7 +597,7 @@ func (s *SessionState) checkOpen() {
 
 				var decapVrfID uint32
 				if s.VRF != "" && s.component.vrfMgr != nil {
-					tableID, err := s.component.vrfMgr.ResolveVRF(s.VRF)
+					tableID, _, _, err := s.component.vrfMgr.ResolveVRF(s.VRF)
 					if err != nil {
 						s.component.logger.Error("Failed to resolve VRF for session",
 							"session_id", s.SessionID,

@@ -25,6 +25,7 @@ type DataplaneTemplateData struct {
 	UseDPDK      bool
 	DPDK         *system.DPDKConfig
 	StatsSegment *system.StatsSegmentConfig
+	LCPNetNs     string
 }
 
 func NewDataplaneTemplateDataWithDefaults(cfg *Config, totalCores int) *DataplaneTemplateData {
@@ -66,6 +67,7 @@ func NewDataplaneTemplateDataWithDefaults(cfg *Config, totalCores int) *Dataplan
 		UseDPDK:      useDPDK,
 		DPDK:         dpdk,
 		StatsSegment: statseg,
+		LCPNetNs:     cfg.Dataplane.LCPNetNs,
 	}
 }
 
