@@ -9,7 +9,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
-	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
 
 const defaultPlatformLabels = 1048575
@@ -19,12 +19,12 @@ func init() {
 }
 
 type MPLSEnabledHandler struct {
-	vpp *vpp.VPP
+	southbound southbound.Southbound
 }
 
 func NewMPLSEnabledHandler(deps *deps.ConfDeps) conf.Handler {
 	return &MPLSEnabledHandler{
-		vpp: deps.Southbound,
+		southbound: deps.Southbound,
 	}
 }
 
@@ -52,13 +52,13 @@ func (h *MPLSEnabledHandler) Apply(ctx context.Context, hctx *conf.HandlerContex
 	}
 	setPlatformLabels(platformLabels)
 
-	if err := h.vpp.CreateMPLSTable(); err != nil {
+	if err := h.southbound.CreateMPLSTable(); err != nil {
 		return fmt.Errorf("create MPLS table: %w", err)
 	}
 
 	for _, ifaceName := range collectMPLSInterfaces(cfg) {
-		if swIfIndex, ok := h.vpp.GetIfMgr().GetSwIfIndex(ifaceName); ok {
-			if err := h.vpp.EnableMPLS(swIfIndex); err != nil {
+		if swIfIndex, ok := h.southbound.GetIfMgr().GetSwIfIndex(ifaceName); ok {
+			if err := h.southbound.EnableMPLS(swIfIndex); err != nil {
 				return fmt.Errorf("enable MPLS on %s: %w", ifaceName, err)
 			}
 		}

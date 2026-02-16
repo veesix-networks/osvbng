@@ -12,13 +12,13 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models/protocols/bgp"
 	"github.com/veesix-networks/osvbng/pkg/models/vrf"
-	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
 
 type Component struct {
 	*component.Base
 	logger     *slog.Logger
-	southbound *vpp.VPP
+	southbound southbound.Southbound
 }
 
 func New(deps component.Dependencies) (component.Component, error) {
@@ -27,7 +27,7 @@ func New(deps component.Dependencies) (component.Component, error) {
 	c := &Component{
 		Base:       component.NewBase("routing"),
 		logger:     log,
-		southbound: deps.VPP,
+		southbound: deps.Southbound,
 	}
 
 	return c, nil

@@ -8,7 +8,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
-	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
 
 var ospf6MulticastGroups = []net.IP{
@@ -21,12 +21,12 @@ func init() {
 }
 
 type OSPF6EnabledHandler struct {
-	vpp *vpp.VPP
+	southbound southbound.Southbound
 }
 
 func NewOSPF6EnabledHandler(deps *deps.ConfDeps) conf.Handler {
 	return &OSPF6EnabledHandler{
-		vpp: deps.Southbound,
+		southbound: deps.Southbound,
 	}
 }
 
@@ -44,7 +44,7 @@ func (h *OSPF6EnabledHandler) Apply(ctx context.Context, hctx *conf.HandlerConte
 	}
 
 	for _, group := range ospf6MulticastGroups {
-		if err := h.vpp.AddMfibLocalReceiveAllInterfaces(group, 0); err != nil {
+		if err := h.southbound.AddMfibLocalReceiveAllInterfaces(group, 0); err != nil {
 			return fmt.Errorf("add OSPFv3 mfib local receive for %s: %w", group, err)
 		}
 	}

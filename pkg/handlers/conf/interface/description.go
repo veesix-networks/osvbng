@@ -7,7 +7,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
-	"github.com/veesix-networks/osvbng/pkg/operations"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
 
 func init() {
@@ -16,14 +16,14 @@ func init() {
 }
 
 type DescriptionHandler struct {
-	dataplane    operations.Dataplane
+	southbound   southbound.Southbound
 	pathPattern  paths.Path
 	dependencies []paths.Path
 }
 
 func NewInterfaceDescriptionHandler(d *deps.ConfDeps) conf.Handler {
 	return &DescriptionHandler{
-		dataplane:    d.Dataplane,
+		southbound:   d.Southbound,
 		pathPattern:  paths.InterfaceDescription,
 		dependencies: []paths.Path{paths.Interface},
 	}
@@ -31,7 +31,7 @@ func NewInterfaceDescriptionHandler(d *deps.ConfDeps) conf.Handler {
 
 func NewSubinterfaceDescriptionHandler(d *deps.ConfDeps) conf.Handler {
 	return &DescriptionHandler{
-		dataplane:    d.Dataplane,
+		southbound:   d.Southbound,
 		pathPattern:  paths.InterfaceSubinterfaceDescription,
 		dependencies: []paths.Path{paths.InterfaceSubinterface},
 	}
@@ -68,7 +68,7 @@ func (h *DescriptionHandler) Apply(ctx context.Context, hctx *conf.HandlerContex
 	}
 	desc := hctx.NewValue.(string)
 
-	return h.dataplane.SetInterfaceDescription(ifName, desc)
+	return h.southbound.SetInterfaceDescription(ifName, desc)
 }
 
 func (h *DescriptionHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) error {
@@ -81,7 +81,7 @@ func (h *DescriptionHandler) Rollback(ctx context.Context, hctx *conf.HandlerCon
 		oldDesc = hctx.OldValue.(string)
 	}
 
-	return h.dataplane.SetInterfaceDescription(ifName, oldDesc)
+	return h.southbound.SetInterfaceDescription(ifName, oldDesc)
 }
 
 func (h *DescriptionHandler) PathPattern() paths.Path {

@@ -7,7 +7,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
-	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"github.com/veesix-networks/osvbng/pkg/state"
 	statepaths "github.com/veesix-networks/osvbng/pkg/state/paths"
 )
@@ -18,18 +18,18 @@ func init() {
 }
 
 type MPLSInterfacesHandler struct {
-	vpp *vpp.VPP
+	southbound southbound.Southbound
 }
 
 func NewMPLSInterfacesHandler(deps *deps.ShowDeps) show.ShowHandler {
-	return &MPLSInterfacesHandler{vpp: deps.Southbound}
+	return &MPLSInterfacesHandler{southbound: deps.Southbound}
 }
 
 func (h *MPLSInterfacesHandler) Collect(ctx context.Context, req *show.Request) (interface{}, error) {
-	if h.vpp == nil {
+	if h.southbound == nil {
 		return nil, fmt.Errorf("southbound not available")
 	}
-	return h.vpp.GetMPLSInterfaces()
+	return h.southbound.GetMPLSInterfaces()
 }
 
 func (h *MPLSInterfacesHandler) PathPattern() paths.Path {

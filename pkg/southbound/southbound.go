@@ -1,5 +1,9 @@
 package southbound
 
+import "fmt"
+
+var ErrUnavailable = fmt.Errorf("southbound dataplane unavailable")
+
 type Southbound interface {
 	Interfaces
 	Addressing

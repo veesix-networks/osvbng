@@ -13,9 +13,10 @@ import (
 	"go.fd.io/govpp/core"
 
 	"github.com/veesix-networks/osvbng/pkg/logger"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
 
-var ErrVPPUnavailable = fmt.Errorf("VPP dataplane unavailable")
+var ErrVPPUnavailable = southbound.ErrUnavailable
 
 type AsyncRequest struct {
 	Message  api.Message

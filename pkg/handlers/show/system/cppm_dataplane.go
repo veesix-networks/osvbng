@@ -6,7 +6,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
-	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
 
 func init() {
@@ -14,7 +14,7 @@ func init() {
 }
 
 type CPPMDataplaneHandler struct {
-	southbound *vpp.VPP
+	southbound southbound.Southbound
 }
 
 func NewCPPMDataplaneHandler(deps *deps.ShowDeps) show.ShowHandler {

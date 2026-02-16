@@ -166,7 +166,6 @@ func main() {
 	}
 
 	configd.AutoRegisterHandlers(&deps.ConfDeps{
-		Dataplane:        vpp,
 		DataplaneState:   nil,
 		Southbound:       vpp,
 		AAA:              nil,
@@ -205,7 +204,6 @@ func main() {
 	}
 
 	configd.AutoRegisterHandlers(&deps.ConfDeps{
-		Dataplane:        vpp,
 		DataplaneState:   configd.GetDataplaneState(),
 		Southbound:       vpp,
 		AAA:              nil,
@@ -234,7 +232,7 @@ func main() {
 	coreDeps := component.Dependencies{
 		EventBus:         eventBus,
 		Cache:            cache,
-		VPP:              vpp,
+		Southbound:       vpp,
 		VRFManager:       vrfMgr,
 		SvcGroupResolver: svcGroupResolver,
 		ConfigManager:    configd,
@@ -398,7 +396,6 @@ func main() {
 	}
 
 	configd.AutoRegisterHandlers(&deps.ConfDeps{
-		Dataplane:        vpp,
 		DataplaneState:   configd.GetDataplaneState(),
 		Southbound:       vpp,
 		AAA:              aaaComp.(*aaa.Component),
@@ -411,7 +408,7 @@ func main() {
 
 	showRegistry.AutoRegisterAll(&deps.ShowDeps{
 		Subscriber:       subscriberComp.(*subscriber.Component),
-		Southbound:       coreDeps.VPP,
+		Southbound:       coreDeps.Southbound,
 		Routing:          routingComp.(*routing.Component),
 		VRFManager:       vrfMgr,
 		SvcGroupResolver: svcGroupResolver,

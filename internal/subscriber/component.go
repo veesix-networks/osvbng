@@ -13,7 +13,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/session"
-	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"github.com/veesix-networks/osvbng/pkg/srg"
 )
 
@@ -23,7 +23,7 @@ type Component struct {
 	logger    *slog.Logger
 	eventBus  events.Bus
 	srgMgr    *srg.Manager
-	vpp       *vpp.VPP
+	vpp       southbound.Southbound
 	expiryMgr *session.ExpiryManager
 	cfgMgr    component.ConfigManager
 	cache     cache.Cache
@@ -37,7 +37,7 @@ func New(deps component.Dependencies, srgMgr *srg.Manager) (component.Component,
 		logger:   log,
 		eventBus: deps.EventBus,
 		srgMgr:   srgMgr,
-		vpp:      deps.VPP,
+		vpp:      deps.Southbound,
 		cfgMgr:   deps.ConfigManager,
 		cache:    deps.Cache,
 	}

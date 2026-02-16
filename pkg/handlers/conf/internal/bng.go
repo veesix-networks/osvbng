@@ -8,7 +8,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
-	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
 
 func init() {
@@ -16,7 +16,7 @@ func init() {
 }
 
 type BNGHandler struct {
-	southbound *vpp.VPP
+	southbound southbound.Southbound
 }
 
 func NewBNGHandler(d *deps.ConfDeps) conf.Handler {

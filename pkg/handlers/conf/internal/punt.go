@@ -9,7 +9,6 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
 	"github.com/veesix-networks/osvbng/pkg/operations"
 	pkgpaths "github.com/veesix-networks/osvbng/pkg/paths"
-	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
 )
 
 func init() {
@@ -21,60 +20,54 @@ func init() {
 }
 
 type PuntHandler struct {
-	southbound     *vpp.VPP
 	dataplaneState operations.DataplaneStateReader
 	pathPattern    paths.Path
 	protocol       uint8
-	enableFunc     func(sb *vpp.VPP, ifName string) error
+	enableFunc     func(ifName string) error
 }
 
 func NewPuntARPHandler(d *deps.ConfDeps) conf.Handler {
 	return &PuntHandler{
-		southbound:     d.Southbound,
 		dataplaneState: d.DataplaneState,
 		pathPattern:    paths.InternalPuntARP,
 		protocol:       operations.PuntProtoARP,
-		enableFunc:     (*vpp.VPP).EnableARPPunt,
+		enableFunc:     d.Southbound.EnableARPPunt,
 	}
 }
 
 func NewPuntDHCPv4Handler(d *deps.ConfDeps) conf.Handler {
 	return &PuntHandler{
-		southbound:     d.Southbound,
 		dataplaneState: d.DataplaneState,
 		pathPattern:    paths.InternalPuntDHCPv4,
 		protocol:       operations.PuntProtoDHCPv4,
-		enableFunc:     (*vpp.VPP).EnableDHCPv4Punt,
+		enableFunc:     d.Southbound.EnableDHCPv4Punt,
 	}
 }
 
 func NewPuntDHCPv6Handler(d *deps.ConfDeps) conf.Handler {
 	return &PuntHandler{
-		southbound:     d.Southbound,
 		dataplaneState: d.DataplaneState,
 		pathPattern:    paths.InternalPuntDHCPv6,
 		protocol:       operations.PuntProtoDHCPv6,
-		enableFunc:     (*vpp.VPP).EnableDHCPv6Punt,
+		enableFunc:     d.Southbound.EnableDHCPv6Punt,
 	}
 }
 
 func NewPuntPPPoEHandler(d *deps.ConfDeps) conf.Handler {
 	return &PuntHandler{
-		southbound:     d.Southbound,
 		dataplaneState: d.DataplaneState,
 		pathPattern:    paths.InternalPuntPPPoE,
 		protocol:       operations.PuntProtoPPPoEDisc,
-		enableFunc:     (*vpp.VPP).EnablePPPoEPunt,
+		enableFunc:     d.Southbound.EnablePPPoEPunt,
 	}
 }
 
 func NewPuntIPv6NDHandler(d *deps.ConfDeps) conf.Handler {
 	return &PuntHandler{
-		southbound:     d.Southbound,
 		dataplaneState: d.DataplaneState,
 		pathPattern:    paths.InternalPuntIPv6ND,
 		protocol:       operations.PuntProtoIPv6ND,
-		enableFunc:     (*vpp.VPP).EnableIPv6NDPunt,
+		enableFunc:     d.Southbound.EnableIPv6NDPunt,
 	}
 }
 
@@ -105,7 +98,7 @@ func (h *PuntHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) erro
 		}
 	}
 
-	return h.enableFunc(h.southbound, ifName)
+	return h.enableFunc(ifName)
 }
 
 func (h *PuntHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) error {

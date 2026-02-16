@@ -8,6 +8,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
 	"github.com/veesix-networks/osvbng/pkg/operations"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
 
 func init() {
@@ -16,7 +17,7 @@ func init() {
 }
 
 type EnabledHandler struct {
-	dataplane      operations.Dataplane
+	southbound     southbound.Southbound
 	dataplaneState operations.DataplaneStateReader
 	pathPattern    paths.Path
 	dependencies   []paths.Path
@@ -24,7 +25,7 @@ type EnabledHandler struct {
 
 func NewInterfaceEnabledHandler(d *deps.ConfDeps) conf.Handler {
 	return &EnabledHandler{
-		dataplane:      d.Dataplane,
+		southbound:     d.Southbound,
 		dataplaneState: d.DataplaneState,
 		pathPattern:    paths.InterfaceEnabled,
 		dependencies:   []paths.Path{paths.Interface},
@@ -33,7 +34,7 @@ func NewInterfaceEnabledHandler(d *deps.ConfDeps) conf.Handler {
 
 func NewSubinterfaceEnabledHandler(d *deps.ConfDeps) conf.Handler {
 	return &EnabledHandler{
-		dataplane:      d.Dataplane,
+		southbound:     d.Southbound,
 		dataplaneState: d.DataplaneState,
 		pathPattern:    paths.InterfaceSubinterfaceEnabled,
 		dependencies:   []paths.Path{paths.InterfaceSubinterface},
@@ -73,7 +74,7 @@ func (h *EnabledHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) e
 		}
 	}
 
-	return h.dataplane.SetInterfaceEnabled(ifName, enabled)
+	return h.southbound.SetInterfaceEnabled(ifName, enabled)
 }
 
 func (h *EnabledHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) error {
@@ -87,7 +88,7 @@ func (h *EnabledHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext
 	}
 
 	oldEnabled := hctx.OldValue.(bool)
-	return h.dataplane.SetInterfaceEnabled(ifName, oldEnabled)
+	return h.southbound.SetInterfaceEnabled(ifName, oldEnabled)
 }
 
 func (h *EnabledHandler) PathPattern() paths.Path {
