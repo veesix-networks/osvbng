@@ -6,7 +6,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
-	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
 )
 
 func init() {
@@ -14,7 +14,7 @@ func init() {
 }
 
 type StatsHandler struct {
-	southbound *southbound.VPP
+	southbound *vpp.VPP
 }
 
 func NewStatsHandler(deps *deps.ShowDeps) show.ShowHandler {

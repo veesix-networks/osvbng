@@ -9,14 +9,14 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/cppm"
 	"github.com/veesix-networks/osvbng/pkg/opdb"
 	"github.com/veesix-networks/osvbng/pkg/operations"
-	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
 	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
 )
 
 type ShowDeps struct {
 	Subscriber       *subscriber.Component
-	Southbound       *southbound.VPP
+	Southbound       *vpp.VPP
 	Routing          *routingcomp.Component
 	VRFManager       *vrfmgr.Manager
 	SvcGroupResolver *svcgroup.Resolver
@@ -34,7 +34,7 @@ type OperDeps struct {
 type ConfDeps struct {
 	Dataplane        operations.Dataplane
 	DataplaneState   operations.DataplaneStateReader
-	Southbound       *southbound.VPP
+	Southbound       *vpp.VPP
 	AAA              *aaacomp.Component
 	Routing          *routingcomp.Component
 	VRFManager       *vrfmgr.Manager

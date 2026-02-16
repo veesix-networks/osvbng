@@ -17,7 +17,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	pathspkg "github.com/veesix-networks/osvbng/pkg/paths"
-	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
 )
 
 type ConfigManager struct {
@@ -599,7 +599,7 @@ func (cd *ConfigManager) GetStartup() (*config.Config, error) {
 	return cd.startupConfig, nil
 }
 
-func (cd *ConfigManager) LoadFromDataplane(vpp *southbound.VPP) error {
+func (cd *ConfigManager) LoadFromDataplane(vpp *vpp.VPP) error {
 	cd.mu.Lock()
 	defer cd.mu.Unlock()
 

@@ -17,7 +17,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
-	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
 )
 
 type Component struct {
@@ -27,7 +27,7 @@ type Component struct {
 	eventBus events.Bus
 	ingress  *shm.Ingress
 	egress   *shm.Egress
-	vpp      *southbound.VPP
+	vpp      *vpp.VPP
 
 	DHCPChan    chan *dataplane.ParsedPacket
 	DHCPv6Chan  chan *dataplane.ParsedPacket

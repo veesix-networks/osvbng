@@ -9,7 +9,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
 	"github.com/veesix-networks/osvbng/pkg/operations"
-	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
 )
 
 func init() {
@@ -27,7 +27,7 @@ var vppProtocolMap = map[string]uint8{
 }
 
 type CPPMDataplanePolicerHandler struct {
-	southbound *southbound.VPP
+	southbound *vpp.VPP
 }
 
 func NewCPPMDataplanePolicerHandler(d *deps.ConfDeps) conf.Handler {

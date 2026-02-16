@@ -12,13 +12,13 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models/protocols/bgp"
 	"github.com/veesix-networks/osvbng/pkg/models/vrf"
-	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
 )
 
 type Component struct {
 	*component.Base
 	logger     *slog.Logger
-	southbound *southbound.VPP
+	southbound *vpp.VPP
 }
 
 func New(deps component.Dependencies) (component.Component, error) {

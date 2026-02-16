@@ -43,7 +43,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/northbound"
 	"github.com/veesix-networks/osvbng/pkg/opdb/sqlite"
 	"github.com/veesix-networks/osvbng/pkg/operations"
-	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
 	"github.com/veesix-networks/osvbng/pkg/state"
 	"github.com/veesix-networks/osvbng/pkg/version"
 	_ "github.com/veesix-networks/osvbng/plugins/all"
@@ -129,7 +129,7 @@ func main() {
 
 	ifMgr := ifmgr.New()
 
-	vpp, err := southbound.NewVPP(southbound.VPPConfig{
+	vpp, err := vpp.NewVPP(vpp.VPPConfig{
 		Connection: vppConn,
 		IfMgr:      ifMgr,
 		UseDPDK:    cfg.Dataplane.DPDK != nil && len(cfg.Dataplane.DPDK.Devices) > 0,

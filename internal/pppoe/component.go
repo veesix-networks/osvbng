@@ -23,7 +23,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/ppp"
 	"github.com/veesix-networks/osvbng/pkg/pppoe"
 	"github.com/veesix-networks/osvbng/pkg/session"
-	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
 	"github.com/veesix-networks/osvbng/pkg/srg"
 	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
@@ -44,7 +44,7 @@ type Component struct {
 	srgMgr   *srg.Manager
 	ifMgr    *ifmgr.Manager
 	cfgMgr   component.ConfigManager
-	vpp      *southbound.VPP
+	vpp      *vpp.VPP
 	vrfMgr           *vrfmgr.Manager
 	svcGroupResolver *svcgroup.Resolver
 	cache    cache.Cache

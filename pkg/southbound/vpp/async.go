@@ -1,4 +1,4 @@
-package southbound
+package vpp
 
 import (
 	"container/list"

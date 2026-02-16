@@ -6,7 +6,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
-	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
 	"github.com/veesix-networks/osvbng/pkg/state"
 	statepaths "github.com/veesix-networks/osvbng/pkg/state/paths"
 )
@@ -17,7 +17,7 @@ func init() {
 }
 
 type ErrorsHandler struct {
-	southbound *southbound.VPP
+	southbound *vpp.VPP
 }
 
 func NewErrorsHandler(deps *deps.ShowDeps) show.ShowHandler {

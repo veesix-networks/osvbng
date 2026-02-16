@@ -11,7 +11,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/config/ip"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models/vrf"
-	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
 )
 
 const (
@@ -29,12 +29,12 @@ type vrfEntry struct {
 type Manager struct {
 	mu            sync.RWMutex
 	vrfs          map[string]*vrfEntry
-	vpp           *southbound.VPP
+	vpp           *vpp.VPP
 	logger        *slog.Logger
 	netlinkHandle *netlink.Handle
 }
 
-func New(vpp *southbound.VPP) *Manager {
+func New(vpp *vpp.VPP) *Manager {
 	return &Manager{
 		vrfs:   make(map[string]*vrfEntry),
 		vpp:    vpp,

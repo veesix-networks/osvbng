@@ -13,5 +13,3 @@ type Southbound interface {
 	Tables
 	System
 }
-
-var _ Southbound = (*VPP)(nil)

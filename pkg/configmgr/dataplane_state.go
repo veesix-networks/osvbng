@@ -5,7 +5,7 @@ import (
 	"net"
 
 	"github.com/veesix-networks/osvbng/pkg/operations"
-	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
 )
 
 var dhcpv6MulticastAddr = net.ParseIP("ff02::1:2")
@@ -32,7 +32,7 @@ func NewDataplaneState() *DataplaneState {
 	}
 }
 
-func (ds *DataplaneState) LoadFromDataplane(vpp *southbound.VPP) error {
+func (ds *DataplaneState) LoadFromDataplane(vpp *vpp.VPP) error {
 	interfaces, err := vpp.DumpInterfaces()
 	if err != nil {
 		return fmt.Errorf("dump interfaces: %w", err)

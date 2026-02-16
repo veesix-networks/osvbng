@@ -10,6 +10,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
 	"github.com/veesix-networks/osvbng/pkg/operations"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
 )
 
 func init() {
@@ -18,7 +19,7 @@ func init() {
 }
 
 type IPv6Handler struct {
-	southbound     *southbound.VPP
+	southbound     *vpp.VPP
 	dataplaneState operations.DataplaneStateReader
 	pathPattern    paths.Path
 	dependencies   []paths.Path

@@ -8,7 +8,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
-	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
 )
 
 func init() {
@@ -17,7 +17,7 @@ func init() {
 }
 
 type ARPHandler struct {
-	southbound   *southbound.VPP
+	southbound   *vpp.VPP
 	pathPattern  paths.Path
 	dependencies []paths.Path
 }

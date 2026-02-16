@@ -8,7 +8,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
-	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
 )
 
 var ospf6MulticastGroups = []net.IP{
@@ -21,7 +21,7 @@ func init() {
 }
 
 type OSPF6EnabledHandler struct {
-	vpp *southbound.VPP
+	vpp *vpp.VPP
 }
 
 func NewOSPF6EnabledHandler(deps *deps.ConfDeps) conf.Handler {

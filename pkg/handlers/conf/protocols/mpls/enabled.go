@@ -9,7 +9,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
-	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
 )
 
 const defaultPlatformLabels = 1048575
@@ -19,7 +19,7 @@ func init() {
 }
 
 type MPLSEnabledHandler struct {
-	vpp *southbound.VPP
+	vpp *vpp.VPP
 }
 
 func NewMPLSEnabledHandler(deps *deps.ConfDeps) conf.Handler {
