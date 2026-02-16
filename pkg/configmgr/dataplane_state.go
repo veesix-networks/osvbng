@@ -32,8 +32,8 @@ func NewDataplaneState() *DataplaneState {
 	}
 }
 
-func (ds *DataplaneState) LoadFromDataplane(vpp *southbound.VPP) error {
-	interfaces, err := vpp.DumpInterfaces()
+func (ds *DataplaneState) LoadFromDataplane(sb southbound.Southbound) error {
+	interfaces, err := sb.DumpInterfaces()
 	if err != nil {
 		return fmt.Errorf("dump interfaces: %w", err)
 	}
@@ -56,7 +56,7 @@ func (ds *DataplaneState) LoadFromDataplane(vpp *southbound.VPP) error {
 	}
 
 	// Load IP addresses
-	addresses, err := vpp.DumpIPAddresses()
+	addresses, err := sb.DumpIPAddresses()
 	if err != nil {
 		return fmt.Errorf("dump ip addresses: %w", err)
 	}
@@ -71,7 +71,7 @@ func (ds *DataplaneState) LoadFromDataplane(vpp *southbound.VPP) error {
 		}
 	}
 
-	unnumbered, err := vpp.DumpUnnumbered()
+	unnumbered, err := sb.DumpUnnumbered()
 	if err != nil {
 		return fmt.Errorf("dump unnumbered: %w", err)
 	}
@@ -80,7 +80,7 @@ func (ds *DataplaneState) LoadFromDataplane(vpp *southbound.VPP) error {
 		ds.Unnumbered[u.SwIfIndex] = u.IPSwIfIndex
 	}
 
-	ipv6Enabled, err := vpp.DumpIPv6Enabled()
+	ipv6Enabled, err := sb.DumpIPv6Enabled()
 	if err != nil {
 		return fmt.Errorf("dump ipv6 enabled: %w", err)
 	}
@@ -89,7 +89,7 @@ func (ds *DataplaneState) LoadFromDataplane(vpp *southbound.VPP) error {
 		ds.IPv6Enabled[swIfIndex] = true
 	}
 
-	raConfigs, err := vpp.DumpIPv6RA()
+	raConfigs, err := sb.DumpIPv6RA()
 	if err != nil {
 		return fmt.Errorf("dump ipv6 ra: %w", err)
 	}
@@ -106,7 +106,7 @@ func (ds *DataplaneState) LoadFromDataplane(vpp *southbound.VPP) error {
 		}
 	}
 
-	punts, err := vpp.DumpPuntRegistrations()
+	punts, err := sb.DumpPuntRegistrations()
 	if err != nil {
 		return fmt.Errorf("dump punt registrations: %w", err)
 	}
@@ -118,7 +118,7 @@ func (ds *DataplaneState) LoadFromDataplane(vpp *southbound.VPP) error {
 		ds.PuntRegistrations[p.SwIfIndex][p.Protocol] = true
 	}
 
-	mroutes, err := vpp.DumpMroutes()
+	mroutes, err := sb.DumpMroutes()
 	if err != nil {
 		return fmt.Errorf("dump mroutes: %w", err)
 	}

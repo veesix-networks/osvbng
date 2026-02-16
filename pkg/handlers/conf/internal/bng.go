@@ -16,7 +16,7 @@ func init() {
 }
 
 type BNGHandler struct {
-	southbound *southbound.VPP
+	southbound southbound.Southbound
 }
 
 func NewBNGHandler(d *deps.ConfDeps) conf.Handler {

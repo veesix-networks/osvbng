@@ -18,7 +18,7 @@ func init() {
 }
 
 type SubinterfaceHandler struct {
-	southbound     *southbound.VPP
+	southbound     southbound.Southbound
 	dataplaneState operations.DataplaneStateReader
 }
 

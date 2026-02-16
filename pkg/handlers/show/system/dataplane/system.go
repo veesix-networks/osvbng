@@ -17,7 +17,7 @@ func init() {
 }
 
 type SystemHandler struct {
-	southbound *southbound.VPP
+	southbound southbound.Southbound
 }
 
 func NewSystemHandler(deps *deps.ShowDeps) show.ShowHandler {

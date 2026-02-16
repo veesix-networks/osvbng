@@ -18,18 +18,18 @@ func init() {
 }
 
 type MPLSTableHandler struct {
-	vpp *southbound.VPP
+	southbound southbound.Southbound
 }
 
 func NewMPLSTableHandler(deps *deps.ShowDeps) show.ShowHandler {
-	return &MPLSTableHandler{vpp: deps.Southbound}
+	return &MPLSTableHandler{southbound: deps.Southbound}
 }
 
 func (h *MPLSTableHandler) Collect(ctx context.Context, req *show.Request) (interface{}, error) {
-	if h.vpp == nil {
+	if h.southbound == nil {
 		return nil, fmt.Errorf("southbound not available")
 	}
-	return h.vpp.GetMPLSRoutes()
+	return h.southbound.GetMPLSRoutes()
 }
 
 func (h *MPLSTableHandler) PathPattern() paths.Path {

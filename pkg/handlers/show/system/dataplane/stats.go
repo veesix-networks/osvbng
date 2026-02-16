@@ -14,7 +14,7 @@ func init() {
 }
 
 type StatsHandler struct {
-	southbound *southbound.VPP
+	southbound southbound.Southbound
 }
 
 func NewStatsHandler(deps *deps.ShowDeps) show.ShowHandler {

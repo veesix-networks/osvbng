@@ -599,12 +599,12 @@ func (cd *ConfigManager) GetStartup() (*config.Config, error) {
 	return cd.startupConfig, nil
 }
 
-func (cd *ConfigManager) LoadFromDataplane(vpp *southbound.VPP) error {
+func (cd *ConfigManager) LoadFromDataplane(sb southbound.Southbound) error {
 	cd.mu.Lock()
 	defer cd.mu.Unlock()
 
 	cd.dataplaneState = NewDataplaneState()
-	if err := cd.dataplaneState.LoadFromDataplane(vpp); err != nil {
+	if err := cd.dataplaneState.LoadFromDataplane(sb); err != nil {
 		return fmt.Errorf("load dataplane state: %w", err)
 	}
 

@@ -10,6 +10,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
 	"github.com/veesix-networks/osvbng/pkg/operations"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
 
 func init() {
@@ -20,7 +21,7 @@ func init() {
 }
 
 type AddressHandler struct {
-	dataplane      operations.Dataplane
+	southbound     southbound.Southbound
 	dataplaneState operations.DataplaneStateReader
 	pathPattern    paths.Path
 	dependencies   []paths.Path
@@ -29,7 +30,7 @@ type AddressHandler struct {
 
 func NewInterfaceIPv4AddressHandler(d *deps.ConfDeps) conf.Handler {
 	return &AddressHandler{
-		dataplane:      d.Dataplane,
+		southbound:     d.Southbound,
 		dataplaneState: d.DataplaneState,
 		pathPattern:    paths.InterfaceIPv4Address,
 		dependencies:   []paths.Path{paths.Interface},
@@ -39,7 +40,7 @@ func NewInterfaceIPv4AddressHandler(d *deps.ConfDeps) conf.Handler {
 
 func NewInterfaceIPv6AddressHandler(d *deps.ConfDeps) conf.Handler {
 	return &AddressHandler{
-		dataplane:      d.Dataplane,
+		southbound:     d.Southbound,
 		dataplaneState: d.DataplaneState,
 		pathPattern:    paths.InterfaceIPv6Address,
 		dependencies:   []paths.Path{paths.Interface},
@@ -49,7 +50,7 @@ func NewInterfaceIPv6AddressHandler(d *deps.ConfDeps) conf.Handler {
 
 func NewSubinterfaceIPv4AddressHandler(d *deps.ConfDeps) conf.Handler {
 	return &AddressHandler{
-		dataplane:      d.Dataplane,
+		southbound:     d.Southbound,
 		dataplaneState: d.DataplaneState,
 		pathPattern:    paths.InterfaceSubinterfaceIPv4Address,
 		dependencies:   []paths.Path{paths.InterfaceSubinterface},
@@ -59,7 +60,7 @@ func NewSubinterfaceIPv4AddressHandler(d *deps.ConfDeps) conf.Handler {
 
 func NewSubinterfaceIPv6AddressHandler(d *deps.ConfDeps) conf.Handler {
 	return &AddressHandler{
-		dataplane:      d.Dataplane,
+		southbound:     d.Southbound,
 		dataplaneState: d.DataplaneState,
 		pathPattern:    paths.InterfaceSubinterfaceIPv6Address,
 		dependencies:   []paths.Path{paths.InterfaceSubinterface},
@@ -122,9 +123,9 @@ func (h *AddressHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) e
 	}
 
 	if h.isIPv6 {
-		return h.dataplane.AddIPv6Address(ifName, addr)
+		return h.southbound.AddIPv6Address(ifName, addr)
 	}
-	return h.dataplane.AddIPv4Address(ifName, addr)
+	return h.southbound.AddIPv4Address(ifName, addr)
 }
 
 func (h *AddressHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) error {
@@ -135,9 +136,9 @@ func (h *AddressHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext
 	addr := hctx.NewValue.(string)
 
 	if h.isIPv6 {
-		return h.dataplane.DelIPv6Address(ifName, addr)
+		return h.southbound.DelIPv6Address(ifName, addr)
 	}
-	return h.dataplane.DelIPv4Address(ifName, addr)
+	return h.southbound.DelIPv4Address(ifName, addr)
 }
 
 func (h *AddressHandler) PathPattern() paths.Path {

@@ -14,7 +14,7 @@ func init() {
 }
 
 type CPPMDataplaneHandler struct {
-	southbound *southbound.VPP
+	southbound southbound.Southbound
 }
 
 func NewCPPMDataplaneHandler(deps *deps.ShowDeps) show.ShowHandler {

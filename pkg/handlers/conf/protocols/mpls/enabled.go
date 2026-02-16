@@ -19,12 +19,12 @@ func init() {
 }
 
 type MPLSEnabledHandler struct {
-	vpp *southbound.VPP
+	southbound southbound.Southbound
 }
 
 func NewMPLSEnabledHandler(deps *deps.ConfDeps) conf.Handler {
 	return &MPLSEnabledHandler{
-		vpp: deps.Southbound,
+		southbound: deps.Southbound,
 	}
 }
 
@@ -52,13 +52,13 @@ func (h *MPLSEnabledHandler) Apply(ctx context.Context, hctx *conf.HandlerContex
 	}
 	setPlatformLabels(platformLabels)
 
-	if err := h.vpp.CreateMPLSTable(); err != nil {
+	if err := h.southbound.CreateMPLSTable(); err != nil {
 		return fmt.Errorf("create MPLS table: %w", err)
 	}
 
 	for _, ifaceName := range collectMPLSInterfaces(cfg) {
-		if swIfIndex, ok := h.vpp.GetIfMgr().GetSwIfIndex(ifaceName); ok {
-			if err := h.vpp.EnableMPLS(swIfIndex); err != nil {
+		if swIfIndex, ok := h.southbound.GetIfMgr().GetSwIfIndex(ifaceName); ok {
+			if err := h.southbound.EnableMPLS(swIfIndex); err != nil {
 				return fmt.Errorf("enable MPLS on %s: %w", ifaceName, err)
 			}
 		}

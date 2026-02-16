@@ -27,7 +27,7 @@ var vppProtocolMap = map[string]uint8{
 }
 
 type CPPMDataplanePolicerHandler struct {
-	southbound *southbound.VPP
+	southbound southbound.Southbound
 }
 
 func NewCPPMDataplanePolicerHandler(d *deps.ConfDeps) conf.Handler {

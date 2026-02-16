@@ -16,7 +16,7 @@ import (
 
 type ShowDeps struct {
 	Subscriber       *subscriber.Component
-	Southbound       *southbound.VPP
+	Southbound       southbound.Southbound
 	Routing          *routingcomp.Component
 	VRFManager       *vrfmgr.Manager
 	SvcGroupResolver *svcgroup.Resolver
@@ -32,9 +32,8 @@ type OperDeps struct {
 }
 
 type ConfDeps struct {
-	Dataplane        operations.Dataplane
 	DataplaneState   operations.DataplaneStateReader
-	Southbound       *southbound.VPP
+	Southbound       southbound.Southbound
 	AAA              *aaacomp.Component
 	Routing          *routingcomp.Component
 	VRFManager       *vrfmgr.Manager

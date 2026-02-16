@@ -20,7 +20,7 @@ type ConfigManager interface {
 type Dependencies struct {
 	EventBus      events.Bus
 	Cache         cache.Cache
-	VPP           *southbound.VPP
+	Southbound    southbound.Southbound
 	VRFManager       *vrfmgr.Manager
 	SvcGroupResolver *svcgroup.Resolver
 	ConfigManager ConfigManager

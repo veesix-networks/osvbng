@@ -23,7 +23,7 @@ type Component struct {
 	logger    *slog.Logger
 	eventBus  events.Bus
 	srgMgr    *srg.Manager
-	vpp       *southbound.VPP
+	vpp       southbound.Southbound
 	expiryMgr *session.ExpiryManager
 	cfgMgr    component.ConfigManager
 	cache     cache.Cache
@@ -37,7 +37,7 @@ func New(deps component.Dependencies, srgMgr *srg.Manager) (component.Component,
 		logger:   log,
 		eventBus: deps.EventBus,
 		srgMgr:   srgMgr,
-		vpp:      deps.VPP,
+		vpp:      deps.Southbound,
 		cfgMgr:   deps.ConfigManager,
 		cache:    deps.Cache,
 	}

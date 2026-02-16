@@ -44,7 +44,7 @@ type Component struct {
 	srgMgr   *srg.Manager
 	ifMgr    *ifmgr.Manager
 	cfgMgr   component.ConfigManager
-	vpp      *southbound.VPP
+	vpp      southbound.Southbound
 	vrfMgr           *vrfmgr.Manager
 	svcGroupResolver *svcgroup.Resolver
 	cache    cache.Cache
@@ -138,7 +138,7 @@ func New(deps component.Dependencies, srgMgr *srg.Manager, ifMgr *ifmgr.Manager)
 		srgMgr:        srgMgr,
 		ifMgr:         ifMgr,
 		cfgMgr:        deps.ConfigManager,
-		vpp:           deps.VPP,
+		vpp:           deps.Southbound,
 		vrfMgr:           deps.VRFManager,
 		svcGroupResolver: deps.SvcGroupResolver,
 		cache:         deps.Cache,
