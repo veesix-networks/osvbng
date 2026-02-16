@@ -3,6 +3,7 @@
 {{ if .Protocols.BGP }}
 {{ if .Protocols.BGP.ASN }}
 router bgp {{ .Protocols.BGP.ASN }}
+ no bgp default ipv4-unicast
 {{ if .Protocols.BGP.RouterID }}
  bgp router-id {{ .Protocols.BGP.RouterID }}
 {{ end }}
