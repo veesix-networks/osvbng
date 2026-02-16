@@ -253,6 +253,16 @@ func (d *VPPDataplane) createLoopback(cfg *interfaces.InterfaceConfig) error {
 		return fmt.Errorf("create VPP loopback: %w", err)
 	}
 
+	if swIfIndex, ok := d.ifaceCache[vppIfName]; ok && d.ifMgr != nil {
+		d.ifMgr.Add(&ifmgr.Interface{
+			SwIfIndex:    uint32(swIfIndex),
+			SupSwIfIndex: uint32(swIfIndex),
+			Name:         vppIfName,
+			DevType:      "loopback",
+			Type:         ifmgr.IfTypeHardware,
+		})
+	}
+
 	if cfg.LCP {
 		if err := d.createLCPPair(vppIfName, cfg.Name, lcp.LCP_API_ITF_HOST_TAP); err != nil {
 			return fmt.Errorf("create LCP pair: %w", err)
