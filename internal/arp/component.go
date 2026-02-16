@@ -218,7 +218,7 @@ func (c *Component) isOwnedIPInVRF(ip net.IP, vrfName string) bool {
 		return false
 	}
 
-	tableID, err := c.vrfMgr.ResolveVRF(vrfName)
+	tableID, _, _, err := c.vrfMgr.ResolveVRF(vrfName)
 	if err != nil {
 		c.logger.Debug("Failed to resolve VRF", "vrf", vrfName, "error", err)
 		return false

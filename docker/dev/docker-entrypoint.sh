@@ -87,6 +87,9 @@ mkdir -p /run/osvbng
 chown root:osvbng /run/osvbng
 chmod 770 /run/osvbng
 
+echo "Creating dataplane network namespace (available for DPDK deployments)..."
+ip netns add dataplane || true
+
 echo "====== Linux Interfaces Below ======"
 ip link show
 echo "====== Linux Interfaces Above ======"
@@ -123,16 +126,16 @@ echo "Setting dataplane API socket permissions..."
 chmod 660 /run/osvbng/dataplane_api.sock || true
 chown root:osvbng /run/osvbng/dataplane_api.sock || true
 
-echo "Configuring kernel MPLS..."
-sysctl -w net.mpls.platform_labels=1048575 || true
-sysctl -w net.mpls.conf.lo.input=1 || true
+echo "Configuring kernel MPLS in dataplane namespace..."
+ip netns exec dataplane sysctl -w net.mpls.platform_labels=1048575 || true
+ip netns exec dataplane sysctl -w net.mpls.conf.lo.input=1 || true
 
 echo "Linking FRR configs to osvbng directory..."
 ln -sf /etc/osvbng/routing-daemons /etc/frr/daemons
 ln -sf /etc/osvbng/frr.conf /etc/frr/frr.conf
 
-echo "Starting routing daemons..."
-/usr/lib/frr/frrinit.sh start
+echo "Starting routing daemons in dataplane namespace..."
+ip netns exec dataplane /usr/lib/frr/frrinit.sh start
 
 sleep 2
 
@@ -140,7 +143,7 @@ echo "Making zebra API socket accessible..."
 chmod 660 /var/run/frr/zserv.api || true
 
 echo "Routing daemon status:"
-/usr/lib/frr/frrinit.sh status || true
+ip netns exec dataplane /usr/lib/frr/frrinit.sh status || true
 
 sleep 5
 

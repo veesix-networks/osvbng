@@ -37,6 +37,8 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/ifmgr"
 	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
+	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netns"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/northbound"
 	"github.com/veesix-networks/osvbng/pkg/opdb/sqlite"
@@ -139,6 +141,25 @@ func main() {
 	vrfMgr := vrfmgr.New(vpp)
 	vppDataplane.SetVRFResolver(vrfMgr.ResolveVRF)
 	vppDataplane.SetIfMgr(ifMgr)
+
+	if cfg.Dataplane.LCPNetNs != "" {
+		if err := vppDataplane.SetLCPNetNs(cfg.Dataplane.LCPNetNs); err != nil {
+			mainLog.Warn("LCP netns not available, LCP interfaces will use default namespace", "ns", cfg.Dataplane.LCPNetNs, "error", err)
+		}
+
+		nsHandle, err := netns.GetFromName(cfg.Dataplane.LCPNetNs)
+		if err != nil {
+			mainLog.Warn("Failed to get LCP netns for VRF manager", "ns", cfg.Dataplane.LCPNetNs, "error", err)
+		} else {
+			nlHandle, err := netlink.NewHandleAt(nsHandle)
+			if err != nil {
+				mainLog.Warn("Failed to create netlink handle for VRF manager", "ns", cfg.Dataplane.LCPNetNs, "error", err)
+			} else {
+				vrfMgr.SetNetlinkHandle(nlHandle)
+				mainLog.Info("VRF manager configured for LCP namespace", "ns", cfg.Dataplane.LCPNetNs)
+			}
+		}
+	}
 
 	svcGroupResolver := svcgroup.New()
 

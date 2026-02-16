@@ -27,10 +27,11 @@ type vrfEntry struct {
 }
 
 type Manager struct {
-	mu     sync.RWMutex
-	vrfs   map[string]*vrfEntry
-	vpp    *southbound.VPP
-	logger *slog.Logger
+	mu            sync.RWMutex
+	vrfs          map[string]*vrfEntry
+	vpp           *southbound.VPP
+	logger        *slog.Logger
+	netlinkHandle *netlink.Handle
 }
 
 func New(vpp *southbound.VPP) *Manager {
@@ -39,6 +40,10 @@ func New(vpp *southbound.VPP) *Manager {
 		vpp:    vpp,
 		logger: logger.Get(logger.Routing),
 	}
+}
+
+func (m *Manager) SetNetlinkHandle(h *netlink.Handle) {
+	m.netlinkHandle = h
 }
 
 func (m *Manager) CreateVRF(ctx context.Context, name string, ipv4 bool, ipv6 bool) (uint32, error) {
@@ -114,9 +119,9 @@ func (m *Manager) DeleteVRF(ctx context.Context, name string) error {
 	return nil
 }
 
-func (m *Manager) ResolveVRF(name string) (uint32, error) {
+func (m *Manager) ResolveVRF(name string) (uint32, bool, bool, error) {
 	if name == "" {
-		return 0, nil
+		return 0, false, false, nil
 	}
 
 	m.mu.RLock()
@@ -124,10 +129,10 @@ func (m *Manager) ResolveVRF(name string) (uint32, error) {
 
 	e, ok := m.vrfs[name]
 	if !ok {
-		return 0, fmt.Errorf("VRF %q not found", name)
+		return 0, false, false, fmt.Errorf("VRF %q not found", name)
 	}
 
-	return e.TableID, nil
+	return e.TableID, e.IPv4, e.IPv6, nil
 }
 
 func (m *Manager) GetVRFs() []vrf.VRF {
@@ -231,18 +236,53 @@ func (m *Manager) allocateTableID() (uint32, error) {
 	return 0, fmt.Errorf("no available table IDs in range %d-%d", tableIDMin, tableIDMax)
 }
 
+func (m *Manager) nlLinkAdd(link netlink.Link) error {
+	if m.netlinkHandle != nil {
+		return m.netlinkHandle.LinkAdd(link)
+	}
+	return netlink.LinkAdd(link)
+}
+
+func (m *Manager) nlLinkSetUp(link netlink.Link) error {
+	if m.netlinkHandle != nil {
+		return m.netlinkHandle.LinkSetUp(link)
+	}
+	return netlink.LinkSetUp(link)
+}
+
+func (m *Manager) nlLinkDel(link netlink.Link) error {
+	if m.netlinkHandle != nil {
+		return m.netlinkHandle.LinkDel(link)
+	}
+	return netlink.LinkDel(link)
+}
+
+func (m *Manager) nlLinkByName(name string) (netlink.Link, error) {
+	if m.netlinkHandle != nil {
+		return m.netlinkHandle.LinkByName(name)
+	}
+	return netlink.LinkByName(name)
+}
+
+func (m *Manager) nlLinkList() ([]netlink.Link, error) {
+	if m.netlinkHandle != nil {
+		return m.netlinkHandle.LinkList()
+	}
+	return netlink.LinkList()
+}
+
 func (m *Manager) createLinuxVRF(name string, tableID uint32) error {
 	link := &netlink.Vrf{
 		LinkAttrs: netlink.LinkAttrs{Name: name},
 		Table:     tableID,
 	}
 
-	if err := netlink.LinkAdd(link); err != nil {
+	if err := m.nlLinkAdd(link); err != nil {
 		return fmt.Errorf("netlink link add: %w", err)
 	}
 
-	if err := netlink.LinkSetUp(link); err != nil {
-		netlink.LinkDel(link)
+	if err := m.nlLinkSetUp(link); err != nil {
+		m.nlLinkDel(link)
 		return fmt.Errorf("netlink link set up: %w", err)
 	}
 
@@ -250,17 +290,17 @@ func (m *Manager) createLinuxVRF(name string, tableID uint32) error {
 }
 
 func (m *Manager) deleteLinuxVRF(name string) {
-	link, err := netlink.LinkByName(name)
+	link, err := m.nlLinkByName(name)
 	if err != nil {
 		return
 	}
-	if err := netlink.LinkDel(link); err != nil {
+	if err := m.nlLinkDel(link); err != nil {
 		m.logger.Warn("Failed to delete Linux VRF device", "name", name, "error", err)
 	}
 }
 
 func (m *Manager) discoverLinuxVRFs() (map[string]uint32, error) {
-	links, err := netlink.LinkList()
+	links, err := m.nlLinkList()
 	if err != nil {
 		return nil, fmt.Errorf("netlink link list: %w", err)
 	}

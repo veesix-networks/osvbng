@@ -736,6 +736,58 @@ func (cd *ConfigManager) LoadConfig(id conf.SessionID, config *config.Config) er
 		}
 	}
 
+	if config.Protocols.OSPF != nil && config.Protocols.OSPF.Enabled {
+		hctx := &conf.HandlerContext{
+			SessionID: id,
+			Path:      "protocols.ospf.enabled",
+			OldValue:  nil,
+			NewValue:  true,
+		}
+		sess.changes = append(sess.changes, hctx)
+
+		for areaID, area := range config.Protocols.OSPF.Areas {
+			for ifName, ifCfg := range area.Interfaces {
+				path, err := pathspkg.Build("protocols.ospf.areas.<*>.interfaces.<*>", areaID, ifName)
+				if err != nil {
+					return fmt.Errorf("build OSPF area interface path: %w", err)
+				}
+				hctx := &conf.HandlerContext{
+					SessionID: id,
+					Path:      path,
+					OldValue:  nil,
+					NewValue:  ifCfg,
+				}
+				sess.changes = append(sess.changes, hctx)
+			}
+		}
+	}
+
+	if config.Protocols.OSPF6 != nil && config.Protocols.OSPF6.Enabled {
+		hctx := &conf.HandlerContext{
+			SessionID: id,
+			Path:      "protocols.ospf6.enabled",
+			OldValue:  nil,
+			NewValue:  true,
+		}
+		sess.changes = append(sess.changes, hctx)
+
+		for areaID, area := range config.Protocols.OSPF6.Areas {
+			for ifName, ifCfg := range area.Interfaces {
+				path, err := pathspkg.Build("protocols.ospf6.areas.<*>.interfaces.<*>", areaID, ifName)
+				if err != nil {
+					return fmt.Errorf("build OSPFv3 area interface path: %w", err)
+				}
+				hctx := &conf.HandlerContext{
+					SessionID: id,
+					Path:      path,
+					OldValue:  nil,
+					NewValue:  ifCfg,
+				}
+				sess.changes = append(sess.changes, hctx)
+			}
+		}
+	}
+
 	if config.Protocols.MPLS != nil && config.Protocols.MPLS.Enabled {
 		hctx := &conf.HandlerContext{
 			SessionID: id,

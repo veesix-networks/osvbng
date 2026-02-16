@@ -3,20 +3,31 @@ package ospf6
 import (
 	"context"
 	"fmt"
+	"net"
 
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
+
+var ospf6MulticastGroups = []net.IP{
+	net.ParseIP("ff02::5"), // AllSPFRouters
+	net.ParseIP("ff02::6"), // AllDRouters
+}
 
 func init() {
 	conf.RegisterFactory(NewOSPF6EnabledHandler)
 }
 
-type OSPF6EnabledHandler struct{}
+type OSPF6EnabledHandler struct {
+	vpp *southbound.VPP
+}
 
 func NewOSPF6EnabledHandler(deps *deps.ConfDeps) conf.Handler {
-	return &OSPF6EnabledHandler{}
+	return &OSPF6EnabledHandler{
+		vpp: deps.Southbound,
+	}
 }
 
 func (h *OSPF6EnabledHandler) Validate(ctx context.Context, hctx *conf.HandlerContext) error {
@@ -27,6 +38,17 @@ func (h *OSPF6EnabledHandler) Validate(ctx context.Context, hctx *conf.HandlerCo
 }
 
 func (h *OSPF6EnabledHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error {
+	enabled, _ := hctx.NewValue.(bool)
+	if !enabled {
+		return nil
+	}
+
+	for _, group := range ospf6MulticastGroups {
+		if err := h.vpp.AddMfibLocalReceive(group, 0); err != nil {
+			return fmt.Errorf("add OSPFv3 mfib local receive for %s: %w", group, err)
+		}
+	}
+
 	return nil
 }
 

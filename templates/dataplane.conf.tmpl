@@ -59,7 +59,8 @@ logging {
 }
 
 linux-cp {
-  lcp-sync
+{{ if .LCPNetNs }}  default netns {{ .LCPNetNs }}
+{{ end }}  lcp-sync
   lcp-auto-subint
   del-static-on-link-down
   del-dynamic-on-link-down
