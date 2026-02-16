@@ -55,6 +55,13 @@ func (d *VPPDataplane) SetLCPNetNs(nsName string) error {
 		return fmt.Errorf("create netlink handle for netns %q: %w", nsName, err)
 	}
 
+	lo, err := h.LinkByName("lo")
+	if err == nil {
+		if err := h.LinkSetUp(lo); err != nil {
+			d.logger.Warn("Failed to bring up loopback in LCP namespace", "netns", nsName, "error", err)
+		}
+	}
+
 	d.lcpNs = h
 	d.logger.Info("LCP namespace configured", "netns", nsName)
 	return nil

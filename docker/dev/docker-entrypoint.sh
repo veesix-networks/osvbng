@@ -89,6 +89,7 @@ chmod 770 /run/osvbng
 
 echo "Creating dataplane network namespace (available for DPDK deployments)..."
 ip netns add dataplane || true
+ip netns exec dataplane ip link set lo up
 
 echo "====== Linux Interfaces Below ======"
 ip link show
