@@ -8,21 +8,16 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
-	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
 
 func init() {
 	conf.RegisterFactory(NewOSPFAreaInterfaceHandler)
 }
 
-type OSPFAreaInterfaceHandler struct {
-	vpp *southbound.VPP
-}
+type OSPFAreaInterfaceHandler struct{}
 
 func NewOSPFAreaInterfaceHandler(deps *deps.ConfDeps) conf.Handler {
-	return &OSPFAreaInterfaceHandler{
-		vpp: deps.Southbound,
-	}
+	return &OSPFAreaInterfaceHandler{}
 }
 
 func (h *OSPFAreaInterfaceHandler) Validate(ctx context.Context, hctx *conf.HandlerContext) error {
@@ -51,23 +46,6 @@ func (h *OSPFAreaInterfaceHandler) Validate(ctx context.Context, hctx *conf.Hand
 }
 
 func (h *OSPFAreaInterfaceHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error {
-	values, err := paths.OSPFAreaInterface.ExtractWildcards(hctx.Path, 2)
-	if err != nil {
-		return fmt.Errorf("extract wildcards: %w", err)
-	}
-	ifName := values[1]
-
-	swIfIndex, ok := h.vpp.GetIfMgr().GetSwIfIndex(ifName)
-	if !ok {
-		return fmt.Errorf("interface %q not found in ifmgr", ifName)
-	}
-
-	for _, group := range ospfMulticastGroups {
-		if err := h.vpp.AddMfibInterfaceAccept(group, 0, swIfIndex); err != nil {
-			return fmt.Errorf("add OSPF mfib accept for %s on %s: %w", group, ifName, err)
-		}
-	}
-
 	return nil
 }
 

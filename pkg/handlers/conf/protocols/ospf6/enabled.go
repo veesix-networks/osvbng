@@ -44,7 +44,7 @@ func (h *OSPF6EnabledHandler) Apply(ctx context.Context, hctx *conf.HandlerConte
 	}
 
 	for _, group := range ospf6MulticastGroups {
-		if err := h.vpp.AddMfibLocalReceive(group, 0); err != nil {
+		if err := h.vpp.AddMfibLocalReceiveAllInterfaces(group, 0); err != nil {
 			return fmt.Errorf("add OSPFv3 mfib local receive for %s: %w", group, err)
 		}
 	}
