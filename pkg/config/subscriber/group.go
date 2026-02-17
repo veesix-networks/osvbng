@@ -33,19 +33,17 @@ const (
 )
 
 type SubscriberGroup struct {
-	AccessType   string           `json:"access-type,omitempty" yaml:"access-type,omitempty"` // ipoe, pppoe, lac, lns
-	VLANs        []VLANRange      `json:"vlans,omitempty" yaml:"vlans,omitempty"`
-	AddressPools []*AddressPool   `json:"address-pools,omitempty" yaml:"address-pools,omitempty"`
-	IANAPool     string           `json:"iana-pool,omitempty" yaml:"iana-pool,omitempty"`
-	PDPool       string           `json:"pd-pool,omitempty" yaml:"pd-pool,omitempty"`
-	SessionMode  SessionMode      `json:"session-mode,omitempty" yaml:"session-mode,omitempty"`
-	VLANProtocol string           `json:"vlan-protocol,omitempty" yaml:"vlan-protocol,omitempty"`
-	DHCP         *SubscriberDHCP  `json:"dhcp,omitempty" yaml:"dhcp,omitempty"`
-	IPv6         *SubscriberIPv6  `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`
-	BGP          *SubscriberBGP   `json:"bgp,omitempty" yaml:"bgp,omitempty"`
-	VRF                 string           `json:"vrf,omitempty" yaml:"vrf,omitempty"`
-	DefaultServiceGroup string           `json:"default-service-group,omitempty" yaml:"default-service-group,omitempty"`
-	AAAPolicy    string           `json:"aaa-policy,omitempty" yaml:"aaa-policy,omitempty"`
+	AccessType          string          `json:"access-type,omitempty" yaml:"access-type,omitempty"` // ipoe, pppoe, lac, lns
+	VLANs               []VLANRange     `json:"vlans,omitempty" yaml:"vlans,omitempty"`
+	SessionMode         SessionMode     `json:"session-mode,omitempty" yaml:"session-mode,omitempty"`
+	VLANProtocol        string          `json:"vlan-protocol,omitempty" yaml:"vlan-protocol,omitempty"`
+	DHCPProfile         string          `json:"dhcp-profile,omitempty" yaml:"dhcp-profile,omitempty"`
+	DHCPv6Profile       string          `json:"dhcpv6-profile,omitempty" yaml:"dhcpv6-profile,omitempty"`
+	IPv6                *SubscriberIPv6 `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`
+	BGP                 *SubscriberBGP  `json:"bgp,omitempty" yaml:"bgp,omitempty"`
+	VRF                 string          `json:"vrf,omitempty" yaml:"vrf,omitempty"`
+	DefaultServiceGroup string          `json:"default-service-group,omitempty" yaml:"default-service-group,omitempty"`
+	AAAPolicy           string          `json:"aaa-policy,omitempty" yaml:"aaa-policy,omitempty"`
 }
 
 func (sg *SubscriberGroup) GetOuterTPID() uint16 {
@@ -75,18 +73,6 @@ type SubscriberIPv6RA struct {
 	MinInterval    uint32 `json:"min_interval,omitempty" yaml:"min_interval,omitempty"`
 }
 
-type AddressPool struct {
-	Name     string   `json:"name,omitempty" yaml:"name,omitempty"`
-	Network  string   `json:"network,omitempty" yaml:"network,omitempty"`
-	Gateway  string   `json:"gateway,omitempty" yaml:"gateway,omitempty"`
-	DNS      []string `json:"dns,omitempty" yaml:"dns,omitempty"`
-	Priority int      `json:"priority,omitempty" yaml:"priority,omitempty"`
-}
-
-type SubscriberDHCP struct {
-	AutoGenerate bool   `json:"auto-generate,omitempty" yaml:"auto-generate,omitempty"`
-	LeaseTime    string `json:"lease-time,omitempty" yaml:"lease-time,omitempty"`
-}
 
 type SubscriberBGP struct {
 	Enabled              bool   `json:"enabled" yaml:"enabled"`

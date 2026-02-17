@@ -98,6 +98,19 @@ func New(cfg *config.Config) (dhcp6.DHCPProvider, error) {
 		leasesByPfx:  make(map[string]*PDLease),
 	}
 
+	for profileName, profile := range cfg.DHCPv6.Profiles {
+		for _, poolCfg := range profile.IANAPools {
+			if err := p.addIANAPool(poolCfg.Name, poolCfg.Network, poolCfg.RangeStart, poolCfg.RangeEnd, poolCfg.Gateway, poolCfg.PreferredTime, poolCfg.ValidTime); err != nil {
+				return nil, fmt.Errorf("profile %s iana pool %s: %w", profileName, poolCfg.Name, err)
+			}
+		}
+		for _, poolCfg := range profile.PDPools {
+			if err := p.addPDPool(poolCfg.Name, poolCfg.Network, poolCfg.PrefixLength, poolCfg.PreferredTime, poolCfg.ValidTime); err != nil {
+				return nil, fmt.Errorf("profile %s pd pool %s: %w", profileName, poolCfg.Name, err)
+			}
+		}
+	}
+
 	for _, poolCfg := range cfg.DHCPv6.IANAPools {
 		if err := p.addIANAPool(poolCfg.Name, poolCfg.Network, poolCfg.RangeStart, poolCfg.RangeEnd, poolCfg.Gateway, poolCfg.PreferredTime, poolCfg.ValidTime); err != nil {
 			return nil, fmt.Errorf("iana pool %s: %w", poolCfg.Name, err)
@@ -224,12 +237,7 @@ func (p *Provider) handleSolicit(pkt *dhcp6.Packet, dhcp *layers.DHCPv6) (*dhcp6
 	duidKey := string(clientDUID)
 
 	var ianaPoolName, pdPoolName string
-	if p.coreConfig.SubscriberGroups != nil {
-		if group, _ := p.coreConfig.SubscriberGroups.FindGroupBySVLAN(pkt.SVLAN); group != nil {
-			ianaPoolName = group.IANAPool
-			pdPoolName = group.PDPool
-		}
-	}
+	// // will integrate in another branch once I've tested locally (resolving pool names via context, generic dhcp and ppp implementation)
 
 	var ianaAddr net.IP
 	var ianaIAID uint32

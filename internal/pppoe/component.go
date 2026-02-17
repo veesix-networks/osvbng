@@ -50,10 +50,9 @@ type Component struct {
 	cache    cache.Cache
 	opdb     opdb.Store
 
-	acName        string
-	cookieMgr     *pppoe.CookieManager
-	poolAllocator *PoolAllocator
-	echoGen       *EchoGenerator
+	acName    string
+	cookieMgr *pppoe.CookieManager
+	echoGen   *EchoGenerator
 
 	sessions  map[string]*SessionState
 	sidIndex  map[uint16]*SessionState
@@ -143,9 +142,8 @@ func New(deps component.Dependencies, srgMgr *srg.Manager, ifMgr *ifmgr.Manager)
 		svcGroupResolver: deps.SvcGroupResolver,
 		cache:         deps.Cache,
 		opdb:          deps.OpDB,
-		acName:        defaultACName,
-		cookieMgr:     cookieMgr,
-		poolAllocator: NewPoolAllocator(),
+		acName:    defaultACName,
+		cookieMgr: cookieMgr,
 		sessions:      make(map[string]*SessionState),
 		sidIndex:      make(map[uint16]*SessionState),
 		pppoeChan:     deps.PPPChan,
