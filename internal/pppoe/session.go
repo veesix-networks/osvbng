@@ -12,6 +12,7 @@ import (
 	"github.com/google/gopacket/layers"
 	"github.com/google/uuid"
 	"github.com/veesix-networks/osvbng/pkg/aaa"
+	"github.com/veesix-networks/osvbng/pkg/allocator"
 	aaacfg "github.com/veesix-networks/osvbng/pkg/config/aaa"
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/svcgroup"
@@ -343,6 +344,7 @@ func (s *SessionState) onAuthResult(allowed bool, attributes map[string]interfac
 		resolved := s.resolveServiceGroup(attributes)
 		s.VRF = resolved.VRF
 		s.ServiceGroup = resolved
+		s.AllocCtx = s.buildAllocContext(attributes)
 
 		logArgs := []any{"session_id", s.SessionID}
 		for _, attr := range resolved.LogAttrs() {
@@ -423,6 +425,18 @@ func (s *SessionState) resolveServiceGroup(aaaAttrs map[string]interface{}) svcg
 	return s.component.svcGroupResolver.Resolve(sgName, defaultSG, aaaAttrs)
 }
 
+func (s *SessionState) buildAllocContext(aaaAttrs map[string]interface{}) *allocator.Context {
+	var profileName string
+	cfg, err := s.component.cfgMgr.GetRunning()
+	if err == nil && cfg != nil && cfg.SubscriberGroups != nil {
+		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(s.OuterVLAN); group != nil {
+			profileName = group.DHCPProfile
+		}
+	}
+
+	return allocator.NewContext(s.SessionID, s.MAC, s.OuterVLAN, s.InnerVLAN, s.VRF, s.ServiceGroup.Name, profileName, aaaAttrs)
+}
+
 func (s *SessionState) sendPAPAck(id uint8) {
 	msg := "Login OK"
 	data := make([]byte, 1+len(msg))
@@ -466,6 +480,10 @@ func (s *SessionState) startNCP() {
 		s.allocateFromPool()
 	}
 
+	if s.DNS1 == nil {
+		s.applyProfileDNS()
+	}
+
 	if s.IPv4Address == nil {
 		s.IPv4Address = net.ParseIP("100.64.0.1")
 	}
@@ -487,7 +505,80 @@ func (s *SessionState) startNCP() {
 }
 
 func (s *SessionState) allocateFromPool() {
-	// will integrate in another branch once I've tested locally
+	if s.AllocCtx == nil || s.AllocCtx.ProfileName == "" {
+		return
+	}
+
+	cfg, err := s.component.cfgMgr.GetRunning()
+	if err != nil || cfg == nil {
+		return
+	}
+
+	profile := cfg.DHCP.Profiles[s.AllocCtx.ProfileName]
+	if profile == nil || len(profile.Pools) == 0 {
+		return
+	}
+
+	if s.AllocCtx.PoolOverride != "" {
+		if alloc, ok := s.component.poolAllocators[s.AllocCtx.PoolOverride]; ok {
+			allocated, err := alloc.Allocate(s.SessionID)
+			if err == nil {
+				s.IPv4Address = allocated
+				s.allocatedPool = s.AllocCtx.PoolOverride
+				s.component.logger.Debug("Allocated IPv4 from override pool",
+					"session_id", s.SessionID,
+					"pool", s.AllocCtx.PoolOverride,
+					"ip", allocated)
+				return
+			}
+		}
+	}
+
+	for _, poolName := range s.component.profilePools[s.AllocCtx.ProfileName] {
+		alloc, ok := s.component.poolAllocators[poolName]
+		if !ok {
+			continue
+		}
+		allocated, err := alloc.Allocate(s.SessionID)
+		if err == nil {
+			s.IPv4Address = allocated
+			s.allocatedPool = poolName
+			s.component.logger.Debug("Allocated IPv4 from pool",
+				"session_id", s.SessionID,
+				"pool", poolName,
+				"ip", allocated)
+			return
+		}
+	}
+
+	s.component.logger.Warn("No available pool IPs",
+		"session_id", s.SessionID,
+		"profile", s.AllocCtx.ProfileName)
+}
+
+func (s *SessionState) applyProfileDNS() {
+	if s.AllocCtx == nil || s.AllocCtx.ProfileName == "" {
+		return
+	}
+	cfg, err := s.component.cfgMgr.GetRunning()
+	if err != nil || cfg == nil {
+		return
+	}
+	profile := cfg.DHCP.Profiles[s.AllocCtx.ProfileName]
+	if profile == nil || len(profile.DNS) == 0 {
+		return
+	}
+	for i, d := range profile.DNS {
+		if dnsIP := net.ParseIP(d); dnsIP != nil {
+			switch i {
+			case 0:
+				s.DNS1 = dnsIP
+			case 1:
+				s.DNS2 = dnsIP
+				return
+			}
+		}
+	}
 }
 
 func (s *SessionState) onIPCPUp() {
@@ -767,6 +858,12 @@ func (s *SessionState) terminate() {
 
 	s.stopCHAPRetryTimer()
 
+	if s.allocatedPool != "" && s.IPv4Address != nil {
+		if alloc, ok := s.component.poolAllocators[s.allocatedPool]; ok {
+			alloc.Release(s.IPv4Address)
+		}
+	}
+
 	if s.component.echoGen != nil {
 		s.component.echoGen.RemoveSession(s.PPPoESessionID)
 	}
@@ -789,7 +886,6 @@ func (s *SessionState) terminate() {
 		})
 	}
 
-	// will integrate release properly in another branch once I've tested locally
 	s.component.deleteSessionCheckpoint(s.SessionID)
 
 	s.component.publishSessionLifecycle(&models.PPPSession{

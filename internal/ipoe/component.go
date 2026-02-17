@@ -126,97 +126,15 @@ func (c *Component) resolveServiceGroup(svlan uint16, aaaAttrs map[string]interf
 }
 
 func (c *Component) buildAllocContext(sess *SessionState, aaaAttrs map[string]interface{}) *allocator.Context {
-	ctx := &allocator.Context{
-		SessionID:       sess.SessionID,
-		MAC:             sess.MAC,
-		SVLAN:           sess.OuterVLAN,
-		CVLAN:           sess.InnerVLAN,
-		VRF:             sess.VRF,
-		ServiceGroup:    sess.ServiceGroup.Name,
-		SubscriberGroup: "",
-	}
-
+	var profileName string
 	cfg, err := c.cfgMgr.GetRunning()
 	if err == nil && cfg != nil && cfg.SubscriberGroups != nil {
 		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(sess.OuterVLAN); group != nil {
-			ctx.ProfileName = group.DHCPProfile
+			profileName = group.DHCPProfile
 		}
 	}
 
-	if v, ok := aaaAttrs[aaa.AttrIPv4Address]; ok {
-		if s, ok := v.(string); ok {
-			ctx.IPv4Address = net.ParseIP(s)
-		}
-	}
-	if v, ok := aaaAttrs[aaa.AttrIPv4Netmask]; ok {
-		if s, ok := v.(string); ok {
-			if mask := net.ParseIP(s); mask != nil {
-				ctx.IPv4Netmask = net.IPMask(mask.To4())
-			}
-		}
-	}
-	if v, ok := aaaAttrs[aaa.AttrIPv4Gateway]; ok {
-		if s, ok := v.(string); ok {
-			ctx.IPv4Gateway = net.ParseIP(s)
-		}
-	}
-	if v, ok := aaaAttrs[aaa.AttrDNSPrimary]; ok {
-		if s, ok := v.(string); ok {
-			if ip := net.ParseIP(s); ip != nil {
-				ctx.DNSv4 = append(ctx.DNSv4, ip)
-			}
-		}
-	}
-	if v, ok := aaaAttrs[aaa.AttrDNSSecondary]; ok {
-		if s, ok := v.(string); ok {
-			if ip := net.ParseIP(s); ip != nil {
-				ctx.DNSv4 = append(ctx.DNSv4, ip)
-			}
-		}
-	}
-	if v, ok := aaaAttrs[aaa.AttrIPv6Address]; ok {
-		if s, ok := v.(string); ok {
-			ctx.IPv6Address = net.ParseIP(s)
-		}
-	}
-	if v, ok := aaaAttrs[aaa.AttrIPv6Prefix]; ok {
-		if s, ok := v.(string); ok {
-			if _, ipnet, err := net.ParseCIDR(s); err == nil {
-				ctx.IPv6Prefix = ipnet
-			}
-		}
-	}
-	if v, ok := aaaAttrs[aaa.AttrIPv6DNSPrimary]; ok {
-		if s, ok := v.(string); ok {
-			if ip := net.ParseIP(s); ip != nil {
-				ctx.DNSv6 = append(ctx.DNSv6, ip)
-			}
-		}
-	}
-	if v, ok := aaaAttrs[aaa.AttrIPv6DNSSecondary]; ok {
-		if s, ok := v.(string); ok {
-			if ip := net.ParseIP(s); ip != nil {
-				ctx.DNSv6 = append(ctx.DNSv6, ip)
-			}
-		}
-	}
-	if v, ok := aaaAttrs[aaa.AttrPool]; ok {
-		if s, ok := v.(string); ok {
-			ctx.PoolOverride = s
-		}
-	}
-	if v, ok := aaaAttrs[aaa.AttrIANAPool]; ok {
-		if s, ok := v.(string); ok {
-			ctx.IANAPoolOverride = s
-		}
-	}
-	if v, ok := aaaAttrs[aaa.AttrPDPool]; ok {
-		if s, ok := v.(string); ok {
-			ctx.PDPoolOverride = s
-		}
-	}
-
-	return ctx
+	return allocator.NewContext(sess.SessionID, sess.MAC, sess.OuterVLAN, sess.InnerVLAN, sess.VRF, sess.ServiceGroup.Name, profileName, aaaAttrs)
 }
 
 func (c *Component) resolveDHCPv4(ctx *allocator.Context) *dhcp.ResolvedDHCPv4 {
