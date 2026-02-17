@@ -11,7 +11,8 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/uuid"
-	"github.com/veesix-networks/osvbng/pkg/config/aaa"
+	"github.com/veesix-networks/osvbng/pkg/aaa"
+	aaacfg "github.com/veesix-networks/osvbng/pkg/config/aaa"
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/models"
@@ -154,7 +155,7 @@ func (s *SessionState) handlePAPPacket(code, id uint8, data []byte) error {
 		s.pendingAuthType = "pap"
 		s.pendingPAPID = id
 
-		s.publishAAARequest(map[string]string{"password": password})
+		s.publishAAARequest(map[string]string{aaa.AttrPassword: password})
 	}
 	return nil
 }
@@ -182,9 +183,9 @@ func (s *SessionState) handleCHAPPacket(code, id uint8, data []byte) error {
 		s.pendingCHAPID = id
 
 		s.publishAAARequest(map[string]string{
-			"chap-id":        hex.EncodeToString([]byte{id}),
-			"chap-challenge": hex.EncodeToString(s.chapChallenge),
-			"chap-response":  hex.EncodeToString(response),
+			aaa.AttrCHAPID:        hex.EncodeToString([]byte{id}),
+			aaa.AttrCHAPChallenge: hex.EncodeToString(s.chapChallenge),
+			aaa.AttrCHAPResponse:  hex.EncodeToString(response),
 		})
 	}
 	return nil
@@ -204,8 +205,8 @@ func (s *SessionState) publishAAARequest(attrs map[string]string) {
 		}
 	}
 	if policyName != "" && cfg != nil {
-		if policy := cfg.AAA.GetPolicyByType(policyName, aaa.PolicyTypePPP); policy != nil {
-			ctx := &aaa.PolicyContext{
+		if policy := cfg.AAA.GetPolicyByType(policyName, aaacfg.PolicyTypePPP); policy != nil {
+			ctx := &aaacfg.PolicyContext{
 				MACAddress:     s.MAC,
 				SVLAN:          s.OuterVLAN,
 				CVLAN:          s.InnerVLAN,
@@ -375,28 +376,26 @@ func (s *SessionState) onAuthResult(allowed bool, attributes map[string]interfac
 }
 
 func (s *SessionState) extractIPFromAttributes() {
-	// we need to normalize these attributes (and the map itself) at some point when we refactor the aaa internals to not be so "radius-y"...
-	// ideally we then have a translation layer for radius, radius would be a plugin implementing the AuthProvider interface
-	if ip, ok := s.Attributes["ipv4_address"]; ok {
+	if ip, ok := s.Attributes[aaa.AttrIPv4Address]; ok {
 		if parsed := net.ParseIP(ip); parsed != nil {
 			s.IPv4Address = parsed
 			s.component.logger.Debug("Got IPv4 from AAA", "ip", ip)
 		}
 	}
 
-	if dns, ok := s.Attributes["dns_primary"]; ok {
+	if dns, ok := s.Attributes[aaa.AttrDNSPrimary]; ok {
 		if parsed := net.ParseIP(dns); parsed != nil {
 			s.DNS1 = parsed
 		}
 	}
 
-	if dns, ok := s.Attributes["dns_secondary"]; ok {
+	if dns, ok := s.Attributes[aaa.AttrDNSSecondary]; ok {
 		if parsed := net.ParseIP(dns); parsed != nil {
 			s.DNS2 = parsed
 		}
 	}
 
-	if prefix, ok := s.Attributes["ipv6_prefix"]; ok {
+	if prefix, ok := s.Attributes[aaa.AttrIPv6Prefix]; ok {
 		if _, ipnet, err := net.ParseCIDR(prefix); err == nil {
 			s.IPv6Prefix = ipnet
 			s.component.logger.Debug("Got IPv6 prefix from AAA", "prefix", prefix)
@@ -407,7 +406,7 @@ func (s *SessionState) extractIPFromAttributes() {
 
 func (s *SessionState) resolveServiceGroup(aaaAttrs map[string]interface{}) svcgroup.ServiceGroup {
 	var sgName string
-	if v, ok := aaaAttrs["service-group"]; ok {
+	if v, ok := aaaAttrs[aaa.AttrServiceGroup]; ok {
 		if str, ok := v.(string); ok {
 			sgName = str
 		}

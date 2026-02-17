@@ -13,14 +13,14 @@ type Context struct {
 	ServiceGroup    string
 	ProfileName     string
 
-	FramedIPv4       net.IP
-	FramedIPv4Mask   net.IPMask
-	FramedIPv6       net.IP
-	FramedIPv6Prefix *net.IPNet
+	IPv4Address net.IP
+	IPv4Netmask net.IPMask
+	IPv4Gateway net.IP
+	IPv6Address net.IP
+	IPv6Prefix  *net.IPNet
 
-	DNSv4   []net.IP
-	DNSv6   []net.IP
-	Gateway net.IP
+	DNSv4 []net.IP
+	DNSv6 []net.IP
 
 	PoolOverride     string
 	IANAPoolOverride string

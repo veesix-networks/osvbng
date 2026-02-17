@@ -14,9 +14,11 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/uuid"
+	"github.com/veesix-networks/osvbng/pkg/aaa"
+	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
-	"github.com/veesix-networks/osvbng/pkg/config/aaa"
+	aaacfg "github.com/veesix-networks/osvbng/pkg/config/aaa"
 	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
 	"github.com/veesix-networks/osvbng/pkg/dhcp4"
@@ -96,15 +98,16 @@ type SessionState struct {
 	PendingDHCPv6Solicit []byte
 	PendingDHCPv6Request []byte
 
-	Username string
-	OuterTPID uint16
-	VRF       string
+	Username     string
+	OuterTPID    uint16
+	VRF          string
 	ServiceGroup svcgroup.ServiceGroup
+	AllocCtx     *allocator.Context
 }
 
 func (c *Component) resolveServiceGroup(svlan uint16, aaaAttrs map[string]interface{}) svcgroup.ServiceGroup {
 	var sgName string
-	if v, ok := aaaAttrs["service-group"]; ok {
+	if v, ok := aaaAttrs[aaa.AttrServiceGroup]; ok {
 		if s, ok := v.(string); ok {
 			sgName = s
 		}
@@ -458,8 +461,8 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 		}
 	}
 	if policyName != "" {
-		if policy := cfg.AAA.GetPolicyByType(policyName, aaa.PolicyTypeDHCP); policy != nil {
-			ctx := &aaa.PolicyContext{
+		if policy := cfg.AAA.GetPolicyByType(policyName, aaacfg.PolicyTypeDHCP); policy != nil {
+			ctx := &aaacfg.PolicyContext{
 				MACAddress: pkt.MAC,
 				SVLAN:      pkt.OuterVLAN,
 				CVLAN:      pkt.InnerVLAN,
@@ -607,8 +610,8 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 		}
 	}
 	if policyName != "" {
-		if policy := cfg.AAA.GetPolicyByType(policyName, aaa.PolicyTypeDHCP); policy != nil {
-			ctx := &aaa.PolicyContext{
+		if policy := cfg.AAA.GetPolicyByType(policyName, aaacfg.PolicyTypeDHCP); policy != nil {
+			ctx := &aaacfg.PolicyContext{
 				MACAddress: pkt.MAC,
 				SVLAN:      pkt.OuterVLAN,
 				CVLAN:      pkt.InnerVLAN,
@@ -1591,8 +1594,8 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, relayInterf
 		}
 	}
 	if policyName != "" {
-		if policy := cfg.AAA.GetPolicyByType(policyName, aaa.PolicyTypeDHCP); policy != nil {
-			ctx := &aaa.PolicyContext{
+		if policy := cfg.AAA.GetPolicyByType(policyName, aaacfg.PolicyTypeDHCP); policy != nil {
+			ctx := &aaacfg.PolicyContext{
 				MACAddress: pkt.MAC,
 				SVLAN:      pkt.OuterVLAN,
 				CVLAN:      pkt.InnerVLAN,
