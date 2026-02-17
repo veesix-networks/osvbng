@@ -21,6 +21,7 @@ import (
 	aaacfg "github.com/veesix-networks/osvbng/pkg/config/aaa"
 	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
+	"github.com/veesix-networks/osvbng/pkg/dhcp"
 	"github.com/veesix-networks/osvbng/pkg/dhcp4"
 	"github.com/veesix-networks/osvbng/pkg/dhcp6"
 	"github.com/veesix-networks/osvbng/pkg/events"
@@ -122,6 +123,115 @@ func (c *Component) resolveServiceGroup(svlan uint16, aaaAttrs map[string]interf
 	}
 
 	return c.svcGroupResolver.Resolve(sgName, defaultSG, aaaAttrs)
+}
+
+func (c *Component) buildAllocContext(sess *SessionState, aaaAttrs map[string]interface{}) *allocator.Context {
+	ctx := &allocator.Context{
+		SessionID:       sess.SessionID,
+		MAC:             sess.MAC,
+		SVLAN:           sess.OuterVLAN,
+		CVLAN:           sess.InnerVLAN,
+		VRF:             sess.VRF,
+		ServiceGroup:    sess.ServiceGroup.Name,
+		SubscriberGroup: "",
+	}
+
+	cfg, err := c.cfgMgr.GetRunning()
+	if err == nil && cfg != nil && cfg.SubscriberGroups != nil {
+		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(sess.OuterVLAN); group != nil {
+			ctx.ProfileName = group.DHCPProfile
+		}
+	}
+
+	if v, ok := aaaAttrs[aaa.AttrIPv4Address]; ok {
+		if s, ok := v.(string); ok {
+			ctx.IPv4Address = net.ParseIP(s)
+		}
+	}
+	if v, ok := aaaAttrs[aaa.AttrIPv4Netmask]; ok {
+		if s, ok := v.(string); ok {
+			if mask := net.ParseIP(s); mask != nil {
+				ctx.IPv4Netmask = net.IPMask(mask.To4())
+			}
+		}
+	}
+	if v, ok := aaaAttrs[aaa.AttrIPv4Gateway]; ok {
+		if s, ok := v.(string); ok {
+			ctx.IPv4Gateway = net.ParseIP(s)
+		}
+	}
+	if v, ok := aaaAttrs[aaa.AttrDNSPrimary]; ok {
+		if s, ok := v.(string); ok {
+			if ip := net.ParseIP(s); ip != nil {
+				ctx.DNSv4 = append(ctx.DNSv4, ip)
+			}
+		}
+	}
+	if v, ok := aaaAttrs[aaa.AttrDNSSecondary]; ok {
+		if s, ok := v.(string); ok {
+			if ip := net.ParseIP(s); ip != nil {
+				ctx.DNSv4 = append(ctx.DNSv4, ip)
+			}
+		}
+	}
+	if v, ok := aaaAttrs[aaa.AttrIPv6Address]; ok {
+		if s, ok := v.(string); ok {
+			ctx.IPv6Address = net.ParseIP(s)
+		}
+	}
+	if v, ok := aaaAttrs[aaa.AttrIPv6Prefix]; ok {
+		if s, ok := v.(string); ok {
+			if _, ipnet, err := net.ParseCIDR(s); err == nil {
+				ctx.IPv6Prefix = ipnet
+			}
+		}
+	}
+	if v, ok := aaaAttrs[aaa.AttrIPv6DNSPrimary]; ok {
+		if s, ok := v.(string); ok {
+			if ip := net.ParseIP(s); ip != nil {
+				ctx.DNSv6 = append(ctx.DNSv6, ip)
+			}
+		}
+	}
+	if v, ok := aaaAttrs[aaa.AttrIPv6DNSSecondary]; ok {
+		if s, ok := v.(string); ok {
+			if ip := net.ParseIP(s); ip != nil {
+				ctx.DNSv6 = append(ctx.DNSv6, ip)
+			}
+		}
+	}
+	if v, ok := aaaAttrs[aaa.AttrPool]; ok {
+		if s, ok := v.(string); ok {
+			ctx.PoolOverride = s
+		}
+	}
+	if v, ok := aaaAttrs[aaa.AttrIANAPool]; ok {
+		if s, ok := v.(string); ok {
+			ctx.IANAPoolOverride = s
+		}
+	}
+	if v, ok := aaaAttrs[aaa.AttrPDPool]; ok {
+		if s, ok := v.(string); ok {
+			ctx.PDPoolOverride = s
+		}
+	}
+
+	return ctx
+}
+
+func (c *Component) resolveDHCPv4(ctx *allocator.Context) *dhcp.ResolvedDHCPv4 {
+	if ctx == nil || ctx.ProfileName == "" {
+		return nil
+	}
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil {
+		return nil
+	}
+	profile := cfg.DHCP.Profiles[ctx.ProfileName]
+	if profile == nil {
+		return nil
+	}
+	return dhcp.ResolveV4(ctx, profile)
 }
 
 func (c *Component) resolveOuterTPID(svlan uint16) uint16 {
@@ -427,6 +537,7 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 			SVLAN:     sess.OuterVLAN,
 			CVLAN:     sess.InnerVLAN,
 			Raw:       buf.Bytes(),
+			Resolved:  c.resolveDHCPv4(sess.AllocCtx),
 		}
 		response, err := c.dhcp4Provider.HandlePacket(c.Ctx, pkt)
 		if err != nil {
@@ -557,6 +668,7 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 			SVLAN:     pkt.OuterVLAN,
 			CVLAN:     pkt.InnerVLAN,
 			Raw:       buf.Bytes(),
+			Resolved:  c.resolveDHCPv4(sess.AllocCtx),
 		}
 
 		response, err := c.dhcp4Provider.HandlePacket(c.Ctx, dhcpPkt)
@@ -990,6 +1102,11 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 		c.sessionMu.Unlock()
 	}
 
+	allocCtx := c.buildAllocContext(sess, payload.Attributes)
+	c.sessionMu.Lock()
+	sess.AllocCtx = allocCtx
+	c.sessionMu.Unlock()
+
 	if !ipoeCreated && c.vpp != nil {
 		c.sessionMu.Lock()
 		if sess.IPoESessionCreated {
@@ -1103,6 +1220,7 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 			SVLAN:     svlan,
 			CVLAN:     cvlan,
 			Raw:       pendingDiscover,
+			Resolved:  c.resolveDHCPv4(allocCtx),
 		}
 
 		response, err := c.dhcp4Provider.HandlePacket(c.Ctx, pkt)
@@ -1127,6 +1245,7 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 			SVLAN:     svlan,
 			CVLAN:     cvlan,
 			Raw:       pendingRequest,
+			Resolved:  c.resolveDHCPv4(allocCtx),
 		}
 
 		response, err := c.dhcp4Provider.HandlePacket(c.Ctx, pkt)
