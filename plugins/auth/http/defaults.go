@@ -1,5 +1,9 @@
 package http
 
+import (
+	"github.com/veesix-networks/osvbng/pkg/aaa"
+)
+
 const DefaultRequestBodyTemplate = `{
   "username": "{{.Username}}",
   "mac_address": "{{.MAC}}",
@@ -31,82 +35,82 @@ const DefaultMethod = "POST"
 const DefaultTimeout = 30
 
 var defaultAttributeMappings = map[string][]string{
-	"ipv4_address": {
+	aaa.AttrIPv4Address: {
 		"ipv4_address",
 		"ip_address",
 		"ip",
 		"framed_ip_address",
 		"subscriber.ipv4.address",
 	},
-	"ipv4_netmask": {
+	aaa.AttrIPv4Netmask: {
 		"ipv4_netmask",
 		"netmask",
 		"framed_ip_netmask",
 		"subscriber.ipv4.netmask",
 	},
-	"ipv4_gateway": {
+	aaa.AttrIPv4Gateway: {
 		"ipv4_gateway",
 		"gateway",
 		"default_gateway",
 		"subscriber.ipv4.gateway",
 	},
-	"dns_primary": {
+	aaa.AttrDNSPrimary: {
 		"dns_primary",
 		"dns[0]",
 		"dns_servers[0]",
 		"subscriber.dns.primary",
 	},
-	"dns_secondary": {
+	aaa.AttrDNSSecondary: {
 		"dns_secondary",
 		"dns[1]",
 		"dns_servers[1]",
 		"subscriber.dns.secondary",
 	},
-	"ipv6_prefix": {
+	aaa.AttrIPv6Prefix: {
 		"ipv6_prefix",
 		"delegated_prefix",
 		"framed_ipv6_prefix",
 		"subscriber.ipv6.prefix",
 	},
-	"ipv6_address": {
+	aaa.AttrIPv6Address: {
 		"ipv6_address",
 		"framed_ipv6_address",
 		"subscriber.ipv6.address",
 	},
-	"ipv6_dns_primary": {
+	aaa.AttrIPv6DNSPrimary: {
 		"ipv6_dns_primary",
 		"dns_v6[0]",
 		"dns_servers_v6[0]",
 		"subscriber.dns_v6.primary",
 	},
-	"ipv6_dns_secondary": {
+	aaa.AttrIPv6DNSSecondary: {
 		"ipv6_dns_secondary",
 		"dns_v6[1]",
 		"dns_servers_v6[1]",
 		"subscriber.dns_v6.secondary",
 	},
-	"session_timeout": {
+	aaa.AttrSessionTimeout: {
 		"session_timeout",
 		"timeout",
 		"subscriber.session_timeout",
 	},
-	"idle_timeout": {
+	aaa.AttrIdleTimeout: {
 		"idle_timeout",
 		"subscriber.idle_timeout",
 	},
-	"rate_limit_up": {
+	aaa.AttrRateLimitUp: {
 		"rate_limit_up",
 		"upload_rate",
 		"bandwidth_up",
 		"subscriber.rate_limit.up",
 	},
-	"rate_limit_down": {
+	aaa.AttrRateLimitDown: {
 		"rate_limit_down",
 		"download_rate",
 		"bandwidth_down",
 		"subscriber.rate_limit.down",
 	},
-	"vrf": {
+	aaa.AttrVRF: {
 		"vrf",
 		"routing_instance",
 		"subscriber.vrf",

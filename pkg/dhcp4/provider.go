@@ -3,6 +3,7 @@ package dhcp4
 import (
 	"context"
 
+	"github.com/veesix-networks/osvbng/pkg/dhcp"
 	"github.com/veesix-networks/osvbng/pkg/provider"
 )
 
@@ -17,4 +18,5 @@ type Packet struct {
 	SVLAN     uint16
 	CVLAN     uint16
 	Raw       []byte
+	Resolved  *dhcp.ResolvedDHCPv4
 }

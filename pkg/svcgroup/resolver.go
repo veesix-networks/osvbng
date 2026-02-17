@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/veesix-networks/osvbng/pkg/aaa"
 	"github.com/veesix-networks/osvbng/pkg/config/servicegroup"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 )
@@ -176,31 +177,31 @@ func applyAAAOverrides(r *ServiceGroup, attrs map[string]interface{}) {
 	if attrs == nil {
 		return
 	}
-	if v := getStringAttr(attrs, "vrf"); v != "" {
+	if v := getStringAttr(attrs, aaa.AttrVRF); v != "" {
 		r.VRF = v
 	}
-	if v := getStringAttr(attrs, "unnumbered"); v != "" {
+	if v := getStringAttr(attrs, aaa.AttrUnnumbered); v != "" {
 		r.Unnumbered = v
 	}
-	if v := getStringAttr(attrs, "urpf"); v != "" {
+	if v := getStringAttr(attrs, aaa.AttrURPF); v != "" {
 		r.URPF = v
 	}
-	if v := getStringAttr(attrs, "acl.ingress"); v != "" {
+	if v := getStringAttr(attrs, aaa.AttrACLIngress); v != "" {
 		r.ACLIngress = v
 	}
-	if v := getStringAttr(attrs, "acl.egress"); v != "" {
+	if v := getStringAttr(attrs, aaa.AttrACLEgress); v != "" {
 		r.ACLEgress = v
 	}
-	if v := getStringAttr(attrs, "qos.ingress-policy"); v != "" {
+	if v := getStringAttr(attrs, aaa.AttrQoSIngressPolicy); v != "" {
 		r.QoSIngress = v
 	}
-	if v := getStringAttr(attrs, "qos.egress-policy"); v != "" {
+	if v := getStringAttr(attrs, aaa.AttrQoSEgressPolicy); v != "" {
 		r.QoSEgress = v
 	}
-	if v := getUint64Attr(attrs, "qos.upload-rate"); v != 0 {
+	if v := getUint64Attr(attrs, aaa.AttrQoSUploadRate); v != 0 {
 		r.UploadRate = v
 	}
-	if v := getUint64Attr(attrs, "qos.download-rate"); v != 0 {
+	if v := getUint64Attr(attrs, aaa.AttrQoSDownloadRate); v != 0 {
 		r.DownloadRate = v
 	}
 }
