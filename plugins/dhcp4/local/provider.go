@@ -13,6 +13,7 @@ import (
 	"github.com/google/gopacket/layers"
 	"inet.af/netaddr"
 	"github.com/veesix-networks/osvbng/pkg/config"
+	"github.com/veesix-networks/osvbng/pkg/dhcp"
 	"github.com/veesix-networks/osvbng/pkg/dhcp4"
 	"github.com/veesix-networks/osvbng/pkg/provider"
 )
@@ -197,16 +198,30 @@ func (p *Provider) HandlePacket(ctx context.Context, pkt *dhcp4.Packet) (*dhcp4.
 	}
 }
 
-func (p *Provider) handleDiscover(pkt *dhcp4.Packet, dhcp *layers.DHCPv4) (*dhcp4.Packet, error) {
+func (p *Provider) handleDiscover(pkt *dhcp4.Packet, dhcpPkt *layers.DHCPv4) (*dhcp4.Packet, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	mac := dhcpPkt.ClientHWAddr.String()
+
+	if pkt.Resolved != nil {
+		if err := p.reserveIP(pkt.Resolved.YourIP, mac, pkt.SessionID, pkt.Resolved.LeaseTime); err != nil {
+			return nil, fmt.Errorf("reserve AAA IP: %w", err)
+		}
+		response := p.buildResponseFromResolved(dhcpPkt, pkt.Resolved, layers.DHCPMsgTypeOffer)
+		return &dhcp4.Packet{
+			SessionID: pkt.SessionID,
+			MAC:       pkt.MAC,
+			SVLAN:     pkt.SVLAN,
+			CVLAN:     pkt.CVLAN,
+			Raw:       response,
+		}, nil
+	}
 
 	group, _ := p.coreConfig.SubscriberGroups.FindGroupBySVLAN(pkt.SVLAN)
 	if group == nil {
 		return nil, fmt.Errorf("no subscriber group for SVLAN %d", pkt.SVLAN)
 	}
-
-	mac := dhcp.ClientHWAddr.String()
 
 	var offerIP net.IP
 	var pool *IPPool
@@ -232,7 +247,7 @@ func (p *Provider) handleDiscover(pkt *dhcp4.Packet, dhcp *layers.DHCPv4) (*dhcp
 		}
 	}
 
-	response := p.buildOffer(dhcp, offerIP, pool)
+	response := p.buildOffer(dhcpPkt, offerIP, pool)
 	return &dhcp4.Packet{
 		SessionID: pkt.SessionID,
 		MAC:       pkt.MAC,
@@ -242,19 +257,33 @@ func (p *Provider) handleDiscover(pkt *dhcp4.Packet, dhcp *layers.DHCPv4) (*dhcp
 	}, nil
 }
 
-func (p *Provider) handleRequest(pkt *dhcp4.Packet, dhcp *layers.DHCPv4) (*dhcp4.Packet, error) {
+func (p *Provider) handleRequest(pkt *dhcp4.Packet, dhcpPkt *layers.DHCPv4) (*dhcp4.Packet, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	mac := dhcpPkt.ClientHWAddr.String()
+
+	if pkt.Resolved != nil {
+		if err := p.reserveIP(pkt.Resolved.YourIP, mac, pkt.SessionID, pkt.Resolved.LeaseTime); err != nil {
+			return nil, fmt.Errorf("reserve AAA IP: %w", err)
+		}
+		response := p.buildResponseFromResolved(dhcpPkt, pkt.Resolved, layers.DHCPMsgTypeAck)
+		return &dhcp4.Packet{
+			SessionID: pkt.SessionID,
+			MAC:       pkt.MAC,
+			SVLAN:     pkt.SVLAN,
+			CVLAN:     pkt.CVLAN,
+			Raw:       response,
+		}, nil
+	}
 
 	group, _ := p.coreConfig.SubscriberGroups.FindGroupBySVLAN(pkt.SVLAN)
 	if group == nil {
 		return nil, fmt.Errorf("no subscriber group for SVLAN %d", pkt.SVLAN)
 	}
 
-	mac := dhcp.ClientHWAddr.String()
-
 	var requestedIP net.IP
-	for _, opt := range dhcp.Options {
+	for _, opt := range dhcpPkt.Options {
 		if opt.Type == layers.DHCPOptRequestIP && len(opt.Data) == 4 {
 			requestedIP = net.IP(opt.Data)
 			break
@@ -262,7 +291,7 @@ func (p *Provider) handleRequest(pkt *dhcp4.Packet, dhcp *layers.DHCPv4) (*dhcp4
 	}
 
 	if requestedIP == nil {
-		requestedIP = dhcp.ClientIP
+		requestedIP = dhcpPkt.ClientIP
 	}
 
 	var pool *IPPool
@@ -288,7 +317,7 @@ func (p *Provider) handleRequest(pkt *dhcp4.Packet, dhcp *layers.DHCPv4) (*dhcp4
 		lease.ExpireTime = time.Now().Add(time.Duration(pool.LeaseTime) * time.Second)
 	}
 
-	response := p.buildAck(dhcp, requestedIP, pool)
+	response := p.buildAck(dhcpPkt, requestedIP, pool)
 	return &dhcp4.Packet{
 		SessionID: pkt.SessionID,
 		MAC:       pkt.MAC,
@@ -338,6 +367,26 @@ func (p *Provider) allocateIP(pool *IPPool, mac, sessionID string) (net.IP, erro
 	}
 
 	return nil, fmt.Errorf("no available IPs in pool")
+}
+
+func (p *Provider) reserveIP(reserveIP net.IP, mac, sessionID string, leaseTime time.Duration) error {
+	ipStr := reserveIP.String()
+	if existing, exists := p.leasesByIP[ipStr]; exists {
+		if existing.MAC == mac {
+			existing.ExpireTime = time.Now().Add(leaseTime)
+			return nil
+		}
+		return fmt.Errorf("IP %s already leased to %s", ipStr, existing.MAC)
+	}
+	lease := &Lease{
+		IP:         reserveIP,
+		MAC:        mac,
+		SessionID:  sessionID,
+		ExpireTime: time.Now().Add(leaseTime),
+	}
+	p.leases[mac] = lease
+	p.leasesByIP[ipStr] = lease
+	return nil
 }
 
 func (p *Provider) buildOffer(req *layers.DHCPv4, offerIP net.IP, pool *IPPool) []byte {
@@ -425,4 +474,90 @@ func (p *Provider) buildResponse(req *layers.DHCPv4, ip net.IP, pool *IPPool, ms
 
 	gopacket.SerializeLayers(buf, opts, ipv4, udp, dhcpReply)
 	return buf.Bytes()
+}
+
+func (p *Provider) buildResponseFromResolved(req *layers.DHCPv4, resolved *dhcp.ResolvedDHCPv4, msgType layers.DHCPMsgType) []byte {
+	leaseData := make([]byte, 4)
+	binary.BigEndian.PutUint32(leaseData, uint32(resolved.LeaseTime.Seconds()))
+
+	options := []layers.DHCPOption{
+		{Type: layers.DHCPOptMessageType, Data: []byte{byte(msgType)}, Length: 1},
+		{Type: layers.DHCPOptLeaseTime, Data: leaseData, Length: 4},
+		{Type: layers.DHCPOptSubnetMask, Data: resolved.Netmask, Length: uint8(len(resolved.Netmask))},
+	}
+
+	if resolved.ServerID != nil {
+		options = append(options, layers.DHCPOption{
+			Type: layers.DHCPOptServerID, Data: resolved.ServerID.To4(), Length: 4,
+		})
+	}
+
+	if resolved.Router != nil {
+		options = append(options, layers.DHCPOption{
+			Type: layers.DHCPOptRouter, Data: resolved.Router.To4(), Length: 4,
+		})
+	}
+
+	if len(resolved.DNS) > 0 {
+		dnsData := make([]byte, 0, len(resolved.DNS)*4)
+		for _, dns := range resolved.DNS {
+			dnsData = append(dnsData, dns.To4()...)
+		}
+		options = append(options, layers.DHCPOption{
+			Type: layers.DHCPOptDNS, Data: dnsData, Length: uint8(len(dnsData)),
+		})
+	}
+
+	if len(resolved.ClasslessRoutes) > 0 {
+		routeData := encodeClasslessRoutes(resolved.ClasslessRoutes)
+		options = append(options, layers.DHCPOption{
+			Type: 121, Data: routeData, Length: uint8(len(routeData)),
+		})
+	}
+
+	srcIP := resolved.Router
+	if resolved.ServerID != nil {
+		srcIP = resolved.ServerID
+	}
+
+	dhcpReply := &layers.DHCPv4{
+		Operation:    layers.DHCPOpReply,
+		HardwareType: layers.LinkTypeEthernet,
+		HardwareLen:  6,
+		Xid:          req.Xid,
+		ClientIP:     req.ClientIP,
+		YourClientIP: resolved.YourIP,
+		NextServerIP: srcIP,
+		ClientHWAddr: req.ClientHWAddr,
+		Options:      options,
+	}
+
+	buf := gopacket.NewSerializeBuffer()
+	opts := gopacket.SerializeOptions{FixLengths: true, ComputeChecksums: true}
+
+	ipv4 := &layers.IPv4{
+		Version:  4,
+		TTL:      64,
+		Protocol: layers.IPProtocolUDP,
+		SrcIP:    srcIP,
+		DstIP:    net.IPv4bcast,
+	}
+
+	udp := &layers.UDP{SrcPort: 67, DstPort: 68}
+	udp.SetNetworkLayerForChecksum(ipv4)
+
+	gopacket.SerializeLayers(buf, opts, ipv4, udp, dhcpReply)
+	return buf.Bytes()
+}
+
+func encodeClasslessRoutes(routes []dhcp.ClasslessRoute) []byte {
+	var data []byte
+	for _, route := range routes {
+		ones, _ := route.Destination.Mask.Size()
+		data = append(data, byte(ones))
+		significantBytes := (ones + 7) / 8
+		data = append(data, route.Destination.IP.To4()[:significantBytes]...)
+		data = append(data, route.NextHop.To4()...)
+	}
+	return data
 }

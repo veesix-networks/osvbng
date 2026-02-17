@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/veesix-networks/osvbng/pkg/aaa"
 	"github.com/veesix-networks/osvbng/pkg/auth"
 	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
@@ -93,21 +94,21 @@ func (p *Provider) Authenticate(ctx context.Context, req *auth.AuthRequest) (*au
 		return &auth.AuthResponse{Allowed: false}, nil
 	}
 
-	if chapResponse, ok := req.Attributes["chap-response"]; ok {
+	if chapResponse, ok := req.Attributes[aaa.AttrCHAPResponse]; ok {
 		if user.Password == nil {
 			p.logger.Debug("CHAP auth but user has no password", "username", req.Username)
 			return &auth.AuthResponse{Allowed: false}, nil
 		}
 
-		chapID := req.Attributes["chap-id"]
-		chapChallenge := req.Attributes["chap-challenge"]
+		chapID := req.Attributes[aaa.AttrCHAPID]
+		chapChallenge := req.Attributes[aaa.AttrCHAPChallenge]
 
 		if !p.validateCHAP(chapID, chapChallenge, chapResponse, *user.Password) {
 			p.logger.Debug("CHAP validation failed", "username", req.Username)
 			return &auth.AuthResponse{Allowed: false}, nil
 		}
 	} else if user.Password != nil {
-		reqPassword, ok := req.Attributes["password"]
+		reqPassword, ok := req.Attributes[aaa.AttrPassword]
 		if !ok || reqPassword != *user.Password {
 			p.logger.Debug("Password mismatch", "username", req.Username)
 			return &auth.AuthResponse{Allowed: false}, nil

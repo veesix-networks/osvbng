@@ -14,11 +14,14 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/uuid"
+	"github.com/veesix-networks/osvbng/pkg/aaa"
+	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
-	"github.com/veesix-networks/osvbng/pkg/config/aaa"
+	aaacfg "github.com/veesix-networks/osvbng/pkg/config/aaa"
 	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
+	"github.com/veesix-networks/osvbng/pkg/dhcp"
 	"github.com/veesix-networks/osvbng/pkg/dhcp4"
 	"github.com/veesix-networks/osvbng/pkg/dhcp6"
 	"github.com/veesix-networks/osvbng/pkg/events"
@@ -96,15 +99,16 @@ type SessionState struct {
 	PendingDHCPv6Solicit []byte
 	PendingDHCPv6Request []byte
 
-	Username string
-	OuterTPID uint16
-	VRF       string
+	Username     string
+	OuterTPID    uint16
+	VRF          string
 	ServiceGroup svcgroup.ServiceGroup
+	AllocCtx     *allocator.Context
 }
 
 func (c *Component) resolveServiceGroup(svlan uint16, aaaAttrs map[string]interface{}) svcgroup.ServiceGroup {
 	var sgName string
-	if v, ok := aaaAttrs["service-group"]; ok {
+	if v, ok := aaaAttrs[aaa.AttrServiceGroup]; ok {
 		if s, ok := v.(string); ok {
 			sgName = s
 		}
@@ -119,6 +123,33 @@ func (c *Component) resolveServiceGroup(svlan uint16, aaaAttrs map[string]interf
 	}
 
 	return c.svcGroupResolver.Resolve(sgName, defaultSG, aaaAttrs)
+}
+
+func (c *Component) buildAllocContext(sess *SessionState, aaaAttrs map[string]interface{}) *allocator.Context {
+	var profileName string
+	cfg, err := c.cfgMgr.GetRunning()
+	if err == nil && cfg != nil && cfg.SubscriberGroups != nil {
+		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(sess.OuterVLAN); group != nil {
+			profileName = group.DHCPProfile
+		}
+	}
+
+	return allocator.NewContext(sess.SessionID, sess.MAC, sess.OuterVLAN, sess.InnerVLAN, sess.VRF, sess.ServiceGroup.Name, profileName, aaaAttrs)
+}
+
+func (c *Component) resolveDHCPv4(ctx *allocator.Context) *dhcp.ResolvedDHCPv4 {
+	if ctx == nil || ctx.ProfileName == "" {
+		return nil
+	}
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil {
+		return nil
+	}
+	profile := cfg.DHCP.Profiles[ctx.ProfileName]
+	if profile == nil {
+		return nil
+	}
+	return dhcp.ResolveV4(ctx, profile)
 }
 
 func (c *Component) resolveOuterTPID(svlan uint16) uint16 {
@@ -424,6 +455,7 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 			SVLAN:     sess.OuterVLAN,
 			CVLAN:     sess.InnerVLAN,
 			Raw:       buf.Bytes(),
+			Resolved:  c.resolveDHCPv4(sess.AllocCtx),
 		}
 		response, err := c.dhcp4Provider.HandlePacket(c.Ctx, pkt)
 		if err != nil {
@@ -458,8 +490,8 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 		}
 	}
 	if policyName != "" {
-		if policy := cfg.AAA.GetPolicyByType(policyName, aaa.PolicyTypeDHCP); policy != nil {
-			ctx := &aaa.PolicyContext{
+		if policy := cfg.AAA.GetPolicyByType(policyName, aaacfg.PolicyTypeDHCP); policy != nil {
+			ctx := &aaacfg.PolicyContext{
 				MACAddress: pkt.MAC,
 				SVLAN:      pkt.OuterVLAN,
 				CVLAN:      pkt.InnerVLAN,
@@ -554,6 +586,7 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 			SVLAN:     pkt.OuterVLAN,
 			CVLAN:     pkt.InnerVLAN,
 			Raw:       buf.Bytes(),
+			Resolved:  c.resolveDHCPv4(sess.AllocCtx),
 		}
 
 		response, err := c.dhcp4Provider.HandlePacket(c.Ctx, dhcpPkt)
@@ -607,8 +640,8 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 		}
 	}
 	if policyName != "" {
-		if policy := cfg.AAA.GetPolicyByType(policyName, aaa.PolicyTypeDHCP); policy != nil {
-			ctx := &aaa.PolicyContext{
+		if policy := cfg.AAA.GetPolicyByType(policyName, aaacfg.PolicyTypeDHCP); policy != nil {
+			ctx := &aaacfg.PolicyContext{
 				MACAddress: pkt.MAC,
 				SVLAN:      pkt.OuterVLAN,
 				CVLAN:      pkt.InnerVLAN,
@@ -987,6 +1020,11 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 		c.sessionMu.Unlock()
 	}
 
+	allocCtx := c.buildAllocContext(sess, payload.Attributes)
+	c.sessionMu.Lock()
+	sess.AllocCtx = allocCtx
+	c.sessionMu.Unlock()
+
 	if !ipoeCreated && c.vpp != nil {
 		c.sessionMu.Lock()
 		if sess.IPoESessionCreated {
@@ -1100,6 +1138,7 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 			SVLAN:     svlan,
 			CVLAN:     cvlan,
 			Raw:       pendingDiscover,
+			Resolved:  c.resolveDHCPv4(allocCtx),
 		}
 
 		response, err := c.dhcp4Provider.HandlePacket(c.Ctx, pkt)
@@ -1124,6 +1163,7 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 			SVLAN:     svlan,
 			CVLAN:     cvlan,
 			Raw:       pendingRequest,
+			Resolved:  c.resolveDHCPv4(allocCtx),
 		}
 
 		response, err := c.dhcp4Provider.HandlePacket(c.Ctx, pkt)
@@ -1591,8 +1631,8 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, relayInterf
 		}
 	}
 	if policyName != "" {
-		if policy := cfg.AAA.GetPolicyByType(policyName, aaa.PolicyTypeDHCP); policy != nil {
-			ctx := &aaa.PolicyContext{
+		if policy := cfg.AAA.GetPolicyByType(policyName, aaacfg.PolicyTypeDHCP); policy != nil {
+			ctx := &aaacfg.PolicyContext{
 				MACAddress: pkt.MAC,
 				SVLAN:      pkt.OuterVLAN,
 				CVLAN:      pkt.InnerVLAN,
