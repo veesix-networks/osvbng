@@ -19,7 +19,7 @@ func (cm *ConfigManager) ProcessSubscriberGroups(sessionID conf.SessionID, cfg *
 
 	for groupName, group := range cfg.SubscriberGroups.Groups {
 		if group.BGP != nil && group.BGP.Enabled {
-			if err := cm.processBGPForGroup(sessionID, groupName, group); err != nil {
+			if err := cm.processBGPForGroup(sessionID, cfg, groupName, group); err != nil {
 				return fmt.Errorf("subscriber group %s: %w", groupName, err)
 			}
 		}
@@ -44,16 +44,18 @@ func (cm *ConfigManager) ApplyInfrastructureConfig(sessionID conf.SessionID, cfg
 	return nil
 }
 
-func (cm *ConfigManager) processBGPForGroup(sessionID conf.SessionID, groupName string, group *subscriber.SubscriberGroup) error {
+func (cm *ConfigManager) processBGPForGroup(sessionID conf.SessionID, cfg *config.Config, groupName string, group *subscriber.SubscriberGroup) error {
 	vrf := group.BGP.VRF
 	if vrf == "" {
 		vrf = group.VRF
 	}
 
 	if group.BGP.AdvertisePools {
-		for _, pool := range group.AddressPools {
-			if err := cm.addBGPNetwork(sessionID, pool.Network, vrf); err != nil {
-				return fmt.Errorf("pool %s: %w", pool.Name, err)
+		if profile := cfg.DHCP.Profiles[group.DHCPProfile]; profile != nil {
+			for _, pool := range profile.Pools {
+				if err := cm.addBGPNetwork(sessionID, pool.Network, vrf); err != nil {
+					return fmt.Errorf("pool %s: %w", pool.Name, err)
+				}
 			}
 		}
 	}

@@ -55,27 +55,38 @@ func New(cfg *config.Config) (dhcp4.DHCPProvider, error) {
 		leasesByIP: make(map[string]*Lease),
 	}
 
-	if cfg.SubscriberGroups != nil {
-		for groupName, group := range cfg.SubscriberGroups.Groups {
-			if group.DHCP != nil && group.DHCP.AutoGenerate {
-				leaseTime := uint32(3600)
-				if group.DHCP.LeaseTime != "" {
-					fmt.Sscanf(group.DHCP.LeaseTime, "%d", &leaseTime)
-				}
+	for profileName, profile := range cfg.DHCP.Profiles {
+		leaseTime := profile.GetLeaseTime()
+		for _, poolCfg := range profile.Pools {
+			prefix, err := netaddr.ParseIPPrefix(poolCfg.Network)
+			if err != nil {
+				return nil, fmt.Errorf("profile %s pool %s: invalid network: %w", profileName, poolCfg.Name, err)
+			}
 
-				for _, addrPool := range group.AddressPools {
-					prefix, err := netaddr.ParseIPPrefix(addrPool.Network)
-					if err != nil {
-						return nil, fmt.Errorf("subscriber group %s pool %s: invalid network: %w", groupName, addrPool.Name, err)
-					}
+			rangeStart := poolCfg.RangeStart
+			rangeEnd := poolCfg.RangeEnd
+			if rangeStart == "" {
+				rangeStart = prefix.Range().From().Next().String()
+			}
+			if rangeEnd == "" {
+				rangeEnd = prefix.Range().To().Prior().String()
+			}
 
-					rangeStart := prefix.Range().From().Next()
-					rangeEnd := prefix.Range().To().Prior()
+			gateway := poolCfg.Gateway
+			if gateway == "" {
+				gateway = profile.Gateway
+			}
+			dns := poolCfg.DNSServers
+			if len(dns) == 0 {
+				dns = profile.DNS
+			}
+			lt := poolCfg.LeaseTime
+			if lt == 0 {
+				lt = leaseTime
+			}
 
-					if err := p.addPool(addrPool.Name, addrPool.Network, rangeStart.String(), rangeEnd.String(), addrPool.Gateway, addrPool.DNS, leaseTime, addrPool.Priority); err != nil {
-						return nil, fmt.Errorf("subscriber group %s pool %s: %w", groupName, addrPool.Name, err)
-					}
-				}
+			if err := p.addPool(poolCfg.Name, poolCfg.Network, rangeStart, rangeEnd, gateway, dns, lt, poolCfg.Priority); err != nil {
+				return nil, fmt.Errorf("profile %s pool %s: %w", profileName, poolCfg.Name, err)
 			}
 		}
 	}

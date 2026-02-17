@@ -488,35 +488,7 @@ func (s *SessionState) startNCP() {
 }
 
 func (s *SessionState) allocateFromPool() {
-	cfg, err := s.component.cfgMgr.GetRunning()
-	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
-		return
-	}
-
-	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(s.OuterVLAN)
-	if group == nil || len(group.AddressPools) == 0 {
-		return
-	}
-
-	ip, dns1, dns2, err := s.component.poolAllocator.Allocate(s.SessionID, group)
-	if err != nil {
-		s.component.logger.Warn("Pool allocation failed",
-			"session_id", s.SessionID,
-			"error", err)
-		return
-	}
-
-	s.IPv4Address = ip
-	if dns1 != nil {
-		s.DNS1 = dns1
-	}
-	if dns2 != nil {
-		s.DNS2 = dns2
-	}
-
-	s.component.logger.Debug("Allocated IP from pool",
-		"session_id", s.SessionID,
-		"ip", ip.String())
+	// will integrate in another branch once I've tested locally
 }
 
 func (s *SessionState) onIPCPUp() {
@@ -818,7 +790,7 @@ func (s *SessionState) terminate() {
 		})
 	}
 
-	s.component.poolAllocator.Release(s.SessionID)
+	// will integrate release properly in another branch once I've tested locally
 	s.component.deleteSessionCheckpoint(s.SessionID)
 
 	s.component.publishSessionLifecycle(&models.PPPSession{

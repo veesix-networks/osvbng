@@ -2141,26 +2141,27 @@ func (c *Component) processRSPacket(pkt *dataplane.ParsedPacket) error {
 		}
 	}
 
-	var ianaPoolName string
-	if group != nil {
-		ianaPoolName = group.IANAPool
-	}
-
 	var prefixes []raPrefixInfo
 
-	for _, pool := range cfg.DHCPv6.IANAPools {
-		if ianaPoolName != "" && pool.Name != ianaPoolName {
-			continue
+	if group != nil && group.DHCPv6Profile != "" {
+		if profile := cfg.DHCPv6.Profiles[group.DHCPv6Profile]; profile != nil {
+			for _, pool := range profile.IANAPools {
+				prefixes = append(prefixes, raPrefixInfo{
+					network:       pool.Network,
+					validTime:     pool.ValidTime,
+					preferredTime: pool.PreferredTime,
+				})
+			}
 		}
+	}
 
-		prefixes = append(prefixes, raPrefixInfo{
-			network:       pool.Network,
-			validTime:     pool.ValidTime,
-			preferredTime: pool.PreferredTime,
-		})
-
-		if ianaPoolName != "" {
-			break
+	if len(prefixes) == 0 {
+		for _, pool := range cfg.DHCPv6.IANAPools {
+			prefixes = append(prefixes, raPrefixInfo{
+				network:       pool.Network,
+				validTime:     pool.ValidTime,
+				preferredTime: pool.PreferredTime,
+			})
 		}
 	}
 
