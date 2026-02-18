@@ -32,6 +32,7 @@ type DHCPPool struct {
 	DNSServers []string `json:"dns_servers,omitempty" yaml:"dns,omitempty"`
 	LeaseTime  uint32   `json:"lease_time,omitempty" yaml:"lease-time,omitempty"`
 	Priority   int      `json:"priority,omitempty" yaml:"priority,omitempty"`
+	Exclude    []string `json:"exclude,omitempty" yaml:"exclude,omitempty"`
 }
 
 type DHCPv6Config struct {

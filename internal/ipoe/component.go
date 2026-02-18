@@ -716,6 +716,17 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 		return nil
 	}
 
+	ciaddr := pkt.DHCPv4.ClientIP
+	if sess.IPv4 != nil && !sess.IPv4.Equal(ciaddr) {
+		c.sessionMu.Unlock()
+		c.logger.Warn("DHCPRELEASE anti-spoof: ciaddr mismatch",
+			"session_id", sess.SessionID,
+			"expected", sess.IPv4,
+			"received", ciaddr,
+			"mac", pkt.MAC.String())
+		return nil
+	}
+
 	sessID := sess.SessionID
 	acctSessionID := sess.AcctSessionID
 	xid := sess.XID
@@ -743,6 +754,10 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 	c.sessionMu.Unlock()
 
 	c.logger.Info("IPv4 released by client", "session_id", sessID, "delete_session", deleteSession)
+
+	if ipv4 != nil {
+		allocator.GetGlobalRegistry().ReleaseIP(ipv4)
+	}
 
 	if c.vpp != nil && ipoeSwIfIndex != 0 {
 		if ipv4 != nil {

@@ -9,13 +9,24 @@ import (
 )
 
 func ResolveV4(ctx *allocator.Context, profile *ip.DHCPProfile) *ResolvedDHCPv4 {
+	var poolName string
 	if ctx.IPv4Address == nil {
-		return nil
+		registry := allocator.GetGlobalRegistry()
+		if registry == nil {
+			return nil
+		}
+		allocated, pn, err := registry.AllocateFromProfile(ctx.ProfileName, ctx.PoolOverride, ctx.SessionID)
+		if err != nil {
+			return nil
+		}
+		ctx.IPv4Address = allocated
+		poolName = pn
 	}
 
 	resolved := &ResolvedDHCPv4{
 		YourIP:    ctx.IPv4Address,
 		LeaseTime: time.Duration(profile.GetLeaseTime()) * time.Second,
+		PoolName:  poolName,
 	}
 
 	if ctx.IPv4Gateway != nil {

@@ -509,51 +509,29 @@ func (s *SessionState) allocateFromPool() {
 		return
 	}
 
-	cfg, err := s.component.cfgMgr.GetRunning()
-	if err != nil || cfg == nil {
+	registry := s.component.registry
+	if registry == nil {
 		return
 	}
 
-	profile := cfg.DHCP.Profiles[s.AllocCtx.ProfileName]
-	if profile == nil || len(profile.Pools) == 0 {
+	allocated, poolName, err := registry.AllocateFromProfile(
+		s.AllocCtx.ProfileName,
+		s.AllocCtx.PoolOverride,
+		s.SessionID,
+	)
+	if err != nil {
+		s.component.logger.Warn("No available pool IPs",
+			"session_id", s.SessionID,
+			"profile", s.AllocCtx.ProfileName)
 		return
 	}
 
-	if s.AllocCtx.PoolOverride != "" {
-		if alloc, ok := s.component.poolAllocators[s.AllocCtx.PoolOverride]; ok {
-			allocated, err := alloc.Allocate(s.SessionID)
-			if err == nil {
-				s.IPv4Address = allocated
-				s.allocatedPool = s.AllocCtx.PoolOverride
-				s.component.logger.Debug("Allocated IPv4 from override pool",
-					"session_id", s.SessionID,
-					"pool", s.AllocCtx.PoolOverride,
-					"ip", allocated)
-				return
-			}
-		}
-	}
-
-	for _, poolName := range s.component.profilePools[s.AllocCtx.ProfileName] {
-		alloc, ok := s.component.poolAllocators[poolName]
-		if !ok {
-			continue
-		}
-		allocated, err := alloc.Allocate(s.SessionID)
-		if err == nil {
-			s.IPv4Address = allocated
-			s.allocatedPool = poolName
-			s.component.logger.Debug("Allocated IPv4 from pool",
-				"session_id", s.SessionID,
-				"pool", poolName,
-				"ip", allocated)
-			return
-		}
-	}
-
-	s.component.logger.Warn("No available pool IPs",
+	s.IPv4Address = allocated
+	s.allocatedPool = poolName
+	s.component.logger.Debug("Allocated IPv4 from pool",
 		"session_id", s.SessionID,
-		"profile", s.AllocCtx.ProfileName)
+		"pool", poolName,
+		"ip", allocated)
 }
 
 func (s *SessionState) applyProfileDNS() {
@@ -859,8 +837,8 @@ func (s *SessionState) terminate() {
 	s.stopCHAPRetryTimer()
 
 	if s.allocatedPool != "" && s.IPv4Address != nil {
-		if alloc, ok := s.component.poolAllocators[s.allocatedPool]; ok {
-			alloc.Release(s.IPv4Address)
+		if registry := s.component.registry; registry != nil {
+			registry.Release(s.allocatedPool, s.IPv4Address)
 		}
 	}
 
