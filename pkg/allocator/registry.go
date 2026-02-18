@@ -75,12 +75,13 @@ func (r *Registry) initV4Pools(profiles map[string]*ip.IPv4Profile) {
 
 		poolNames := make([]string, len(refs))
 		for i, ref := range refs {
-			poolNames[i] = ref.name
+			poolNames[i] = profileName + "/" + ref.name
 		}
 		r.profilePools[profileName] = poolNames
 
 		for _, pool := range profile.Pools {
-			if _, exists := r.allocators[pool.Name]; exists {
+			key := profileName + "/" + pool.Name
+			if _, exists := r.allocators[key]; exists {
 				continue
 			}
 
@@ -121,7 +122,7 @@ func (r *Registry) initV4Pools(profiles map[string]*ip.IPv4Profile) {
 				excludeAddrs = append(excludeAddrs, parseExcludeRange(excl)...)
 			}
 
-			r.allocators[pool.Name] = NewPoolAllocator(rs, re, excludeAddrs)
+			r.allocators[key] = NewPoolAllocator(rs, re, excludeAddrs)
 		}
 	}
 }
@@ -134,9 +135,10 @@ func (r *Registry) initV6Pools(profiles map[string]*ip.IPv6Profile) {
 	for profileName, profile := range profiles {
 		ianaNames := make([]string, len(profile.IANAPools))
 		for i, pool := range profile.IANAPools {
-			ianaNames[i] = pool.Name
+			key := profileName + "/" + pool.Name
+			ianaNames[i] = key
 
-			if _, exists := r.ianaAllocators[pool.Name]; exists {
+			if _, exists := r.ianaAllocators[key]; exists {
 				continue
 			}
 
@@ -168,15 +170,16 @@ func (r *Registry) initV6Pools(profiles map[string]*ip.IPv6Profile) {
 				excludeAddrs = append(excludeAddrs, gw)
 			}
 
-			r.ianaAllocators[pool.Name] = NewPoolAllocator(rs, re, excludeAddrs)
+			r.ianaAllocators[key] = NewPoolAllocator(rs, re, excludeAddrs)
 		}
 		r.profileIANAPools[profileName] = ianaNames
 
 		pdNames := make([]string, len(profile.PDPools))
 		for i, pool := range profile.PDPools {
-			pdNames[i] = pool.Name
+			key := profileName + "/" + pool.Name
+			pdNames[i] = key
 
-			if _, exists := r.pdAllocators[pool.Name]; exists {
+			if _, exists := r.pdAllocators[key]; exists {
 				continue
 			}
 
@@ -190,7 +193,7 @@ func (r *Registry) initV6Pools(profiles map[string]*ip.IPv6Profile) {
 				continue
 			}
 
-			r.pdAllocators[pool.Name] = alloc
+			r.pdAllocators[key] = alloc
 		}
 		r.profilePDPools[profileName] = pdNames
 	}
@@ -205,10 +208,11 @@ func (r *Registry) AllocateFromProfile(profileName, poolOverride, sessionID stri
 	defer r.mu.RUnlock()
 
 	if poolOverride != "" {
-		if alloc, ok := r.allocators[poolOverride]; ok {
+		key := profileName + "/" + poolOverride
+		if alloc, ok := r.allocators[key]; ok {
 			allocated, err := alloc.Allocate(sessionID)
 			if err == nil {
-				return allocated, poolOverride, nil
+				return allocated, key, nil
 			}
 		}
 	}
@@ -236,10 +240,11 @@ func (r *Registry) AllocateIANAFromProfile(profileName, poolOverride, sessionID 
 	defer r.mu.RUnlock()
 
 	if poolOverride != "" {
-		if alloc, ok := r.ianaAllocators[poolOverride]; ok {
+		key := profileName + "/" + poolOverride
+		if alloc, ok := r.ianaAllocators[key]; ok {
 			allocated, err := alloc.Allocate(sessionID)
 			if err == nil {
-				return allocated, poolOverride, nil
+				return allocated, key, nil
 			}
 		}
 	}
@@ -267,10 +272,11 @@ func (r *Registry) AllocatePDFromProfile(profileName, poolOverride, sessionID st
 	defer r.mu.RUnlock()
 
 	if poolOverride != "" {
-		if alloc, ok := r.pdAllocators[poolOverride]; ok {
+		key := profileName + "/" + poolOverride
+		if alloc, ok := r.pdAllocators[key]; ok {
 			allocated, err := alloc.Allocate(sessionID)
 			if err == nil {
-				return allocated, poolOverride, nil
+				return allocated, key, nil
 			}
 		}
 	}
