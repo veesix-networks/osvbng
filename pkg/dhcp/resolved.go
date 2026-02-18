@@ -20,3 +20,13 @@ type ClasslessRoute struct {
 	Destination *net.IPNet
 	NextHop     net.IP
 }
+
+type ResolvedDHCPv6 struct {
+	IANAAddress       net.IP
+	IANAPreferredTime uint32
+	IANAValidTime     uint32
+	PDPrefix          *net.IPNet
+	PDPreferredTime   uint32
+	PDValidTime       uint32
+	DNS               []net.IP
+}

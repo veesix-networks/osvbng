@@ -138,12 +138,14 @@ func (p *DHCPProfile) GetLeaseTime() uint32 {
 }
 
 type DHCPv6Profile struct {
-	Mode      string         `json:"mode,omitempty" yaml:"mode,omitempty"`
-	VRF       string         `json:"vrf,omitempty" yaml:"vrf,omitempty"`
-	IANAPools []DHCPv6Pool   `json:"iana_pools,omitempty" yaml:"iana-pools,omitempty"`
-	PDPools   []DHCPv6PDPool `json:"pd_pools,omitempty" yaml:"pd-pools,omitempty"`
-	DNS       []string       `json:"dns,omitempty" yaml:"dns,omitempty"`
-	RA        *IPv6RAConfig  `json:"ra,omitempty" yaml:"ra,omitempty"`
+	Mode          string         `json:"mode,omitempty" yaml:"mode,omitempty"`
+	VRF           string         `json:"vrf,omitempty" yaml:"vrf,omitempty"`
+	IANAPools     []DHCPv6Pool   `json:"iana_pools,omitempty" yaml:"iana-pools,omitempty"`
+	PDPools       []DHCPv6PDPool `json:"pd_pools,omitempty" yaml:"pd-pools,omitempty"`
+	DNS           []string       `json:"dns,omitempty" yaml:"dns,omitempty"`
+	PreferredTime uint32         `json:"preferred_time,omitempty" yaml:"preferred-time,omitempty"`
+	ValidTime     uint32         `json:"valid_time,omitempty" yaml:"valid-time,omitempty"`
+	RA            *IPv6RAConfig  `json:"ra,omitempty" yaml:"ra,omitempty"`
 }
 
 func (p *DHCPv6Profile) GetMode() string {
@@ -151,4 +153,18 @@ func (p *DHCPv6Profile) GetMode() string {
 		return "server"
 	}
 	return p.Mode
+}
+
+func (p *DHCPv6Profile) GetPreferredTime() uint32 {
+	if p == nil || p.PreferredTime == 0 {
+		return 3600
+	}
+	return p.PreferredTime
+}
+
+func (p *DHCPv6Profile) GetValidTime() uint32 {
+	if p == nil || p.ValidTime == 0 {
+		return 7200
+	}
+	return p.ValidTime
 }
