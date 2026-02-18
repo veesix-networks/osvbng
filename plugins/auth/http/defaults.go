@@ -115,6 +115,28 @@ var defaultAttributeMappings = map[string][]string{
 		"routing_instance",
 		"subscriber.vrf",
 	},
+	aaa.AttrServiceGroup: {
+		"service_group",
+		"service-group",
+		"subscriber.service_group",
+	},
+	aaa.AttrPool: {
+		"pool",
+		"address_pool",
+		"framed_pool",
+		"subscriber.pool",
+	},
+	aaa.AttrIANAPool: {
+		"iana_pool",
+		"ipv6_address_pool",
+		"subscriber.iana_pool",
+	},
+	aaa.AttrPDPool: {
+		"pd_pool",
+		"prefix_pool",
+		"delegated_prefix_pool",
+		"subscriber.pd_pool",
+	},
 }
 
 func getDefaultMappings() map[string][]string {
