@@ -75,28 +75,74 @@ func TestResolveV4ReserveAAAIP(t *testing.T) {
 }
 
 func TestResolveV4GatewayPrecedence(t *testing.T) {
-	v4 := map[string]*ip.IPv4Profile{
-		"prof1": {
-			Gateway: "10.0.0.1",
-			Pools: []ip.IPv4Pool{{
-				Name:       "pool1",
-				Network:    "10.0.0.0/24",
-				RangeStart: "10.0.0.2",
-				RangeEnd:   "10.0.0.10",
-			}},
-		},
-	}
-	initRegistry(t, v4, nil)
+	t.Run("ctx gateway wins over pool and profile", func(t *testing.T) {
+		v4 := map[string]*ip.IPv4Profile{
+			"prof1": {
+				Gateway: "10.0.0.1",
+				Pools: []ip.IPv4Pool{{
+					Name:       "pool1",
+					Network:    "10.0.0.0/24",
+					RangeStart: "10.0.0.2",
+					RangeEnd:   "10.0.0.10",
+					Gateway:    "10.0.0.100",
+				}},
+			},
+		}
+		initRegistry(t, v4, nil)
 
-	ctx := &allocator.Context{
-		SessionID:   "s1",
-		ProfileName: "prof1",
-		IPv4Gateway: net.ParseIP("10.0.0.254"),
-	}
-	res := ResolveV4(ctx, v4["prof1"])
-	if !res.Router.Equal(net.ParseIP("10.0.0.254")) {
-		t.Fatalf("Router = %v, want 10.0.0.254 (ctx gateway)", res.Router)
-	}
+		ctx := &allocator.Context{
+			SessionID:   "s1",
+			ProfileName: "prof1",
+			IPv4Gateway: net.ParseIP("10.0.0.254"),
+		}
+		res := ResolveV4(ctx, v4["prof1"])
+		if !res.Router.Equal(net.ParseIP("10.0.0.254")) {
+			t.Fatalf("Router = %v, want 10.0.0.254 (ctx gateway)", res.Router)
+		}
+	})
+
+	t.Run("pool gateway wins over profile", func(t *testing.T) {
+		v4 := map[string]*ip.IPv4Profile{
+			"prof1": {
+				Gateway: "10.0.0.1",
+				Pools: []ip.IPv4Pool{{
+					Name:       "pool1",
+					Network:    "192.168.1.0/24",
+					RangeStart: "192.168.1.2",
+					RangeEnd:   "192.168.1.10",
+					Gateway:    "192.168.1.1",
+				}},
+			},
+		}
+		initRegistry(t, v4, nil)
+
+		ctx := &allocator.Context{SessionID: "s1", ProfileName: "prof1"}
+		res := ResolveV4(ctx, v4["prof1"])
+		if !res.Router.Equal(net.ParseIP("192.168.1.1")) {
+			t.Fatalf("Router = %v, want 192.168.1.1 (pool gateway)", res.Router)
+		}
+	})
+
+	t.Run("profile gateway used when pool has none", func(t *testing.T) {
+		v4 := map[string]*ip.IPv4Profile{
+			"prof1": {
+				Gateway: "10.0.0.1",
+				Pools: []ip.IPv4Pool{{
+					Name:       "pool1",
+					Network:    "10.0.0.0/24",
+					RangeStart: "10.0.0.2",
+					RangeEnd:   "10.0.0.10",
+				}},
+			},
+		}
+		initRegistry(t, v4, nil)
+
+		ctx := &allocator.Context{SessionID: "s1", ProfileName: "prof1"}
+		res := ResolveV4(ctx, v4["prof1"])
+		if !res.Router.Equal(net.ParseIP("10.0.0.1")) {
+			t.Fatalf("Router = %v, want 10.0.0.1 (profile gateway)", res.Router)
+		}
+	})
 }
 
 func TestResolveV4ServerID(t *testing.T) {
