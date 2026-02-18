@@ -152,6 +152,30 @@ func (c *Component) resolveDHCPv4(ctx *allocator.Context) *dhcp.ResolvedDHCPv4 {
 	return dhcp.ResolveV4(ctx, profile)
 }
 
+func (c *Component) resolveDHCPv6(ctx *allocator.Context) *dhcp.ResolvedDHCPv6 {
+	if ctx == nil {
+		return nil
+	}
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil {
+		return nil
+	}
+	var profileName string
+	if cfg.SubscriberGroups != nil {
+		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(ctx.SVLAN); group != nil {
+			profileName = group.DHCPv6Profile
+		}
+	}
+	if profileName == "" {
+		return nil
+	}
+	profile := cfg.DHCPv6.Profiles[profileName]
+	if profile == nil {
+		return nil
+	}
+	return dhcp.ResolveV6(ctx, profile)
+}
+
 func (c *Component) resolveOuterTPID(svlan uint16) uint16 {
 	cfg, err := c.cfgMgr.GetRunning()
 	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
@@ -1189,6 +1213,7 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 			CVLAN:     cvlan,
 			DUID:      dhcpv6DUID,
 			Raw:       pendingDHCPv6Solicit,
+			Resolved:  c.resolveDHCPv6(allocCtx),
 		}
 
 		response, err := c.dhcp6Provider.HandlePacket(c.Ctx, pkt)
@@ -1214,6 +1239,7 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 			CVLAN:     cvlan,
 			DUID:      dhcpv6DUID,
 			Raw:       pendingDHCPv6Request,
+			Resolved:  c.resolveDHCPv6(allocCtx),
 		}
 
 		response, err := c.dhcp6Provider.HandlePacket(c.Ctx, pkt)
@@ -1815,6 +1841,7 @@ func (c *Component) forwardDHCPv6ToProvider(sess *SessionState, pkt *dataplane.P
 		CVLAN:     sess.InnerVLAN,
 		DUID:      sess.DHCPv6DUID,
 		Raw:       raw,
+		Resolved:  c.resolveDHCPv6(sess.AllocCtx),
 	}
 
 	response, err := c.dhcp6Provider.HandlePacket(c.Ctx, dhcpPkt)

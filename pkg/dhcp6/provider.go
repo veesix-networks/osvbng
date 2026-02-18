@@ -3,6 +3,7 @@ package dhcp6
 import (
 	"context"
 
+	"github.com/veesix-networks/osvbng/pkg/dhcp"
 	"github.com/veesix-networks/osvbng/pkg/provider"
 )
 
@@ -18,4 +19,5 @@ type Packet struct {
 	CVLAN     uint16
 	DUID      []byte
 	Raw       []byte
+	Resolved  *dhcp.ResolvedDHCPv6
 }

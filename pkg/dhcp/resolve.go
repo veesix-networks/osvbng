@@ -65,6 +65,80 @@ func ResolveV4(ctx *allocator.Context, profile *ip.DHCPProfile) *ResolvedDHCPv4 
 	return resolved
 }
 
+func ResolveV6(ctx *allocator.Context, profile *ip.DHCPv6Profile) *ResolvedDHCPv6 {
+	if ctx.IPv6Address == nil && ctx.IPv6Prefix == nil {
+		return nil
+	}
+
+	resolved := &ResolvedDHCPv6{}
+
+	if ctx.IPv6Address != nil {
+		resolved.IANAAddress = ctx.IPv6Address
+		resolved.IANAPreferredTime = profile.GetPreferredTime()
+		resolved.IANAValidTime = profile.GetValidTime()
+		if pool := findIANAPoolForAddr(ctx.IPv6Address, profile); pool != nil {
+			if pool.PreferredTime > 0 {
+				resolved.IANAPreferredTime = pool.PreferredTime
+			}
+			if pool.ValidTime > 0 {
+				resolved.IANAValidTime = pool.ValidTime
+			}
+		}
+	}
+
+	if ctx.IPv6Prefix != nil {
+		resolved.PDPrefix = ctx.IPv6Prefix
+		resolved.PDPreferredTime = profile.GetPreferredTime()
+		resolved.PDValidTime = profile.GetValidTime()
+		if pool := findPDPoolForPrefix(ctx.IPv6Prefix, profile); pool != nil {
+			if pool.PreferredTime > 0 {
+				resolved.PDPreferredTime = pool.PreferredTime
+			}
+			if pool.ValidTime > 0 {
+				resolved.PDValidTime = pool.ValidTime
+			}
+		}
+	}
+
+	if len(ctx.DNSv6) > 0 {
+		resolved.DNS = ctx.DNSv6
+	} else {
+		for _, s := range profile.DNS {
+			if dnsIP := net.ParseIP(s); dnsIP != nil {
+				resolved.DNS = append(resolved.DNS, dnsIP)
+			}
+		}
+	}
+
+	return resolved
+}
+
+func findIANAPoolForAddr(addr net.IP, profile *ip.DHCPv6Profile) *ip.DHCPv6Pool {
+	for i := range profile.IANAPools {
+		_, poolNet, err := net.ParseCIDR(profile.IANAPools[i].Network)
+		if err != nil {
+			continue
+		}
+		if poolNet.Contains(addr) {
+			return &profile.IANAPools[i]
+		}
+	}
+	return nil
+}
+
+func findPDPoolForPrefix(prefix *net.IPNet, profile *ip.DHCPv6Profile) *ip.DHCPv6PDPool {
+	for i := range profile.PDPools {
+		_, poolNet, err := net.ParseCIDR(profile.PDPools[i].Network)
+		if err != nil {
+			continue
+		}
+		if poolNet.Contains(prefix.IP) {
+			return &profile.PDPools[i]
+		}
+	}
+	return nil
+}
+
 func poolNetmaskForIP(clientIP net.IP, profile *ip.DHCPProfile) net.IPMask {
 	for _, pool := range profile.Pools {
 		_, poolNet, err := net.ParseCIDR(pool.Network)

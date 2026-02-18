@@ -236,8 +236,11 @@ func (p *Provider) handleSolicit(pkt *dhcp6.Packet, dhcp *layers.DHCPv6) (*dhcp6
 
 	duidKey := string(clientDUID)
 
+	if pkt.Resolved != nil {
+		return p.handleSolicitResolved(pkt, dhcp, clientDUID, duidKey)
+	}
+
 	var ianaPoolName, pdPoolName string
-	// // will integrate in another branch once I've tested locally (resolving pool names via context, generic dhcp and ppp implementation)
 
 	var ianaAddr net.IP
 	var ianaIAID uint32
@@ -289,7 +292,7 @@ func (p *Provider) handleSolicit(pkt *dhcp6.Packet, dhcp *layers.DHCPv6) (*dhcp6
 		}
 	}
 
-	response := p.buildAdvertise(dhcp, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool)
+	response := p.buildAdvertise(dhcp, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, nil)
 	return &dhcp6.Packet{
 		SessionID: pkt.SessionID,
 		MAC:       pkt.MAC,
@@ -310,6 +313,10 @@ func (p *Provider) handleRequest(pkt *dhcp6.Packet, dhcp *layers.DHCPv6) (*dhcp6
 	}
 
 	duidKey := string(clientDUID)
+
+	if pkt.Resolved != nil {
+		return p.handleRequestResolved(pkt, dhcp, clientDUID, duidKey)
+	}
 
 	var ianaAddr net.IP
 	var ianaIAID uint32
@@ -341,7 +348,7 @@ func (p *Provider) handleRequest(pkt *dhcp6.Packet, dhcp *layers.DHCPv6) (*dhcp6
 		}
 	}
 
-	response := p.buildReply(dhcp, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool)
+	response := p.buildReply(dhcp, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, nil)
 	return &dhcp6.Packet{
 		SessionID: pkt.SessionID,
 		MAC:       pkt.MAC,
@@ -505,15 +512,15 @@ func (p *Provider) allocatePDPrefix(pool *PDPool, duid []byte, iaid uint32, sess
 	}
 }
 
-func (p *Provider) buildAdvertise(req *layers.DHCPv6, clientDUID []byte, ianaAddr net.IP, ianaIAID uint32, ianaPool *IANAPool, pdPrefix *net.IPNet, pdIAID uint32, pdPool *PDPool) []byte {
-	return p.buildResponse(req, layers.DHCPv6MsgTypeAdverstise, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool)
+func (p *Provider) buildAdvertise(req *layers.DHCPv6, clientDUID []byte, ianaAddr net.IP, ianaIAID uint32, ianaPool *IANAPool, pdPrefix *net.IPNet, pdIAID uint32, pdPool *PDPool, dnsOverride []net.IP) []byte {
+	return p.buildResponse(req, layers.DHCPv6MsgTypeAdverstise, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, dnsOverride)
 }
 
-func (p *Provider) buildReply(req *layers.DHCPv6, clientDUID []byte, ianaAddr net.IP, ianaIAID uint32, ianaPool *IANAPool, pdPrefix *net.IPNet, pdIAID uint32, pdPool *PDPool) []byte {
-	return p.buildResponse(req, layers.DHCPv6MsgTypeReply, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool)
+func (p *Provider) buildReply(req *layers.DHCPv6, clientDUID []byte, ianaAddr net.IP, ianaIAID uint32, ianaPool *IANAPool, pdPrefix *net.IPNet, pdIAID uint32, pdPool *PDPool, dnsOverride []net.IP) []byte {
+	return p.buildResponse(req, layers.DHCPv6MsgTypeReply, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, dnsOverride)
 }
 
-func (p *Provider) buildResponse(req *layers.DHCPv6, msgType layers.DHCPv6MsgType, clientDUID []byte, ianaAddr net.IP, ianaIAID uint32, ianaPool *IANAPool, pdPrefix *net.IPNet, pdIAID uint32, pdPool *PDPool) []byte {
+func (p *Provider) buildResponse(req *layers.DHCPv6, msgType layers.DHCPv6MsgType, clientDUID []byte, ianaAddr net.IP, ianaIAID uint32, ianaPool *IANAPool, pdPrefix *net.IPNet, pdIAID uint32, pdPool *PDPool, dnsOverride []net.IP) []byte {
 	var options []layers.DHCPv6Option
 
 	options = append(options, layers.NewDHCPv6Option(layers.DHCPv6OptClientID, clientDUID))
@@ -529,17 +536,23 @@ func (p *Provider) buildResponse(req *layers.DHCPv6, msgType layers.DHCPv6MsgTyp
 		options = append(options, layers.NewDHCPv6Option(layers.DHCPv6OptIAPD, pdData))
 	}
 
-	if len(p.coreConfig.DHCPv6.DNSServers) > 0 {
-		dnsData := make([]byte, 0, len(p.coreConfig.DHCPv6.DNSServers)*16)
+	var dnsData []byte
+	if len(dnsOverride) > 0 {
+		dnsData = make([]byte, 0, len(dnsOverride)*16)
+		for _, ip := range dnsOverride {
+			dnsData = append(dnsData, ip.To16()...)
+		}
+	} else if len(p.coreConfig.DHCPv6.DNSServers) > 0 {
+		dnsData = make([]byte, 0, len(p.coreConfig.DHCPv6.DNSServers)*16)
 		for _, dns := range p.coreConfig.DHCPv6.DNSServers {
 			ip := net.ParseIP(dns)
 			if ip != nil {
 				dnsData = append(dnsData, ip.To16()...)
 			}
 		}
-		if len(dnsData) > 0 {
-			options = append(options, layers.NewDHCPv6Option(layers.DHCPv6OptDNSServers, dnsData))
-		}
+	}
+	if len(dnsData) > 0 {
+		options = append(options, layers.NewDHCPv6Option(layers.DHCPv6OptDNSServers, dnsData))
 	}
 
 	dhcpReply := &layers.DHCPv6{
@@ -601,6 +614,134 @@ func (p *Provider) buildIAPDOption(iaid uint32, prefix *net.IPNet, pool *PDPool)
 	copy(data[25:41], prefix.IP.To16())
 
 	return data
+}
+
+func (p *Provider) handleSolicitResolved(pkt *dhcp6.Packet, dhcpReq *layers.DHCPv6, clientDUID []byte, duidKey string) (*dhcp6.Packet, error) {
+	var ianaAddr net.IP
+	var ianaIAID uint32
+	var ianaPool *IANAPool
+	if iaid, ok := p.extractIANA(dhcpReq); ok && pkt.Resolved.IANAAddress != nil {
+		ianaIAID = iaid
+		ianaAddr = pkt.Resolved.IANAAddress
+		ianaPool = &IANAPool{
+			PreferredTime: pkt.Resolved.IANAPreferredTime,
+			ValidTime:     pkt.Resolved.IANAValidTime,
+		}
+		if err := p.reserveIANA(ianaAddr, clientDUID, ianaIAID, pkt.SessionID, pkt.Resolved.IANAPreferredTime, pkt.Resolved.IANAValidTime); err != nil {
+			return nil, fmt.Errorf("reserve IANA: %w", err)
+		}
+	}
+
+	var pdPrefix *net.IPNet
+	var pdIAID uint32
+	var pdPool *PDPool
+	if iaid, ok := p.extractIAPD(dhcpReq); ok && pkt.Resolved.PDPrefix != nil {
+		pdIAID = iaid
+		pdPrefix = pkt.Resolved.PDPrefix
+		pdPool = &PDPool{
+			PreferredTime: pkt.Resolved.PDPreferredTime,
+			ValidTime:     pkt.Resolved.PDValidTime,
+		}
+		if err := p.reservePD(pdPrefix, clientDUID, pdIAID, pkt.SessionID, pkt.Resolved.PDPreferredTime, pkt.Resolved.PDValidTime); err != nil {
+			return nil, fmt.Errorf("reserve PD: %w", err)
+		}
+	}
+
+	response := p.buildAdvertise(dhcpReq, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, pkt.Resolved.DNS)
+	return &dhcp6.Packet{
+		SessionID: pkt.SessionID,
+		MAC:       pkt.MAC,
+		SVLAN:     pkt.SVLAN,
+		CVLAN:     pkt.CVLAN,
+		DUID:      clientDUID,
+		Raw:       response,
+	}, nil
+}
+
+func (p *Provider) handleRequestResolved(pkt *dhcp6.Packet, dhcpReq *layers.DHCPv6, clientDUID []byte, duidKey string) (*dhcp6.Packet, error) {
+	var ianaAddr net.IP
+	var ianaIAID uint32
+	var ianaPool *IANAPool
+	if iaid, ok := p.extractIANA(dhcpReq); ok && pkt.Resolved.IANAAddress != nil {
+		ianaIAID = iaid
+		ianaAddr = pkt.Resolved.IANAAddress
+		ianaPool = &IANAPool{
+			PreferredTime: pkt.Resolved.IANAPreferredTime,
+			ValidTime:     pkt.Resolved.IANAValidTime,
+		}
+		if err := p.reserveIANA(ianaAddr, clientDUID, ianaIAID, pkt.SessionID, pkt.Resolved.IANAPreferredTime, pkt.Resolved.IANAValidTime); err != nil {
+			return nil, fmt.Errorf("reserve IANA: %w", err)
+		}
+	}
+
+	var pdPrefix *net.IPNet
+	var pdIAID uint32
+	var pdPool *PDPool
+	if iaid, ok := p.extractIAPD(dhcpReq); ok && pkt.Resolved.PDPrefix != nil {
+		pdIAID = iaid
+		pdPrefix = pkt.Resolved.PDPrefix
+		pdPool = &PDPool{
+			PreferredTime: pkt.Resolved.PDPreferredTime,
+			ValidTime:     pkt.Resolved.PDValidTime,
+		}
+		if err := p.reservePD(pdPrefix, clientDUID, pdIAID, pkt.SessionID, pkt.Resolved.PDPreferredTime, pkt.Resolved.PDValidTime); err != nil {
+			return nil, fmt.Errorf("reserve PD: %w", err)
+		}
+	}
+
+	response := p.buildReply(dhcpReq, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, pkt.Resolved.DNS)
+	return &dhcp6.Packet{
+		SessionID: pkt.SessionID,
+		MAC:       pkt.MAC,
+		SVLAN:     pkt.SVLAN,
+		CVLAN:     pkt.CVLAN,
+		DUID:      clientDUID,
+		Raw:       response,
+	}, nil
+}
+
+func (p *Provider) reserveIANA(addr net.IP, duid []byte, iaid uint32, sessionID string, preferredTime, validTime uint32) error {
+	duidKey := string(duid)
+	addrKey := addr.String()
+
+	if existing, exists := p.leasesByAddr[addrKey]; exists && existing.SessionID != sessionID {
+		return fmt.Errorf("address %s already leased to session %s", addrKey, existing.SessionID)
+	}
+
+	lease := &IANALease{
+		Address:       dupIP(addr),
+		DUID:          duid,
+		IAID:          iaid,
+		SessionID:     sessionID,
+		PreferredTime: preferredTime,
+		ValidTime:     validTime,
+		ExpireTime:    time.Now().Add(time.Duration(validTime) * time.Second),
+	}
+	p.ianaLeases[duidKey] = lease
+	p.leasesByAddr[addrKey] = lease
+	return nil
+}
+
+func (p *Provider) reservePD(prefix *net.IPNet, duid []byte, iaid uint32, sessionID string, preferredTime, validTime uint32) error {
+	duidKey := string(duid)
+	pfxKey := prefix.String()
+
+	if existing, exists := p.leasesByPfx[pfxKey]; exists && existing.SessionID != sessionID {
+		return fmt.Errorf("prefix %s already leased to session %s", pfxKey, existing.SessionID)
+	}
+
+	lease := &PDLease{
+		Prefix:        prefix,
+		DUID:          duid,
+		IAID:          iaid,
+		SessionID:     sessionID,
+		PreferredTime: preferredTime,
+		ValidTime:     validTime,
+		ExpireTime:    time.Now().Add(time.Duration(validTime) * time.Second),
+	}
+	p.pdLeases[duidKey] = lease
+	p.leasesByPfx[pfxKey] = lease
+	return nil
 }
 
 func dupIP(ip net.IP) net.IP {
