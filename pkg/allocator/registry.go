@@ -39,6 +39,12 @@ func GetGlobalRegistry() *Registry {
 	return globalRegistry
 }
 
+func ResetGlobalRegistry() {
+	registryMu.Lock()
+	defer registryMu.Unlock()
+	globalRegistry = nil
+}
+
 func newRegistry(v4Profiles map[string]*ip.IPv4Profile, v6Profiles map[string]*ip.IPv6Profile) *Registry {
 	r := &Registry{
 		allocators:       make(map[string]*PoolAllocator),
