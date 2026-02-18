@@ -1,6 +1,6 @@
 # Subscriber Groups
 
-Defines how subscribers are grouped and configured based on VLAN.
+Defines how subscribers are grouped and configured based on VLAN. Each group binds a set of VLANs to an access type (IPoE or PPPoE), address profiles, service group, and AAA policy. Both IPoE and PPPoE sessions use the same profile and service group resolution.
 
 ## Group Settings
 
@@ -8,16 +8,13 @@ Defines how subscribers are grouped and configured based on VLAN.
 |-------|------|-------------|---------|
 | `access-type` | string | Access type: `ipoe`, `pppoe`, `lac`, `lns` | `ipoe` |
 | `vlans` | [VLANRule](#vlan-rules) | VLAN matching rules | |
-| `address-pools` | [AddressPool](#address-pools) | IP address pools (used for DHCP and BGP auto config) | |
-| `iana-pool` | string | DHCPv6 IANA pool name | `residential-v6` |
-| `pd-pool` | string | DHCPv6 prefix delegation pool name | `residential-pd` |
+| `ipv4-profile` | string | [IPv4 profile](ipv4-profiles.md) name | `residential` |
+| `ipv6-profile` | string | [IPv6 profile](ipv6-profiles.md) name | `default-v6` |
 | `session-mode` | string | Session mode: `unified` or `independent` | `unified` |
-| `dhcp` | [GroupDHCP](#group-dhcp) | DHCP settings for this group | |
+| `default-service-group` | string | Default [service group](service-groups.md) for subscribers | `cgnat-residential` |
+| `aaa-policy` | string | Default AAA policy name | `default-policy` |
 | `ipv6` | [GroupIPv6](#group-ipv6) | IPv6 settings for this group | |
 | `bgp` | [GroupBGP](#group-bgp) | BGP settings for this group | |
-| `vrf` | string | VRF name for this group (legacy, prefer `default-service-group`) | `customers` |
-| `default-service-group` | string | Default [service group](service-groups.md) for subscribers in this group | `cgnat-residential` |
-| `aaa-policy` | string | Default AAA policy name | `default-policy` |
 
 ## VLAN Rules
 
@@ -26,24 +23,7 @@ Defines how subscribers are grouped and configured based on VLAN.
 | `svlan` | string | S-VLAN match: single, range, or `any` | `100-199` |
 | `cvlan` | string | C-VLAN match: single, range, or `any` | `any` |
 | `interface` | string | Gateway interface for matched subscribers | `loop100` |
-| `aaa.policy` | string | AAA policy override | `custom-policy` |
-
-## Address Pools
-
-| Field | Type | Description | Example |
-|-------|------|-------------|---------|
-| `name` | string | Pool name | `residential-pool` |
-| `network` | string | Network CIDR | `10.100.0.0/16` |
-| `gateway` | string | Gateway IP address | `10.100.0.1` |
-| `dns` | array | DNS server IPs | `[192.168.100.10, 192.168.101.10]` |
-| `priority` | int | Pool priority (lower = preferred) | `1` |
-
-## Group DHCP
-
-| Field | Type | Description | Example |
-|-------|------|-------------|---------|
-| `auto-generate` | bool | Auto-generate DHCP pools/config | `true` |
-| `lease-time` | string | Lease time in seconds | `"3600"` |
+| `aaa.policy` | string | AAA policy override for this VLAN range | `custom-policy` |
 
 ## Group IPv6
 
@@ -70,47 +50,61 @@ Defines how subscribers are grouped and configured based on VLAN.
 | `redistribute-connected` | bool | Redistribute connected routes | `false` |
 | `vrf` | string | VRF name for BGP advertisements | `customers` |
 
-!!! info "Auto-generation"
-    When `dhcp.auto-generate: true` and `bgp.advertise-pools: true` are set, osvbng automatically:
-
-    - Creates DHCP pools from the `address-pools` (full network range, gateway, DNS)
-    - Advertises the pool networks via BGP to your upstream routers
-
-    This means you only define your address pools once, and both DHCP and routing are configured automatically.
-
 ## Example
 
 ```yaml
+ipv4-profiles:
+  residential:
+    gateway: 10.255.0.1
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    pools:
+      - name: subscriber-pool
+        network: 10.255.0.0/16
+    dhcp:
+      lease-time: 3600
+
+ipv6-profiles:
+  default-v6:
+    iana-pools:
+      - name: wan-link-pool
+        network: 2001:db8:0:1::/64
+        range_start: 2001:db8:0:1::1000
+        range_end: 2001:db8:0:1::ffff
+        gateway: 2001:db8:0:1::1
+        preferred_time: 3600
+        valid_time: 7200
+    pd-pools:
+      - name: subscriber-pd-pool
+        network: 2001:db8:100::/40
+        prefix_length: 56
+        preferred_time: 3600
+        valid_time: 7200
+    dns:
+      - 2001:4860:4860::8888
+      - 2001:4860:4860::8844
+
+service-groups:
+  cgnat-residential:
+    vrf: cgnat
+    unnumbered: loop100
+    urpf: strict
+
 subscriber-groups:
   groups:
     residential:
       access-type: ipoe
       session-mode: unified
+      ipv4-profile: residential
+      ipv6-profile: default-v6
+      default-service-group: cgnat-residential
+      aaa-policy: default-policy
       vlans:
         - svlan: "100-199"
           cvlan: any
           interface: loop100
-      address-pools:
-        - name: residential-pool
-          network: 10.100.0.0/16
-          gateway: 10.100.0.1
-          dns:
-            - 192.168.100.10
-            - 192.168.101.10
-          priority: 1
-      iana-pool: residential-v6
-      pd-pool: residential-pd
-      dhcp:
-        auto-generate: true
-        lease-time: "3600"
-      ipv6:
-        ra:
-          managed: true
-          other: true
-          router_lifetime: 1800
       bgp:
         enabled: true
         advertise-pools: true
-      default-service-group: cgnat-residential
-      aaa-policy: default-policy
 ```

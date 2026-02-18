@@ -69,6 +69,15 @@ func (a *PoolAllocator) Reserve(ip net.IP, sessionID string) error {
 	return nil
 }
 
+func (a *PoolAllocator) Contains(ip net.IP) bool {
+	addr, ok := netip.AddrFromSlice(ip)
+	if !ok {
+		return false
+	}
+	addr = addr.Unmap()
+	return addr.Compare(a.rangeStart) >= 0 && addr.Compare(a.rangeEnd) <= 0
+}
+
 func (a *PoolAllocator) Available() int {
 	a.mu.Lock()
 	defer a.mu.Unlock()

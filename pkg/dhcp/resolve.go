@@ -8,7 +8,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/config/ip"
 )
 
-func ResolveV4(ctx *allocator.Context, profile *ip.DHCPProfile) *ResolvedDHCPv4 {
+func ResolveV4(ctx *allocator.Context, profile *ip.IPv4Profile) *ResolvedDHCPv4 {
 	var poolName string
 	if ctx.IPv4Address == nil {
 		registry := allocator.GetGlobalRegistry()
@@ -21,6 +21,10 @@ func ResolveV4(ctx *allocator.Context, profile *ip.DHCPProfile) *ResolvedDHCPv4 
 		}
 		ctx.IPv4Address = allocated
 		poolName = pn
+	} else {
+		if registry := allocator.GetGlobalRegistry(); registry != nil {
+			registry.ReserveIP(ctx.IPv4Address, ctx.SessionID)
+		}
 	}
 
 	resolved := &ResolvedDHCPv4{
@@ -35,7 +39,7 @@ func ResolveV4(ctx *allocator.Context, profile *ip.DHCPProfile) *ResolvedDHCPv4 
 		resolved.Router = gw
 	}
 
-	if sid := net.ParseIP(profile.ServerID); sid != nil {
+	if sid := net.ParseIP(profile.GetServerID()); sid != nil {
 		resolved.ServerID = sid
 	} else {
 		resolved.ServerID = resolved.Router
@@ -76,12 +80,43 @@ func ResolveV4(ctx *allocator.Context, profile *ip.DHCPProfile) *ResolvedDHCPv4 
 	return resolved
 }
 
-func ResolveV6(ctx *allocator.Context, profile *ip.DHCPv6Profile) *ResolvedDHCPv6 {
+func ResolveV6(ctx *allocator.Context, profile *ip.IPv6Profile) *ResolvedDHCPv6 {
+	registry := allocator.GetGlobalRegistry()
+
+	var ianaPoolName string
+	if ctx.IPv6Address == nil {
+		if registry != nil {
+			allocated, pn, err := registry.AllocateIANAFromProfile(ctx.ProfileName, ctx.IANAPoolOverride, ctx.SessionID)
+			if err == nil {
+				ctx.IPv6Address = allocated
+				ianaPoolName = pn
+			}
+		}
+	} else if registry != nil {
+		registry.ReserveIANA(ctx.IPv6Address, ctx.SessionID)
+	}
+
+	var pdPoolName string
+	if ctx.IPv6Prefix == nil {
+		if registry != nil {
+			allocated, pn, err := registry.AllocatePDFromProfile(ctx.ProfileName, ctx.PDPoolOverride, ctx.SessionID)
+			if err == nil {
+				ctx.IPv6Prefix = allocated
+				pdPoolName = pn
+			}
+		}
+	} else if registry != nil {
+		registry.ReservePD(ctx.IPv6Prefix, ctx.SessionID)
+	}
+
 	if ctx.IPv6Address == nil && ctx.IPv6Prefix == nil {
 		return nil
 	}
 
-	resolved := &ResolvedDHCPv6{}
+	resolved := &ResolvedDHCPv6{
+		IANAPoolName: ianaPoolName,
+		PDPoolName:   pdPoolName,
+	}
 
 	if ctx.IPv6Address != nil {
 		resolved.IANAAddress = ctx.IPv6Address
@@ -124,7 +159,7 @@ func ResolveV6(ctx *allocator.Context, profile *ip.DHCPv6Profile) *ResolvedDHCPv
 	return resolved
 }
 
-func findIANAPoolForAddr(addr net.IP, profile *ip.DHCPv6Profile) *ip.DHCPv6Pool {
+func findIANAPoolForAddr(addr net.IP, profile *ip.IPv6Profile) *ip.IANAPool {
 	for i := range profile.IANAPools {
 		_, poolNet, err := net.ParseCIDR(profile.IANAPools[i].Network)
 		if err != nil {
@@ -137,7 +172,7 @@ func findIANAPoolForAddr(addr net.IP, profile *ip.DHCPv6Profile) *ip.DHCPv6Pool 
 	return nil
 }
 
-func findPDPoolForPrefix(prefix *net.IPNet, profile *ip.DHCPv6Profile) *ip.DHCPv6PDPool {
+func findPDPoolForPrefix(prefix *net.IPNet, profile *ip.IPv6Profile) *ip.PDPool {
 	for i := range profile.PDPools {
 		_, poolNet, err := net.ParseCIDR(profile.PDPools[i].Network)
 		if err != nil {
@@ -150,7 +185,7 @@ func findPDPoolForPrefix(prefix *net.IPNet, profile *ip.DHCPv6Profile) *ip.DHCPv
 	return nil
 }
 
-func poolNetmaskForIP(clientIP net.IP, profile *ip.DHCPProfile) net.IPMask {
+func poolNetmaskForIP(clientIP net.IP, profile *ip.IPv4Profile) net.IPMask {
 	for _, pool := range profile.Pools {
 		_, poolNet, err := net.ParseCIDR(pool.Network)
 		if err != nil {

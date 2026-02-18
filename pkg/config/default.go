@@ -58,8 +58,8 @@ func Generate(opts GenerateOptions) (string, error) {
 							Interface: "loop100",
 						},
 					},
-					DHCPProfile:   "default",
-					DHCPv6Profile: "default-v6",
+					IPv4Profile:   "default",
+					IPv6Profile:   "default-v6",
 					BGP: &subscriber.SubscriberBGP{
 						Enabled:               true,
 						AdvertisePools:        true,
@@ -69,50 +69,52 @@ func Generate(opts GenerateOptions) (string, error) {
 				},
 			},
 		},
-		DHCP: ip.DHCPConfig{
-			Provider: "local",
-			Profiles: map[string]*ip.DHCPProfile{
-				"default": {
-					Gateway:   "10.255.0.1",
-					DNS:       []string{"8.8.8.8", "8.8.4.4"},
-					LeaseTime: 3600,
-					Pools: []ip.DHCPPool{
-						{
-							Name:    "subscriber-pool",
-							Network: "10.255.0.0/16",
-						},
+		IPv4Profiles: map[string]*ip.IPv4Profile{
+			"default": {
+				Gateway: "10.255.0.1",
+				DNS:     []string{"8.8.8.8", "8.8.4.4"},
+				Pools: []ip.IPv4Pool{
+					{
+						Name:    "subscriber-pool",
+						Network: "10.255.0.0/16",
 					},
 				},
+				DHCP: &ip.IPv4DHCPOptions{
+					LeaseTime: 3600,
+				},
 			},
+		},
+		IPv6Profiles: map[string]*ip.IPv6Profile{
+			"default-v6": {
+				IANAPools: []ip.IANAPool{
+					{
+						Name:          "wan-link-pool",
+						Network:       "2001:db8:0:1::/64",
+						RangeStart:    "2001:db8:0:1::1000",
+						RangeEnd:      "2001:db8:0:1::ffff",
+						Gateway:       "2001:db8:0:1::1",
+						PreferredTime: 3600,
+						ValidTime:     7200,
+					},
+				},
+				PDPools: []ip.PDPool{
+					{
+						Name:          "subscriber-pd-pool",
+						Network:       "2001:db8:100::/40",
+						PrefixLength:  56,
+						PreferredTime: 3600,
+						ValidTime:     7200,
+					},
+				},
+				DNS: []string{"2001:4860:4860::8888", "2001:4860:4860::8844"},
+			},
+		},
+		DHCP: ip.DHCPConfig{
+			Provider: "local",
 		},
 		DHCPv6: ip.DHCPv6Config{
 			Provider:   "local",
 			DNSServers: []string{"2001:4860:4860::8888", "2001:4860:4860::8844"},
-			Profiles: map[string]*ip.DHCPv6Profile{
-				"default-v6": {
-					IANAPools: []ip.DHCPv6Pool{
-						{
-							Name:          "wan-link-pool",
-							Network:       "2001:db8:0:1::/64",
-							RangeStart:    "2001:db8:0:1::1000",
-							RangeEnd:      "2001:db8:0:1::ffff",
-							Gateway:       "2001:db8:0:1::1",
-							PreferredTime: 3600,
-							ValidTime:     7200,
-						},
-					},
-					PDPools: []ip.DHCPv6PDPool{
-						{
-							Name:          "subscriber-pd-pool",
-							Network:       "2001:db8:100::/40",
-							PrefixLength:  56,
-							PreferredTime: 3600,
-							ValidTime:     7200,
-						},
-					},
-					DNS: []string{"2001:4860:4860::8888", "2001:4860:4860::8844"},
-				},
-			},
 			RA: &ip.IPv6RAConfig{
 				RouterLifetime: 1800,
 				MaxInterval:    600,

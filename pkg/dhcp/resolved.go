@@ -26,8 +26,10 @@ type ResolvedDHCPv6 struct {
 	IANAAddress       net.IP
 	IANAPreferredTime uint32
 	IANAValidTime     uint32
+	IANAPoolName      string
 	PDPrefix          *net.IPNet
 	PDPreferredTime   uint32
 	PDValidTime       uint32
+	PDPoolName        string
 	DNS               []net.IP
 }

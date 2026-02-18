@@ -37,8 +37,8 @@ type SubscriberGroup struct {
 	VLANs               []VLANRange     `json:"vlans,omitempty" yaml:"vlans,omitempty"`
 	SessionMode         SessionMode     `json:"session-mode,omitempty" yaml:"session-mode,omitempty"`
 	VLANProtocol        string          `json:"vlan-protocol,omitempty" yaml:"vlan-protocol,omitempty"`
-	DHCPProfile         string          `json:"dhcp-profile,omitempty" yaml:"dhcp-profile,omitempty"`
-	DHCPv6Profile       string          `json:"dhcpv6-profile,omitempty" yaml:"dhcpv6-profile,omitempty"`
+	IPv4Profile         string          `json:"ipv4-profile,omitempty" yaml:"ipv4-profile,omitempty"`
+	IPv6Profile         string          `json:"ipv6-profile,omitempty" yaml:"ipv6-profile,omitempty"`
 	IPv6                *SubscriberIPv6 `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`
 	BGP                 *SubscriberBGP  `json:"bgp,omitempty" yaml:"bgp,omitempty"`
 	VRF                 string          `json:"vrf,omitempty" yaml:"vrf,omitempty"`

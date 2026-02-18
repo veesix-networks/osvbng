@@ -430,7 +430,7 @@ func (s *SessionState) buildAllocContext(aaaAttrs map[string]interface{}) *alloc
 	cfg, err := s.component.cfgMgr.GetRunning()
 	if err == nil && cfg != nil && cfg.SubscriberGroups != nil {
 		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(s.OuterVLAN); group != nil {
-			profileName = group.DHCPProfile
+			profileName = group.IPv4Profile
 		}
 	}
 
@@ -478,6 +478,14 @@ func (s *SessionState) startNCP() {
 
 	if s.IPv4Address == nil {
 		s.allocateFromPool()
+	} else if registry := s.component.registry; registry != nil {
+		registry.ReserveIP(s.IPv4Address, s.SessionID)
+	}
+
+	if s.IPv6Prefix != nil {
+		if registry := s.component.registry; registry != nil {
+			registry.ReservePD(s.IPv6Prefix, s.SessionID)
+		}
 	}
 
 	if s.DNS1 == nil {
@@ -542,7 +550,7 @@ func (s *SessionState) applyProfileDNS() {
 	if err != nil || cfg == nil {
 		return
 	}
-	profile := cfg.DHCP.Profiles[s.AllocCtx.ProfileName]
+	profile := cfg.IPv4Profiles[s.AllocCtx.ProfileName]
 	if profile == nil || len(profile.DNS) == 0 {
 		return
 	}
@@ -836,9 +844,14 @@ func (s *SessionState) terminate() {
 
 	s.stopCHAPRetryTimer()
 
-	if s.allocatedPool != "" && s.IPv4Address != nil {
-		if registry := s.component.registry; registry != nil {
+	if registry := s.component.registry; registry != nil {
+		if s.allocatedPool != "" && s.IPv4Address != nil {
 			registry.Release(s.allocatedPool, s.IPv4Address)
+		} else if s.IPv4Address != nil {
+			registry.ReleaseIP(s.IPv4Address)
+		}
+		if s.IPv6Prefix != nil {
+			registry.ReleasePDByPrefix(s.IPv6Prefix)
 		}
 	}
 
