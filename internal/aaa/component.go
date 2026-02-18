@@ -187,10 +187,11 @@ func (c *Component) handleAAARequest(event models.Event) error {
 		return c.publishResponse(req.RequestID, event.SessionID, event.AccessType, false, nil, err)
 	}
 
-	c.logger.Debug("Authentication response",
+	c.logger.Info("Authentication response",
 		"allowed", authResp.Allowed,
 		"mac", req.MAC,
-		"acct_session_id", req.AcctSessionID)
+		"acct_session_id", req.AcctSessionID,
+		"attributes", authResp.Attributes)
 
 	respAttrs := make(map[string]interface{})
 	for k, v := range authResp.Attributes {
