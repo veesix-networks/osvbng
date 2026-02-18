@@ -6,15 +6,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"net/netip"
-	"sort"
 	"sync"
 	"time"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/uuid"
-	"inet.af/netaddr"
 	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
@@ -62,8 +59,7 @@ type Component struct {
 	sidIndex  map[uint16]*SessionState
 	sessionMu sync.RWMutex
 
-	poolAllocators map[string]allocator.Allocator // pool name → allocator
-	profilePools   map[string][]string            // profile name → sorted pool names
+	registry *allocator.Registry
 
 	pppoeChan <-chan *dataplane.ParsedPacket
 
@@ -156,8 +152,7 @@ func New(deps component.Dependencies, srgMgr *srg.Manager, ifMgr *ifmgr.Manager)
 		cookieMgr: cookieMgr,
 		sessions:       make(map[string]*SessionState),
 		sidIndex:       make(map[uint16]*SessionState),
-		poolAllocators: make(map[string]allocator.Allocator),
-		profilePools:   make(map[string][]string),
+		registry: allocator.GetGlobalRegistry(),
 		pppoeChan:      deps.PPPChan,
 		nextSessionID: 1,
 	}
@@ -188,86 +183,10 @@ func (c *Component) getSessionOuterTPID(sess *SessionState) uint16 {
 	return tpid
 }
 
-func (c *Component) initPoolAllocators() {
-	cfg, err := c.cfgMgr.GetRunning()
-	if err != nil || cfg == nil || cfg.DHCP.Profiles == nil {
-		return
-	}
-
-	for profileName, profile := range cfg.DHCP.Profiles {
-		type poolRef struct {
-			name     string
-			priority int
-		}
-		refs := make([]poolRef, len(profile.Pools))
-		for i, p := range profile.Pools {
-			refs[i] = poolRef{p.Name, p.Priority}
-		}
-		sort.Slice(refs, func(i, j int) bool {
-			return refs[i].priority < refs[j].priority
-		})
-
-		poolNames := make([]string, len(refs))
-		for i, r := range refs {
-			poolNames[i] = r.name
-		}
-		c.profilePools[profileName] = poolNames
-
-		for _, pool := range profile.Pools {
-			if _, exists := c.poolAllocators[pool.Name]; exists {
-				continue
-			}
-
-			prefix, err := netaddr.ParseIPPrefix(pool.Network)
-			if err != nil {
-				c.logger.Warn("Invalid pool network", "pool", pool.Name, "error", err)
-				continue
-			}
-
-			rangeStart := pool.RangeStart
-			rangeEnd := pool.RangeEnd
-			if rangeStart == "" {
-				rangeStart = prefix.Range().From().Next().String()
-			}
-			if rangeEnd == "" {
-				rangeEnd = prefix.Range().To().Prior().String()
-			}
-
-			rs, err := netip.ParseAddr(rangeStart)
-			if err != nil {
-				c.logger.Warn("Invalid pool range start", "pool", pool.Name, "error", err)
-				continue
-			}
-			re, err := netip.ParseAddr(rangeEnd)
-			if err != nil {
-				c.logger.Warn("Invalid pool range end", "pool", pool.Name, "error", err)
-				continue
-			}
-
-			gateway := pool.Gateway
-			if gateway == "" {
-				gateway = profile.Gateway
-			}
-			var excludeAddrs []netip.Addr
-			if gw, err := netip.ParseAddr(gateway); err == nil {
-				excludeAddrs = append(excludeAddrs, gw)
-			}
-
-			alloc := allocator.NewPoolAllocator(rs, re, excludeAddrs)
-			c.poolAllocators[pool.Name] = alloc
-			c.logger.Debug("Initialized pool allocator",
-				"pool", pool.Name,
-				"range", rangeStart+"-"+rangeEnd,
-				"available", alloc.Available())
-		}
-	}
-}
 
 func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
 	c.logger.Info("Starting PPPoE component", "ac_name", c.acName)
-
-	c.initPoolAllocators()
 
 	if err := c.restoreSessions(ctx); err != nil {
 		c.logger.Warn("Failed to restore sessions from OpDB", "error", err)
