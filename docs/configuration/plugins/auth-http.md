@@ -57,7 +57,10 @@ HTTP-based subscriber authentication. Authenticates subscribers against an exter
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
 | `path` | string | JSONPath to extract the value from the response | `$.ip_address` |
-| `attribute` | string | Subscriber attribute to set | `Framed-IP-Address` |
+| `attribute` | string | Internal attribute name to set | `ipv4_address` |
+
+!!! tip "Default mappings"
+    The HTTP auth plugin auto-discovers attributes from common JSON field names without explicit mappings. See [provisioning](../provisioning.md#http-auth-plugin-default-mappings) for the full list of default JSON paths.
 
 ## Accounting
 
@@ -93,9 +96,9 @@ plugins:
         value: "true"
       attribute_mappings:
         - path: "$.ip_address"
-          attribute: Framed-IP-Address
-        - path: "$.rate_limit"
-          attribute: Rate-Limit
+          attribute: ipv4_address
+        - path: "$.download_rate"
+          attribute: qos.download-rate
     accounting:
       enabled: true
       start:
