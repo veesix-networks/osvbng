@@ -6,6 +6,9 @@ type Config struct {
 	URPF       string     `json:"urpf,omitempty" yaml:"urpf,omitempty"`
 	ACL        *ACLConfig `json:"acl,omitempty" yaml:"acl,omitempty"`
 	QoS        *QoSConfig `json:"qos,omitempty" yaml:"qos,omitempty"`
+	Pool       string     `json:"pool,omitempty" yaml:"pool,omitempty"`
+	IANAPool   string     `json:"iana-pool,omitempty" yaml:"iana-pool,omitempty"`
+	PDPool     string     `json:"pd-pool,omitempty" yaml:"pd-pool,omitempty"`
 }
 
 type ACLConfig struct {

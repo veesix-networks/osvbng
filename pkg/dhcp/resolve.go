@@ -33,8 +33,14 @@ func ResolveV4(ctx *allocator.Context, profile *ip.IPv4Profile) *ResolvedDHCPv4 
 		PoolName:  poolName,
 	}
 
+	pool := findPoolForIP(ctx.IPv4Address, profile)
+
 	if ctx.IPv4Gateway != nil {
 		resolved.Router = ctx.IPv4Gateway
+	} else if pool != nil && pool.Gateway != "" {
+		if gw := net.ParseIP(pool.Gateway); gw != nil {
+			resolved.Router = gw
+		}
 	} else if gw := net.ParseIP(profile.Gateway); gw != nil {
 		resolved.Router = gw
 	}
@@ -72,8 +78,10 @@ func ResolveV4(ctx *allocator.Context, profile *ip.IPv4Profile) *ResolvedDHCPv4 
 	default:
 		if ctx.IPv4Netmask != nil {
 			resolved.Netmask = ctx.IPv4Netmask
-		} else {
-			resolved.Netmask = poolNetmaskForIP(ctx.IPv4Address, profile)
+		} else if pool != nil {
+			if _, poolNet, err := net.ParseCIDR(pool.Network); err == nil {
+				resolved.Netmask = poolNet.Mask
+			}
 		}
 	}
 
@@ -185,15 +193,15 @@ func findPDPoolForPrefix(prefix *net.IPNet, profile *ip.IPv6Profile) *ip.PDPool 
 	return nil
 }
 
-func poolNetmaskForIP(clientIP net.IP, profile *ip.IPv4Profile) net.IPMask {
-	for _, pool := range profile.Pools {
-		_, poolNet, err := net.ParseCIDR(pool.Network)
+func findPoolForIP(clientIP net.IP, profile *ip.IPv4Profile) *ip.IPv4Pool {
+	for i := range profile.Pools {
+		_, poolNet, err := net.ParseCIDR(profile.Pools[i].Network)
 		if err != nil {
 			continue
 		}
 		if poolNet.Contains(clientIP) {
-			return poolNet.Mask
+			return &profile.Pools[i]
 		}
 	}
-	return net.CIDRMask(24, 32)
+	return nil
 }

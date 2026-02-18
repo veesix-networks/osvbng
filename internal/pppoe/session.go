@@ -434,7 +434,19 @@ func (s *SessionState) buildAllocContext(aaaAttrs map[string]interface{}) *alloc
 		}
 	}
 
-	return allocator.NewContext(s.SessionID, s.MAC, s.OuterVLAN, s.InnerVLAN, s.VRF, s.ServiceGroup.Name, profileName, aaaAttrs)
+	ctx := allocator.NewContext(s.SessionID, s.MAC, s.OuterVLAN, s.InnerVLAN, s.VRF, s.ServiceGroup.Name, profileName, aaaAttrs)
+
+	if ctx.PoolOverride == "" && s.ServiceGroup.Pool != "" {
+		ctx.PoolOverride = s.ServiceGroup.Pool
+	}
+	if ctx.IANAPoolOverride == "" && s.ServiceGroup.IANAPool != "" {
+		ctx.IANAPoolOverride = s.ServiceGroup.IANAPool
+	}
+	if ctx.PDPoolOverride == "" && s.ServiceGroup.PDPool != "" {
+		ctx.PDPoolOverride = s.ServiceGroup.PDPool
+	}
+
+	return ctx
 }
 
 func (s *SessionState) sendPAPAck(id uint8) {

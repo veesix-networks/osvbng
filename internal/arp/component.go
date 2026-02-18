@@ -125,12 +125,20 @@ func (c *Component) handlePacket(pkt *dataplane.ParsedPacket) error {
 	}
 
 	sess := c.lookupSubscriberSession(pkt)
-	if sess != nil && sess.VRF != "" {
-		if !c.isOwnedIPInVRF(dstIP, sess.VRF) {
-			c.logger.Debug("Ignoring ARP request for IP not in subscriber VRF",
-				"dst_ip", dstIP.String(),
-				"vrf", sess.VRF)
-			return nil
+	if sess != nil {
+		if sess.VRF != "" {
+			if !c.isOwnedIPInVRF(dstIP, sess.VRF) {
+				c.logger.Debug("Ignoring ARP request for IP not in subscriber VRF",
+					"dst_ip", dstIP.String(),
+					"vrf", sess.VRF)
+				return nil
+			}
+		} else {
+			if !c.ifMgr.HasIPv4InFIB(dstIP, 0) {
+				c.logger.Debug("Ignoring ARP request for IP not in default FIB",
+					"dst_ip", dstIP.String())
+				return nil
+			}
 		}
 	}
 

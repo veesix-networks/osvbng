@@ -22,6 +22,9 @@ type ServiceGroup struct {
 	QoSEgress    string
 	UploadRate   uint64
 	DownloadRate uint64
+	Pool         string
+	IANAPool     string
+	PDPool       string
 }
 
 func (r ServiceGroup) LogAttrs() []slog.Attr {
@@ -55,6 +58,15 @@ func (r ServiceGroup) LogAttrs() []slog.Attr {
 	}
 	if r.DownloadRate != 0 {
 		attrs = append(attrs, slog.Uint64("download_rate", r.DownloadRate))
+	}
+	if r.Pool != "" {
+		attrs = append(attrs, slog.String("pool", r.Pool))
+	}
+	if r.IANAPool != "" {
+		attrs = append(attrs, slog.String("iana_pool", r.IANAPool))
+	}
+	if r.PDPool != "" {
+		attrs = append(attrs, slog.String("pd_pool", r.PDPool))
 	}
 	return attrs
 }
@@ -170,6 +182,15 @@ func applyConfig(r *ServiceGroup, cfg *servicegroup.Config) {
 		if cfg.QoS.DownloadRate != 0 {
 			r.DownloadRate = cfg.QoS.DownloadRate
 		}
+	}
+	if cfg.Pool != "" {
+		r.Pool = cfg.Pool
+	}
+	if cfg.IANAPool != "" {
+		r.IANAPool = cfg.IANAPool
+	}
+	if cfg.PDPool != "" {
+		r.PDPool = cfg.PDPool
 	}
 }
 
