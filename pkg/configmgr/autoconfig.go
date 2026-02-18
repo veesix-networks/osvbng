@@ -51,7 +51,7 @@ func (cm *ConfigManager) processBGPForGroup(sessionID conf.SessionID, cfg *confi
 	}
 
 	if group.BGP.AdvertisePools {
-		if profile := cfg.DHCP.Profiles[group.DHCPProfile]; profile != nil {
+		if profile := cfg.IPv4Profiles[group.IPv4Profile]; profile != nil {
 			for _, pool := range profile.Pools {
 				if err := cm.addBGPNetwork(sessionID, pool.Network, vrf); err != nil {
 					return fmt.Errorf("pool %s: %w", pool.Name, err)

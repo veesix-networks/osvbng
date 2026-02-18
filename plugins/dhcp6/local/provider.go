@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
+	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/dhcp6"
 	"github.com/veesix-networks/osvbng/pkg/provider"
@@ -71,6 +72,7 @@ type IANALease struct {
 	DUID          []byte
 	IAID          uint32
 	SessionID     string
+	PoolName      string
 	PreferredTime uint32
 	ValidTime     uint32
 	ExpireTime    time.Time
@@ -81,6 +83,7 @@ type PDLease struct {
 	DUID          []byte
 	IAID          uint32
 	SessionID     string
+	PoolName      string
 	PreferredTime uint32
 	ValidTime     uint32
 	ExpireTime    time.Time
@@ -98,7 +101,7 @@ func New(cfg *config.Config) (dhcp6.DHCPProvider, error) {
 		leasesByPfx:  make(map[string]*PDLease),
 	}
 
-	for profileName, profile := range cfg.DHCPv6.Profiles {
+	for profileName, profile := range cfg.IPv6Profiles {
 		for _, poolCfg := range profile.IANAPools {
 			if err := p.addIANAPool(poolCfg.Name, poolCfg.Network, poolCfg.RangeStart, poolCfg.RangeEnd, poolCfg.Gateway, poolCfg.PreferredTime, poolCfg.ValidTime); err != nil {
 				return nil, fmt.Errorf("profile %s iana pool %s: %w", profileName, poolCfg.Name, err)
@@ -379,11 +382,17 @@ func (p *Provider) handleRelease(pkt *dhcp6.Packet, dhcp *layers.DHCPv6) (*dhcp6
 	duidKey := string(clientDUID)
 
 	if lease, exists := p.ianaLeases[duidKey]; exists {
+		if lease.PoolName != "" {
+			allocator.GetGlobalRegistry().ReleaseIANA(lease.PoolName, lease.Address)
+		}
 		delete(p.leasesByAddr, lease.Address.String())
 		delete(p.ianaLeases, duidKey)
 	}
 
 	if lease, exists := p.pdLeases[duidKey]; exists {
+		if lease.PoolName != "" {
+			allocator.GetGlobalRegistry().ReleasePD(lease.PoolName, lease.Prefix)
+		}
 		delete(p.leasesByPfx, lease.Prefix.String())
 		delete(p.pdLeases, duidKey)
 	}
@@ -627,7 +636,7 @@ func (p *Provider) handleSolicitResolved(pkt *dhcp6.Packet, dhcpReq *layers.DHCP
 			PreferredTime: pkt.Resolved.IANAPreferredTime,
 			ValidTime:     pkt.Resolved.IANAValidTime,
 		}
-		if err := p.reserveIANA(ianaAddr, clientDUID, ianaIAID, pkt.SessionID, pkt.Resolved.IANAPreferredTime, pkt.Resolved.IANAValidTime); err != nil {
+		if err := p.reserveIANA(ianaAddr, clientDUID, ianaIAID, pkt.SessionID, pkt.Resolved.IANAPoolName, pkt.Resolved.IANAPreferredTime, pkt.Resolved.IANAValidTime); err != nil {
 			return nil, fmt.Errorf("reserve IANA: %w", err)
 		}
 	}
@@ -642,7 +651,7 @@ func (p *Provider) handleSolicitResolved(pkt *dhcp6.Packet, dhcpReq *layers.DHCP
 			PreferredTime: pkt.Resolved.PDPreferredTime,
 			ValidTime:     pkt.Resolved.PDValidTime,
 		}
-		if err := p.reservePD(pdPrefix, clientDUID, pdIAID, pkt.SessionID, pkt.Resolved.PDPreferredTime, pkt.Resolved.PDValidTime); err != nil {
+		if err := p.reservePD(pdPrefix, clientDUID, pdIAID, pkt.SessionID, pkt.Resolved.PDPoolName, pkt.Resolved.PDPreferredTime, pkt.Resolved.PDValidTime); err != nil {
 			return nil, fmt.Errorf("reserve PD: %w", err)
 		}
 	}
@@ -669,7 +678,7 @@ func (p *Provider) handleRequestResolved(pkt *dhcp6.Packet, dhcpReq *layers.DHCP
 			PreferredTime: pkt.Resolved.IANAPreferredTime,
 			ValidTime:     pkt.Resolved.IANAValidTime,
 		}
-		if err := p.reserveIANA(ianaAddr, clientDUID, ianaIAID, pkt.SessionID, pkt.Resolved.IANAPreferredTime, pkt.Resolved.IANAValidTime); err != nil {
+		if err := p.reserveIANA(ianaAddr, clientDUID, ianaIAID, pkt.SessionID, pkt.Resolved.IANAPoolName, pkt.Resolved.IANAPreferredTime, pkt.Resolved.IANAValidTime); err != nil {
 			return nil, fmt.Errorf("reserve IANA: %w", err)
 		}
 	}
@@ -684,7 +693,7 @@ func (p *Provider) handleRequestResolved(pkt *dhcp6.Packet, dhcpReq *layers.DHCP
 			PreferredTime: pkt.Resolved.PDPreferredTime,
 			ValidTime:     pkt.Resolved.PDValidTime,
 		}
-		if err := p.reservePD(pdPrefix, clientDUID, pdIAID, pkt.SessionID, pkt.Resolved.PDPreferredTime, pkt.Resolved.PDValidTime); err != nil {
+		if err := p.reservePD(pdPrefix, clientDUID, pdIAID, pkt.SessionID, pkt.Resolved.PDPoolName, pkt.Resolved.PDPreferredTime, pkt.Resolved.PDValidTime); err != nil {
 			return nil, fmt.Errorf("reserve PD: %w", err)
 		}
 	}
@@ -700,7 +709,7 @@ func (p *Provider) handleRequestResolved(pkt *dhcp6.Packet, dhcpReq *layers.DHCP
 	}, nil
 }
 
-func (p *Provider) reserveIANA(addr net.IP, duid []byte, iaid uint32, sessionID string, preferredTime, validTime uint32) error {
+func (p *Provider) reserveIANA(addr net.IP, duid []byte, iaid uint32, sessionID, poolName string, preferredTime, validTime uint32) error {
 	duidKey := string(duid)
 	addrKey := addr.String()
 
@@ -713,6 +722,7 @@ func (p *Provider) reserveIANA(addr net.IP, duid []byte, iaid uint32, sessionID 
 		DUID:          duid,
 		IAID:          iaid,
 		SessionID:     sessionID,
+		PoolName:      poolName,
 		PreferredTime: preferredTime,
 		ValidTime:     validTime,
 		ExpireTime:    time.Now().Add(time.Duration(validTime) * time.Second),
@@ -722,7 +732,7 @@ func (p *Provider) reserveIANA(addr net.IP, duid []byte, iaid uint32, sessionID 
 	return nil
 }
 
-func (p *Provider) reservePD(prefix *net.IPNet, duid []byte, iaid uint32, sessionID string, preferredTime, validTime uint32) error {
+func (p *Provider) reservePD(prefix *net.IPNet, duid []byte, iaid uint32, sessionID, poolName string, preferredTime, validTime uint32) error {
 	duidKey := string(duid)
 	pfxKey := prefix.String()
 
@@ -735,6 +745,7 @@ func (p *Provider) reservePD(prefix *net.IPNet, duid []byte, iaid uint32, sessio
 		DUID:          duid,
 		IAID:          iaid,
 		SessionID:     sessionID,
+		PoolName:      poolName,
 		PreferredTime: preferredTime,
 		ValidTime:     validTime,
 		ExpireTime:    time.Now().Add(time.Duration(validTime) * time.Second),

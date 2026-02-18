@@ -130,7 +130,7 @@ func (c *Component) buildAllocContext(sess *SessionState, aaaAttrs map[string]in
 	cfg, err := c.cfgMgr.GetRunning()
 	if err == nil && cfg != nil && cfg.SubscriberGroups != nil {
 		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(sess.OuterVLAN); group != nil {
-			profileName = group.DHCPProfile
+			profileName = group.IPv4Profile
 		}
 	}
 
@@ -145,7 +145,7 @@ func (c *Component) resolveDHCPv4(ctx *allocator.Context) *dhcp.ResolvedDHCPv4 {
 	if err != nil || cfg == nil {
 		return nil
 	}
-	profile := cfg.DHCP.Profiles[ctx.ProfileName]
+	profile := cfg.IPv4Profiles[ctx.ProfileName]
 	if profile == nil {
 		return nil
 	}
@@ -163,13 +163,13 @@ func (c *Component) resolveDHCPv6(ctx *allocator.Context) *dhcp.ResolvedDHCPv6 {
 	var profileName string
 	if cfg.SubscriberGroups != nil {
 		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(ctx.SVLAN); group != nil {
-			profileName = group.DHCPv6Profile
+			profileName = group.IPv6Profile
 		}
 	}
 	if profileName == "" {
 		return nil
 	}
-	profile := cfg.DHCPv6.Profiles[profileName]
+	profile := cfg.IPv6Profiles[profileName]
 	if profile == nil {
 		return nil
 	}
@@ -2225,8 +2225,8 @@ func (c *Component) processRSPacket(pkt *dataplane.ParsedPacket) error {
 
 	var prefixes []raPrefixInfo
 
-	if group != nil && group.DHCPv6Profile != "" {
-		if profile := cfg.DHCPv6.Profiles[group.DHCPv6Profile]; profile != nil {
+	if group != nil && group.IPv6Profile != "" {
+		if profile := cfg.IPv6Profiles[group.IPv6Profile]; profile != nil {
 			for _, pool := range profile.IANAPools {
 				prefixes = append(prefixes, raPrefixInfo{
 					network:       pool.Network,

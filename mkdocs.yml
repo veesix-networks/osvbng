@@ -42,10 +42,13 @@ nav:
     - Dataplane: configuration/dataplane.md
     - Interfaces: configuration/interfaces.md
     - Subscriber Groups: configuration/subscriber-groups.md
+    - IPv4 Profiles: configuration/ipv4-profiles.md
+    - IPv6 Profiles: configuration/ipv6-profiles.md
     - DHCP: configuration/dhcp.md
     - DHCPv6: configuration/dhcpv6.md
     - AAA: configuration/aaa.md
     - Service Groups: configuration/service-groups.md
+    - Subscriber Provisioning: configuration/provisioning.md
     - VRFs: configuration/vrfs.md
     - Protocols: configuration/protocols.md
     - MPLS: configuration/mpls.md
