@@ -18,12 +18,12 @@ service-groups:
     customer-a:
         vrf: CUSTOMER-A
         unnumbered: loop101
+        pool: customer-a-pool
 
 subscriber-groups:
     groups:
         default:
             access-type: ipoe
-            vrf: cgnat
             ipv4-profile: default
             ipv6-profile: default-v6
             vlans:
@@ -45,6 +45,13 @@ ipv4-profiles:
         pools:
             - name: subscriber-pool
               network: 10.255.0.0/16
+              priority: 1
+            - name: customer-a-pool
+              network: 192.168.123.0/24
+              range_start: 192.168.123.2
+              range_end: 192.168.123.254
+              gateway: 192.168.123.1
+              priority: 10
         dhcp:
             lease-time: 3600
 
@@ -182,7 +189,7 @@ aaa:
     nas_identifier: osvbng
     policy:
         - name: default-policy
-          format: $remote-id$
+          format: $mac-address$
           max_concurrent_sessions: 1
 plugins:
     exporter.prometheus:
@@ -192,7 +199,7 @@ plugins:
         enabled: true
         listen_address: :8080
     subscriber.auth.local:
-        allow_all: true
+        allow_all: false
         database_path: /tmp/osvbng.db
     subscriber.auth.http:
         endpoint: http://host.docker.internal:8081/api/v1/subscribers
@@ -254,8 +261,8 @@ logging:
     format: text
     level: info
     components:
-        aaa: info
-        arp: info
+        aaa: debug
+        arp: debug
         dataplane: debug
         ipoe: info
         pppoe: info

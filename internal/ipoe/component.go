@@ -134,7 +134,19 @@ func (c *Component) buildAllocContext(sess *SessionState, aaaAttrs map[string]in
 		}
 	}
 
-	return allocator.NewContext(sess.SessionID, sess.MAC, sess.OuterVLAN, sess.InnerVLAN, sess.VRF, sess.ServiceGroup.Name, profileName, aaaAttrs)
+	ctx := allocator.NewContext(sess.SessionID, sess.MAC, sess.OuterVLAN, sess.InnerVLAN, sess.VRF, sess.ServiceGroup.Name, profileName, aaaAttrs)
+
+	if ctx.PoolOverride == "" && sess.ServiceGroup.Pool != "" {
+		ctx.PoolOverride = sess.ServiceGroup.Pool
+	}
+	if ctx.IANAPoolOverride == "" && sess.ServiceGroup.IANAPool != "" {
+		ctx.IANAPoolOverride = sess.ServiceGroup.IANAPool
+	}
+	if ctx.PDPoolOverride == "" && sess.ServiceGroup.PDPool != "" {
+		ctx.PDPoolOverride = sess.ServiceGroup.PDPool
+	}
+
+	return ctx
 }
 
 func (c *Component) resolveDHCPv4(ctx *allocator.Context) *dhcp.ResolvedDHCPv4 {
@@ -1028,11 +1040,38 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 	c.sessionMu.Unlock()
 
 	if !allowed {
-		c.logger.Info("Session AAA rejected, DHCP not forwarded", "session_id", sessID)
+		c.logger.Info("Session AAA rejected, cleaning up session", "session_id", sessID)
+		c.sessionMu.Lock()
+		delete(c.sessionIndex, sessID)
+		delete(c.xidIndex, sess.XID)
+		lookupV4 := c.makeSessionKeyV4(mac, svlan, cvlan)
+		lookupV6 := c.makeSessionKeyV6(mac, svlan, cvlan)
+		delete(c.sessions, lookupV4)
+		delete(c.sessions, lookupV6)
+		c.sessionMu.Unlock()
 		return nil
 	}
 
-	c.logger.Info("Session AAA approved", "session_id", sessID)
+	var subscriberGroup, ipv4Profile, ipv6Profile string
+	cfg, _ := c.cfgMgr.GetRunning()
+	if cfg != nil && cfg.SubscriberGroups != nil {
+		for name, group := range cfg.SubscriberGroups.Groups {
+			for i := range group.VLANs {
+				if group.VLANs[i].MatchesSVLAN(svlan) {
+					subscriberGroup = name
+					ipv4Profile = group.IPv4Profile
+					ipv6Profile = group.IPv6Profile
+					break
+				}
+			}
+		}
+	}
+	c.logger.Info("Session AAA approved",
+		"session_id", sessID,
+		"subscriber_group", subscriberGroup,
+		"ipv4_profile", ipv4Profile,
+		"ipv6_profile", ipv6Profile,
+	)
 
 	resolved := c.resolveServiceGroup(svlan, payload.Attributes)
 
@@ -1060,6 +1099,13 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 	}
 
 	allocCtx := c.buildAllocContext(sess, payload.Attributes)
+	c.logger.Info("Built allocator context",
+		"session_id", sessID,
+		"profile", allocCtx.ProfileName,
+		"pool_override", allocCtx.PoolOverride,
+		"iana_pool_override", allocCtx.IANAPoolOverride,
+		"pd_pool_override", allocCtx.PDPoolOverride,
+	)
 	c.sessionMu.Lock()
 	sess.AllocCtx = allocCtx
 	c.sessionMu.Unlock()
