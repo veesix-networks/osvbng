@@ -16,6 +16,8 @@ type Config struct {
 	Logging          system.LoggingConfig                   `json:"logging,omitempty" yaml:"logging,omitempty"`
 	Dataplane        system.DataplaneConfig                 `json:"dataplane,omitempty" yaml:"dataplane,omitempty"`
 	SubscriberGroups *subscriber.SubscriberGroupsConfig     `json:"subscriber-groups,omitempty" yaml:"subscriber-groups,omitempty"`
+	IPv4Profiles     map[string]*ip.IPv4Profile             `json:"ipv4-profiles,omitempty" yaml:"ipv4-profiles,omitempty"`
+	IPv6Profiles     map[string]*ip.IPv6Profile             `json:"ipv6-profiles,omitempty" yaml:"ipv6-profiles,omitempty"`
 	DHCP             ip.DHCPConfig                          `json:"dhcp,omitempty" yaml:"dhcp,omitempty"`
 	DHCPv6           ip.DHCPv6Config                        `json:"dhcpv6,omitempty" yaml:"dhcpv6,omitempty"`
 	Monitoring       system.MonitoringConfig                `json:"monitoring,omitempty" yaml:"monitoring,omitempty"`

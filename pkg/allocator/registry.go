@@ -12,9 +12,13 @@ import (
 )
 
 type Registry struct {
-	allocators   map[string]*PoolAllocator
-	profilePools map[string][]string
-	mu           sync.RWMutex
+	allocators       map[string]*PoolAllocator
+	profilePools     map[string][]string
+	ianaAllocators   map[string]*PoolAllocator
+	profileIANAPools map[string][]string
+	pdAllocators     map[string]*PrefixAllocator
+	profilePDPools   map[string][]string
+	mu               sync.RWMutex
 }
 
 var (
@@ -22,10 +26,10 @@ var (
 	registryMu     sync.Mutex
 )
 
-func InitGlobalRegistry(profiles map[string]*ip.DHCPProfile) *Registry {
+func InitGlobalRegistry(v4Profiles map[string]*ip.IPv4Profile, v6Profiles map[string]*ip.IPv6Profile) *Registry {
 	registryMu.Lock()
 	defer registryMu.Unlock()
-	globalRegistry = newRegistry(profiles)
+	globalRegistry = newRegistry(v4Profiles, v6Profiles)
 	return globalRegistry
 }
 
@@ -35,14 +39,25 @@ func GetGlobalRegistry() *Registry {
 	return globalRegistry
 }
 
-func newRegistry(profiles map[string]*ip.DHCPProfile) *Registry {
+func newRegistry(v4Profiles map[string]*ip.IPv4Profile, v6Profiles map[string]*ip.IPv6Profile) *Registry {
 	r := &Registry{
-		allocators:   make(map[string]*PoolAllocator),
-		profilePools: make(map[string][]string),
+		allocators:       make(map[string]*PoolAllocator),
+		profilePools:     make(map[string][]string),
+		ianaAllocators:   make(map[string]*PoolAllocator),
+		profileIANAPools: make(map[string][]string),
+		pdAllocators:     make(map[string]*PrefixAllocator),
+		profilePDPools:   make(map[string][]string),
 	}
 
+	r.initV4Pools(v4Profiles)
+	r.initV6Pools(v6Profiles)
+
+	return r
+}
+
+func (r *Registry) initV4Pools(profiles map[string]*ip.IPv4Profile) {
 	if profiles == nil {
-		return r
+		return
 	}
 
 	for profileName, profile := range profiles {
@@ -109,8 +124,76 @@ func newRegistry(profiles map[string]*ip.DHCPProfile) *Registry {
 			r.allocators[pool.Name] = NewPoolAllocator(rs, re, excludeAddrs)
 		}
 	}
+}
 
-	return r
+func (r *Registry) initV6Pools(profiles map[string]*ip.IPv6Profile) {
+	if profiles == nil {
+		return
+	}
+
+	for profileName, profile := range profiles {
+		ianaNames := make([]string, len(profile.IANAPools))
+		for i, pool := range profile.IANAPools {
+			ianaNames[i] = pool.Name
+
+			if _, exists := r.ianaAllocators[pool.Name]; exists {
+				continue
+			}
+
+			prefix, err := netaddr.ParseIPPrefix(pool.Network)
+			if err != nil {
+				continue
+			}
+
+			rangeStart := pool.RangeStart
+			rangeEnd := pool.RangeEnd
+			if rangeStart == "" {
+				rangeStart = prefix.Range().From().Next().String()
+			}
+			if rangeEnd == "" {
+				rangeEnd = prefix.Range().To().Prior().String()
+			}
+
+			rs, err := netip.ParseAddr(rangeStart)
+			if err != nil {
+				continue
+			}
+			re, err := netip.ParseAddr(rangeEnd)
+			if err != nil {
+				continue
+			}
+
+			var excludeAddrs []netip.Addr
+			if gw, err := netip.ParseAddr(pool.Gateway); err == nil {
+				excludeAddrs = append(excludeAddrs, gw)
+			}
+
+			r.ianaAllocators[pool.Name] = NewPoolAllocator(rs, re, excludeAddrs)
+		}
+		r.profileIANAPools[profileName] = ianaNames
+
+		pdNames := make([]string, len(profile.PDPools))
+		for i, pool := range profile.PDPools {
+			pdNames[i] = pool.Name
+
+			if _, exists := r.pdAllocators[pool.Name]; exists {
+				continue
+			}
+
+			prefix, err := netip.ParsePrefix(pool.Network)
+			if err != nil {
+				continue
+			}
+
+			alloc := NewPrefixAllocator(prefix, int(pool.PrefixLength))
+			if alloc == nil {
+				continue
+			}
+
+			r.pdAllocators[pool.Name] = alloc
+		}
+		r.profilePDPools[profileName] = pdNames
+	}
 }
 
 func (r *Registry) AllocateFromProfile(profileName, poolOverride, sessionID string) (net.IP, string, error) {
@@ -144,6 +227,68 @@ func (r *Registry) AllocateFromProfile(profileName, poolOverride, sessionID stri
 	return nil, "", ErrPoolExhausted
 }
 
+func (r *Registry) AllocateIANAFromProfile(profileName, poolOverride, sessionID string) (net.IP, string, error) {
+	if r == nil {
+		return nil, "", ErrPoolExhausted
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if poolOverride != "" {
+		if alloc, ok := r.ianaAllocators[poolOverride]; ok {
+			allocated, err := alloc.Allocate(sessionID)
+			if err == nil {
+				return allocated, poolOverride, nil
+			}
+		}
+	}
+
+	for _, poolName := range r.profileIANAPools[profileName] {
+		alloc, ok := r.ianaAllocators[poolName]
+		if !ok {
+			continue
+		}
+		allocated, err := alloc.Allocate(sessionID)
+		if err == nil {
+			return allocated, poolName, nil
+		}
+	}
+
+	return nil, "", ErrPoolExhausted
+}
+
+func (r *Registry) AllocatePDFromProfile(profileName, poolOverride, sessionID string) (*net.IPNet, string, error) {
+	if r == nil {
+		return nil, "", ErrPoolExhausted
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if poolOverride != "" {
+		if alloc, ok := r.pdAllocators[poolOverride]; ok {
+			allocated, err := alloc.Allocate(sessionID)
+			if err == nil {
+				return allocated, poolOverride, nil
+			}
+		}
+	}
+
+	for _, poolName := range r.profilePDPools[profileName] {
+		alloc, ok := r.pdAllocators[poolName]
+		if !ok {
+			continue
+		}
+		allocated, err := alloc.Allocate(sessionID)
+		if err == nil {
+			return allocated, poolName, nil
+		}
+	}
+
+	return nil, "", ErrPoolExhausted
+}
+
 func (r *Registry) Release(poolName string, ip net.IP) {
 	if r == nil {
 		return
@@ -154,6 +299,109 @@ func (r *Registry) Release(poolName string, ip net.IP) {
 
 	if alloc, ok := r.allocators[poolName]; ok {
 		alloc.Release(ip)
+	}
+}
+
+func (r *Registry) ReleaseIANA(poolName string, ip net.IP) {
+	if r == nil {
+		return
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if alloc, ok := r.ianaAllocators[poolName]; ok {
+		alloc.Release(ip)
+	}
+}
+
+func (r *Registry) ReleasePD(poolName string, prefix *net.IPNet) {
+	if r == nil {
+		return
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if alloc, ok := r.pdAllocators[poolName]; ok {
+		alloc.Release(prefix)
+	}
+}
+
+func (r *Registry) ReserveIP(ip net.IP, sessionID string) {
+	if r == nil {
+		return
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, alloc := range r.allocators {
+		if alloc.Contains(ip) {
+			alloc.Reserve(ip, sessionID)
+			return
+		}
+	}
+}
+
+func (r *Registry) ReserveIANA(ip net.IP, sessionID string) {
+	if r == nil {
+		return
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, alloc := range r.ianaAllocators {
+		if alloc.Contains(ip) {
+			alloc.Reserve(ip, sessionID)
+			return
+		}
+	}
+}
+
+func (r *Registry) ReservePD(prefix *net.IPNet, sessionID string) {
+	if r == nil {
+		return
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, alloc := range r.pdAllocators {
+		if alloc.Contains(prefix) {
+			alloc.Reserve(prefix, sessionID)
+			return
+		}
+	}
+}
+
+func (r *Registry) ReleaseIANAByIP(ip net.IP) {
+	if r == nil {
+		return
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, alloc := range r.ianaAllocators {
+		alloc.Release(ip)
+	}
+}
+
+func (r *Registry) ReleasePDByPrefix(prefix *net.IPNet) {
+	if r == nil {
+		return
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, alloc := range r.pdAllocators {
+		if alloc.Contains(prefix) {
+			alloc.Release(prefix)
+			return
+		}
 	}
 }
 

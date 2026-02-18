@@ -53,9 +53,9 @@ func New(cfg *config.Config) (dhcp4.DHCPProvider, error) {
 		leasesByIP: make(map[string]*Lease),
 	}
 
-	allocator.InitGlobalRegistry(cfg.DHCP.Profiles)
+	allocator.InitGlobalRegistry(cfg.IPv4Profiles, cfg.IPv6Profiles)
 
-	for profileName, profile := range cfg.DHCP.Profiles {
+	for profileName, profile := range cfg.IPv4Profiles {
 		leaseTime := profile.GetLeaseTime()
 		for _, poolCfg := range profile.Pools {
 			gateway := poolCfg.Gateway
