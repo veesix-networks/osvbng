@@ -12,6 +12,7 @@ type ResolvedDHCPv4 struct {
 	DNS       []net.IP
 	LeaseTime time.Duration
 	ServerID  net.IP
+	PoolName  string
 
 	ClasslessRoutes []ClasslessRoute
 }
