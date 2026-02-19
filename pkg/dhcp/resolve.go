@@ -15,7 +15,7 @@ func ResolveV4(ctx *allocator.Context, profile *ip.IPv4Profile) *ResolvedDHCPv4 
 		if registry == nil {
 			return nil
 		}
-		allocated, pn, err := registry.AllocateFromProfile(ctx.ProfileName, ctx.PoolOverride, ctx.SessionID)
+		allocated, pn, err := registry.AllocateFromProfile(ctx.ProfileName, ctx.PoolOverride, ctx.VRF, ctx.SessionID)
 		if err != nil {
 			return nil
 		}
@@ -94,7 +94,7 @@ func ResolveV6(ctx *allocator.Context, profile *ip.IPv6Profile) *ResolvedDHCPv6 
 	var ianaPoolName string
 	if ctx.IPv6Address == nil {
 		if registry != nil {
-			allocated, pn, err := registry.AllocateIANAFromProfile(ctx.ProfileName, ctx.IANAPoolOverride, ctx.SessionID)
+			allocated, pn, err := registry.AllocateIANAFromProfile(ctx.ProfileName, ctx.IANAPoolOverride, ctx.VRF, ctx.SessionID)
 			if err == nil {
 				ctx.IPv6Address = allocated
 				ianaPoolName = pn
@@ -107,7 +107,7 @@ func ResolveV6(ctx *allocator.Context, profile *ip.IPv6Profile) *ResolvedDHCPv6 
 	var pdPoolName string
 	if ctx.IPv6Prefix == nil {
 		if registry != nil {
-			allocated, pn, err := registry.AllocatePDFromProfile(ctx.ProfileName, ctx.PDPoolOverride, ctx.SessionID)
+			allocated, pn, err := registry.AllocatePDFromProfile(ctx.ProfileName, ctx.PDPoolOverride, ctx.VRF, ctx.SessionID)
 			if err == nil {
 				ctx.IPv6Prefix = allocated
 				pdPoolName = pn

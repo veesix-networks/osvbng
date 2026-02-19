@@ -537,6 +537,7 @@ func (s *SessionState) allocateFromPool() {
 	allocated, poolName, err := registry.AllocateFromProfile(
 		s.AllocCtx.ProfileName,
 		s.AllocCtx.PoolOverride,
+		s.AllocCtx.VRF,
 		s.SessionID,
 	)
 	if err != nil {

@@ -6,6 +6,7 @@ type IPv4Pool struct {
 	RangeStart string   `json:"range_start,omitempty" yaml:"range-start,omitempty"`
 	RangeEnd   string   `json:"range_end,omitempty" yaml:"range-end,omitempty"`
 	Gateway    string   `json:"gateway,omitempty" yaml:"gateway,omitempty"`
+	VRF        string   `json:"vrf,omitempty" yaml:"vrf,omitempty"`
 	DNSServers []string `json:"dns_servers,omitempty" yaml:"dns,omitempty"`
 	LeaseTime  uint32   `json:"lease_time,omitempty" yaml:"lease-time,omitempty"`
 	Priority   int      `json:"priority,omitempty" yaml:"priority,omitempty"`
@@ -18,6 +19,7 @@ type IANAPool struct {
 	RangeStart    string `json:"range_start,omitempty" yaml:"range_start,omitempty"`
 	RangeEnd      string `json:"range_end,omitempty" yaml:"range_end,omitempty"`
 	Gateway       string `json:"gateway,omitempty" yaml:"gateway,omitempty"`
+	VRF           string `json:"vrf,omitempty" yaml:"vrf,omitempty"`
 	PreferredTime uint32 `json:"preferred_time,omitempty" yaml:"preferred_time,omitempty"`
 	ValidTime     uint32 `json:"valid_time,omitempty" yaml:"valid_time,omitempty"`
 }
@@ -26,6 +28,7 @@ type PDPool struct {
 	Name          string `json:"name,omitempty" yaml:"name,omitempty"`
 	Network       string `json:"network,omitempty" yaml:"network,omitempty"`
 	PrefixLength  uint8  `json:"prefix_length,omitempty" yaml:"prefix_length,omitempty"`
+	VRF           string `json:"vrf,omitempty" yaml:"vrf,omitempty"`
 	PreferredTime uint32 `json:"preferred_time,omitempty" yaml:"preferred_time,omitempty"`
 	ValidTime     uint32 `json:"valid_time,omitempty" yaml:"valid_time,omitempty"`
 }
