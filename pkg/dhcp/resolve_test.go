@@ -494,6 +494,83 @@ func TestResolveV4LeaseTime(t *testing.T) {
 	}
 }
 
+func TestResolveV4ReserveCollision(t *testing.T) {
+	v4 := map[string]*ip.IPv4Profile{
+		"prof1": {
+			Gateway: "10.0.0.1",
+			Pools: []ip.IPv4Pool{{
+				Name:       "pool1",
+				Network:    "10.0.0.0/24",
+				RangeStart: "10.0.0.2",
+				RangeEnd:   "10.0.0.10",
+			}},
+		},
+	}
+	initRegistry(t, v4, nil)
+
+	ctx1 := &allocator.Context{SessionID: "s1", ProfileName: "prof1"}
+	res1 := ResolveV4(ctx1, v4["prof1"])
+	if res1 == nil {
+		t.Fatal("first allocation should succeed")
+	}
+
+	ctx2 := &allocator.Context{
+		SessionID:   "s2",
+		ProfileName: "prof1",
+		IPv4Address: res1.YourIP,
+	}
+	res2 := ResolveV4(ctx2, v4["prof1"])
+	if res2 != nil {
+		t.Fatalf("expected nil result for collision, got YourIP=%v", res2.YourIP)
+	}
+}
+
+func TestResolveV6ReserveIANACollision(t *testing.T) {
+	v6 := map[string]*ip.IPv6Profile{
+		"prof1": makeTestV6Profile(),
+	}
+	initRegistry(t, nil, v6)
+
+	ctx1 := &allocator.Context{SessionID: "s1", ProfileName: "prof1"}
+	res1 := ResolveV6(ctx1, v6["prof1"])
+	if res1 == nil {
+		t.Fatal("first allocation should succeed")
+	}
+
+	ctx2 := &allocator.Context{
+		SessionID:   "s2",
+		ProfileName: "prof1",
+		IPv6Address: res1.IANAAddress,
+	}
+	res2 := ResolveV6(ctx2, v6["prof1"])
+	if res2 != nil {
+		t.Fatalf("expected nil result for IANA collision, got IANAAddress=%v", res2.IANAAddress)
+	}
+}
+
+func TestResolveV6ReservePDCollision(t *testing.T) {
+	v6 := map[string]*ip.IPv6Profile{
+		"prof1": makeTestV6Profile(),
+	}
+	initRegistry(t, nil, v6)
+
+	ctx1 := &allocator.Context{SessionID: "s1", ProfileName: "prof1"}
+	res1 := ResolveV6(ctx1, v6["prof1"])
+	if res1 == nil {
+		t.Fatal("first allocation should succeed")
+	}
+
+	ctx2 := &allocator.Context{
+		SessionID:  "s2",
+		ProfileName: "prof1",
+		IPv6Prefix: res1.PDPrefix,
+	}
+	res2 := ResolveV6(ctx2, v6["prof1"])
+	if res2 != nil {
+		t.Fatalf("expected nil result for PD collision, got PDPrefix=%v", res2.PDPrefix)
+	}
+}
+
 func makeTestV6Profile() *ip.IPv6Profile {
 	return &ip.IPv6Profile{
 		IANAPools: []ip.IANAPool{{

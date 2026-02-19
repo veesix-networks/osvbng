@@ -23,7 +23,9 @@ func ResolveV4(ctx *allocator.Context, profile *ip.IPv4Profile) *ResolvedDHCPv4 
 		poolName = pn
 	} else {
 		if registry := allocator.GetGlobalRegistry(); registry != nil {
-			registry.ReserveIP(ctx.IPv4Address, ctx.SessionID)
+			if err := registry.ReserveIP(ctx.IPv4Address, ctx.SessionID); err != nil {
+				return nil
+			}
 		}
 	}
 
@@ -101,7 +103,9 @@ func ResolveV6(ctx *allocator.Context, profile *ip.IPv6Profile) *ResolvedDHCPv6 
 			}
 		}
 	} else if registry != nil {
-		registry.ReserveIANA(ctx.IPv6Address, ctx.SessionID)
+		if err := registry.ReserveIANA(ctx.IPv6Address, ctx.SessionID); err != nil {
+			return nil
+		}
 	}
 
 	var pdPoolName string
@@ -114,7 +118,9 @@ func ResolveV6(ctx *allocator.Context, profile *ip.IPv6Profile) *ResolvedDHCPv6 
 			}
 		}
 	} else if registry != nil {
-		registry.ReservePD(ctx.IPv6Prefix, ctx.SessionID)
+		if err := registry.ReservePD(ctx.IPv6Prefix, ctx.SessionID); err != nil {
+			return nil
+		}
 	}
 
 	if ctx.IPv6Address == nil && ctx.IPv6Prefix == nil {

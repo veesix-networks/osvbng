@@ -363,9 +363,9 @@ func (r *Registry) ReleasePD(poolName string, prefix *net.IPNet) {
 	}
 }
 
-func (r *Registry) ReserveIP(ip net.IP, sessionID string) {
+func (r *Registry) ReserveIP(ip net.IP, sessionID string) error {
 	if r == nil {
-		return
+		return nil
 	}
 
 	r.mu.RLock()
@@ -373,15 +373,15 @@ func (r *Registry) ReserveIP(ip net.IP, sessionID string) {
 
 	for _, alloc := range r.allocators {
 		if alloc.Contains(ip) {
-			alloc.Reserve(ip, sessionID)
-			return
+			return alloc.Reserve(ip, sessionID)
 		}
 	}
+	return nil
 }
 
-func (r *Registry) ReserveIANA(ip net.IP, sessionID string) {
+func (r *Registry) ReserveIANA(ip net.IP, sessionID string) error {
 	if r == nil {
-		return
+		return nil
 	}
 
 	r.mu.RLock()
@@ -389,15 +389,15 @@ func (r *Registry) ReserveIANA(ip net.IP, sessionID string) {
 
 	for _, alloc := range r.ianaAllocators {
 		if alloc.Contains(ip) {
-			alloc.Reserve(ip, sessionID)
-			return
+			return alloc.Reserve(ip, sessionID)
 		}
 	}
+	return nil
 }
 
-func (r *Registry) ReservePD(prefix *net.IPNet, sessionID string) {
+func (r *Registry) ReservePD(prefix *net.IPNet, sessionID string) error {
 	if r == nil {
-		return
+		return nil
 	}
 
 	r.mu.RLock()
@@ -405,10 +405,10 @@ func (r *Registry) ReservePD(prefix *net.IPNet, sessionID string) {
 
 	for _, alloc := range r.pdAllocators {
 		if alloc.Contains(prefix) {
-			alloc.Reserve(prefix, sessionID)
-			return
+			return alloc.Reserve(prefix, sessionID)
 		}
 	}
+	return nil
 }
 
 func (r *Registry) ReleaseIANAByIP(ip net.IP) {
