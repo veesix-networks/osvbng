@@ -491,12 +491,24 @@ func (s *SessionState) startNCP() {
 	if s.IPv4Address == nil {
 		s.allocateFromPool()
 	} else if registry := s.component.registry; registry != nil {
-		registry.ReserveIP(s.IPv4Address, s.SessionID)
+		if err := registry.ReserveIP(s.IPv4Address, s.SessionID); err != nil {
+			s.component.logger.Error("IPv4 reservation conflict",
+				"session_id", s.SessionID,
+				"address", s.IPv4Address,
+				"error", err)
+			s.IPv4Address = nil
+		}
 	}
 
 	if s.IPv6Prefix != nil {
 		if registry := s.component.registry; registry != nil {
-			registry.ReservePD(s.IPv6Prefix, s.SessionID)
+			if err := registry.ReservePD(s.IPv6Prefix, s.SessionID); err != nil {
+				s.component.logger.Error("PD reservation conflict",
+					"session_id", s.SessionID,
+					"prefix", s.IPv6Prefix,
+					"error", err)
+				s.IPv6Prefix = nil
+			}
 		}
 	}
 
