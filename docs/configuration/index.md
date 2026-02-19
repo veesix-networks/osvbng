@@ -19,6 +19,7 @@ osvbngd config > /etc/osvbng/osvbng.yaml
 - [DHCP](dhcp.md) - DHCPv4 provider configuration
 - [DHCPv6](dhcpv6.md) - DHCPv6 provider configuration
 - [AAA](aaa.md) - Authentication and policies
+- [QoS Policies](qos.md) - Per-subscriber rate limiting with VPP policers
 - [Service Groups](service-groups.md) - Named per-subscriber attribute bundles (VRF, ACL, QoS)
 - [Subscriber Provisioning](provisioning.md) - AAA attribute resolution, override priority, and scenarios
 - [VRFs](vrfs.md) - Virtual Routing and Forwarding instances

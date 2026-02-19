@@ -69,8 +69,6 @@ func createTestSession(sessionID string, authTime time.Time, macStr string, ipAd
 			VLANCount:        1,
 			IPv4Address:      ip,
 			LeaseTime:        3600,
-			RADIUSAttributes: map[string]string{},
-			CreatedAt:        authTime,
 		},
 	}
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
+	"github.com/veesix-networks/osvbng/pkg/config/qos"
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
@@ -382,16 +383,56 @@ func (c *Component) activateSession(sess models.SubscriberSession) error {
 		return nil
 	}
 
-	if err := c.vpp.ApplyQoS(swIfIndex, 10, 10); err != nil {
-		c.logger.Warn("Failed to apply QoS", "error", err, "sw_if_index", swIfIndex)
+	sgName := sess.GetServiceGroup()
+	if sgName == "" {
+		return nil
+	}
+
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil {
+		return nil
+	}
+
+	sg, ok := cfg.ServiceGroups[sgName]
+	if !ok || sg.QoS == nil {
+		return nil
+	}
+
+	var ingress, egress *qos.Policy
+	if sg.QoS.IngressPolicy != "" && cfg.QoSPolicies != nil {
+		ingress = cfg.QoSPolicies[sg.QoS.IngressPolicy]
+	}
+	if sg.QoS.EgressPolicy != "" && cfg.QoSPolicies != nil {
+		egress = cfg.QoSPolicies[sg.QoS.EgressPolicy]
+	}
+
+	if ingress == nil && egress == nil {
+		return nil
+	}
+
+	if err := c.vpp.ApplyQoS(swIfIndex, ingress, egress); err != nil {
+		c.logger.Warn("Failed to apply QoS", "error", err, "sw_if_index", swIfIndex, "service_group", sgName)
 	} else {
-		c.logger.Debug("Applied QoS", "sw_if_index", swIfIndex)
+		c.logger.Debug("Applied QoS",
+			"sw_if_index", swIfIndex,
+			"service_group", sgName,
+			"ingress_policy", sg.QoS.IngressPolicy,
+			"egress_policy", sg.QoS.EgressPolicy)
 	}
 
 	return nil
 }
 
 func (c *Component) releaseSession(sess models.SubscriberSession) error {
+	swIfIndex := sess.GetIfIndex()
+	if swIfIndex == 0 {
+		return nil
+	}
+
+	if err := c.vpp.RemoveQoS(swIfIndex); err != nil {
+		c.logger.Warn("Failed to remove QoS", "error", err, "sw_if_index", swIfIndex)
+	}
+
 	return nil
 }
 

@@ -37,10 +37,10 @@ Attributes are captured as a point-in-time snapshot when the session is created.
 
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
-| `ingress-policy` | string | Ingress QoS policy name | `upload-policy` |
-| `egress-policy` | string | Egress QoS policy name | `download-policy` |
-| `upload-rate` | uint64 | Upload rate limit in bps | `1000000000` |
-| `download-rate` | uint64 | Download rate limit in bps | `1000000000` |
+| `ingress-policy` | string | Ingress [QoS policy](qos.md) name | `upload-50m` |
+| `egress-policy` | string | Egress [QoS policy](qos.md) name | `download-200m` |
+| `upload-rate` | uint64 | Upload rate limit in bps (reserved for AAA ad-hoc rates) | `1000000000` |
+| `download-rate` | uint64 | Download rate limit in bps (reserved for AAA ad-hoc rates) | `1000000000` |
 
 ## AAA Attributes
 
@@ -75,6 +75,25 @@ curl http://localhost:8080/api/show/service-groups
 ## Example
 
 ```yaml
+qos-policies:
+  residential-1g:
+    cir: 1000000
+    conform:
+      action: transmit
+    exceed:
+      action: drop
+    violate:
+      action: drop
+
+  enterprise-10g:
+    cir: 10000000
+    conform:
+      action: transmit
+    exceed:
+      action: drop
+    violate:
+      action: drop
+
 vrfs:
   cgnat:
     address-families:
@@ -86,15 +105,15 @@ service-groups:
     unnumbered: loop101
     urpf: strict
     qos:
-      upload-rate: 1000000000
-      download-rate: 1000000000
+      ingress-policy: residential-1g
+      egress-policy: residential-1g
 
   enterprise:
     vrf: cgnat
     unnumbered: loop101
     qos:
-      upload-rate: 10000000000
-      download-rate: 10000000000
+      ingress-policy: enterprise-10g
+      egress-policy: enterprise-10g
 
 subscriber-groups:
   groups:
@@ -106,4 +125,4 @@ subscriber-groups:
           interface: loop100
 ```
 
-In this example, all subscribers in the `default` group get the `cgnat-residential` service group by default. AAA can override individual subscribers to `enterprise` by returning `service-group: enterprise`, or override specific fields like `qos.download-rate: 5000000000`.
+In this example, all subscribers in the `default` group get the `cgnat-residential` service group by default. AAA can override individual subscribers to `enterprise` by returning `service-group: enterprise`, or override specific fields like `qos.egress-policy: enterprise-10g`.

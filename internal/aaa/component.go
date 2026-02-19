@@ -259,10 +259,8 @@ func (c *Component) handleSessionLifecycle(event models.Event) error {
 				ipv4Address = sess.IPv4Address.String()
 				attributes["ipv4_address"] = ipv4Address
 			}
-			if user, ok := sess.RADIUSAttributes["username"]; ok {
-				username = user
-			}
-			acctSessionID = sess.RADIUSSessionID
+			username = sess.Username
+			acctSessionID = sess.AAASessionID
 		}
 	case models.AccessTypePPPoE:
 		var sess models.PPPSession
@@ -273,10 +271,8 @@ func (c *Component) handleSessionLifecycle(event models.Event) error {
 				ipv4Address = sess.IPv4Address.String()
 				attributes["ipv4_address"] = ipv4Address
 			}
-			if user, ok := sess.RADIUSAttributes["username"]; ok {
-				username = user
-			}
-			acctSessionID = sess.RADIUSSessionID
+			username = sess.Username
+			acctSessionID = sess.AAASessionID
 		}
 	}
 
