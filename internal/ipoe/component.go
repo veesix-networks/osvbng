@@ -161,7 +161,15 @@ func (c *Component) resolveDHCPv4(ctx *allocator.Context) *dhcp.ResolvedDHCPv4 {
 	if profile == nil {
 		return nil
 	}
-	return dhcp.ResolveV4(ctx, profile)
+	resolved := dhcp.ResolveV4(ctx, profile)
+	if resolved == nil {
+		c.logger.Warn("IPv4 address resolution failed",
+			"session_id", ctx.SessionID,
+			"profile", ctx.ProfileName,
+			"vrf", ctx.VRF,
+			"pool_override", ctx.PoolOverride)
+	}
+	return resolved
 }
 
 func (c *Component) resolveDHCPv6(ctx *allocator.Context) *dhcp.ResolvedDHCPv6 {
