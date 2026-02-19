@@ -15,14 +15,15 @@ type SubscriberSession interface {
 	GetMAC() net.HardwareAddr
 	GetOuterVLAN() uint16
 	GetInnerVLAN() uint16
-	GetRADIUSSessionID() string
+	GetAAASessionID() string
 	GetIPv4Address() net.IP
 	GetIPv6Address() net.IP
 	GetIPv6Prefix() string
 	GetIfIndex() uint32
 	GetVLANCount() int
-	GetInterfaceName() string
 	GetUsername() string
+	GetServiceGroup() string
+	GetActivatedAt() time.Time
 }
 
 type IPoESession struct {
@@ -36,10 +37,9 @@ type IPoESession struct {
 	InnerVLAN uint16
 	VLANCount int
 
-	InterfaceName string
-	IfIndex       uint32
-	VRF           string
-	ServiceGroup  string
+	IfIndex      uint32
+	VRF          string
+	ServiceGroup string
 
 	IPv4Address net.IP
 	LeaseTime   uint32
@@ -56,32 +56,27 @@ type IPoESession struct {
 
 	Username string
 
-	RADIUSSessionID  string
-	RADIUSAttributes map[string]string
+	AAASessionID string
 
-	UpstreamMbps   int
-	DownstreamMbps int
-
-	CreatedAt time.Time
-	LastSeen  time.Time
-	ExpiresAt time.Time
+	ActivatedAt time.Time
 }
 
-func (s *IPoESession) GetSessionID() string       { return s.SessionID }
-func (s *IPoESession) GetAccessType() AccessType  { return AccessTypeIPoE }
-func (s *IPoESession) GetProtocol() Protocol      { return Protocol(s.Protocol) }
-func (s *IPoESession) GetState() SessionState     { return s.State }
-func (s *IPoESession) GetMAC() net.HardwareAddr   { return s.MAC }
-func (s *IPoESession) GetOuterVLAN() uint16       { return s.OuterVLAN }
-func (s *IPoESession) GetInnerVLAN() uint16       { return s.InnerVLAN }
-func (s *IPoESession) GetRADIUSSessionID() string { return s.RADIUSSessionID }
+func (s *IPoESession) GetSessionID() string      { return s.SessionID }
+func (s *IPoESession) GetAccessType() AccessType { return AccessTypeIPoE }
+func (s *IPoESession) GetProtocol() Protocol     { return Protocol(s.Protocol) }
+func (s *IPoESession) GetState() SessionState    { return s.State }
+func (s *IPoESession) GetMAC() net.HardwareAddr  { return s.MAC }
+func (s *IPoESession) GetOuterVLAN() uint16      { return s.OuterVLAN }
+func (s *IPoESession) GetInnerVLAN() uint16      { return s.InnerVLAN }
+func (s *IPoESession) GetAAASessionID() string   { return s.AAASessionID }
 func (s *IPoESession) GetIPv4Address() net.IP     { return s.IPv4Address }
 func (s *IPoESession) GetIPv6Address() net.IP     { return s.IPv6Address }
 func (s *IPoESession) GetIPv6Prefix() string      { return s.IPv6Prefix }
 func (s *IPoESession) GetIfIndex() uint32         { return s.IfIndex }
 func (s *IPoESession) GetVLANCount() int          { return s.VLANCount }
-func (s *IPoESession) GetInterfaceName() string   { return s.InterfaceName }
 func (s *IPoESession) GetUsername() string         { return s.Username }
+func (s *IPoESession) GetServiceGroup() string     { return s.ServiceGroup }
+func (s *IPoESession) GetActivatedAt() time.Time   { return s.ActivatedAt }
 
 func (s *IPoESession) IsDualStack() bool {
 	return s.IPv4Address != nil && (s.IPv6Address != nil || s.IPv6Prefix != "")
@@ -150,10 +145,9 @@ type PPPSession struct {
 	InnerVLAN uint16
 	VLANCount int
 
-	InterfaceName string
-	IfIndex       uint32
-	VRF           string
-	ServiceGroup  string
+	IfIndex      uint32
+	VRF          string
+	ServiceGroup string
 
 	IPv4Address net.IP
 	IPv6Address net.IP
@@ -164,32 +158,27 @@ type PPPSession struct {
 
 	Username string
 
-	RADIUSSessionID  string
-	RADIUSAttributes map[string]string
+	AAASessionID string
 
-	UpstreamMbps   int
-	DownstreamMbps int
-
-	CreatedAt time.Time
-	LastSeen  time.Time
-	ExpiresAt time.Time
+	ActivatedAt time.Time
 }
 
-func (s *PPPSession) GetSessionID() string       { return s.SessionID }
-func (s *PPPSession) GetAccessType() AccessType  { return AccessTypePPPoE }
-func (s *PPPSession) GetProtocol() Protocol      { return ProtocolPPPoESession }
-func (s *PPPSession) GetState() SessionState     { return s.State }
-func (s *PPPSession) GetMAC() net.HardwareAddr   { return s.MAC }
-func (s *PPPSession) GetOuterVLAN() uint16       { return s.OuterVLAN }
-func (s *PPPSession) GetInnerVLAN() uint16       { return s.InnerVLAN }
-func (s *PPPSession) GetRADIUSSessionID() string { return s.RADIUSSessionID }
+func (s *PPPSession) GetSessionID() string      { return s.SessionID }
+func (s *PPPSession) GetAccessType() AccessType { return AccessTypePPPoE }
+func (s *PPPSession) GetProtocol() Protocol     { return ProtocolPPPoESession }
+func (s *PPPSession) GetState() SessionState    { return s.State }
+func (s *PPPSession) GetMAC() net.HardwareAddr  { return s.MAC }
+func (s *PPPSession) GetOuterVLAN() uint16      { return s.OuterVLAN }
+func (s *PPPSession) GetInnerVLAN() uint16      { return s.InnerVLAN }
+func (s *PPPSession) GetAAASessionID() string   { return s.AAASessionID }
 func (s *PPPSession) GetIPv4Address() net.IP     { return s.IPv4Address }
 func (s *PPPSession) GetIPv6Address() net.IP     { return s.IPv6Address }
 func (s *PPPSession) GetIPv6Prefix() string      { return s.IPv6Prefix }
 func (s *PPPSession) GetIfIndex() uint32         { return s.IfIndex }
 func (s *PPPSession) GetVLANCount() int          { return s.VLANCount }
-func (s *PPPSession) GetInterfaceName() string   { return s.InterfaceName }
 func (s *PPPSession) GetUsername() string         { return s.Username }
+func (s *PPPSession) GetServiceGroup() string     { return s.ServiceGroup }
+func (s *PPPSession) GetActivatedAt() time.Time   { return s.ActivatedAt }
 
 func (s *PPPSession) RedisKey() string {
 	return fmt.Sprintf("osvbng:sessions:%s", s.SessionID)

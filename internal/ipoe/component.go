@@ -816,14 +816,13 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 		State:            models.SessionStateReleased,
 		AccessType:       string(models.AccessTypeIPoE),
 		Protocol:         string(models.ProtocolDHCPv4),
-		RADIUSSessionID:  acctSessionID,
+		AAASessionID:  acctSessionID,
 		MAC:              mac,
 		OuterVLAN:        pkt.OuterVLAN,
 		InnerVLAN:        pkt.InnerVLAN,
 		VRF:              sess.VRF,
 		Username:         sess.Username,
-		RADIUSAttributes: make(map[string]string),
-	})
+			})
 }
 
 func (c *Component) handleServerResponse(pkt *dataplane.ParsedPacket) error {
@@ -1003,14 +1002,15 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 		VLANCount:        c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
 		IfIndex:          ipoeSwIfIndex,
 		VRF:              sess.VRF,
+		ServiceGroup:     sess.ServiceGroup.Name,
 		IPv4Address:      sess.IPv4,
 		LeaseTime:        sess.LeaseTime,
 		IPv6Address:      sess.IPv6Address,
 		IPv6LeaseTime:    sess.IPv6LeaseTime,
 		DUID:             sess.DHCPv6DUID,
 		Username:         sess.Username,
-		RADIUSSessionID:  sess.AcctSessionID,
-		RADIUSAttributes: make(map[string]string),
+		AAASessionID: sess.AcctSessionID,
+		ActivatedAt:  time.Now(),
 	}
 	if sess.IPv6Prefix != nil {
 		ipoeSess.IPv6Prefix = sess.IPv6Prefix.String()
@@ -1089,6 +1089,10 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 	}
 	c.logger.Info("Resolved service group", logArgs...)
 
+	c.sessionMu.Lock()
+	sess.ServiceGroup = resolved
+	c.sessionMu.Unlock()
+
 	vrfName := resolved.VRF
 	var decapVrfID uint32
 	if vrfName != "" {
@@ -1102,7 +1106,6 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 		}
 		c.sessionMu.Lock()
 		sess.VRF = vrfName
-		sess.ServiceGroup = resolved
 		c.sessionMu.Unlock()
 	}
 
@@ -1895,7 +1898,7 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
 			IPv6Address:     ipv6Address,
 			IPv6Prefix:      prefixStr,
 			Username:        sess.Username,
-			RADIUSSessionID: "",
+			AAASessionID: "",
 		})
 	}
 
@@ -2052,14 +2055,16 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, dhcp *layers.DHCPv6) e
 		VLANCount:       c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
 		IfIndex:         ipoeSwIfIndex,
 		VRF:             sess.VRF,
+		ServiceGroup:    sess.ServiceGroup.Name,
 		IPv4Address:     sess.IPv4,
 		LeaseTime:       sess.LeaseTime,
 		IPv6Address:     ianaAddr,
 		IPv6Prefix:      prefixStr,
 		IPv6LeaseTime:   sess.IPv6LeaseTime,
 		DUID:            sess.DHCPv6DUID,
-		Username:        sess.Username,
-		RADIUSSessionID: sess.AcctSessionID,
+		Username:     sess.Username,
+		AAASessionID: sess.AcctSessionID,
+		ActivatedAt: time.Now(),
 	}
 
 	return c.publishSessionLifecycle(ipoeSess)
@@ -2624,12 +2629,14 @@ func (c *Component) restoreSessionToCache(ctx context.Context, sess *SessionStat
 		VLANCount:       c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
 		IfIndex:         sess.IPoESwIfIndex,
 		VRF:             sess.VRF,
+		ServiceGroup:    sess.ServiceGroup.Name,
 		IPv4Address:     sess.IPv4,
 		LeaseTime:       sess.LeaseTime,
 		IPv6Address:     sess.IPv6Address,
 		IPv6LeaseTime:   sess.IPv6LeaseTime,
 		DUID:            sess.DHCPv6DUID,
-		RADIUSSessionID: sess.AcctSessionID,
+		AAASessionID: sess.AcctSessionID,
+		ActivatedAt:  sess.BoundAt,
 	}
 	if sess.IPv6Prefix != nil {
 		ipoeSess.IPv6Prefix = sess.IPv6Prefix.String()

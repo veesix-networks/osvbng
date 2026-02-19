@@ -47,6 +47,7 @@ nav:
     - DHCP: configuration/dhcp.md
     - DHCPv6: configuration/dhcpv6.md
     - AAA: configuration/aaa.md
+    - QoS Policies: configuration/qos.md
     - Service Groups: configuration/service-groups.md
     - Subscriber Provisioning: configuration/provisioning.md
     - VRFs: configuration/vrfs.md
