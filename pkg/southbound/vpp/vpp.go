@@ -17,16 +17,18 @@ import (
 var _ southbound.Southbound = (*VPP)(nil)
 
 type VPP struct {
-	conn        *core.Connection
-	ifMgr       *ifmgr.Manager
-	logger      *slog.Logger
-	fibChan     api.Channel
-	fibMux      sync.Mutex
-	useDPDK     bool
-	asyncWorker *AsyncWorker
-	statsClient *StatsClient
-	vrfResolver func(string) (uint32, bool, bool, error)
-	lcpNs       *netlink.Handle
+	conn           *core.Connection
+	ifMgr          *ifmgr.Manager
+	logger         *slog.Logger
+	fibChan        api.Channel
+	fibMux         sync.Mutex
+	useDPDK        bool
+	asyncWorker    *AsyncWorker
+	statsClient    *StatsClient
+	vrfResolver    func(string) (uint32, bool, bool, error)
+	lcpNs          *netlink.Handle
+	policerNames map[uint32][2]string
+	policerMu    sync.Mutex
 }
 
 type VPPConfig struct {
@@ -64,13 +66,14 @@ func NewVPP(cfg VPPConfig) (*VPP, error) {
 	}
 
 	v := &VPP{
-		conn:        conn,
-		ifMgr:       cfg.IfMgr,
-		logger:      logger.Get(logger.Southbound),
-		fibChan:     fibChan,
-		useDPDK:     cfg.UseDPDK,
-		asyncWorker: asyncWorker,
-		statsClient: statsClient,
+		conn:           conn,
+		ifMgr:          cfg.IfMgr,
+		logger:         logger.Get(logger.Southbound),
+		fibChan:        fibChan,
+		useDPDK:        cfg.UseDPDK,
+		asyncWorker:    asyncWorker,
+		statsClient:    statsClient,
+		policerNames: make(map[uint32][2]string),
 	}
 
 	if err := v.LoadInterfaces(); err != nil {

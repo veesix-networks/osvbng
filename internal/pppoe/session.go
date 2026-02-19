@@ -638,20 +638,22 @@ func (s *SessionState) checkOpen() {
 			s.component.checkpointSession(s)
 
 			s.component.publishSessionLifecycle(&models.PPPSession{
-				SessionID:       s.SessionID,
-				State:           models.SessionStateActive,
-				AccessType:      string(models.AccessTypePPPoE),
-				Protocol:        string(models.ProtocolPPPoESession),
-				PPPSessionID:    s.PPPoESessionID,
-				MAC:             s.MAC,
-				OuterVLAN:       s.OuterVLAN,
-				InnerVLAN:       s.InnerVLAN,
-				IfIndex:         s.SwIfIndex,
-				VRF:             s.VRF,
-				IPv4Address:     s.IPv4Address,
-				IPv6Address:     s.IPv6Address,
-				Username:        s.Username,
-				RADIUSSessionID: s.AcctSessionID,
+				SessionID:    s.SessionID,
+				State:        models.SessionStateActive,
+				AccessType:   string(models.AccessTypePPPoE),
+				Protocol:     string(models.ProtocolPPPoESession),
+				PPPSessionID: s.PPPoESessionID,
+				MAC:          s.MAC,
+				OuterVLAN:    s.OuterVLAN,
+				InnerVLAN:    s.InnerVLAN,
+				IfIndex:      s.SwIfIndex,
+				VRF:          s.VRF,
+				ServiceGroup: s.ServiceGroup.Name,
+				IPv4Address:  s.IPv4Address,
+				IPv6Address:  s.IPv6Address,
+				Username:     s.Username,
+				AAASessionID: s.AcctSessionID,
+				ActivatedAt:  time.Now(),
 			})
 
 			if s.component.vpp != nil && s.IPv4Address != nil {
@@ -914,6 +916,6 @@ func (s *SessionState) terminate() {
 		OuterVLAN:       s.OuterVLAN,
 		InnerVLAN:       s.InnerVLAN,
 		Username:        s.Username,
-		RADIUSSessionID: s.AcctSessionID,
+		AAASessionID: s.AcctSessionID,
 	})
 }

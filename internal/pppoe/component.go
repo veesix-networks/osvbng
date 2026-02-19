@@ -737,16 +737,18 @@ func (c *Component) restoreSessionToCache(ctx context.Context, sess *SessionStat
 	cacheKey := fmt.Sprintf("osvbng:sessions:%s", sess.SessionID)
 
 	pppSess := &models.PPPSession{
-		SessionID:       sess.SessionID,
-		PPPSessionID:    sess.PPPoESessionID,
-		State:           models.SessionStateActive,
-		MAC:             sess.MAC,
-		OuterVLAN:       sess.OuterVLAN,
-		InnerVLAN:       sess.InnerVLAN,
-		IfIndex:         sess.SwIfIndex,
-		IPv4Address:     sess.IPv4Address,
-		IPv6Address:     sess.IPv6Address,
-		RADIUSSessionID: sess.AcctSessionID,
+		SessionID:    sess.SessionID,
+		PPPSessionID: sess.PPPoESessionID,
+		State:        models.SessionStateActive,
+		MAC:          sess.MAC,
+		OuterVLAN:    sess.OuterVLAN,
+		InnerVLAN:    sess.InnerVLAN,
+		IfIndex:      sess.SwIfIndex,
+		ServiceGroup: sess.ServiceGroup.Name,
+		IPv4Address:  sess.IPv4Address,
+		IPv6Address:  sess.IPv6Address,
+		AAASessionID: sess.AcctSessionID,
+		ActivatedAt:  sess.BoundAt,
 	}
 
 	data, err := json.Marshal(pppSess)

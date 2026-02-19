@@ -7,6 +7,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
 	"github.com/veesix-networks/osvbng/pkg/config/ip"
 	"github.com/veesix-networks/osvbng/pkg/config/protocols"
+	"github.com/veesix-networks/osvbng/pkg/config/qos"
 	"github.com/veesix-networks/osvbng/pkg/config/servicegroup"
 	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/config/system"
@@ -25,6 +26,7 @@ type Config struct {
 	Interfaces       map[string]*interfaces.InterfaceConfig `json:"interfaces,omitempty" yaml:"interfaces,omitempty"`
 	Protocols        protocols.ProtocolConfig               `json:"protocols,omitempty" yaml:"protocols,omitempty"`
 	AAA              aaa.AAAConfig                          `json:"aaa,omitempty" yaml:"aaa,omitempty"`
+	QoSPolicies      map[string]*qos.Policy                     `json:"qos-policies,omitempty" yaml:"qos-policies,omitempty"`
 	ServiceGroups    map[string]*servicegroup.Config           `json:"service-groups,omitempty" yaml:"service-groups,omitempty"`
 	VRFS             map[string]*ip.VRFSConfig               `json:"vrfs,omitempty" yaml:"vrfs,omitempty"`
 	System           *SystemConfig                          `json:"system,omitempty" yaml:"system,omitempty"`

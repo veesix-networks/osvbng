@@ -1,6 +1,10 @@
 package southbound
 
-import "net"
+import (
+	"net"
+
+	"github.com/veesix-networks/osvbng/pkg/config/qos"
+)
 
 type Sessions interface {
 	AddPPPoESession(sessionID uint16, clientIP net.IP, clientMAC net.HardwareAddr, localMAC net.HardwareAddr, encapIfIndex uint32, outerVLAN uint16, innerVLAN uint16, decapVrfID uint32) (uint32, error)
@@ -20,5 +24,6 @@ type Sessions interface {
 	IPoESetSessionIPv6Async(swIfIndex uint32, clientIP net.IP, isAdd bool, callback func(error))
 	IPoESetDelegatedPrefixAsync(swIfIndex uint32, prefix net.IPNet, nextHop net.IP, isAdd bool, callback func(error))
 
-	ApplyQoS(swIfIndex uint32, upMbps, downMbps int) error
+	ApplyQoS(swIfIndex uint32, ingress, egress *qos.Policy) error
+	RemoveQoS(swIfIndex uint32) error
 }

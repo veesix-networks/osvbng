@@ -417,7 +417,7 @@ func (c *Component) GetSessions(ctx context.Context, req *pb.GetSessionsRequest)
 			OuterVlan:     uint32(sess.GetOuterVLAN()),
 			InnerVlan:     uint32(sess.GetInnerVLAN()),
 			State:         string(sess.GetState()),
-			AcctSessionId: sess.GetRADIUSSessionID(),
+			AcctSessionId: sess.GetAAASessionID(),
 			SwIfIndex:     sess.GetIfIndex(),
 		}
 
@@ -471,7 +471,7 @@ func (c *Component) GetSession(ctx context.Context, req *pb.GetSessionRequest) (
 		Hostname:      sess.Hostname,
 		SwIfIndex:     uint32(sess.IfIndex),
 		LeaseTime:     sess.LeaseTime,
-		AcctSessionId: sess.RADIUSSessionID,
+		AcctSessionId: sess.AAASessionID,
 	}
 	if sess.IPv4Address != nil {
 		pbSess.Ipv4Address = sess.IPv4Address.String()
