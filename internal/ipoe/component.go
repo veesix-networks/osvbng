@@ -484,6 +484,7 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 	sess.CircuitID = circuitID
 	sess.RemoteID = remoteID
 	sess.LastSeen = time.Now()
+	sess.EncapIfIndex = pkt.SwIfIndex
 	sess.PendingDHCPDiscover = buf.Bytes()
 	c.xidIndex[pkt.DHCPv4.Xid] = sess
 	alreadyApproved := sess.AAAApproved
@@ -2529,12 +2530,34 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 		}
 
 		if sess.IPoESwIfIndex != 0 && !validIfIndexes[sess.IPoESwIfIndex] {
-			c.logger.Info("VPP interface not found, resetting session state",
+			c.logger.Info("VPP interface not found, recreating IPoE session",
 				"session_id", sess.SessionID,
 				"stale_sw_if_index", sess.IPoESwIfIndex)
-			sess.IPoESwIfIndex = 0
-			sess.IPoESessionCreated = false
-			sess.AAAApproved = false
+
+			var decapVrfID uint32
+			if sess.VRF != "" && c.vrfMgr != nil {
+				if tableID, _, _, err := c.vrfMgr.ResolveVRF(sess.VRF); err == nil {
+					decapVrfID = tableID
+				}
+			}
+
+			localMAC := c.getLocalMAC(sess.OuterVLAN, sess.EncapIfIndex)
+			if localMAC != nil && c.vpp != nil {
+				swIfIndex, err := c.vpp.AddIPoESession(sess.MAC, localMAC, sess.EncapIfIndex, sess.OuterVLAN, sess.InnerVLAN, decapVrfID)
+				if err != nil {
+					c.logger.Error("Failed to recreate IPoE session", "session_id", sess.SessionID, "error", err)
+					sess.IPoESwIfIndex = 0
+					sess.IPoESessionCreated = false
+				} else {
+					c.logger.Info("Recreated IPoE session in VPP", "session_id", sess.SessionID, "sw_if_index", swIfIndex)
+					sess.IPoESwIfIndex = swIfIndex
+					sess.IPoESessionCreated = true
+				}
+			} else {
+				sess.IPoESwIfIndex = 0
+				sess.IPoESessionCreated = false
+			}
+
 			sess.PendingDHCPDiscover = nil
 			sess.PendingDHCPRequest = nil
 			sess.PendingDHCPv6Solicit = nil
@@ -2669,4 +2692,28 @@ func (c *Component) restoreSessionToCache(ctx context.Context, sess *SessionStat
 	if err := c.cache.Set(ctx, cacheKey, data, ttl); err != nil {
 		c.logger.Warn("Failed to restore session to cache", "session_id", sess.SessionID, "error", err)
 	}
+}
+
+func (c *Component) RecoverSessions(ctx context.Context) error {
+	c.sessionMu.RLock()
+	total := len(c.sessions)
+	c.sessionMu.RUnlock()
+
+	if total == 0 {
+		c.logger.Info("No IPoE sessions to recover")
+		return nil
+	}
+
+	c.logger.Info("Recovering IPoE sessions from OpDB", "total_in_memory", total)
+
+	if err := c.restoreSessions(ctx); err != nil {
+		return fmt.Errorf("recover ipoe sessions: %w", err)
+	}
+
+	c.sessionMu.RLock()
+	recovered := len(c.sessions)
+	c.sessionMu.RUnlock()
+
+	c.logger.Info("IPoE session recovery complete", "recovered", recovered)
+	return nil
 }
