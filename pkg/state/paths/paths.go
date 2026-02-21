@@ -28,6 +28,8 @@ const (
 	SystemDataplaneNodes      Path = "system.dataplane.nodes"
 	SystemDataplaneErrors     Path = "system.dataplane.errors"
 	SystemDataplaneBuffers    Path = "system.dataplane.buffers"
+
+	SystemWatchdog Path = "system.watchdog"
 )
 
 func (p Path) String() string {

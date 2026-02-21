@@ -4,6 +4,7 @@ import (
 	aaacomp "github.com/veesix-networks/osvbng/internal/aaa"
 	routingcomp "github.com/veesix-networks/osvbng/internal/routing"
 	"github.com/veesix-networks/osvbng/internal/subscriber"
+	"github.com/veesix-networks/osvbng/internal/watchdog"
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/cppm"
@@ -23,6 +24,7 @@ type ShowDeps struct {
 	Cache            cache.Cache
 	OpDB             opdb.Store
 	CPPM             *cppm.Manager
+	Watchdog         watchdog.StateProvider
 	PluginComponents map[string]component.Component
 }
 

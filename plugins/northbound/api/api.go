@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/veesix-networks/osvbng/internal/watchdog"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
 	"github.com/veesix-networks/osvbng/pkg/logger"
@@ -22,6 +23,7 @@ type Component struct {
 	adapter  *northbound.Adapter
 	addr     string
 	server   *http.Server
+	watchdog *watchdog.Watchdog
 	mu       sync.RWMutex
 	running  bool
 	specJSON []byte
@@ -56,6 +58,10 @@ func NewComponent(deps component.Dependencies) (component.Component, error) {
 
 func (c *Component) SetRegistries(adapter *northbound.Adapter) {
 	c.adapter = adapter
+}
+
+func (c *Component) SetHealthEndpoints(wd *watchdog.Watchdog) {
+	c.watchdog = wd
 }
 
 func (c *Component) Start(ctx context.Context) error {
@@ -129,6 +135,11 @@ func (c *Component) startServer() {
 		mux.Handle("GET /api/docs/", http.StripPrefix("/api/docs/", http.FileServer(http.FS(swaggerFS))))
 	}
 	mux.HandleFunc("GET /api/docs", c.handleDocsRedirect)
+
+	if c.watchdog != nil {
+		mux.HandleFunc("GET /healthz", watchdog.HealthzHandler(c.watchdog))
+		mux.HandleFunc("GET /readyz", watchdog.ReadyzHandler(c.watchdog))
+	}
 
 	c.server = &http.Server{
 		Addr:    c.addr,

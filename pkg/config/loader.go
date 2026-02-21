@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/veesix-networks/osvbng/pkg/config/system"
 	"gopkg.in/yaml.v3"
 )
 
@@ -17,6 +18,8 @@ func Load(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
+
+	cfg.applyDefaults()
 
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)
@@ -36,6 +39,23 @@ func Save(path string, cfg *Config) error {
 	}
 
 	return nil
+}
+
+func (c *Config) applyDefaults() {
+	defaults := system.DefaultWatchdogConfig()
+
+	if c.Watchdog.CheckInterval == 0 {
+		c.Watchdog.CheckInterval = defaults.CheckInterval
+	}
+	if c.Watchdog.Targets == nil {
+		c.Watchdog.Targets = defaults.Targets
+	} else {
+		for name, defaultTarget := range defaults.Targets {
+			if _, exists := c.Watchdog.Targets[name]; !exists {
+				c.Watchdog.Targets[name] = defaultTarget
+			}
+		}
+	}
 }
 
 func (c *Config) Validate() error {
