@@ -29,6 +29,7 @@ type Config struct {
 	QoSPolicies      map[string]*qos.Policy                     `json:"qos-policies,omitempty" yaml:"qos-policies,omitempty"`
 	ServiceGroups    map[string]*servicegroup.Config           `json:"service-groups,omitempty" yaml:"service-groups,omitempty"`
 	VRFS             map[string]*ip.VRFSConfig               `json:"vrfs,omitempty" yaml:"vrfs,omitempty"`
+	Watchdog         system.WatchdogConfig                  `json:"watchdog,omitempty" yaml:"watchdog,omitempty"`
 	System           *SystemConfig                          `json:"system,omitempty" yaml:"system,omitempty"`
 	Plugins          map[string]interface{}                 `json:"plugins,omitempty" yaml:"plugins,omitempty"`
 }

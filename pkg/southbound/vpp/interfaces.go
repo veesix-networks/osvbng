@@ -664,7 +664,9 @@ func (v *VPP) createPhysicalInterface(cfg *interfaces.InterfaceConfig) error {
 			if err := v.createLCPPair(cfg.Name, cfg.Name, lcp.LCP_API_ITF_HOST_TAP); err != nil {
 				return fmt.Errorf("create LCP pair: %w", err)
 			}
-			time.Sleep(100 * time.Millisecond)
+			if err := v.waitForLink(cfg.Name, 10*time.Second); err != nil {
+				return fmt.Errorf("wait for LCP interface: %w", err)
+			}
 		}
 
 		if cfg.Description != "" {
@@ -719,7 +721,9 @@ func (v *VPP) createPhysicalInterface(cfg *interfaces.InterfaceConfig) error {
 		if err := v.createLCPPair(vppIfName, cfg.Name, lcp.LCP_API_ITF_HOST_TAP); err != nil {
 			return fmt.Errorf("create LCP pair: %w", err)
 		}
-		time.Sleep(100 * time.Millisecond)
+		if err := v.waitForLink(cfg.Name, 10*time.Second); err != nil {
+			return fmt.Errorf("wait for LCP interface: %w", err)
+		}
 	}
 
 	if cfg.Description != "" {
@@ -764,8 +768,10 @@ func (v *VPP) createLoopback(cfg *interfaces.InterfaceConfig) error {
 		if err := v.createLCPPair(vppIfName, cfg.Name, lcp.LCP_API_ITF_HOST_TAP); err != nil {
 			return fmt.Errorf("create LCP pair: %w", err)
 		}
+		if err := v.waitForLink(cfg.Name, 10*time.Second); err != nil {
+			return fmt.Errorf("wait for LCP interface: %w", err)
+		}
 
-		time.Sleep(100 * time.Millisecond)
 		if cfg.Description != "" {
 			v.SetInterfaceDescription(cfg.Name, cfg.Description)
 		}
@@ -915,6 +921,17 @@ func (v *VPP) DelIPv6Address(ifName, address string) error {
 
 	v.logger.Info("Deleted IPv6 address", "interface", ifName, "address", address)
 	return nil
+}
+
+func (v *VPP) waitForLink(name string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if _, _, err := v.findLink(name); err == nil {
+			return nil
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return fmt.Errorf("timeout waiting for LCP interface %q", name)
 }
 
 // Internal helpers

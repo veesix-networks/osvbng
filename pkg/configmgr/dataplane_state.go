@@ -32,6 +32,16 @@ func NewDataplaneState() *DataplaneState {
 	}
 }
 
+func (ds *DataplaneState) Reset() {
+	clear(ds.Interfaces)
+	clear(ds.InterfacesByName)
+	clear(ds.Unnumbered)
+	clear(ds.IPv6Enabled)
+	clear(ds.IPv6RA)
+	clear(ds.PuntRegistrations)
+	clear(ds.DHCPv6MulticastEnabled)
+}
+
 func (ds *DataplaneState) LoadFromDataplane(sb southbound.Southbound) error {
 	interfaces, err := sb.DumpInterfaces()
 	if err != nil {

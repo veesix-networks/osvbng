@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -19,6 +20,9 @@ import (
 	"github.com/veesix-networks/osvbng/internal/pppoe"
 	"github.com/veesix-networks/osvbng/internal/routing"
 	"github.com/veesix-networks/osvbng/internal/subscriber"
+	"github.com/veesix-networks/osvbng/internal/watchdog"
+	"github.com/veesix-networks/osvbng/internal/watchdog/targets"
+	syscfg "github.com/veesix-networks/osvbng/pkg/config/system"
 	"github.com/veesix-networks/osvbng/pkg/auth"
 	"github.com/veesix-networks/osvbng/pkg/cache/memory"
 	"github.com/veesix-networks/osvbng/pkg/component"
@@ -174,48 +178,9 @@ func main() {
 		PluginComponents: nil,
 	})
 
-	mainLog.Info("Applying startup configuration")
-	if err := configd.ApplyLoadedConfig(); err != nil {
-		if err.Error() == "failed to commit: no changes to commit" {
-			mainLog.Info("No startup configuration changes to apply")
-		} else {
-			log.Fatalf("Failed to apply startup config: %v", err)
-		}
-	} else {
-		mainLog.Info("Startup configuration applied")
+	if err := bootstrapDataplane(mainLog, configd, vpp, vrfMgr, svcGroupResolver, cppmManager, cfg, accessInterface); err != nil {
+		log.Fatalf("Failed to bootstrap dataplane: %v", err)
 	}
-
-	mainLog.Info("Waiting for VPP LCP to sync interfaces...")
-	time.Sleep(5 * time.Second)
-
-	if err := vpp.LoadInterfaces(); err != nil {
-		mainLog.Warn("Failed to load interfaces from dataplane", "error", err)
-	}
-
-	if err := vpp.LoadIPState(); err != nil {
-		mainLog.Warn("Failed to load IP state from dataplane", "error", err)
-	}
-
-	mainLog.Info("Loading dataplane state")
-	if err := configd.LoadFromDataplane(vpp); err != nil {
-		log.Fatalf("Failed to load dataplane state: %v", err)
-	}
-
-	configd.AutoRegisterHandlers(&deps.ConfDeps{
-		DataplaneState:   configd.GetDataplaneState(),
-		Southbound:       vpp,
-		AAA:              nil,
-		Routing:          nil,
-		VRFManager:       vrfMgr,
-		SvcGroupResolver: svcGroupResolver,
-		PluginComponents: nil,
-	})
-
-	// VPP blackholes 255.255.255.255/32 as per default FIB implementation, this is a temp workaround for now, there are many better solutions but require more time
-	if err := vpp.AddLocalRoute("255.255.255.255/32"); err != nil {
-		log.Fatalf("Failed to add broadcast route: %v", err)
-	}
-	mainLog.Info("Added broadcast route for DHCP")
 
 	eventBus := local.NewBus()
 	cache := memory.New()
@@ -249,24 +214,6 @@ func main() {
 	coreDeps.ARPChan = dpComp.ARPChan
 	coreDeps.PPPChan = dpComp.PPPoEChan
 	coreDeps.IPv6NDChan = dpComp.IPv6NDChan
-
-	mainLog.Info("Applying infrastructure configuration")
-	infraSessionID, err := configd.CreateCandidateSession()
-	if err != nil {
-		log.Fatalf("Failed to create infrastructure session: %v", err)
-	}
-	if err := configd.ApplyInfrastructureConfig(infraSessionID, cfg, accessInterface); err != nil {
-		configd.CloseCandidateSession(infraSessionID)
-		log.Fatalf("Failed to apply infrastructure config: %v", err)
-	}
-	if err := configd.Commit(infraSessionID); err != nil {
-		if err.Error() != "no changes to commit" {
-			configd.CloseCandidateSession(infraSessionID)
-			log.Fatalf("Failed to commit infrastructure config: %v", err)
-		}
-	}
-	configd.CloseCandidateSession(infraSessionID)
-	mainLog.Info("Infrastructure configuration applied")
 
 	authProviderName := cfg.AAA.AuthProvider
 	if authProviderName == "" {
@@ -336,6 +283,65 @@ func main() {
 		log.Fatalf("Failed to create pppoe component: %v", err)
 	}
 
+	wdCfg := cfg.Watchdog
+
+	var wd *watchdog.Watchdog
+	if wdCfg.Enabled {
+		wd = watchdog.New()
+
+		if tc := wdCfg.Targets["vpp"]; tc == nil || tc.Enabled {
+			vppTarget := targets.NewVPPTarget(vpp, apiSocket, isCritical(wdCfg.Targets["vpp"]))
+			vppTarget.SetCallbacks(targets.VPPCallbacks{
+				OnDown: func() {
+					mainLog.Error("VPP is DOWN, pausing dataplane")
+					dpComp.PauseProcessing()
+				},
+				OnUp: func() {
+					mainLog.Info("VPP is UP, resuming dataplane")
+					dpComp.ResumeProcessing()
+				},
+				OnRecover: func(ctx context.Context) error {
+					mainLog.Info("VPP recovery: reconnecting southbound")
+					if err := vpp.Reconnect(apiSocket); err != nil {
+						return fmt.Errorf("VPP reconnect: %w", err)
+					}
+
+					ifCount := len(vpp.GetIfMgr().List())
+					mainLog.Info("VPP recovery: checked dataplane state", "interfaces", ifCount)
+
+					if ifCount <= 1 {
+						mainLog.Info("VPP recovery: dataplane state lost, bootstrapping")
+						if err := bootstrapDataplane(mainLog, configd, vpp, vrfMgr, svcGroupResolver, cppmManager, cfg, accessInterface); err != nil {
+							return fmt.Errorf("bootstrap dataplane: %w", err)
+						}
+
+						mainLog.Info("VPP recovery: reconnecting dataplane SHM")
+						if err := dpComp.Reconnect(); err != nil {
+							return fmt.Errorf("dataplane reconnect: %w", err)
+						}
+
+						mainLog.Info("VPP recovery: recovering IPoE sessions")
+						if err := ipoeComp.(*ipoe.Component).RecoverSessions(ctx); err != nil {
+							mainLog.Error("IPoE session recovery failed", "error", err)
+						}
+
+						mainLog.Info("VPP recovery: recovering PPPoE sessions")
+						if err := pppoeComp.(*pppoe.Component).RecoverSessions(ctx); err != nil {
+							mainLog.Error("PPPoE session recovery failed", "error", err)
+						}
+					}
+
+					return nil
+				},
+			})
+			wd.Register(vppTarget, buildRunnerConfig(wdCfg, wdCfg.Targets["vpp"]))
+		}
+
+		if tc := wdCfg.Targets["frr"]; tc == nil || tc.Enabled {
+			wd.Register(targets.NewFRRTarget("", isCritical(wdCfg.Targets["frr"])), buildRunnerConfig(wdCfg, wdCfg.Targets["frr"]))
+		}
+	}
+
 	showRegistry := show.NewRegistry()
 	operRegistry := oper.NewRegistry()
 
@@ -378,6 +384,9 @@ func main() {
 	orch.Register(pppoeComp)
 	orch.Register(monitorComp)
 	orch.Register(gatewayComp)
+	if wd != nil {
+		orch.Register(wd)
+	}
 
 	pluginComponents, err := component.LoadAll(coreDeps)
 	if err != nil {
@@ -413,6 +422,7 @@ func main() {
 		Cache:            cache,
 		OpDB:             opdbStore,
 		CPPM:             cppmManager,
+		Watchdog:         wd,
 		PluginComponents: pluginComponentsMap,
 	})
 
@@ -425,6 +435,11 @@ func main() {
 		if apiPlugin, ok := apiComp.(interface{ SetRegistries(*northbound.Adapter) }); ok {
 			adapter := northbound.NewAdapter(showRegistry, configd.GetRegistry(), operRegistry, configd)
 			apiPlugin.SetRegistries(adapter)
+		}
+		if wd != nil {
+			if hp, ok := apiComp.(interface{ SetHealthEndpoints(*watchdog.Watchdog) }); ok {
+				hp.SetHealthEndpoints(wd)
+			}
 		}
 	}
 
@@ -450,4 +465,121 @@ func main() {
 	}
 
 	mainLog.Info("osvbng stopped")
+}
+
+func isCritical(tc *syscfg.WatchdogTargetConfig) bool {
+	if tc == nil || tc.Critical == nil {
+		return false
+	}
+	return *tc.Critical
+}
+
+func buildRunnerConfig(wdCfg syscfg.WatchdogConfig, tc *syscfg.WatchdogTargetConfig) watchdog.RunnerConfig {
+	rc := watchdog.RunnerConfig{
+		CheckInterval:       wdCfg.CheckInterval,
+		Timeout:             3 * time.Second,
+		FailureThreshold:    3,
+		OnFailure:           watchdog.ActionWarn,
+		ReconnectBackoff:    1 * time.Second,
+		ReconnectMaxBackoff: 30 * time.Second,
+		FailExitCode:        1,
+	}
+
+	if tc == nil {
+		return rc
+	}
+
+	if tc.Timeout > 0 {
+		rc.Timeout = tc.Timeout
+	}
+	if tc.FailureThreshold > 0 {
+		rc.FailureThreshold = tc.FailureThreshold
+	}
+	if tc.OnFailure != "" {
+		rc.OnFailure = watchdog.FailureAction(tc.OnFailure)
+	}
+	if tc.MinRestartInterval > 0 {
+		rc.MinRestartInterval = tc.MinRestartInterval
+	}
+	if tc.ReconnectBackoff > 0 {
+		rc.ReconnectBackoff = tc.ReconnectBackoff
+	}
+	if tc.ReconnectMaxBackoff > 0 {
+		rc.ReconnectMaxBackoff = tc.ReconnectMaxBackoff
+	}
+	if tc.ReconnectMaxRetries > 0 {
+		rc.ReconnectMaxRetries = tc.ReconnectMaxRetries
+	}
+	if tc.FailExitCode != 0 {
+		rc.FailExitCode = tc.FailExitCode
+	}
+	if tc.FailDelay > 0 {
+		rc.FailDelay = tc.FailDelay
+	}
+
+	return rc
+}
+
+func bootstrapDataplane(
+	log *slog.Logger,
+	configd *configmgr.ConfigManager,
+	sb *vpp.VPP,
+	vrfMgr *vrfmgr.Manager,
+	svcGroupResolver *svcgroup.Resolver,
+	cppmManager *cppm.Manager,
+	cfg *config.Config,
+	accessInterface string,
+) error {
+	configd.ResetForRecovery()
+	vrfMgr.Reset()
+
+	log.Info("Applying startup configuration")
+	if err := configd.ApplyLoadedConfig(); err != nil {
+		if err.Error() != "failed to commit: no changes to commit" {
+			return fmt.Errorf("apply startup config: %w", err)
+		}
+	}
+
+	if err := sb.LoadInterfaces(); err != nil {
+		log.Warn("Failed to load interfaces", "error", err)
+	}
+	if err := sb.LoadIPState(); err != nil {
+		log.Warn("Failed to load IP state", "error", err)
+	}
+
+	if err := configd.LoadFromDataplane(sb); err != nil {
+		return fmt.Errorf("load dataplane state: %w", err)
+	}
+
+	configd.AutoRegisterHandlers(&deps.ConfDeps{
+		DataplaneState:   configd.GetDataplaneState(),
+		Southbound:       sb,
+		CPPM:             cppmManager,
+		VRFManager:       vrfMgr,
+		SvcGroupResolver: svcGroupResolver,
+	})
+
+	if err := sb.AddLocalRoute("255.255.255.255/32"); err != nil {
+		log.Warn("Failed to add broadcast route", "error", err)
+	}
+
+	log.Info("Applying infrastructure configuration")
+	infraSess, err := configd.CreateCandidateSession()
+	if err != nil {
+		return fmt.Errorf("create infra session: %w", err)
+	}
+	if err := configd.ApplyInfrastructureConfig(infraSess, cfg, accessInterface); err != nil {
+		configd.CloseCandidateSession(infraSess)
+		return fmt.Errorf("apply infrastructure config: %w", err)
+	}
+	if err := configd.Commit(infraSess); err != nil {
+		if err.Error() != "no changes to commit" {
+			configd.CloseCandidateSession(infraSess)
+			return fmt.Errorf("commit infrastructure config: %w", err)
+		}
+	}
+	configd.CloseCandidateSession(infraSess)
+
+	log.Info("Dataplane bootstrap complete")
+	return nil
 }

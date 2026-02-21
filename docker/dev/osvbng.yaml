@@ -274,3 +274,23 @@ dataplane:
         size: "512m"
         page-size: "4k"
         per-node-counters: false
+
+watchdog:
+  enabled: true
+  check-interval: 3s
+  targets:
+    vpp:
+      enabled: true
+      timeout: 2s
+      failure-threshold: 3
+      on-failure: restart
+      min-restart-interval: 30s
+      reconnect-backoff: 2s
+      reconnect-max-backoff: 30s
+      critical: true
+    frr:
+      enabled: true
+      timeout: 2s
+      failure-threshold: 3
+      on-failure: warn
+      critical: false

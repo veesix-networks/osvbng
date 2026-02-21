@@ -189,6 +189,11 @@ func (c *Client) Close() error {
 	return nil
 }
 
+func (c *Client) Reconnect() error {
+	c.Close()
+	return c.Connect()
+}
+
 func (c *Client) PuntEventfd() int {
 	return c.puntEventfd
 }

@@ -768,3 +768,27 @@ func (c *Component) restoreSessionToCache(ctx context.Context, sess *SessionStat
 		c.logger.Warn("Failed to restore session to cache", "session_id", sess.SessionID, "error", err)
 	}
 }
+
+func (c *Component) RecoverSessions(ctx context.Context) error {
+	c.sessionMu.RLock()
+	total := len(c.sessions)
+	c.sessionMu.RUnlock()
+
+	if total == 0 {
+		c.logger.Info("No PPPoE sessions to recover")
+		return nil
+	}
+
+	c.logger.Info("Recovering PPPoE sessions from OpDB", "total_in_memory", total)
+
+	if err := c.restoreSessions(ctx); err != nil {
+		return fmt.Errorf("recover pppoe sessions: %w", err)
+	}
+
+	c.sessionMu.RLock()
+	recovered := len(c.sessions)
+	c.sessionMu.RUnlock()
+
+	c.logger.Info("PPPoE session recovery complete", "recovered", recovered)
+	return nil
+}

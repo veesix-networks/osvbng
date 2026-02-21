@@ -20,6 +20,8 @@ const (
 	Northbound = "nb"
 	SvcGroup   = "svcgroup"
 
+	WatchdogLog = "watchdog"
+
 	IPoEDHCP4   = "dhcp4"
 	IPoEDHCP6   = "dhcp6"
 	IPoESession = "session"
