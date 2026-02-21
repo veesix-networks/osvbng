@@ -36,8 +36,8 @@ router bgp {{ .Protocols.BGP.ASN }}
 {{ if .Protocols.BGP.IPv4Unicast }}
  address-family ipv4 unicast
 {{ range $name, $peerGroup := $.Protocols.BGP.PeerGroups }}
-{{ if $peerGroup.IPv4Unicast }}
   neighbor {{ $name }} activate
+{{ if $peerGroup.IPv4Unicast }}
 {{ if $peerGroup.IPv4Unicast.NextHopSelf }}
   neighbor {{ $name }} next-hop-self
 {{ end }}
@@ -53,8 +53,8 @@ router bgp {{ .Protocols.BGP.ASN }}
 {{ end }}
 {{ end }}
 {{ range $addr, $neighbor := $.Protocols.BGP.Neighbors }}
-{{ if $neighbor.IPv4Unicast }}
   neighbor {{ $addr }} activate
+{{ if $neighbor.IPv4Unicast }}
 {{ if $neighbor.IPv4Unicast.NextHopSelf }}
   neighbor {{ $addr }} next-hop-self
 {{ end }}
@@ -86,8 +86,8 @@ router bgp {{ .Protocols.BGP.ASN }}
 {{ if .Protocols.BGP.IPv6Unicast }}
  address-family ipv6 unicast
 {{ range $name, $peerGroup := $.Protocols.BGP.PeerGroups }}
-{{ if $peerGroup.IPv6Unicast }}
   neighbor {{ $name }} activate
+{{ if $peerGroup.IPv6Unicast }}
 {{ if $peerGroup.IPv6Unicast.NextHopSelf }}
   neighbor {{ $name }} next-hop-self
 {{ end }}
@@ -103,8 +103,8 @@ router bgp {{ .Protocols.BGP.ASN }}
 {{ end }}
 {{ end }}
 {{ range $addr, $neighbor := $.Protocols.BGP.Neighbors }}
-{{ if $neighbor.IPv6Unicast }}
   neighbor {{ $addr }} activate
+{{ if $neighbor.IPv6Unicast }}
 {{ if $neighbor.IPv6Unicast.NextHopSelf }}
   neighbor {{ $addr }} next-hop-self
 {{ end }}
