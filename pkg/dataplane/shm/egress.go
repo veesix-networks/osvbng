@@ -140,6 +140,24 @@ func (e *Egress) SendPacket(pkt *dataplane.EgressPacket) error {
 	}
 }
 
+func (e *Egress) Reconnect(client *Client) error {
+	e.logger.Info("Reconnecting SHM egress")
+
+	close(e.closeChan)
+	e.wg.Wait()
+
+	e.client = client
+	e.writer = NewEgressWriter(client)
+	e.txChan = make(chan *dataplane.EgressPacket, 1000)
+	e.closeChan = make(chan struct{})
+
+	e.wg.Add(1)
+	go e.txFlushLoop()
+
+	e.logger.Info("SHM egress reconnected")
+	return nil
+}
+
 func (e *Egress) Close() error {
 	close(e.closeChan)
 	e.wg.Wait()

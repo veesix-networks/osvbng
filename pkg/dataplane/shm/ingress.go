@@ -189,6 +189,22 @@ func (i *Ingress) parsePacket(pkt *PuntPacket) (*dataplane.ParsedPacket, error) 
 	return parsed, nil
 }
 
+func (i *Ingress) Reconnect() error {
+	i.logger.Info("Reconnecting SHM ingress")
+
+	if err := i.client.Reconnect(); err != nil {
+		return fmt.Errorf("reconnect shm client: %w", err)
+	}
+
+	i.reader = NewPuntReader(i.client)
+
+	i.logger.Info("SHM ingress reconnected",
+		"punt_ring_size", i.client.header.PuntRingSize,
+		"egress_ring_size", i.client.header.EgressRingSize,
+	)
+	return nil
+}
+
 func (i *Ingress) Client() *Client {
 	return i.client
 }

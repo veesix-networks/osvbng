@@ -10,6 +10,7 @@ import (
 	southbound "github.com/veesix-networks/osvbng/pkg/southbound"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
+	"go.fd.io/govpp"
 	"go.fd.io/govpp/api"
 	"go.fd.io/govpp/core"
 )
@@ -135,5 +136,60 @@ func (v *VPP) Close() error {
 		v.fibChan.Close()
 	}
 	v.conn.Disconnect()
+	return nil
+}
+
+func (v *VPP) Reconnect(apiSocket string) error {
+	v.logger.Info("Reconnecting to VPP", "socket", apiSocket)
+
+	if v.asyncWorker != nil {
+		v.asyncWorker.Stop()
+		v.asyncWorker = nil
+	}
+
+	if v.statsClient != nil {
+		v.statsClient.Disconnect()
+	}
+
+	if v.fibChan != nil {
+		v.fibChan.Close()
+		v.fibChan = nil
+	}
+
+	v.conn.Disconnect()
+
+	newConn, err := govpp.Connect(apiSocket)
+	if err != nil {
+		return fmt.Errorf("reconnect to VPP API: %w", err)
+	}
+	v.conn = newConn
+
+	fibChan, err := newConn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("recreate FIB API channel: %w", err)
+	}
+	v.fibChan = fibChan
+
+	asyncWorker, err := NewAsyncWorker(newConn, DefaultAsyncWorkerConfig())
+	if err != nil {
+		return fmt.Errorf("recreate async worker: %w", err)
+	}
+	v.asyncWorker = asyncWorker
+	asyncWorker.Start()
+
+	if err := v.statsClient.Connect(); err != nil {
+		v.logger.Warn("Failed to reconnect stats client", "error", err)
+	}
+
+	v.ifMgr.Clear()
+	if err := v.LoadInterfaces(); err != nil {
+		return fmt.Errorf("reload interfaces: %w", err)
+	}
+
+	if err := v.LoadIPState(); err != nil {
+		v.logger.Warn("Failed to reload IP state", "error", err)
+	}
+
+	v.logger.Info("VPP reconnected", "interfaces_loaded", len(v.ifMgr.List()))
 	return nil
 }

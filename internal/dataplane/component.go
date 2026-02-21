@@ -40,6 +40,10 @@ type Component struct {
 	egressCount  atomic.Int64
 	egressErrors atomic.Int64
 	readLoopWg   sync.WaitGroup
+
+	readCtx    context.Context
+	readCancel context.CancelFunc
+	paused     atomic.Bool
 }
 
 func New(deps component.Dependencies) (component.Component, error) {
@@ -81,11 +85,16 @@ func (c *Component) Start(ctx context.Context) error {
 		return fmt.Errorf("subscribe to session lifecycle: %w", err)
 	}
 
+	c.startReadLoop()
+
+	return nil
+}
+
+func (c *Component) startReadLoop() {
+	c.readCtx, c.readCancel = context.WithCancel(c.Ctx)
 	c.readLoopWg.Add(2)
 	go c.readLoop()
 	go c.egressStatsLoop()
-
-	return nil
 }
 
 func (c *Component) egressStatsLoop() {
@@ -95,7 +104,7 @@ func (c *Component) egressStatsLoop() {
 	var lastCount, lastErrors int64
 	for {
 		select {
-		case <-c.Ctx.Done():
+		case <-c.readCtx.Done():
 			return
 		case <-ticker.C:
 			count := c.egressCount.Load()
@@ -112,7 +121,7 @@ func (c *Component) egressStatsLoop() {
 func (c *Component) readLoop() {
 	defer c.readLoopWg.Done()
 	c.logger.Info("Starting dataplane readLoop")
-	ctx := c.Ctx
+	ctx := c.readCtx
 	pktCount := 0
 	lastLogTime := time.Now()
 	for {
@@ -193,6 +202,61 @@ func (c *Component) readLoop() {
 			default:
 				c.logger.Warn("Unknown protocol", "protocol", pkt.Protocol)
 			}
+		}
+	}
+}
+
+func (c *Component) PauseProcessing() {
+	if c.paused.Load() {
+		return
+	}
+	c.logger.Info("Pausing dataplane processing")
+	c.paused.Store(true)
+
+	if c.readCancel != nil {
+		c.readCancel()
+	}
+	c.readLoopWg.Wait()
+
+	c.drainChannels()
+	c.logger.Info("Dataplane processing paused")
+}
+
+func (c *Component) ResumeProcessing() {
+	if !c.paused.Load() {
+		return
+	}
+	c.logger.Info("Resuming dataplane processing")
+	c.paused.Store(false)
+	c.startReadLoop()
+	c.logger.Info("Dataplane processing resumed")
+}
+
+func (c *Component) Reconnect() error {
+	c.logger.Info("Reconnecting dataplane SHM")
+
+	if err := c.ingress.Reconnect(); err != nil {
+		return fmt.Errorf("reconnect ingress: %w", err)
+	}
+
+	if err := c.egress.Reconnect(c.ingress.Client()); err != nil {
+		return fmt.Errorf("reconnect egress: %w", err)
+	}
+
+	c.logger.Info("Dataplane SHM reconnected")
+	return nil
+}
+
+func (c *Component) drainChannels() {
+	for {
+		select {
+		case <-c.DHCPChan:
+		case <-c.DHCPv6Chan:
+		case <-c.ARPChan:
+		case <-c.PPPoEChan:
+		case <-c.IPv6NDChan:
+		default:
+			return
 		}
 	}
 }

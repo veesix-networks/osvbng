@@ -61,6 +61,11 @@ func (s *StatsClient) IsConnected() bool {
 	return s.connected
 }
 
+func (s *StatsClient) Reconnect() error {
+	s.Disconnect()
+	return s.Connect()
+}
+
 func (s *StatsClient) GetSystemStats() (*southbound.SystemStats, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
