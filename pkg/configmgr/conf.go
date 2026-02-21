@@ -599,6 +599,20 @@ func (cd *ConfigManager) GetStartup() (*config.Config, error) {
 	return cd.startupConfig, nil
 }
 
+func (cd *ConfigManager) ResetForRecovery() {
+	cd.mu.Lock()
+	defer cd.mu.Unlock()
+
+	cd.runningConfig = &config.Config{}
+	if cd.dataplaneState != nil {
+		cd.dataplaneState.Reset()
+	} else {
+		cd.dataplaneState = NewDataplaneState()
+	}
+	cd.sessions = make(map[conf.SessionID]*session)
+	cd.logger.Info("Config manager reset for recovery")
+}
+
 func (cd *ConfigManager) LoadFromDataplane(sb southbound.Southbound) error {
 	cd.mu.Lock()
 	defer cd.mu.Unlock()

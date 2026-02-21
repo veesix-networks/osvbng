@@ -46,12 +46,38 @@ func (m *Manager) SetNetlinkHandle(h *netlink.Handle) {
 	m.netlinkHandle = h
 }
 
+func (m *Manager) Reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	clear(m.vrfs)
+}
+
 func (m *Manager) CreateVRF(ctx context.Context, name string, ipv4 bool, ipv6 bool) (uint32, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if e, ok := m.vrfs[name]; ok {
 		return e.TableID, nil
+	}
+
+	if tableID, ok := m.findExistingLinuxVRF(name); ok {
+		if ipv4 {
+			if err := m.tables.AddIPTable(tableID, false, name); err != nil {
+				return 0, fmt.Errorf("create VPP IPv4 table for existing VRF %q: %w", name, err)
+			}
+		}
+		if ipv6 {
+			if err := m.tables.AddIPTable(tableID, true, name); err != nil {
+				if ipv4 {
+					m.tables.DelIPTable(tableID, false)
+				}
+				return 0, fmt.Errorf("create VPP IPv6 table for existing VRF %q: %w", name, err)
+			}
+		}
+		m.vrfs[name] = &vrfEntry{Name: name, TableID: tableID, IPv4: ipv4, IPv6: ipv6}
+		m.logger.Info("Recovered existing VRF", "name", name, "table_id", tableID)
+		return tableID, nil
 	}
 
 	tableID, err := m.allocateTableID()
@@ -214,6 +240,15 @@ func (m *Manager) Reconcile(ctx context.Context, desired map[string]*ip.VRFSConf
 	}
 
 	return nil
+}
+
+func (m *Manager) findExistingLinuxVRF(name string) (uint32, bool) {
+	existing, err := m.discoverLinuxVRFs()
+	if err != nil {
+		return 0, false
+	}
+	tableID, ok := existing[name]
+	return tableID, ok
 }
 
 func (m *Manager) allocateTableID() (uint32, error) {
