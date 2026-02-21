@@ -56,6 +56,7 @@ func (cm *ConfigManager) processBGPForGroup(sessionID conf.SessionID, cfg *confi
 				if err := cm.addBGPNetwork(sessionID, pool.Network, vrf); err != nil {
 					return fmt.Errorf("pool %s: %w", pool.Name, err)
 				}
+				addPoolBlackholeRoute(cfg, pool.Network)
 			}
 		}
 	}
@@ -99,6 +100,28 @@ func (cm *ConfigManager) addBGPNetwork(sessionID conf.SessionID, network, vrf st
 	}
 
 	return cm.Set(sessionID, path, &protocols.BGPNetwork{})
+}
+
+func addPoolBlackholeRoute(cfg *config.Config, network string) {
+	route := protocols.StaticRoute{
+		Destination: network,
+		NextHop:     "blackhole",
+	}
+
+	if cfg.Protocols.Static == nil {
+		cfg.Protocols.Static = &protocols.StaticConfig{}
+	}
+
+	ip, _, err := net.ParseCIDR(network)
+	if err != nil {
+		return
+	}
+
+	if ip.To4() != nil {
+		cfg.Protocols.Static.IPv4 = append(cfg.Protocols.Static.IPv4, route)
+	} else {
+		cfg.Protocols.Static.IPv6 = append(cfg.Protocols.Static.IPv6, route)
+	}
 }
 
 func (cm *ConfigManager) enableBGPRedistribute(sessionID conf.SessionID, proto, vrf string) error {
