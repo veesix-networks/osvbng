@@ -1108,6 +1108,10 @@ func (v *VPP) createLCPPair(vppIface, linuxIface string, hostType lcp.LcpItfHost
 
 	reply := &lcp.LcpItfPairAddDelReply{}
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		if reply.Retval == -81 {
+			v.logger.Info("LCP pair already exists", "vpp_iface", vppIface, "linux_iface", linuxIface)
+			return nil
+		}
 		return fmt.Errorf("create LCP pair: %w", err)
 	}
 
