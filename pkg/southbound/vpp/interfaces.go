@@ -157,13 +157,6 @@ func (v *VPP) GetInterfaceIndex(name string) (int, error) {
 		if reply.InterfaceName == name || reply.InterfaceName == "host-"+name {
 			v.logger.Debug("Found matching interface", "requested_name", name, "matched_name", reply.InterfaceName, "sw_if_index", reply.SwIfIndex)
 			ifaceName := strings.TrimRight(reply.InterfaceName, "\x00")
-			mac := reply.L2Address[:]
-			if strings.HasPrefix(ifaceName, "host-") && isZeroMAC(mac) {
-				linuxIfName := strings.TrimPrefix(ifaceName, "host-")
-				if linuxIf, err := net.InterfaceByName(linuxIfName); err == nil {
-					mac = linuxIf.HardwareAddr
-				}
-			}
 			v.ifMgr.Add(&ifmgr.Interface{
 				SwIfIndex:       uint32(reply.SwIfIndex),
 				SupSwIfIndex:    reply.SupSwIfIndex,
@@ -173,7 +166,7 @@ func (v *VPP) GetInterfaceIndex(name string) (int, error) {
 				AdminUp:         reply.Flags&interface_types.IF_STATUS_API_FLAG_ADMIN_UP != 0,
 				LinkUp:          reply.Flags&interface_types.IF_STATUS_API_FLAG_LINK_UP != 0,
 				MTU:             reply.Mtu[0],
-				MAC:             mac,
+				MAC:             reply.L2Address[:],
 				SubID:           reply.SubID,
 				SubNumberOfTags: reply.SubNumberOfTags,
 				OuterVlanID:     reply.SubOuterVlanID,
@@ -187,10 +180,6 @@ func (v *VPP) GetInterfaceIndex(name string) (int, error) {
 }
 
 func (v *VPP) SetInterfacePromiscuous(ifaceName string, on bool) error {
-	// For af-packet interfaces, VPP may report a zero MAC. Set the Linux
-	// interface MAC on the VPP side so ethernet-input accepts unicast traffic,
-	// and enable Linux promiscuous mode for future SRG/VRRP virtual MACs.
-
 	link, err := netlink.LinkByName(ifaceName)
 	if err != nil {
 		return fmt.Errorf("find linux interface %s: %w", ifaceName, err)
@@ -205,31 +194,11 @@ func (v *VPP) SetInterfacePromiscuous(ifaceName string, on bool) error {
 		}
 	}
 
-	idx, err := v.GetInterfaceIndex(ifaceName)
-	if err != nil {
-		v.logger.Warn("Could not find VPP interface for MAC sync", "interface", ifaceName, "error", err)
-		return nil
-	}
-
-	linuxIf, err := net.InterfaceByName(ifaceName)
-	if err != nil {
-		v.logger.Warn("Could not get Linux interface MAC", "interface", ifaceName, "error", err)
-		return nil
-	}
-
-	if len(linuxIf.HardwareAddr) >= 6 {
-		if err := v.setInterfaceMAC(interface_types.InterfaceIndex(idx), linuxIf.HardwareAddr); err != nil {
-			v.logger.Warn("Failed to set VPP interface MAC from Linux", "interface", ifaceName, "error", err)
-		} else {
-			v.logger.Debug("Synced VPP interface MAC from Linux", "interface", ifaceName, "mac", linuxIf.HardwareAddr)
-		}
-	}
-
 	v.logger.Debug("Set interface promiscuous", "interface", ifaceName, "on", on)
 	return nil
 }
 
-func (v *VPP) setInterfaceMAC(swIfIndex interface_types.InterfaceIndex, mac net.HardwareAddr) error {
+func (v *VPP) SetInterfaceMAC(swIfIndex interface_types.InterfaceIndex, mac net.HardwareAddr) error {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
 		return err
@@ -446,14 +415,6 @@ func (v *VPP) LoadInterfaces() error {
 		}
 
 		ifaceName := strings.TrimRight(reply.InterfaceName, "\x00")
-		mac := reply.L2Address[:]
-
-		if strings.HasPrefix(ifaceName, "host-") && isZeroMAC(mac) {
-			linuxIfName := strings.TrimPrefix(ifaceName, "host-")
-			if linuxIf, err := net.InterfaceByName(linuxIfName); err == nil {
-				mac = linuxIf.HardwareAddr
-			}
-		}
 
 		v.ifMgr.Add(&ifmgr.Interface{
 			SwIfIndex:       uint32(reply.SwIfIndex),
@@ -465,7 +426,7 @@ func (v *VPP) LoadInterfaces() error {
 			LinkUp:          reply.Flags&interface_types.IF_STATUS_API_FLAG_LINK_UP != 0,
 			MTU:             reply.Mtu[0],
 			LinkSpeed:       reply.LinkSpeed,
-			MAC:             mac,
+			MAC:             reply.L2Address[:],
 			SubID:           reply.SubID,
 			SubNumberOfTags: reply.SubNumberOfTags,
 			OuterVlanID:     reply.SubOuterVlanID,
@@ -1031,6 +992,12 @@ func (v *VPP) createVPPHostInterface(linuxIface string) (string, error) {
 		NumRxQueues:     1,
 	}
 
+	var mac net.HardwareAddr
+	if linuxIf, err := net.InterfaceByName(linuxIface); err == nil && len(linuxIf.HardwareAddr) >= 6 {
+		mac = linuxIf.HardwareAddr
+		copy(afReq.HwAddr[:], mac)
+	}
+
 	afReply := &af_packet.AfPacketCreateV2Reply{}
 	if err := ch.SendRequest(afReq).ReceiveReply(afReply); err != nil {
 		return "", fmt.Errorf("create host-interface: %w", err)
@@ -1048,6 +1015,7 @@ func (v *VPP) createVPPHostInterface(linuxIface string) (string, error) {
 		Name:         vppIfName,
 		DevType:      "af_packet",
 		Type:         ifmgr.IfTypeHardware,
+		MAC:          mac,
 	})
 
 	rxModeReq := &vppinterfaces.SwInterfaceSetRxMode{
