@@ -21,6 +21,7 @@ var globalProvider *Provider
 type Provider struct {
 	db       *sql.DB
 	logger   *slog.Logger
+	cfg      *config.Config
 	allowAll bool
 }
 
@@ -53,6 +54,7 @@ func New(cfg *config.Config) (auth.AuthProvider, error) {
 	p := &Provider{
 		db:       db,
 		logger:   logger.Get(Namespace),
+		cfg:      cfg,
 		allowAll: pluginCfg.AllowAll,
 	}
 
@@ -94,24 +96,31 @@ func (p *Provider) Authenticate(ctx context.Context, req *auth.AuthRequest) (*au
 		return &auth.AuthResponse{Allowed: false}, nil
 	}
 
-	if chapResponse, ok := req.Attributes[aaa.AttrCHAPResponse]; ok {
-		if user.Password == nil {
-			p.logger.Debug("CHAP auth but user has no password", "username", req.Username)
-			return &auth.AuthResponse{Allowed: false}, nil
-		}
+	authenticate := false
+	if policy := p.cfg.AAA.GetPolicy(req.PolicyName); policy != nil {
+		authenticate = policy.Authenticate
+	}
 
-		chapID := req.Attributes[aaa.AttrCHAPID]
-		chapChallenge := req.Attributes[aaa.AttrCHAPChallenge]
+	if authenticate {
+		if chapResponse, ok := req.Attributes[aaa.AttrCHAPResponse]; ok {
+			if user.Password == nil {
+				p.logger.Debug("CHAP auth but user has no password", "username", req.Username)
+				return &auth.AuthResponse{Allowed: false}, nil
+			}
 
-		if !p.validateCHAP(chapID, chapChallenge, chapResponse, *user.Password) {
-			p.logger.Debug("CHAP validation failed", "username", req.Username)
-			return &auth.AuthResponse{Allowed: false}, nil
-		}
-	} else if user.Password != nil {
-		reqPassword, ok := req.Attributes[aaa.AttrPassword]
-		if !ok || reqPassword != *user.Password {
-			p.logger.Debug("Password mismatch", "username", req.Username)
-			return &auth.AuthResponse{Allowed: false}, nil
+			chapID := req.Attributes[aaa.AttrCHAPID]
+			chapChallenge := req.Attributes[aaa.AttrCHAPChallenge]
+
+			if !p.validateCHAP(chapID, chapChallenge, chapResponse, *user.Password) {
+				p.logger.Debug("CHAP validation failed", "username", req.Username)
+				return &auth.AuthResponse{Allowed: false}, nil
+			}
+		} else if user.Password != nil {
+			reqPassword, ok := req.Attributes[aaa.AttrPassword]
+			if !ok || reqPassword != *user.Password {
+				p.logger.Debug("Password mismatch", "username", req.Username)
+				return &auth.AuthResponse{Allowed: false}, nil
+			}
 		}
 	}
 
