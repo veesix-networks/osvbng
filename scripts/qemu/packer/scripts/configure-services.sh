@@ -34,6 +34,8 @@ Requires=osvbng-config.service
 After=osvbng-config.service
 
 [Service]
+ExecStartPre=-/sbin/ip netns add dataplane
+ExecStartPre=/sbin/ip netns exec dataplane ip link set lo up
 ExecStart=
 ExecStart=/usr/bin/vpp -c /etc/osvbng/dataplane.conf
 EOF
