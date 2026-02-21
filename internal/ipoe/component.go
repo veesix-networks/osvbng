@@ -159,6 +159,7 @@ func (c *Component) resolveDHCPv4(ctx *allocator.Context) *dhcp.ResolvedDHCPv4 {
 	}
 	profile := cfg.IPv4Profiles[ctx.ProfileName]
 	if profile == nil {
+		c.logger.Error("IPv4 profile not found", "profile", ctx.ProfileName, "session_id", ctx.SessionID)
 		return nil
 	}
 	resolved := dhcp.ResolveV4(ctx, profile)
@@ -191,6 +192,7 @@ func (c *Component) resolveDHCPv6(ctx *allocator.Context) *dhcp.ResolvedDHCPv6 {
 	}
 	profile := cfg.IPv6Profiles[profileName]
 	if profile == nil {
+		c.logger.Error("IPv6 profile not found", "profile", profileName, "session_id", ctx.SessionID)
 		return nil
 	}
 	return dhcp.ResolveV6(ctx, profile)
