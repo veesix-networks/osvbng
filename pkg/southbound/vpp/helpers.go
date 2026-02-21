@@ -24,12 +24,3 @@ func (v *VPP) toAddress(ip net.IP) (ip_types.Address, error) {
 	}
 	return addr, nil
 }
-
-func isZeroMAC(mac []byte) bool {
-	for _, b := range mac {
-		if b != 0 {
-			return false
-		}
-	}
-	return true
-}
