@@ -138,22 +138,20 @@ func main() {
 	vrfMgr := vrfmgr.New(vpp)
 	vpp.SetVRFResolver(vrfMgr.ResolveVRF)
 
-	if cfg.Dataplane.LCPNetNs != "" {
-		if err := vpp.SetLCPNetNs(cfg.Dataplane.LCPNetNs); err != nil {
-			mainLog.Warn("LCP netns not available, LCP interfaces will use default namespace", "ns", cfg.Dataplane.LCPNetNs, "error", err)
-		}
+	if err := vpp.SetLCPNetNs(config.LCPNetNs); err != nil {
+		mainLog.Warn("LCP netns not available, LCP interfaces will use default namespace", "ns", config.LCPNetNs, "error", err)
+	}
 
-		nsHandle, err := netns.GetFromName(cfg.Dataplane.LCPNetNs)
+	nsHandle, err := netns.GetFromName(config.LCPNetNs)
+	if err != nil {
+		mainLog.Warn("Failed to get LCP netns for VRF manager", "ns", config.LCPNetNs, "error", err)
+	} else {
+		nlHandle, err := netlink.NewHandleAt(nsHandle)
 		if err != nil {
-			mainLog.Warn("Failed to get LCP netns for VRF manager", "ns", cfg.Dataplane.LCPNetNs, "error", err)
+			mainLog.Warn("Failed to create netlink handle for VRF manager", "ns", config.LCPNetNs, "error", err)
 		} else {
-			nlHandle, err := netlink.NewHandleAt(nsHandle)
-			if err != nil {
-				mainLog.Warn("Failed to create netlink handle for VRF manager", "ns", cfg.Dataplane.LCPNetNs, "error", err)
-			} else {
-				vrfMgr.SetNetlinkHandle(nlHandle)
-				mainLog.Info("VRF manager configured for LCP namespace", "ns", cfg.Dataplane.LCPNetNs)
-			}
+			vrfMgr.SetNetlinkHandle(nlHandle)
+			mainLog.Info("VRF manager configured for LCP namespace", "ns", config.LCPNetNs)
 		}
 	}
 

@@ -8,6 +8,7 @@ import (
 
 const (
 	DefaultDataplaneConfigPath = "/etc/osvbng/dataplane.conf"
+	LCPNetNs                   = "dataplane"
 )
 
 type DataplaneConf struct {
@@ -67,7 +68,7 @@ func NewDataplaneTemplateDataWithDefaults(cfg *Config, totalCores int) *Dataplan
 		UseDPDK:      useDPDK,
 		DPDK:         dpdk,
 		StatsSegment: statseg,
-		LCPNetNs:     cfg.Dataplane.LCPNetNs,
+		LCPNetNs:     LCPNetNs,
 	}
 }
 
