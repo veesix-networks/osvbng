@@ -16,7 +16,12 @@ Authentication, Authorization, and Accounting configuration.
 | `name` | string | Policy name | `default-policy` |
 | `format` | string | Username format | `$mac-address$` |
 | `type` | string | Session type: `dhcp` or `ppp` | `dhcp` |
+| `authenticate` | bool | Validate PPP credentials (CHAP/PAP). Default `false` | `false` |
 | `max_concurrent_sessions` | int | Max sessions per subscriber | `1` |
+
+When `authenticate` is `false` (default), the subscriber is identified by the policy `format` field only. PPP CHAP/PAP handshakes complete at the protocol level but credentials are not validated against the auth provider. The subscriber is authorized if the user exists and is enabled.
+
+When `authenticate` is `true`, the auth provider validates CHAP/PAP credentials. The user must have a password configured in the auth provider database.
 
 ## Username Format Variables
 
@@ -41,6 +46,9 @@ aaa:
   policy:
     - name: default-policy
       format: "$mac-address$"
-      type: dhcp
+      max_concurrent_sessions: 1
+    - name: credential-policy
+      format: "$mac-address$"
+      authenticate: true
       max_concurrent_sessions: 1
 ```
