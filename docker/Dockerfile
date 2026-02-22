@@ -45,6 +45,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     numactl \
     vpp=${DATAPLANE_VERSION} \
     vpp-plugin-core=${DATAPLANE_VERSION} \
+    vpp-plugin-dpdk=${DATAPLANE_VERSION} \
     libvppinfra=${DATAPLANE_VERSION} \
     && rm -rf /var/lib/apt/lists/*
 
