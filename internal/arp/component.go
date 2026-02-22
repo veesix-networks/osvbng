@@ -166,7 +166,7 @@ func (c *Component) handlePacket(pkt *dataplane.ParsedPacket) error {
 		return nil
 	}
 
-	egressPayload := &models.EgressPacketPayload{
+	egressPayload := models.EgressPacketPayload{
 		DstMAC:    srcMAC.String(),
 		SrcMAC:    gatewayMAC.String(),
 		OuterVLAN: pkt.OuterVLAN,
@@ -176,16 +176,13 @@ func (c *Component) handlePacket(pkt *dataplane.ParsedPacket) error {
 		RawData:   arpReply,
 	}
 
-	egressEvent := models.Event{
-		Type:       models.EventTypeEgress,
-		AccessType: models.AccessTypeIPoE,
-		Protocol:   models.ProtocolARP,
-	}
-	egressEvent.SetPayload(egressPayload)
-
-	if err := c.eventBus.Publish(events.TopicEgress, egressEvent); err != nil {
-		return fmt.Errorf("publish egress event: %w", err)
-	}
+	c.eventBus.Publish(events.TopicEgress, events.Event{
+		Source: c.Name(),
+		Data: &events.EgressEvent{
+			Protocol: models.ProtocolARP,
+			Packet:   egressPayload,
+		},
+	})
 
 	c.logger.Debug("Sent ARP reply", "target_ip", dstIP.String(), "gateway_mac", gatewayMAC.String())
 	return nil

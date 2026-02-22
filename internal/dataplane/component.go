@@ -37,6 +37,9 @@ type Component struct {
 
 	CPPM *cppm.Manager
 
+	egressSub    events.Subscription
+	lifecycleSub events.Subscription
+
 	egressCount  atomic.Int64
 	egressErrors atomic.Int64
 	readLoopWg   sync.WaitGroup
@@ -77,13 +80,8 @@ func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
 	c.logger.Info("Starting dataplane component")
 
-	if err := c.eventBus.Subscribe(events.TopicEgress, c.handleEgress); err != nil {
-		return fmt.Errorf("subscribe to egress: %w", err)
-	}
-
-	if err := c.eventBus.Subscribe(events.TopicSessionLifecycle, c.handleSessionLifecycle); err != nil {
-		return fmt.Errorf("subscribe to session lifecycle: %w", err)
-	}
+	c.egressSub = c.eventBus.Subscribe(events.TopicEgress, c.handleEgress)
+	c.lifecycleSub = c.eventBus.Subscribe(events.TopicSessionLifecycle, c.handleSessionLifecycle)
 
 	c.startReadLoop()
 
@@ -264,6 +262,9 @@ func (c *Component) drainChannels() {
 func (c *Component) Stop(ctx context.Context) error {
 	c.logger.Info("Stopping dataplane component")
 
+	c.egressSub.Unsubscribe()
+	c.lifecycleSub.Unsubscribe()
+
 	c.StopContext()
 	c.readLoopWg.Wait()
 
@@ -279,24 +280,29 @@ func (c *Component) Stop(ctx context.Context) error {
 }
 
 
-func (c *Component) handleEgress(event models.Event) error {
-	var payload models.EgressPacketPayload
-	if err := event.GetPayload(&payload); err != nil {
-		return fmt.Errorf("failed to decode egress packet payload: %w", err)
+func (c *Component) handleEgress(event events.Event) {
+	data, ok := event.Data.(*events.EgressEvent)
+	if !ok {
+		c.logger.Error("Invalid event data for egress")
+		return
 	}
+
+	payload := data.Packet
 
 	dstMAC, err := net.ParseMAC(payload.DstMAC)
 	if err != nil {
-		return fmt.Errorf("invalid dst mac: %w", err)
+		c.logger.Error("Invalid dst mac", "error", err)
+		return
 	}
 
 	srcMAC, err := net.ParseMAC(payload.SrcMAC)
 	if err != nil {
-		return fmt.Errorf("invalid src mac: %w", err)
+		c.logger.Error("Invalid src mac", "error", err)
+		return
 	}
 
 	etherType := ethernet.EtherTypeIPv4
-	switch event.Protocol {
+	switch data.Protocol {
 	case models.ProtocolARP:
 		etherType = ethernet.EtherTypeARP
 	case models.ProtocolPPPoEDiscovery:
@@ -327,19 +333,14 @@ func (c *Component) handleEgress(event models.Event) error {
 
 	if err := c.egress.SendPacket(pkt); err != nil {
 		c.egressErrors.Add(1)
-		return fmt.Errorf("send packet: %w", err)
+		c.logger.Error("Failed to send packet", "error", err)
+		return
 	}
 	c.egressCount.Add(1)
 
 	c.logger.Debug("Sent egress packet", "sw_if_index", swIfIndex, "payload_sw_if_index", payload.SwIfIndex, "dst_mac", dstMAC.String(), "src_mac", srcMAC.String(), "svlan", payload.OuterVLAN, "cvlan", payload.InnerVLAN)
-
-	return nil
 }
 
-func (c *Component) handleSessionLifecycle(event models.Event) error {
-	// session lifecycle fib programming is now moved to align with respective
-	// access technology profile, keeping this here for now until we've fully
-	// unified the dhcpv4, dhcpv6 and pppoe processes
-	return nil
+func (c *Component) handleSessionLifecycle(event events.Event) {
 }
 
