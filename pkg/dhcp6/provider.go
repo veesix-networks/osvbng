@@ -10,6 +10,7 @@ import (
 type DHCPProvider interface {
 	provider.Provider
 	HandlePacket(ctx context.Context, pkt *Packet) (*Packet, error)
+	ReleaseLease(duid []byte)
 }
 
 type Packet struct {

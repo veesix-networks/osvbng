@@ -761,6 +761,9 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 	encapIfIndex := sess.EncapIfIndex
 	innerVLAN := sess.InnerVLAN
 	ipv6Bound := sess.IPv6Bound
+	ipv6Address := sess.IPv6Address
+	ipv6Prefix := sess.IPv6Prefix
+	v6duid := sess.DHCPv6DUID
 
 	sess.IPv4 = nil
 	sess.State = "released"
@@ -773,6 +776,10 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 	}
 
 	if deleteSession {
+		sess.IPv6Bound = false
+		sess.IPv6Address = nil
+		sess.IPv6Prefix = nil
+		delete(c.xid6Index, sess.DHCPv6XID)
 		delete(c.sessionIndex, sessID)
 		delete(c.sessions, lookupKey)
 	}
@@ -783,16 +790,44 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 	if ipv4 != nil {
 		allocator.GetGlobalRegistry().ReleaseIP(ipv4)
 	}
+	if c.dhcp4Provider != nil {
+		c.dhcp4Provider.ReleaseLease(mac.String())
+	}
+	if deleteSession {
+		if ipv6Address != nil {
+			allocator.GetGlobalRegistry().ReleaseIANAByIP(ipv6Address)
+		}
+		if ipv6Prefix != nil {
+			allocator.GetGlobalRegistry().ReleasePDByPrefix(ipv6Prefix)
+		}
+		if c.dhcp6Provider != nil && v6duid != nil {
+			c.dhcp6Provider.ReleaseLease(v6duid)
+		}
+	}
 
 	if c.vpp != nil && ipoeSwIfIndex != 0 {
 		if ipv4 != nil {
 			c.vpp.IPoESetSessionIPv4Async(ipoeSwIfIndex, ipv4, false, func(err error) {
 				if err != nil {
-					c.logger.Warn("Failed to unbind IPv4 from IPoE session", "session_id", sessID, "error", err)
+					c.logger.Debug("Failed to unbind IPv4 from IPoE session", "session_id", sessID, "error", err)
 				}
 			})
 		}
 		if deleteSession {
+			if ipv6Address != nil {
+				c.vpp.IPoESetSessionIPv6Async(ipoeSwIfIndex, ipv6Address, false, func(err error) {
+					if err != nil {
+						c.logger.Debug("Failed to unbind IPv6 from IPoE session", "session_id", sessID, "error", err)
+					}
+				})
+			}
+			if ipv6Prefix != nil {
+				c.vpp.IPoESetDelegatedPrefixAsync(ipoeSwIfIndex, *ipv6Prefix, net.ParseIP("::"), false, func(err error) {
+					if err != nil {
+						c.logger.Debug("Failed to unbind delegated prefix from IPoE session", "session_id", sessID, "error", err)
+					}
+				})
+			}
 			c.vpp.DeleteIPoESessionAsync(mac, encapIfIndex, innerVLAN, func(err error) {
 				if err != nil {
 					c.logger.Warn("Failed to delete IPoE session", "session_id", sessID, "error", err)
@@ -944,6 +979,7 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 	}
 
 	c.sessionMu.Lock()
+	alreadyBound := sess.State == "bound"
 	sess.State = "bound"
 	sess.IPv4 = pkt.DHCPv4.YourClientIP
 	sess.LeaseTime = leaseTime
@@ -980,8 +1016,10 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 	}
 
 	counterKey := fmt.Sprintf("osvbng:session_count:%s:%d:%d", mac.String(), svlan, cvlan)
-	if _, err := c.cache.Incr(c.Ctx, counterKey); err != nil {
-		c.logger.Warn("Failed to increment session counter", "error", err, "key", counterKey)
+	if !alreadyBound {
+		if _, err := c.cache.Incr(c.Ctx, counterKey); err != nil {
+			c.logger.Warn("Failed to increment session counter", "error", err, "key", counterKey)
+		}
 	}
 	expiry := time.Duration(sess.LeaseTime*2) * time.Second
 	if expiry == 0 || expiry > 24*time.Hour {
@@ -1497,21 +1535,65 @@ func (c *Component) cleanupSessions() {
 			c.sessionMu.Unlock()
 
 			for _, item := range toDelete {
-				if c.vpp != nil && item.sess.IPoESwIfIndex != 0 {
-					sessID := item.sess.SessionID
-					if item.sess.IPv4 != nil {
-						c.vpp.IPoESetSessionIPv4Async(item.sess.IPoESwIfIndex, item.sess.IPv4, false, func(err error) {
+				sess := item.sess
+				sessID := sess.SessionID
+
+				if sess.IPv4 != nil {
+					allocator.GetGlobalRegistry().ReleaseIP(sess.IPv4)
+				}
+				if sess.IPv6Address != nil {
+					allocator.GetGlobalRegistry().ReleaseIANAByIP(sess.IPv6Address)
+				}
+				if sess.IPv6Prefix != nil {
+					allocator.GetGlobalRegistry().ReleasePDByPrefix(sess.IPv6Prefix)
+				}
+				if c.dhcp4Provider != nil {
+					c.dhcp4Provider.ReleaseLease(sess.MAC.String())
+				}
+
+				if c.vpp != nil && sess.IPoESwIfIndex != 0 {
+					if sess.IPv6Address != nil {
+						c.vpp.IPoESetSessionIPv6Async(sess.IPoESwIfIndex, sess.IPv6Address, false, func(err error) {
+							if err != nil {
+								c.logger.Debug("Failed to unbind IPv6 from stale IPoE session", "session_id", sessID, "error", err)
+							}
+						})
+					}
+					if sess.IPv6Prefix != nil {
+						c.vpp.IPoESetDelegatedPrefixAsync(sess.IPoESwIfIndex, *sess.IPv6Prefix, net.ParseIP("::"), false, func(err error) {
+							if err != nil {
+								c.logger.Debug("Failed to unbind PD from stale IPoE session", "session_id", sessID, "error", err)
+							}
+						})
+					}
+					if sess.IPv4 != nil {
+						c.vpp.IPoESetSessionIPv4Async(sess.IPoESwIfIndex, sess.IPv4, false, func(err error) {
 							if err != nil {
 								c.logger.Warn("Failed to unbind IPv4 from stale IPoE session", "session_id", sessID, "error", err)
 							}
 						})
 					}
-					c.vpp.DeleteIPoESessionAsync(item.sess.MAC, item.sess.EncapIfIndex, item.sess.InnerVLAN, func(err error) {
+					c.vpp.DeleteIPoESessionAsync(sess.MAC, sess.EncapIfIndex, sess.InnerVLAN, func(err error) {
 						if err != nil {
 							c.logger.Warn("Failed to delete stale IPoE session", "session_id", sessID, "error", err)
 						}
 					})
 				}
+
+				c.deleteSessionCheckpoint(sessID)
+
+				c.publishSessionLifecycle(&models.IPoESession{
+					SessionID:   sessID,
+					State:       models.SessionStateReleased,
+					AccessType:  string(models.AccessTypeIPoE),
+					MAC:         sess.MAC,
+					OuterVLAN:   sess.OuterVLAN,
+					InnerVLAN:   sess.InnerVLAN,
+					VRF:         sess.VRF,
+					Username:    sess.Username,
+					IPv4Address: sess.IPv4,
+					IPv6Address: sess.IPv6Address,
+				})
 			}
 		}
 	}
@@ -1815,6 +1897,7 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
 	sess := c.sessions[lookupKey]
 	if sess == nil {
 		c.sessionMu.Unlock()
+		c.logger.Info("Received DHCPv6 Release for unknown session", "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
 		return nil
 	}
 
@@ -1825,12 +1908,12 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
 	mac := sess.MAC
 	encapIfIndex := sess.EncapIfIndex
 	innerVLAN := sess.InnerVLAN
-	ipv4Bound := sess.IPv4 != nil
+	ipv4 := sess.IPv4
+	ipv4Bound := ipv4 != nil
 	xid6 := sess.DHCPv6XID
+	duid := sess.DHCPv6DUID
 
 	sess.IPv6Bound = false
-	sess.IPv6Address = nil
-	sess.IPv6Prefix = nil
 	delete(c.xid6Index, xid6)
 
 	sessionMode := c.getSessionMode(pkt.OuterVLAN)
@@ -1839,7 +1922,10 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
 		deleteSession = false
 	}
 
+	sess.IPv6Address = nil
+	sess.IPv6Prefix = nil
 	if deleteSession {
+		sess.IPv4 = nil
 		delete(c.sessionIndex, sessID)
 		delete(c.sessions, lookupKey)
 	}
@@ -1847,22 +1933,67 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
 
 	c.logger.Info("IPv6 released by client", "session_id", sessID, "delete_session", deleteSession)
 
+	if c.dhcp6Provider != nil {
+		buf := gopacket.NewSerializeBuffer()
+		opts := gopacket.SerializeOptions{FixLengths: true}
+		if err := pkt.DHCPv6.SerializeTo(buf, opts); err == nil {
+			dhcpPkt := &dhcp6.Packet{
+				SessionID: sessID,
+				MAC:       mac.String(),
+				SVLAN:     pkt.OuterVLAN,
+				CVLAN:     pkt.InnerVLAN,
+				DUID:      duid,
+				Raw:       buf.Bytes(),
+			}
+			response, err := c.dhcp6Provider.HandlePacket(c.Ctx, dhcpPkt)
+			if err != nil {
+				c.logger.Warn("DHCPv6 provider failed on Release", "session_id", sessID, "error", err)
+			} else if response != nil && len(response.Raw) > 0 {
+				if err := c.sendDHCPv6Response(sess, response.Raw); err != nil {
+					c.logger.Debug("Failed to send DHCPv6 Release Reply", "session_id", sessID, "error", err)
+				}
+			}
+		}
+	}
+
+	if ipv6Address != nil {
+		allocator.GetGlobalRegistry().ReleaseIANAByIP(ipv6Address)
+	}
+	if ipv6Prefix != nil {
+		allocator.GetGlobalRegistry().ReleasePDByPrefix(ipv6Prefix)
+	}
+	if deleteSession {
+		if ipv4 != nil {
+			allocator.GetGlobalRegistry().ReleaseIP(ipv4)
+		}
+		if c.dhcp4Provider != nil {
+			c.dhcp4Provider.ReleaseLease(mac.String())
+		}
+	}
+
 	if c.vpp != nil && ipoeSwIfIndex != 0 {
 		if ipv6Address != nil {
 			c.vpp.IPoESetSessionIPv6Async(ipoeSwIfIndex, ipv6Address, false, func(err error) {
 				if err != nil {
-					c.logger.Warn("Failed to unbind IPv6 from IPoE session", "session_id", sessID, "error", err)
+					c.logger.Debug("Failed to unbind IPv6 from IPoE session", "session_id", sessID, "error", err)
 				}
 			})
 		}
 		if ipv6Prefix != nil {
 			c.vpp.IPoESetDelegatedPrefixAsync(ipoeSwIfIndex, *ipv6Prefix, net.ParseIP("::"), false, func(err error) {
 				if err != nil {
-					c.logger.Warn("Failed to unbind delegated prefix from IPoE session", "session_id", sessID, "error", err)
+					c.logger.Debug("Failed to unbind delegated prefix from IPoE session", "session_id", sessID, "error", err)
 				}
 			})
 		}
 		if deleteSession {
+			if ipv4 != nil {
+				c.vpp.IPoESetSessionIPv4Async(ipoeSwIfIndex, ipv4, false, func(err error) {
+					if err != nil {
+						c.logger.Debug("Failed to unbind IPv4 from IPoE session", "session_id", sessID, "error", err)
+					}
+				})
+			}
 			c.vpp.DeleteIPoESessionAsync(mac, encapIfIndex, innerVLAN, func(err error) {
 				if err != nil {
 					c.logger.Warn("Failed to delete IPoE session", "session_id", sessID, "error", err)
@@ -1874,6 +2005,13 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
 	}
 
 	if deleteSession {
+		counterKey := fmt.Sprintf("osvbng:session_count:%s:%d:%d", pkt.MAC.String(), pkt.OuterVLAN, pkt.InnerVLAN)
+		newCount, err := c.cache.Decr(c.Ctx, counterKey)
+		if err != nil {
+			c.logger.Warn("Failed to decrement session counter", "error", err, "key", counterKey)
+		} else if newCount <= 0 {
+			c.cache.Delete(c.Ctx, counterKey)
+		}
 		c.deleteSessionCheckpoint(sessID)
 	} else if sess != nil {
 		c.checkpointSession(sess)
