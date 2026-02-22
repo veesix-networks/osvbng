@@ -1,0 +1,224 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: osvbng-entrypoint
+data:
+  docker-entrypoint.sh: |
+    #!/bin/bash
+    set -e
+    
+    if [ -z "$OSVBNG_ACCESS_INTERFACE" ]; then
+        OSVBNG_ACCESS_INTERFACE="eth1"
+    fi
+    
+    # Get actual CPU cores allocated to this pod/container
+    CPUS_ALLOWED=$(grep Cpus_allowed_list /proc/self/status | awk '{print $2}')
+    echo "CPUs allowed by cgroup: $CPUS_ALLOWED"
+    
+    # Parse the CPU list to get individual core numbers
+    # Handles formats like "0-3", "0,2,4", "0-2,5-7", etc.
+    parse_cpu_list() {
+        local cpu_list="$1"
+        local cores=()
+        
+        IFS=',' read -ra SEGMENTS <<< "$cpu_list"
+        for segment in "${SEGMENTS[@]}"; do
+            if [[ $segment =~ ^([0-9]+)-([0-9]+)$ ]]; then
+                # Range format (e.g., "0-3")
+                start="${BASH_REMATCH[1]}"
+                end="${BASH_REMATCH[2]}"
+                for ((i=start; i<=end; i++)); do
+                    cores+=($i)
+                done
+            else
+                # Single core (e.g., "5")
+                cores+=($segment)
+            fi
+        done
+        
+        echo "${cores[@]}"
+    }
+    
+    # Get array of available cores
+    AVAILABLE_CORES=($(parse_cpu_list "$CPUS_ALLOWED"))
+    TOTAL_CORES=${#AVAILABLE_CORES[@]}
+    
+    echo "Total cores allocated to pod: $TOTAL_CORES"
+    echo "Available core IDs: ${AVAILABLE_CORES[@]}"
+    
+    # Allocate cores based on what's actually available
+    if [ -z "$OSVBNG_DP_MAIN_CORE" ] || [ -z "$OSVBNG_DP_WORKER_CORES" ] || [ -z "$OSVBNG_CP_CORES" ]; then
+        case $TOTAL_CORES in
+            1)
+                OSVBNG_DP_MAIN_CORE=${AVAILABLE_CORES[0]}
+                OSVBNG_DP_WORKER_CORES=""
+                OSVBNG_CP_CORES=""
+                USE_TASKSET=false
+                ;;
+            2)
+                OSVBNG_DP_MAIN_CORE=${AVAILABLE_CORES[0]}
+                OSVBNG_DP_WORKER_CORES=${AVAILABLE_CORES[1]}
+                OSVBNG_CP_CORES=${AVAILABLE_CORES[0]}
+                USE_TASKSET=true
+                ;;
+            3)
+                OSVBNG_DP_MAIN_CORE=${AVAILABLE_CORES[0]}
+                # Create range for workers: core[1] to core[2]
+                OSVBNG_DP_WORKER_CORES="${AVAILABLE_CORES[1]}-${AVAILABLE_CORES[2]}"
+                OSVBNG_CP_CORES=${AVAILABLE_CORES[0]}
+                USE_TASKSET=true
+                ;;
+            4)
+                OSVBNG_DP_MAIN_CORE=${AVAILABLE_CORES[0]}
+                # Create range for workers: core[1] to core[3]
+                OSVBNG_DP_WORKER_CORES="${AVAILABLE_CORES[1]}-${AVAILABLE_CORES[3]}"
+                OSVBNG_CP_CORES=${AVAILABLE_CORES[0]}
+                USE_TASKSET=true
+                ;;
+            *)
+                OSVBNG_DP_MAIN_CORE=${AVAILABLE_CORES[0]}
+                # Workers: core[1] to core[n-2]
+                OSVBNG_DP_WORKER_CORES="${AVAILABLE_CORES[1]}-${AVAILABLE_CORES[$((TOTAL_CORES-2))]}"
+                # CP: last core
+                OSVBNG_CP_CORES=${AVAILABLE_CORES[$((TOTAL_CORES-1))]}
+                USE_TASKSET=true
+                ;;
+        esac
+    fi
+    
+    echo "Core allocation: Total=$TOTAL_CORES DP_MAIN=$OSVBNG_DP_MAIN_CORE DP_WORKERS=$OSVBNG_DP_WORKER_CORES CP=$OSVBNG_CP_CORES"
+    
+    mkdir -p /etc/osvbng
+    mkdir -p /var/log/osvbng
+    
+    # REMOVED: Hugepages configuration (K8s handles this via pod spec)
+    # K8s will mount hugepages at /dev/hugepages if configured in pod resources
+    
+    # Copy FRR configs from staging to /etc/osvbng (where osvbngd expects them)
+    echo "Copying FRR configuration templates..."
+    if [ -f /frr-config-templates/frr.conf ]; then
+        cp /frr-config-templates/frr.conf /etc/osvbng/frr.conf
+        echo "Copied frr.conf to /etc/osvbng/"
+    else
+        echo "WARNING: frr.conf template not found, using defaults"
+    fi
+    
+    if [ -f /frr-config-templates/routing-daemons ]; then
+        cp /frr-config-templates/routing-daemons /etc/osvbng/routing-daemons
+        echo "Copied routing-daemons to /etc/osvbng/"
+    else
+        echo "WARNING: routing-daemons template not found, using defaults"
+    fi
+    
+    # Process osvbng.yaml template
+    echo "Generating osvbng.yaml from template..."
+    if [ -f /config-templates/osvbng.yaml.template ]; then
+        sed "s/__OSVBNG_ACCESS_INTERFACE__/${OSVBNG_ACCESS_INTERFACE}/g" \
+            /config-templates/osvbng.yaml.template > /etc/osvbng/osvbng.yaml
+        
+        echo "Generated osvbng.yaml with interface: $OSVBNG_ACCESS_INTERFACE"
+    else
+        echo "ERROR: osvbng.yaml.template not found!"
+        exit 1
+    fi
+    
+    # Process dataplane.conf template
+    echo "Generating dataplane.conf from template..."
+    if [ -f /config-templates/dataplane.conf.template ]; then
+        # Replace CPU placeholders
+        sed -e "s/__DP_MAIN_CORE__/${OSVBNG_DP_MAIN_CORE}/g" \
+            -e "s/__DP_WORKER_CORES__/${OSVBNG_DP_WORKER_CORES}/g" \
+            /config-templates/dataplane.conf.template > /etc/osvbng/dataplane.conf.pre
+        
+        # Handle empty worker cores (single core scenario)
+        if [ -z "$OSVBNG_DP_WORKER_CORES" ]; then
+            sed 's/corelist-workers __DP_WORKER_CORES__/# corelist-workers (none - single core mode)/' \
+                /etc/osvbng/dataplane.conf.pre > /etc/osvbng/dataplane.conf.processed
+        else
+            cp /etc/osvbng/dataplane.conf.pre /etc/osvbng/dataplane.conf.processed
+        fi
+        
+        echo "Generated dataplane.conf with CPU cores - Main: $OSVBNG_DP_MAIN_CORE, Workers: ${OSVBNG_DP_WORKER_CORES:-none}"
+        echo "====== CPU Configuration ======"
+        grep -A 3 "^cpu {" /etc/osvbng/dataplane.conf.processed
+    else
+        echo "ERROR: dataplane.conf.template not found!"
+        exit 1
+    fi
+    
+    echo "Using access interface: $OSVBNG_ACCESS_INTERFACE"
+    ip link show $OSVBNG_ACCESS_INTERFACE || echo "WARNING: Interface $OSVBNG_ACCESS_INTERFACE not found yet"
+    
+    echo "Creating runtime directories..."
+    mkdir -p /run/osvbng
+    chown root:osvbng /run/osvbng 2>/dev/null || true
+    chmod 770 /run/osvbng
+    
+    echo "====== Linux Interfaces Below ======"
+    ip link show
+    echo "====== Linux Interfaces Above ======"
+    
+    echo "Generating external configurations..."
+    /usr/local/bin/osvbngd -config /etc/osvbng/osvbng.yaml generate-external
+    
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to generate external configurations"
+        exit 1
+    fi
+    
+    # Now use the processed dataplane.conf (osvbngd might have overwritten it)
+    # Copy our processed version back
+    if [ -f /etc/osvbng/dataplane.conf.processed ]; then
+        cp /etc/osvbng/dataplane.conf.processed /etc/osvbng/dataplane.conf
+        echo "Restored processed dataplane.conf with correct CPU allocations"
+    fi
+    
+    echo "Final dataplane.conf CPU configuration:"
+    grep -A 3 "^cpu {" /etc/osvbng/dataplane.conf
+    
+    echo "Starting dataplane..."
+    /usr/bin/vpp -c /etc/osvbng/dataplane.conf &
+    DATAPLANE_PID=$!
+    
+    echo "Checking dataplane process status..."
+    if ! kill -0 $DATAPLANE_PID 2>/dev/null; then
+        echo "Dataplane process not running (PID $DATAPLANE_PID)"
+        echo "====== Dataplane Log (last 50 lines) ======"
+        tail -50 /var/log/osvbng/dataplane.log 2>/dev/null || echo "No log file found"
+        echo "====== Final dataplane.conf ======"
+        cat /etc/osvbng/dataplane.conf
+        exit 1
+    else
+        echo "Dataplane process running (PID $DATAPLANE_PID)"
+        echo "====== Checking if dataplane API is responsive ======"
+        vppctl -s /run/osvbng/cli.sock show version && echo "Dataplane API responsive" || echo "Dataplane API not responding yet"
+    fi
+    
+    echo "Waiting for dataplane interfaces to be ready..."
+    sleep 5
+    vppctl -s /run/osvbng/cli.sock show interface
+    
+    echo "Setting dataplane API socket permissions..."
+    chmod 660 /run/osvbng/dataplane_api.sock 2>/dev/null || true
+    chown root:osvbng /run/osvbng/dataplane_api.sock 2>/dev/null || true
+    
+    echo "Linking FRR configs from /etc/osvbng to /etc/frr..."
+    ln -sf /etc/osvbng/routing-daemons /etc/frr/daemons
+    ln -sf /etc/osvbng/frr.conf /etc/frr/frr.conf
+    
+    echo "Starting routing daemons..."
+    /usr/lib/frr/frrinit.sh start
+    sleep 2
+    
+    echo "Making zebra API socket accessible..."
+    chmod 660 /var/run/frr/zserv.api 2>/dev/null || true
+    
+    echo "Routing daemon status:"
+    /usr/lib/frr/frrinit.sh status || true
+    
+    echo "Starting osvbng..."
+    if [ "$USE_TASKSET" = true ] && [ -n "$OSVBNG_CP_CORES" ]; then
+        exec taskset -c ${OSVBNG_CP_CORES} /usr/local/bin/osvbngd -config /etc/osvbng/osvbng.yaml
+    else
+        exec /usr/local/bin/osvbngd -config /etc/osvbng/osvbng.yaml
+    fi

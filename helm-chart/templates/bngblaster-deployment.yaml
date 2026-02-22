@@ -1,0 +1,48 @@
+{{- if .Values.bngblaster.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bngblaster
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bngblaster
+  template:
+    metadata:
+      labels:
+        app: bngblaster
+      {{- if .Values.multus.enabled }}
+      annotations:
+        k8s.v1.cni.cncf.io/networks: bngblaster-access, bngblaster-core
+      {{- end }}
+    spec:
+      initContainers:
+        - name: disable-ipv6
+          image: busybox:1.36.1
+          command:
+            - sh
+            - -c
+            - |
+              # Disable IPv6 on Multus interfaces
+              sysctl -w net.ipv6.conf.{{ .Values.bngblaster.accessInterface | quote }}.disable_ipv6=1
+              sysctl -w net.ipv6.conf.{{ .Values.bngblaster.coreInterface | quote }}.disable_ipv6=1
+              echo "IPv6 disabled on net1 and net2"
+          securityContext:
+            privileged: true
+      containers:
+        - name: bngblaster
+          image: {{ .Values.bngblaster.image | quote }}
+          imagePullPolicy: {{ .Values.bngblaster.pullPolicy }}
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN
+          volumeMounts:
+            - name: bngblaster-config
+              mountPath: /config-templates
+      volumes:
+        - name: bngblaster-config
+          configMap:
+            name: bngblaster-config
+{{- end }}
