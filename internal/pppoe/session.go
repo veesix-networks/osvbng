@@ -233,22 +233,20 @@ func (s *SessionState) publishAAARequest(attrs map[string]string) {
 		Attributes:    attrs,
 	}
 
-	aaaEvent := models.Event{
-		Type:       models.EventTypeAAARequest,
-		AccessType: models.AccessTypePPPoE,
-		Protocol:   models.ProtocolPPPoESession,
-		SessionID:  s.SessionID,
-	}
-	aaaEvent.SetPayload(aaaPayload)
-
 	s.component.logger.Debug("Publishing AAA request",
 		"session_id", s.SessionID,
 		"username", username,
 		"auth_type", s.pendingAuthType)
 
-	if err := s.component.eventBus.Publish(events.TopicAAARequest, aaaEvent); err != nil {
-		s.component.logger.Error("Failed to publish AAA request", "error", err)
-	}
+	s.component.eventBus.Publish(events.TopicAAARequest, events.Event{
+		Source: s.component.Name(),
+		Data: &events.AAARequestEvent{
+			AccessType: models.AccessTypePPPoE,
+			Protocol:   models.ProtocolPPPoESession,
+			SessionID:  s.SessionID,
+			Request:    *aaaPayload,
+		},
+	})
 }
 
 func (s *SessionState) onLCPUp() {
@@ -837,7 +835,7 @@ func (s *SessionState) sendPPPPacket(proto uint16, code, id uint8, data []byte) 
 		return
 	}
 
-	egressPayload := &models.EgressPacketPayload{
+	egressPayload := models.EgressPacketPayload{
 		DstMAC:    s.MAC.String(),
 		SrcMAC:    srcMAC,
 		OuterVLAN: s.OuterVLAN,
@@ -847,22 +845,19 @@ func (s *SessionState) sendPPPPacket(proto uint16, code, id uint8, data []byte) 
 		RawData:   buf.Bytes(),
 	}
 
-	egressEvent := models.Event{
-		Type:       models.EventTypeEgress,
-		AccessType: models.AccessTypePPPoE,
-		Protocol:   models.ProtocolPPPoESession,
-	}
-	egressEvent.SetPayload(egressPayload)
-
 	s.component.logger.Debug("Sending PPP packet",
 		"proto", fmt.Sprintf("0x%04x", proto),
 		"code", code,
 		"id", id,
 		"pppoe_session_id", s.PPPoESessionID)
 
-	if err := s.component.eventBus.Publish(events.TopicEgress, egressEvent); err != nil {
-		s.component.logger.Error("Failed to publish egress", "error", err)
-	}
+	s.component.eventBus.Publish(events.TopicEgress, events.Event{
+		Source: s.component.Name(),
+		Data: &events.EgressEvent{
+			Protocol: models.ProtocolPPPoESession,
+			Packet:   egressPayload,
+		},
+	})
 }
 
 func (s *SessionState) terminate() {

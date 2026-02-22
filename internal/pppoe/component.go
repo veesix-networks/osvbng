@@ -61,7 +61,8 @@ type Component struct {
 
 	registry *allocator.Registry
 
-	pppoeChan <-chan *dataplane.ParsedPacket
+	aaaRespSub events.Subscription
+	pppoeChan  <-chan *dataplane.ParsedPacket
 
 	nextSessionID uint16
 	sidMu         sync.Mutex
@@ -192,9 +193,7 @@ func (c *Component) Start(ctx context.Context) error {
 		c.logger.Warn("Failed to restore sessions from OpDB", "error", err)
 	}
 
-	if err := c.eventBus.Subscribe(events.TopicAAAResponsePPPoE, c.handleAAAResponse); err != nil {
-		return fmt.Errorf("subscribe to aaa responses: %w", err)
-	}
+	c.aaaRespSub = c.eventBus.Subscribe(events.TopicAAAResponsePPPoE, c.handleAAAResponse)
 
 	c.echoGen.Start()
 	c.Go(c.consumePPPoEPackets)
@@ -204,6 +203,7 @@ func (c *Component) Start(ctx context.Context) error {
 
 func (c *Component) Stop(ctx context.Context) error {
 	c.logger.Info("Stopping PPPoE component")
+	c.aaaRespSub.Unsubscribe()
 	c.echoGen.Stop()
 	c.StopContext()
 	return nil
@@ -472,7 +472,7 @@ func (c *Component) sendDiscoveryPacket(pkt *dataplane.ParsedPacket, code layers
 		return fmt.Errorf("no source MAC available for SVLAN %d", pkt.OuterVLAN)
 	}
 
-	egressPayload := &models.EgressPacketPayload{
+	egressPayload := models.EgressPacketPayload{
 		DstMAC:    pkt.MAC.String(),
 		SrcMAC:    srcMAC,
 		OuterVLAN: pkt.OuterVLAN,
@@ -482,13 +482,6 @@ func (c *Component) sendDiscoveryPacket(pkt *dataplane.ParsedPacket, code layers
 		RawData:   rawPPPoE,
 	}
 
-	egressEvent := models.Event{
-		Type:       models.EventTypeEgress,
-		AccessType: models.AccessTypePPPoE,
-		Protocol:   models.ProtocolPPPoEDiscovery,
-	}
-	egressEvent.SetPayload(egressPayload)
-
 	c.logger.Debug("Sending PPPoE discovery packet",
 		"code", code.String(),
 		"session_id", sessionID,
@@ -496,18 +489,24 @@ func (c *Component) sendDiscoveryPacket(pkt *dataplane.ParsedPacket, code layers
 		"svlan", pkt.OuterVLAN,
 		"payload_len", len(payload))
 
-	if err := c.eventBus.Publish(events.TopicEgress, egressEvent); err != nil {
-		return fmt.Errorf("publish egress: %w", err)
-	}
+	c.eventBus.Publish(events.TopicEgress, events.Event{
+		Source: c.Name(),
+		Data: &events.EgressEvent{
+			Protocol: models.ProtocolPPPoEDiscovery,
+			Packet:   egressPayload,
+		},
+	})
 
 	return nil
 }
 
-func (c *Component) handleAAAResponse(event models.Event) error {
-	var resp models.AAAResponse
-	if err := event.GetPayload(&resp); err != nil {
-		return fmt.Errorf("failed to decode AAA response: %w", err)
+func (c *Component) handleAAAResponse(event events.Event) {
+	data, ok := event.Data.(*events.AAAResponseEvent)
+	if !ok {
+		c.logger.Error("Invalid event data for AAA response")
+		return
 	}
+	resp := data.Response
 
 	c.sessionMu.RLock()
 	var sess *SessionState
@@ -521,7 +520,7 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 
 	if sess == nil {
 		c.logger.Debug("AAA response for unknown request", "request_id", resp.RequestID)
-		return nil
+		return
 	}
 
 	c.logger.Debug("Received AAA response",
@@ -532,12 +531,10 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 	sess.mu.Lock()
 	if sess.pendingAuthRequestID != resp.RequestID {
 		sess.mu.Unlock()
-		return nil
+		return
 	}
 	sess.onAuthResult(resp.Allowed, resp.Attributes)
 	sess.mu.Unlock()
-
-	return nil
 }
 
 func (c *Component) allocateSessionID() uint16 {
@@ -606,14 +603,17 @@ func (c *Component) handleDeadPeer(sessionID uint16) {
 }
 
 func (c *Component) publishSessionLifecycle(payload models.SubscriberSession) error {
-	lifecycleEvent := models.Event{
-		Type:       models.EventTypeSessionLifecycle,
-		AccessType: payload.GetAccessType(),
-		Protocol:   payload.GetProtocol(),
-		SessionID:  payload.GetSessionID(),
-	}
-	lifecycleEvent.SetPayload(payload)
-	return c.eventBus.Publish(events.TopicSessionLifecycle, lifecycleEvent)
+	c.eventBus.Publish(events.TopicSessionLifecycle, events.Event{
+		Source: c.Name(),
+		Data: &events.SessionLifecycleEvent{
+			AccessType: payload.GetAccessType(),
+			Protocol:   payload.GetProtocol(),
+			SessionID:  payload.GetSessionID(),
+			State:      payload.GetState(),
+			Session:    payload,
+		},
+	})
+	return nil
 }
 
 func (c *Component) checkpointSession(sess *SessionState) {

@@ -423,11 +423,13 @@ func main() {
 		OpDB:             opdbStore,
 		CPPM:             cppmManager,
 		Watchdog:         wd,
+		EventBus:         eventBus,
 		PluginComponents: pluginComponentsMap,
 	})
 
 	operRegistry.AutoRegisterAll(&deps.OperDeps{
 		Subscriber:       subscriberComp.(*subscriber.Component),
+		EventBus:         eventBus,
 		PluginComponents: pluginComponentsMap,
 	})
 

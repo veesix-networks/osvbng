@@ -60,6 +60,8 @@ type Component struct {
 	dhcpChan    <-chan *dataplane.ParsedPacket
 	dhcp6Chan   <-chan *dataplane.ParsedPacket
 	ipv6NDChan  <-chan *dataplane.ParsedPacket
+
+	aaaRespSub events.Subscription
 }
 
 type SessionState struct {
@@ -262,9 +264,7 @@ func (c *Component) Start(ctx context.Context) error {
 		c.logger.Warn("Failed to restore sessions from OpDB", "error", err)
 	}
 
-	if err := c.eventBus.Subscribe(events.TopicAAAResponseIPoE, c.handleAAAResponse); err != nil {
-		return fmt.Errorf("subscribe to aaa responses: %w", err)
-	}
+	c.aaaRespSub = c.eventBus.Subscribe(events.TopicAAAResponseIPoE, c.handleAAAResponse)
 
 	c.Go(c.cleanupSessions)
 	c.Go(c.consumeDHCPPackets)
@@ -277,7 +277,7 @@ func (c *Component) Start(ctx context.Context) error {
 func (c *Component) Stop(ctx context.Context) error {
 	c.logger.Info("Stopping IPoE component")
 
-	c.eventBus.Unsubscribe(events.TopicAAAResponseIPoE, c.handleAAAResponse)
+	c.aaaRespSub.Unsubscribe()
 
 	c.StopContext()
 
@@ -567,15 +567,16 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 		PolicyName:    policyName,
 	}
 
-	aaaEvent := models.Event{
-		Type:       models.EventTypeAAARequest,
-		AccessType: models.AccessTypeIPoE,
-		Protocol:   models.ProtocolDHCPv4,
-		SessionID:  sess.SessionID,
-	}
-	aaaEvent.SetPayload(aaaPayload)
-
-	return c.eventBus.Publish(events.TopicAAARequest, aaaEvent)
+	c.eventBus.Publish(events.TopicAAARequest, events.Event{
+		Source: c.Name(),
+		Data: &events.AAARequestEvent{
+			AccessType: models.AccessTypeIPoE,
+			Protocol:   models.ProtocolDHCPv4,
+			SessionID:  sess.SessionID,
+			Request:    *aaaPayload,
+		},
+	})
+	return nil
 }
 
 func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
@@ -717,15 +718,16 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 		PolicyName:    policyName,
 	}
 
-	aaaEvent := models.Event{
-		Type:       models.EventTypeAAARequest,
-		AccessType: models.AccessTypeIPoE,
-		Protocol:   models.ProtocolDHCPv4,
-		SessionID:  sess.SessionID,
-	}
-	aaaEvent.SetPayload(aaaPayload)
-
-	return c.eventBus.Publish(events.TopicAAARequest, aaaEvent)
+	c.eventBus.Publish(events.TopicAAARequest, events.Event{
+		Source: c.Name(),
+		Data: &events.AAARequestEvent{
+			AccessType: models.AccessTypeIPoE,
+			Protocol:   models.ProtocolDHCPv4,
+			SessionID:  sess.SessionID,
+			Request:    *aaaPayload,
+		},
+	})
+	return nil
 }
 
 func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
@@ -918,18 +920,15 @@ func (c *Component) handleServerResponse(pkt *dataplane.ParsedPacket) error {
 		RawData:   finalBuf.Bytes(),
 	}
 
-	egressEvent := models.Event{
-		Type:       models.EventTypeEgress,
-		AccessType: models.AccessTypeIPoE,
-		Protocol:   models.ProtocolDHCPv4,
-	}
-	egressEvent.SetPayload(egressPayload)
-
 	c.logger.Debug("Sending DHCP via egress", "message_type", msgType.String(), "dst_mac", dstMAC, "svlan", sess.OuterVLAN, "cvlan", sess.InnerVLAN)
 
-	if err := c.eventBus.Publish(events.TopicEgress, egressEvent); err != nil {
-		return err
-	}
+	c.eventBus.Publish(events.TopicEgress, events.Event{
+		Source: c.Name(),
+		Data: &events.EgressEvent{
+			Protocol: models.ProtocolDHCPv4,
+			Packet:   *egressPayload,
+		},
+	})
 
 	if msgType == layers.DHCPMsgTypeAck {
 		return c.handleAck(sess, pkt)
@@ -1022,20 +1021,22 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 	return c.publishSessionLifecycle(ipoeSess)
 }
 
-func (c *Component) handleAAAResponse(event models.Event) error {
-	var payload models.AAAResponse
-	if err := event.GetPayload(&payload); err != nil {
-		return fmt.Errorf("failed to decode AAA response: %w", err)
+func (c *Component) handleAAAResponse(event events.Event) {
+	data, ok := event.Data.(*events.AAAResponseEvent)
+	if !ok {
+		c.logger.Error("Invalid event data for AAA response")
+		return
 	}
 
-	sessID := event.SessionID
-	allowed := payload.Allowed
+	sessID := data.SessionID
+	allowed := data.Response.Allowed
 
 	c.sessionMu.Lock()
 	sess := c.sessionIndex[sessID]
 	if sess == nil {
 		c.sessionMu.Unlock()
-		return fmt.Errorf("session %s not found for AAA response", sessID)
+		c.logger.Error("Session not found for AAA response", "session_id", sessID)
+		return
 	}
 
 	sess.AAAApproved = allowed
@@ -1060,7 +1061,7 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 		delete(c.sessions, lookupV4)
 		delete(c.sessions, lookupV6)
 		c.sessionMu.Unlock()
-		return nil
+		return
 	}
 
 	var subscriberGroup, ipv4Profile, ipv6Profile string
@@ -1084,7 +1085,7 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 		"ipv6_profile", ipv6Profile,
 	)
 
-	resolved := c.resolveServiceGroup(svlan, payload.Attributes)
+	resolved := c.resolveServiceGroup(svlan, data.Response.Attributes)
 
 	logArgs := []any{"session_id", sessID}
 	for _, attr := range resolved.LogAttrs() {
@@ -1103,7 +1104,7 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 			tableID, _, _, err := c.vrfMgr.ResolveVRF(vrfName)
 			if err != nil {
 				c.logger.Error("Failed to resolve VRF for session", "session_id", sessID, "vrf", vrfName, "error", err)
-				return fmt.Errorf("resolve VRF %q: %w", vrfName, err)
+				return
 			}
 			decapVrfID = tableID
 		}
@@ -1112,7 +1113,7 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 		c.sessionMu.Unlock()
 	}
 
-	allocCtx := c.buildAllocContext(sess, payload.Attributes)
+	allocCtx := c.buildAllocContext(sess, data.Response.Attributes)
 	c.logger.Info("Built allocator context",
 		"session_id", sessID,
 		"profile", allocCtx.ProfileName,
@@ -1135,7 +1136,7 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 			localMAC := c.getLocalMAC(svlan, encapIfIndex)
 			if localMAC == nil {
 				c.logger.Error("No local MAC available for IPoE session", "session_id", sessID, "svlan", svlan)
-				return fmt.Errorf("no local MAC for svlan %d", svlan)
+				return
 			}
 
 			c.vpp.AddIPoESessionAsync(mac, localMAC, encapIfIndex, svlan, cvlan, decapVrfID, func(swIfIndex uint32, err error) {
@@ -1243,12 +1244,13 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 		response, err := c.dhcp4Provider.HandlePacket(c.Ctx, pkt)
 		if err != nil {
 			c.logger.Error("DHCP provider failed for DISCOVER", "session_id", sessID, "error", err)
-			return fmt.Errorf("dhcp provider failed: %w", err)
+			return
 		}
 
 		if response != nil && len(response.Raw) > 0 {
 			if err := c.sendDHCPResponse(sessID, svlan, cvlan, encapIfIndex, mac, response.Raw, "OFFER"); err != nil {
-				return err
+				c.logger.Error("Failed to send DHCP OFFER", "session_id", sessID, "error", err)
+				return
 			}
 		}
 	}
@@ -1268,12 +1270,13 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 		response, err := c.dhcp4Provider.HandlePacket(c.Ctx, pkt)
 		if err != nil {
 			c.logger.Error("DHCP provider failed for REQUEST", "session_id", sessID, "error", err)
-			return fmt.Errorf("dhcp provider failed: %w", err)
+			return
 		}
 
 		if response != nil && len(response.Raw) > 0 {
 			if err := c.sendDHCPResponse(sessID, svlan, cvlan, encapIfIndex, mac, response.Raw, "ACK"); err != nil {
-				return err
+				c.logger.Error("Failed to send DHCP ACK", "session_id", sessID, "error", err)
+				return
 			}
 		}
 	}
@@ -1337,8 +1340,6 @@ func (c *Component) handleAAAResponse(event models.Event) error {
 			}
 		}
 	}
-
-	return nil
 }
 
 func (c *Component) getVLANCount(svlan, cvlan uint16) int {
@@ -1451,20 +1452,15 @@ func (c *Component) sendDHCPResponse(sessID string, svlan, cvlan uint16, encapIf
 		RawData:   rawData,
 	}
 
-	egressEvent := models.Event{
-		Type:       models.EventTypeEgress,
-		AccessType: models.AccessTypeIPoE,
-		Protocol:   models.ProtocolDHCPv4,
-		SessionID:  sessID,
-	}
-	egressEvent.SetPayload(egressPayload)
-
 	c.logger.Debug("Sending DHCP "+msgType+" to client", "session_id", sessID, "size", len(rawData))
 
-	if err := c.eventBus.Publish(events.TopicEgress, egressEvent); err != nil {
-		c.logger.Error("Failed to publish DHCP "+msgType+" to egress", "session_id", sessID, "error", err)
-		return fmt.Errorf("publish egress: %w", err)
-	}
+	c.eventBus.Publish(events.TopicEgress, events.Event{
+		Source: c.Name(),
+		Data: &events.EgressEvent{
+			Protocol: models.ProtocolDHCPv4,
+			Packet:   *egressPayload,
+		},
+	})
 
 	return nil
 }
@@ -1759,17 +1755,18 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, relayInterf
 		PolicyName:    policyName,
 	}
 
-	aaaEvent := models.Event{
-		Type:       models.EventTypeAAARequest,
-		AccessType: models.AccessTypeIPoE,
-		Protocol:   models.ProtocolDHCPv6,
-		SessionID:  sess.SessionID,
-	}
-	aaaEvent.SetPayload(aaaPayload)
-
 	c.logger.Info("Publishing AAA request for DHCPv6 SOLICIT", "session_id", sess.SessionID, "username", username)
 
-	return c.eventBus.Publish(events.TopicAAARequest, aaaEvent)
+	c.eventBus.Publish(events.TopicAAARequest, events.Event{
+		Source: c.Name(),
+		Data: &events.AAARequestEvent{
+			AccessType: models.AccessTypeIPoE,
+			Protocol:   models.ProtocolDHCPv6,
+			SessionID:  sess.SessionID,
+			Request:    *aaaPayload,
+		},
+	})
+	return nil
 }
 
 func (c *Component) handleDHCPv6Request(pkt *dataplane.ParsedPacket) error {
@@ -2138,17 +2135,16 @@ func (c *Component) sendDHCPv6Response(sess *SessionState, rawDHCPv6 []byte) err
 		RawData:   buf.Bytes(),
 	}
 
-	egressEvent := models.Event{
-		Type:       models.EventTypeEgress,
-		AccessType: models.AccessTypeIPoE,
-		Protocol:   models.ProtocolDHCPv6,
-		SessionID:  sess.SessionID,
-	}
-	egressEvent.SetPayload(egressPayload)
-
 	c.logger.Debug("Sending DHCPv6 response", "session_id", sess.SessionID, "size", len(rawDHCPv6), "dst_ip", dstIP)
 
-	return c.eventBus.Publish(events.TopicEgress, egressEvent)
+	c.eventBus.Publish(events.TopicEgress, events.Event{
+		Source: c.Name(),
+		Data: &events.EgressEvent{
+			Protocol: models.ProtocolDHCPv6,
+			Packet:   *egressPayload,
+		},
+	})
+	return nil
 }
 
 func (c *Component) extractDHCPv6ClientDUID(dhcp *layers.DHCPv6) []byte {
@@ -2442,13 +2438,6 @@ func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbo
 		RawData:   buf.Bytes(),
 	}
 
-	egressEvent := models.Event{
-		Type:       models.EventTypeEgress,
-		AccessType: models.AccessTypeIPoE,
-		Protocol:   models.ProtocolIPv6ND,
-	}
-	egressEvent.SetPayload(egressPayload)
-
 	c.logger.Debug("Sending RA response",
 		"dst_mac", pkt.MAC.String(),
 		"src_mac", srcMACBytes.String(),
@@ -2458,18 +2447,28 @@ func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbo
 		"other", raConfig.Other,
 	)
 
-	return c.eventBus.Publish(events.TopicEgress, egressEvent)
+	c.eventBus.Publish(events.TopicEgress, events.Event{
+		Source: c.Name(),
+		Data: &events.EgressEvent{
+			Protocol: models.ProtocolIPv6ND,
+			Packet:   *egressPayload,
+		},
+	})
+	return nil
 }
 
 func (c *Component) publishSessionLifecycle(payload models.SubscriberSession) error {
-	lifecycleEvent := models.Event{
-		Type:       models.EventTypeSessionLifecycle,
-		AccessType: payload.GetAccessType(),
-		Protocol:   payload.GetProtocol(),
-		SessionID:  payload.GetSessionID(),
-	}
-	lifecycleEvent.SetPayload(payload)
-	return c.eventBus.Publish(events.TopicSessionLifecycle, lifecycleEvent)
+	c.eventBus.Publish(events.TopicSessionLifecycle, events.Event{
+		Source: c.Name(),
+		Data: &events.SessionLifecycleEvent{
+			AccessType: payload.GetAccessType(),
+			Protocol:   payload.GetProtocol(),
+			SessionID:  payload.GetSessionID(),
+			State:      payload.GetState(),
+			Session:    payload,
+		},
+	})
+	return nil
 }
 
 func (c *Component) checkpointSession(sess *SessionState) {

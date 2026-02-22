@@ -1,37 +1,5 @@
 package models
 
-import (
-	"encoding/json"
-	"time"
-)
-
-type Event struct {
-	ID         string     `json:"event_id"`
-	Type       EventType  `json:"event_type"`
-	Timestamp  time.Time  `json:"timestamp"`
-	AccessType AccessType `json:"access_type"`
-	Protocol   Protocol   `json:"protocol"`
-	SessionID  string     `json:"session_id,omitempty"`
-
-	Payload json.RawMessage `json:"payload,omitempty"`
-}
-
-func (e *Event) GetPayload(v interface{}) error {
-	if len(e.Payload) == 0 {
-		return nil
-	}
-	return json.Unmarshal(e.Payload, v)
-}
-
-func (e *Event) SetPayload(v interface{}) error {
-	data, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-	e.Payload = data
-	return nil
-}
-
 type AAARequest struct {
 	RequestID     string            `json:"request_id"`
 	Username      string            `json:"username"`
@@ -60,16 +28,6 @@ type EgressPacketPayload struct {
 	OuterTPID uint16 `json:"outer_tpid,omitempty"`
 	SwIfIndex uint32 `json:"sw_if_index"`
 }
-
-type EventType string
-
-const (
-	EventTypePacket           EventType = "packet"
-	EventTypeSessionLifecycle EventType = "session_lifecycle"
-	EventTypeAAARequest       EventType = "aaa_request"
-	EventTypeAAAResponse      EventType = "aaa_response"
-	EventTypeEgress           EventType = "egress"
-)
 
 type AccessType string
 

@@ -56,6 +56,7 @@ const (
 	SystemDataplaneErrors    Path = "system.dataplane.errors"
 	SystemDataplaneBuffers   Path = "system.dataplane.buffers"
 
+	SystemEvents   Path = "system.events"
 	SystemWatchdog Path = "system.watchdog"
 )
 
