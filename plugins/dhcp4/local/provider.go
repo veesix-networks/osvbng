@@ -255,6 +255,21 @@ func (p *Provider) handleRelease(pkt *dhcp4.Packet, dhcp *layers.DHCPv4) (*dhcp4
 	return nil, nil
 }
 
+func (p *Provider) ReleaseLease(mac string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	lease, exists := p.leases[mac]
+	if !exists {
+		return
+	}
+	if lease.PoolName != "" {
+		allocator.GetGlobalRegistry().Release(lease.PoolName, lease.IP)
+	}
+	delete(p.leasesByIP, lease.IP.String())
+	delete(p.leases, mac)
+}
+
 func (p *Provider) reserveIP(reserveIP net.IP, mac, sessionID, poolName string, leaseTime time.Duration) error {
 	ipStr := reserveIP.String()
 	if existing, exists := p.leasesByIP[ipStr]; exists {
@@ -262,7 +277,15 @@ func (p *Provider) reserveIP(reserveIP net.IP, mac, sessionID, poolName string, 
 			existing.ExpireTime = time.Now().Add(leaseTime)
 			return nil
 		}
-		return fmt.Errorf("IP %s already leased to %s", ipStr, existing.MAC)
+		if time.Now().After(existing.ExpireTime) {
+			if existing.PoolName != "" {
+				allocator.GetGlobalRegistry().Release(existing.PoolName, existing.IP)
+			}
+			delete(p.leasesByIP, ipStr)
+			delete(p.leases, existing.MAC)
+		} else {
+			return fmt.Errorf("IP %s already leased to %s", ipStr, existing.MAC)
+		}
 	}
 	lease := &Lease{
 		IP:         reserveIP,

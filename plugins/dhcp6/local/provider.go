@@ -397,11 +397,66 @@ func (p *Provider) handleRelease(pkt *dhcp6.Packet, dhcp *layers.DHCPv6) (*dhcp6
 		delete(p.pdLeases, duidKey)
 	}
 
-	return nil, nil
+	reply := p.buildReleaseReply(dhcp, clientDUID)
+	return &dhcp6.Packet{
+		SessionID: pkt.SessionID,
+		MAC:       pkt.MAC,
+		SVLAN:     pkt.SVLAN,
+		CVLAN:     pkt.CVLAN,
+		DUID:      clientDUID,
+		Raw:       reply,
+	}, nil
+}
+
+func (p *Provider) buildReleaseReply(req *layers.DHCPv6, clientDUID []byte) []byte {
+	statusData := make([]byte, 2)
+	binary.BigEndian.PutUint16(statusData[0:2], StatusSuccess)
+
+	options := []layers.DHCPv6Option{
+		layers.NewDHCPv6Option(layers.DHCPv6OptClientID, clientDUID),
+		layers.NewDHCPv6Option(layers.DHCPv6OptServerID, p.serverDUID),
+		layers.NewDHCPv6Option(layers.DHCPv6Opt(OptStatusCode), statusData),
+	}
+
+	dhcpReply := &layers.DHCPv6{
+		MsgType:       layers.DHCPv6MsgTypeReply,
+		TransactionID: req.TransactionID,
+		Options:       options,
+	}
+
+	buf := gopacket.NewSerializeBuffer()
+	opts := gopacket.SerializeOptions{FixLengths: true}
+	if err := dhcpReply.SerializeTo(buf, opts); err != nil {
+		return nil
+	}
+	return buf.Bytes()
 }
 
 func (p *Provider) handleDecline(pkt *dhcp6.Packet, dhcp *layers.DHCPv6) (*dhcp6.Packet, error) {
 	return p.handleRelease(pkt, dhcp)
+}
+
+func (p *Provider) ReleaseLease(duid []byte) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	duidKey := string(duid)
+
+	if lease, exists := p.ianaLeases[duidKey]; exists {
+		if lease.PoolName != "" {
+			allocator.GetGlobalRegistry().ReleaseIANA(lease.PoolName, lease.Address)
+		}
+		delete(p.leasesByAddr, lease.Address.String())
+		delete(p.ianaLeases, duidKey)
+	}
+
+	if lease, exists := p.pdLeases[duidKey]; exists {
+		if lease.PoolName != "" {
+			allocator.GetGlobalRegistry().ReleasePD(lease.PoolName, lease.Prefix)
+		}
+		delete(p.leasesByPfx, lease.Prefix.String())
+		delete(p.pdLeases, duidKey)
+	}
 }
 
 func (p *Provider) extractClientDUID(dhcp *layers.DHCPv6) []byte {
