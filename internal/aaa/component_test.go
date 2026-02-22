@@ -7,8 +7,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/veesix-networks/osvbng/pkg/auth"
+	"github.com/veesix-networks/osvbng/pkg/component"
+	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/models"
+	"github.com/veesix-networks/osvbng/pkg/provider"
 )
+
+type noopAuthProvider struct{}
+
+func (noopAuthProvider) Info() provider.Info                                           { return provider.Info{} }
+func (noopAuthProvider) Authenticate(context.Context, *auth.AuthRequest) (*auth.AuthResponse, error) {
+	return &auth.AuthResponse{}, nil
+}
+func (noopAuthProvider) StartAccounting(context.Context, *auth.Session) error  { return nil }
+func (noopAuthProvider) UpdateAccounting(context.Context, *auth.Session) error { return nil }
+func (noopAuthProvider) StopAccounting(context.Context, *auth.Session) error   { return nil }
 
 func TestCalculateBucket(t *testing.T) {
 	tests := []struct {
@@ -50,7 +64,7 @@ func TestCalculateBucket(t *testing.T) {
 type testSession struct {
 	sessionID string
 	authTime  time.Time
-	session   *models.DHCPv4Session
+	session   *models.IPoESession
 }
 
 func createTestSession(sessionID string, authTime time.Time, macStr string, ipAddr string) testSession {
@@ -60,99 +74,30 @@ func createTestSession(sessionID string, authTime time.Time, macStr string, ipAd
 	return testSession{
 		sessionID: sessionID,
 		authTime:  authTime,
-		session: &models.DHCPv4Session{
-			SessionID:        sessionID,
-			State:            models.SessionStateActive,
-			MAC:              mac,
-			OuterVLAN:        100,
-			InnerVLAN:        0,
-			VLANCount:        1,
-			IPv4Address:      ip,
-			LeaseTime:        3600,
+		session: &models.IPoESession{
+			SessionID:   sessionID,
+			State:       models.SessionStateActive,
+			MAC:         mac,
+			OuterVLAN:   100,
+			InnerVLAN:   0,
+			VLANCount:   1,
+			IPv4Address: ip,
+			LeaseTime:   3600,
 		},
 	}
-}
-
-func TestBuildBuckets(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	d := &Daemon{
-		authServers: []ServerConfig{
-			{
-				Address: "127.0.0.1:1812",
-				Secret:  "testing123",
-				Timeout: 3 * time.Second,
-			},
-		},
-		acctServers: []ServerConfig{
-			{
-				Address: "127.0.0.1:1813",
-				Secret:  "testing123",
-				Timeout: 3 * time.Second,
-			},
-		},
-		buckets:    make(map[int][]string),
-		bucketSize: 1 * time.Second,
-		ctx:        ctx,
-		logger:     slog.Default(),
-		acctCache:  make(map[string]*AccountingSession),
-		stats:      NewRADIUSStats(),
-	}
-
-	now := time.Now()
-	targetSecond := (now.Second() + 5) % 60
-
-	authTime1 := now.Truncate(time.Minute).Add(time.Duration(targetSecond) * time.Second).Add(-6 * time.Minute)
-	session1 := createTestSession("session-1", authTime1, "02:00:00:00:00:01", "10.1.0.1")
-
-	authTime2 := now.Truncate(time.Minute).Add(time.Duration(targetSecond) * time.Second).Add(-11 * time.Minute)
-	session2 := createTestSession("session-2", authTime2, "02:00:00:00:00:02", "10.1.0.2")
-
-	event1 := models.Event{
-		Type:       models.EventTypeSessionLifecycle,
-		Timestamp:  authTime1,
-		SessionID:  session1.sessionID,
-		AccessType: models.AccessTypeIPoE,
-		Protocol:   models.ProtocolDHCPv4,
-	}
-	event1.SetPayload(session1.session)
-
-	err := d.handleSessionLifecycle(event1)
-	if err != nil {
-		t.Fatalf("handleSessionLifecycle failed: %v", err)
-	}
-
-	event2 := models.Event{
-		Type:       models.EventTypeSessionLifecycle,
-		Timestamp:  authTime2,
-		SessionID:  session2.sessionID,
-		AccessType: models.AccessTypeIPoE,
-		Protocol:   models.ProtocolDHCPv4,
-	}
-	event2.SetPayload(session2.session)
-
-	err = d.handleSessionLifecycle(event2)
-	if err != nil {
-		t.Fatalf("handleSessionLifecycle failed: %v", err)
-	}
-
-	expectedBucket := calculateBucket(authTime1, d.bucketSize)
-	t.Logf("Sessions added to bucket %d (second :%02d), should fire in ~%d seconds",
-		expectedBucket, targetSecond, (targetSecond-now.Second()+60)%60)
-
-	d.BuildAccountingBuckets()
-
-	time.Sleep(120 * time.Second)
-
-	cancel()
 }
 
 func TestHandleSessionLifecycle(t *testing.T) {
-	d := &Daemon{
-		buckets:    make(map[int][]string),
-		bucketSize: 5 * time.Second,
-		acctCache:  make(map[string]*AccountingSession),
+	base := component.NewBase("aaa-test")
+	base.StartContext(context.Background())
+	defer base.StopContext()
+
+	c := &Component{
+		Base:         base,
+		logger:       slog.Default(),
+		authProvider: noopAuthProvider{},
+		buckets:      make(map[int][]string),
+		acctCache:    make(map[string]*AccountingSession),
 	}
 
 	tests := []struct {
@@ -184,21 +129,20 @@ func TestHandleSessionLifecycle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			event := models.Event{
-				Type:       models.EventTypeSessionLifecycle,
-				Timestamp:  tt.session.authTime,
-				SessionID:  tt.session.sessionID,
-				AccessType: models.AccessTypeIPoE,
-				Protocol:   models.ProtocolDHCPv4,
-			}
-			event.SetPayload(tt.session.session)
-
-			err := d.handleSessionLifecycle(event)
-			if err != nil {
-				t.Fatalf("handleSessionLifecycle() error = %v", err)
+			event := events.Event{
+				Timestamp: tt.session.authTime,
+				Data: &events.SessionLifecycleEvent{
+					AccessType: models.AccessTypeIPoE,
+					Protocol:   models.ProtocolDHCPv4,
+					SessionID:  tt.session.sessionID,
+					State:      tt.session.session.State,
+					Session:    tt.session.session,
+				},
 			}
 
-			sessions := d.buckets[tt.wantBucket]
+			c.handleSessionLifecycle(event)
+
+			sessions := c.buckets[tt.wantBucket]
 			if len(sessions) == 0 {
 				t.Fatalf("expected session in bucket %d, but bucket is empty", tt.wantBucket)
 			}
@@ -214,9 +158,7 @@ func TestHandleSessionLifecycle(t *testing.T) {
 			if !found {
 				t.Errorf("session %s not found in bucket %d", tt.session.sessionID, tt.wantBucket)
 			}
-
 		})
-
 	}
-	t.Logf("Buckets: %+v", d.buckets)
+	t.Logf("Buckets: %+v", c.buckets)
 }

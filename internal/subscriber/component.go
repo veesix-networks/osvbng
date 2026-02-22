@@ -28,6 +28,8 @@ type Component struct {
 	expiryMgr *session.ExpiryManager
 	cfgMgr    component.ConfigManager
 	cache     cache.Cache
+
+	lifecycleSub events.Subscription
 }
 
 func New(deps component.Dependencies, srgMgr *srg.Manager) (component.Component, error) {
@@ -57,9 +59,7 @@ func (c *Component) Start(ctx context.Context) error {
 	}
 	c.expiryMgr.Start()
 
-	if err := c.eventBus.Subscribe(events.TopicSessionLifecycle, c.handleSessionLifecycle); err != nil {
-		return fmt.Errorf("subscribe to session lifecycle: %w", err)
-	}
+	c.lifecycleSub = c.eventBus.Subscribe(events.TopicSessionLifecycle, c.handleSessionLifecycle)
 
 	return nil
 }
@@ -72,7 +72,7 @@ func (c *Component) Stop(ctx context.Context) error {
 	}
 	c.expiryMgr.Stop()
 
-	c.eventBus.Unsubscribe(events.TopicSessionLifecycle, c.handleSessionLifecycle)
+	c.lifecycleSub.Unsubscribe()
 
 	c.StopContext()
 
@@ -281,50 +281,49 @@ func (c *Component) TerminateSession(ctx context.Context, sessionID string) erro
 
 	sess.State = models.SessionStateReleased
 
-	releaseEvent := models.Event{
-		Type:       models.EventTypeSessionLifecycle,
-		AccessType: models.AccessType(sess.AccessType),
-		Protocol:   models.Protocol(sess.Protocol),
-		SessionID:  sessionID,
-	}
-	releaseEvent.SetPayload(sess)
-
-	if err := c.eventBus.Publish(events.TopicSessionLifecycle, releaseEvent); err != nil {
-		return fmt.Errorf("publish release event: %w", err)
-	}
+	c.eventBus.Publish(events.TopicSessionLifecycle, events.Event{
+		Source: c.Name(),
+		Data: &events.SessionLifecycleEvent{
+			AccessType: models.AccessType(sess.AccessType),
+			Protocol:   models.Protocol(sess.Protocol),
+			SessionID:  sessionID,
+			State:      sess.State,
+			Session:    sess,
+		},
+	})
 
 	return nil
 }
 
-func (c *Component) handleSessionLifecycle(event models.Event) error {
+func (c *Component) handleSessionLifecycle(event events.Event) {
+	data, ok := event.Data.(*events.SessionLifecycleEvent)
+	if !ok {
+		c.logger.Error("Invalid event data for session lifecycle")
+		return
+	}
+
 	var sess models.SubscriberSession
 	var leaseTime uint32
 
-	switch event.AccessType {
+	switch data.AccessType {
 	case models.AccessTypeIPoE:
-		switch event.Protocol {
-		case models.ProtocolDHCPv6:
-			var dhcp6Sess models.IPoESession
-			if err := event.GetPayload(&dhcp6Sess); err != nil {
-				return fmt.Errorf("failed to decode DHCPv6 session: %w", err)
-			}
-			sess = &dhcp6Sess
-		default:
-			var dhcp4Sess models.IPoESession
-			if err := event.GetPayload(&dhcp4Sess); err != nil {
-				return fmt.Errorf("failed to decode DHCPv4 session: %w", err)
-			}
-			leaseTime = dhcp4Sess.LeaseTime
-			sess = &dhcp4Sess
+		if ipoeSess, ok := data.Session.(*models.IPoESession); ok {
+			leaseTime = ipoeSess.LeaseTime
+			sess = ipoeSess
+		} else {
+			c.logger.Error("Invalid session type for IPoE lifecycle event")
+			return
 		}
 	case models.AccessTypePPPoE:
-		var pppSess models.PPPSession
-		if err := event.GetPayload(&pppSess); err != nil {
-			return fmt.Errorf("failed to decode PPP session: %w", err)
+		if pppSess, ok := data.Session.(*models.PPPSession); ok {
+			sess = pppSess
+		} else {
+			c.logger.Error("Invalid session type for PPPoE lifecycle event")
+			return
 		}
-		sess = &pppSess
 	default:
-		return fmt.Errorf("unsupported access type: %s", event.AccessType)
+		c.logger.Error("Unsupported access type", "access_type", data.AccessType)
+		return
 	}
 
 	sessionID := sess.GetSessionID()
@@ -334,7 +333,8 @@ func (c *Component) handleSessionLifecycle(event models.Event) error {
 	state := sess.GetState()
 
 	if outerVLAN == 0 {
-		return fmt.Errorf("session rejected: S-VLAN required (untagged not supported)")
+		c.logger.Error("Session rejected: S-VLAN required", "session_id", sessionID)
+		return
 	}
 
 	isDF := true
@@ -347,13 +347,14 @@ func (c *Component) handleSessionLifecycle(event models.Event) error {
 			"session_id", sessionID,
 			"group", c.srgMgr.GetGroupForSVLAN(outerVLAN))
 		c.persistSession(sess)
-		return nil
+		return
 	}
 
 	c.logger.Debug("[DF] Processing session", "session_id", sessionID, "state", state, "username", sess.GetUsername())
 
 	if err := c.persistSession(sess); err != nil {
-		return fmt.Errorf("persist session: %w", err)
+		c.logger.Error("Failed to persist session", "session_id", sessionID, "error", err)
+		return
 	}
 
 	if state == models.SessionStateActive {
@@ -373,8 +374,6 @@ func (c *Component) handleSessionLifecycle(event models.Event) error {
 			c.logger.Error("Error releasing session", "error", err)
 		}
 	}
-
-	return nil
 }
 
 func (c *Component) activateSession(sess models.SubscriberSession) error {
@@ -656,15 +655,14 @@ func (c *Component) handleSessionExpiry(sessionID string, expiryTime time.Time) 
 		payload = &dhcp4Sess
 	}
 
-	releaseEvent := models.Event{
-		Type:       models.EventTypeSessionLifecycle,
-		AccessType: accessType,
-		Protocol:   protocol,
-		SessionID:  sessionID,
-	}
-	releaseEvent.SetPayload(payload)
-
-	if err := c.eventBus.Publish(events.TopicSessionLifecycle, releaseEvent); err != nil {
-		c.logger.Warn("Failed to publish expiry event", "session_id", sessionID, "error", err)
-	}
+	c.eventBus.Publish(events.TopicSessionLifecycle, events.Event{
+		Source: c.Name(),
+		Data: &events.SessionLifecycleEvent{
+			AccessType: accessType,
+			Protocol:   protocol,
+			SessionID:  sessionID,
+			State:      models.SessionStateReleased,
+			Session:    payload,
+		},
+	})
 }

@@ -2,7 +2,6 @@ package aaa
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -39,6 +38,9 @@ type Component struct {
 	eventBus     events.Bus
 	cache        cache.Cache
 
+	aaaReqSub    events.Subscription
+	lifecycleSub events.Subscription
+
 	buckets  map[int][]string
 	bucketMu sync.RWMutex
 
@@ -66,13 +68,8 @@ func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
 	c.logger.Info("Starting AAA component")
 
-	if err := c.eventBus.Subscribe(events.TopicAAARequest, c.handleAAARequest); err != nil {
-		return fmt.Errorf("subscribe to aaa requests: %w", err)
-	}
-
-	if err := c.eventBus.Subscribe(events.TopicSessionLifecycle, c.handleSessionLifecycle); err != nil {
-		return fmt.Errorf("subscribe to session lifecycle: %w", err)
-	}
+	c.aaaReqSub = c.eventBus.Subscribe(events.TopicAAARequest, c.handleAAARequest)
+	c.lifecycleSub = c.eventBus.Subscribe(events.TopicSessionLifecycle, c.handleSessionLifecycle)
 
 	c.BuildAccountingBuckets()
 
@@ -81,6 +78,8 @@ func (c *Component) Start(ctx context.Context) error {
 
 func (c *Component) Stop(ctx context.Context) error {
 	c.logger.Info("Stopping AAA component")
+	c.aaaReqSub.Unsubscribe()
+	c.lifecycleSub.Unsubscribe()
 	c.StopContext()
 	return nil
 }
@@ -155,12 +154,14 @@ func (c *Component) sendAccountingUpdate(acctSession *AccountingSession) {
 	}
 }
 
-func (c *Component) handleAAARequest(event models.Event) error {
-	var req models.AAARequest
-	if err := event.GetPayload(&req); err != nil {
-		return fmt.Errorf("failed to decode AAA request: %w", err)
+func (c *Component) handleAAARequest(event events.Event) {
+	data, ok := event.Data.(*events.AAARequestEvent)
+	if !ok {
+		c.logger.Error("Invalid event data for AAA request")
+		return
 	}
 
+	req := data.Request
 	attrs := req.Attributes
 	if attrs == nil {
 		attrs = make(map[string]string)
@@ -173,7 +174,7 @@ func (c *Component) handleAAARequest(event models.Event) error {
 		SVLAN:         req.SVLAN,
 		CVLAN:         req.CVLAN,
 		Interface:     req.Interface,
-		AccessType:    string(event.AccessType),
+		AccessType:    string(data.AccessType),
 		PolicyName:    req.PolicyName,
 		Attributes:    attrs,
 	}
@@ -184,7 +185,8 @@ func (c *Component) handleAAARequest(event models.Event) error {
 			"mac", req.MAC,
 			"acct_session_id", req.AcctSessionID,
 			"error", err)
-		return c.publishResponse(req.RequestID, event.SessionID, event.AccessType, false, nil, err)
+		c.publishResponse(req.RequestID, data.SessionID, data.AccessType, false, nil, err)
+		return
 	}
 
 	c.logger.Info("Authentication response",
@@ -198,11 +200,11 @@ func (c *Component) handleAAARequest(event models.Event) error {
 		respAttrs[k] = v
 	}
 
-	return c.publishResponse(req.RequestID, event.SessionID, event.AccessType, authResp.Allowed, respAttrs, nil)
+	c.publishResponse(req.RequestID, data.SessionID, data.AccessType, authResp.Allowed, respAttrs, nil)
 }
 
-func (c *Component) publishResponse(requestID, sessionID string, accessType models.AccessType, allowed bool, attributes map[string]interface{}, authErr error) error {
-	resp := &models.AAAResponse{
+func (c *Component) publishResponse(requestID, sessionID string, accessType models.AccessType, allowed bool, attributes map[string]interface{}, authErr error) {
+	resp := models.AAAResponse{
 		RequestID:  requestID,
 		Allowed:    allowed,
 		Attributes: attributes,
@@ -210,16 +212,6 @@ func (c *Component) publishResponse(requestID, sessionID string, accessType mode
 
 	if authErr != nil {
 		resp.Error = authErr.Error()
-	}
-
-	responseEvent := models.Event{
-		Type:       models.EventTypeAAAResponse,
-		AccessType: accessType,
-		SessionID:  sessionID,
-	}
-
-	if err := responseEvent.SetPayload(resp); err != nil {
-		return fmt.Errorf("failed to set payload: %w", err)
 	}
 
 	var topic string
@@ -232,7 +224,14 @@ func (c *Component) publishResponse(requestID, sessionID string, accessType mode
 		topic = events.TopicAAAResponse
 	}
 
-	return c.eventBus.Publish(topic, responseEvent)
+	c.eventBus.Publish(topic, events.Event{
+		Source: c.Name(),
+		Data: &events.AAAResponseEvent{
+			AccessType: accessType,
+			SessionID:  sessionID,
+			Response:   resp,
+		},
+	})
 }
 
 func calculateBucket(authTime time.Time, bucketSize time.Duration) int {
@@ -242,17 +241,22 @@ func calculateBucket(authTime time.Time, bucketSize time.Duration) int {
 	return int(totalNanos / bucketSize.Nanoseconds())
 }
 
-func (c *Component) handleSessionLifecycle(event models.Event) error {
-	sessionId := event.SessionID
+func (c *Component) handleSessionLifecycle(event events.Event) {
+	data, ok := event.Data.(*events.SessionLifecycleEvent)
+	if !ok {
+		c.logger.Error("Invalid event data for session lifecycle")
+		return
+	}
+
+	sessionId := data.SessionID
 
 	var username, mac, ipv4Address, acctSessionID string
 	var sessionState models.SessionState
 	attributes := make(map[string]string)
 
-	switch event.AccessType {
+	switch data.AccessType {
 	case models.AccessTypeIPoE:
-		var sess models.IPoESession
-		if err := event.GetPayload(&sess); err == nil {
+		if sess, ok := data.Session.(*models.IPoESession); ok {
 			sessionState = sess.State
 			mac = sess.MAC.String()
 			if sess.IPv4Address != nil {
@@ -263,8 +267,7 @@ func (c *Component) handleSessionLifecycle(event models.Event) error {
 			acctSessionID = sess.AAASessionID
 		}
 	case models.AccessTypePPPoE:
-		var sess models.PPPSession
-		if err := event.GetPayload(&sess); err == nil {
+		if sess, ok := data.Session.(*models.PPPSession); ok {
 			sessionState = sess.State
 			mac = sess.MAC.String()
 			if sess.IPv4Address != nil {
@@ -277,7 +280,10 @@ func (c *Component) handleSessionLifecycle(event models.Event) error {
 	}
 
 	if sessionState == models.SessionStateReleased {
-		return c.handleSessionRelease(sessionId, username, mac, acctSessionID, attributes)
+		if err := c.handleSessionRelease(sessionId, username, mac, acctSessionID, attributes); err != nil {
+			c.logger.Error("Failed to handle session release", "session_id", sessionId, "error", err)
+		}
+		return
 	}
 
 	bucketId := calculateBucket(event.Timestamp, defaultBucketSize)
@@ -287,7 +293,7 @@ func (c *Component) handleSessionLifecycle(event models.Event) error {
 		for _, sid := range sessions {
 			if sid == sessionId {
 				c.bucketMu.Unlock()
-				return nil
+				return
 			}
 		}
 	}
@@ -300,7 +306,7 @@ func (c *Component) handleSessionLifecycle(event models.Event) error {
 	acctSession := &AccountingSession{
 		sessionID:     sessionId,
 		acctSessionID: acctSessionID,
-		accessType:    event.AccessType,
+		accessType:    data.AccessType,
 		authDate:      event.Timestamp,
 		username:      username,
 		mac:           mac,
@@ -320,8 +326,6 @@ func (c *Component) handleSessionLifecycle(event models.Event) error {
 	}
 
 	go c.authProvider.StartAccounting(c.Ctx, session)
-
-	return nil
 }
 
 func (c *Component) handleSessionRelease(sessionId, username, mac, acctSessionID string, attributes map[string]string) error {
