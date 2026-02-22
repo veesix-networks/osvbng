@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/veesix-networks/osvbng/compare/v0.2.0...v0.3.0) (2026-02-22)
+
+
+### Features
+
+* **watchdog:** add VPP health monitoring and dataplane recovery ([#128](https://github.com/veesix-networks/osvbng/issues/128)) ([2bd4648](https://github.com/veesix-networks/osvbng/commit/2bd4648c47bd3daeefb06333b1887d475aaddb0d))
+
+
+### Bug Fixes
+
+* **ipoe:** fix VPP crash on session re-creation and release resource leaks ([#133](https://github.com/veesix-networks/osvbng/issues/133)) ([339665f](https://github.com/veesix-networks/osvbng/commit/339665f69b398e0e1b76c2a263723e938e93a240))
+
 ## [0.2.0](https://github.com/veesix-networks/osvbng/compare/v0.1.2...v0.2.0) (2026-02-21)
 
 
