@@ -82,6 +82,9 @@ func (w *Watchdog) GetState(name string) (StateInfo, bool) {
 }
 
 func (w *Watchdog) GetAllStates() []StateInfo {
+	if w == nil {
+		return nil
+	}
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
@@ -97,6 +100,9 @@ func (w *Watchdog) IsHealthy() bool {
 }
 
 func (w *Watchdog) IsReady() bool {
+	if w == nil {
+		return true
+	}
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
