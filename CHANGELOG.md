@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/veesix-networks/osvbng/compare/v0.3.0...v0.3.1) (2026-02-23)
+
+
+### Bug Fixes
+
+* **docker:** create dataplane netns in published image entrypoint ([#135](https://github.com/veesix-networks/osvbng/issues/135)) ([81f8530](https://github.com/veesix-networks/osvbng/commit/81f8530199d1e21bcbc496619ffc8f918c700def))
+
 ## [0.3.0](https://github.com/veesix-networks/osvbng/compare/v0.2.0...v0.3.0) (2026-02-22)
 
 
