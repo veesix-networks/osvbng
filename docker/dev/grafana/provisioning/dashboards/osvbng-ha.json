@@ -1,0 +1,290 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": true,
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "1": { "text": "Connected", "color": "green" }, "0": { "text": "Disconnected", "color": "red" } }, "type": "value" }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value"
+      },
+      "targets": [{
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "expr": "osvbng_ha_peer_connected{node=\"bng-1\"}",
+        "legendFormat": "bng-1"
+      }],
+      "title": "bng-1 Peer Status",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "1": { "text": "Connected", "color": "green" }, "0": { "text": "Disconnected", "color": "red" } }, "type": "value" }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value"
+      },
+      "targets": [{
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "expr": "osvbng_ha_peer_connected{node=\"bng-2\"}",
+        "legendFormat": "bng-2"
+      }],
+      "title": "bng-2 Peer Status",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": {
+              "ACTIVE": { "text": "ACTIVE", "color": "green" },
+              "STANDBY": { "text": "STANDBY", "color": "blue" },
+              "ACTIVE_SOLO": { "text": "ACTIVE_SOLO", "color": "yellow" },
+              "WAITING": { "text": "WAITING", "color": "orange" },
+              "READY": { "text": "READY", "color": "purple" },
+              "INIT": { "text": "INIT", "color": "dark-gray" }
+            }, "type": "value" }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value"
+      },
+      "targets": [{
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "expr": "osvbng_ha_srg_state{node=\"bng-1\"}",
+        "legendFormat": "{{srg}}: {{state}}"
+      }],
+      "title": "bng-1 SRG State",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": {
+              "ACTIVE": { "text": "ACTIVE", "color": "green" },
+              "STANDBY": { "text": "STANDBY", "color": "blue" },
+              "ACTIVE_SOLO": { "text": "ACTIVE_SOLO", "color": "yellow" },
+              "WAITING": { "text": "WAITING", "color": "orange" },
+              "READY": { "text": "READY", "color": "purple" },
+              "INIT": { "text": "INIT", "color": "dark-gray" }
+            }, "type": "value" }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value"
+      },
+      "targets": [{
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "expr": "osvbng_ha_srg_state{node=\"bng-2\"}",
+        "legendFormat": "{{srg}}: {{state}}"
+      }],
+      "title": "bng-2 SRG State",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisLabel": "",
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "stacking": { "mode": "none" }
+          },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "min": 0,
+          "max": 1
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "id": 5,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "osvbng_ha_peer_connected{node=\"bng-1\"}",
+          "legendFormat": "bng-1 → peer"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "osvbng_ha_peer_connected{node=\"bng-2\"}",
+          "legendFormat": "bng-2 → peer"
+        }
+      ],
+      "title": "Peer Connectivity Over Time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisLabel": "",
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "stacking": { "mode": "none" }
+          },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "min": 0,
+          "max": 1
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "id": 6,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "osvbng_ha_srg_state{node=\"bng-1\", state=\"ACTIVE\"}",
+          "legendFormat": "bng-1 {{srg}} ACTIVE"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "osvbng_ha_srg_state{node=\"bng-1\", state=\"STANDBY\"}",
+          "legendFormat": "bng-1 {{srg}} STANDBY"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "osvbng_ha_srg_state{node=\"bng-2\", state=\"ACTIVE\"}",
+          "legendFormat": "bng-2 {{srg}} ACTIVE"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "osvbng_ha_srg_state{node=\"bng-2\", state=\"STANDBY\"}",
+          "legendFormat": "bng-2 {{srg}} STANDBY"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "osvbng_ha_srg_state{node=~\"bng-.\", state=\"ACTIVE_SOLO\"}",
+          "legendFormat": "{{node}} {{srg}} ACTIVE_SOLO"
+        }
+      ],
+      "title": "SRG State Over Time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 1 },
+            { "color": "red", "value": 3 }
+          ]},
+          "unit": "none",
+          "min": 0
+        }
+      },
+      "gridPos": { "h": 4, "w": 12, "x": 0, "y": 12 },
+      "id": 7,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "changes(osvbng_ha_srg_state{node=\"bng-1\"}[5m])",
+          "legendFormat": "bng-1 {{srg}} transitions"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "changes(osvbng_ha_srg_state{node=\"bng-2\"}[5m])",
+          "legendFormat": "bng-2 {{srg}} transitions"
+        }
+      ],
+      "title": "SRG State Transitions (last 5m)",
+      "type": "stat"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["osvbng", "ha"],
+  "templating": { "list": [] },
+  "time": { "from": "now-15m", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "osvbng - High Availability",
+  "uid": "osvbng-ha",
+  "version": 1
+}

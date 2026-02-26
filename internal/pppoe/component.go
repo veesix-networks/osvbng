@@ -1,3 +1,7 @@
+// Copyright 2025 Veesix Networks Ltd
+// Licensed under the GNU General Public License v3.0 or later.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package pppoe
 
 import (
@@ -25,7 +29,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/pppoe"
 	"github.com/veesix-networks/osvbng/pkg/session"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
-	"github.com/veesix-networks/osvbng/pkg/srg"
+	"github.com/veesix-networks/osvbng/pkg/ha"
 	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
 )
@@ -42,7 +46,7 @@ type Component struct {
 
 	logger   *slog.Logger
 	eventBus events.Bus
-	srgMgr   *srg.Manager
+	srgMgr   ha.SRGProvider
 	ifMgr    *ifmgr.Manager
 	cfgMgr   component.ConfigManager
 	vpp      southbound.Southbound
@@ -121,6 +125,7 @@ type SessionState struct {
 	OuterTPID uint16
 	VRF       string
 	ServiceGroup svcgroup.ServiceGroup
+	SRGName      string
 
 	AllocCtx      *allocator.Context
 	allocatedPool string
@@ -129,7 +134,7 @@ type SessionState struct {
 	mu        sync.Mutex
 }
 
-func New(deps component.Dependencies, srgMgr *srg.Manager, ifMgr *ifmgr.Manager) (component.Component, error) {
+func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manager) (component.Component, error) {
 	log := logger.Get(logger.PPPoE)
 
 	cookieMgr, err := pppoe.NewCookieManager(cookieTTL)
@@ -161,6 +166,21 @@ func New(deps component.Dependencies, srgMgr *srg.Manager, ifMgr *ifmgr.Manager)
 	c.echoGen = NewEchoGenerator(DefaultEchoConfig(), c.sendEchoRequest, c.handleDeadPeer)
 
 	return c, nil
+}
+
+func (c *Component) resolveSRGName(svlan uint16) string {
+	if c.srgMgr == nil {
+		return ""
+	}
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+		return ""
+	}
+	groupName := cfg.SubscriberGroups.FindGroupNameBySVLAN(svlan)
+	if groupName == "" {
+		return ""
+	}
+	return c.srgMgr.GetSRGForGroup(groupName)
 }
 
 func (c *Component) resolveOuterTPID(svlan uint16) uint16 {
@@ -454,7 +474,8 @@ func (c *Component) sendDiscoveryPacket(pkt *dataplane.ParsedPacket, code layers
 	var srcMAC string
 	var parentSwIfIndex uint32
 	if c.srgMgr != nil {
-		if vmac := c.srgMgr.GetVirtualMAC(pkt.OuterVLAN); vmac != nil {
+		srgName := c.resolveSRGName(pkt.OuterVLAN)
+		if vmac := c.srgMgr.GetVirtualMAC(srgName); vmac != nil {
 			srcMAC = vmac.String()
 		}
 	}

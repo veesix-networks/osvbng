@@ -1,3 +1,7 @@
+// Copyright 2025 Veesix Networks Ltd
+// Licensed under the GNU General Public License v3.0 or later.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package arp
 
 import (
@@ -17,7 +21,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/ifmgr"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
-	"github.com/veesix-networks/osvbng/pkg/srg"
+	"github.com/veesix-networks/osvbng/pkg/ha"
 	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
 )
 
@@ -27,14 +31,14 @@ type Component struct {
 	logger    *slog.Logger
 	eventBus  events.Bus
 	cache     cache.Cache
-	srgMgr    *srg.Manager
+	srgMgr    ha.SRGProvider
 	ifMgr     *ifmgr.Manager
 	vrfMgr    *vrfmgr.Manager
 	configMgr component.ConfigManager
 	arpChan   <-chan *dataplane.ParsedPacket
 }
 
-func New(deps component.Dependencies, srgMgr *srg.Manager, ifMgr *ifmgr.Manager) (component.Component, error) {
+func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manager) (component.Component, error) {
 	log := logger.Get(logger.ARP)
 
 	return &Component{
@@ -48,6 +52,21 @@ func New(deps component.Dependencies, srgMgr *srg.Manager, ifMgr *ifmgr.Manager)
 		configMgr: deps.ConfigManager,
 		arpChan:   deps.ARPChan,
 	}, nil
+}
+
+func (c *Component) resolveSRGName(svlan uint16) string {
+	if c.srgMgr == nil {
+		return ""
+	}
+	cfg, err := c.configMgr.GetRunning()
+	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+		return ""
+	}
+	groupName := cfg.SubscriberGroups.FindGroupNameBySVLAN(svlan)
+	if groupName == "" {
+		return ""
+	}
+	return c.srgMgr.GetSRGForGroup(groupName)
 }
 
 func (c *Component) resolveOuterTPID(svlan uint16) uint16 {
@@ -145,7 +164,16 @@ func (c *Component) handlePacket(pkt *dataplane.ParsedPacket) error {
 	var gatewayMAC net.HardwareAddr
 	var parentSwIfIndex uint32
 	if c.srgMgr != nil {
-		gatewayMAC = c.srgMgr.GetVirtualMAC(0)
+		var srgName string
+		if sess != nil {
+			srgName = sess.SRGName
+		}
+		if srgName == "" {
+			srgName = c.resolveSRGName(pkt.OuterVLAN)
+		}
+		if srgName != "" {
+			gatewayMAC = c.srgMgr.GetVirtualMAC(srgName)
+		}
 	}
 	if c.ifMgr != nil {
 		if iface := c.ifMgr.Get(pkt.SwIfIndex); iface != nil {

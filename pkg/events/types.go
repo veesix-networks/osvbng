@@ -1,3 +1,7 @@
+// Copyright 2025 Veesix Networks Ltd
+// Licensed under the GNU General Public License v3.0 or later.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package events
 
 import "github.com/veesix-networks/osvbng/pkg/models"
@@ -26,4 +30,10 @@ type AAAResponseEvent struct {
 type EgressEvent struct {
 	Protocol models.Protocol
 	Packet   models.EgressPacketPayload
+}
+
+type HAStateChangeEvent struct {
+	SRGName  string
+	OldState string
+	NewState string
 }

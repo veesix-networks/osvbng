@@ -1,3 +1,7 @@
+// Copyright 2025 Veesix Networks Ltd
+// Licensed under the GNU General Public License v3.0 or later.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package main
 
 import (
@@ -33,6 +37,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/dhcp4"
 	"github.com/veesix-networks/osvbng/pkg/dhcp6"
 	"github.com/veesix-networks/osvbng/pkg/events/local"
+	"github.com/veesix-networks/osvbng/pkg/ha"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/conf/all"
 	"github.com/veesix-networks/osvbng/pkg/handlers/oper"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/oper/all"
@@ -263,22 +268,32 @@ func main() {
 		}
 	}
 
-	ipoeComp, err := ipoe.New(coreDeps, nil, ifMgr, dhcp4Provider, dhcp6Provider)
+	var haMgr *ha.Manager
+	var srgProvider ha.SRGProvider
+	if cfg.HA.Enabled {
+		haMgr, err = ha.NewManager(&cfg.HA, eventBus)
+		if err != nil {
+			log.Fatalf("Failed to create HA manager: %v", err)
+		}
+		srgProvider = haMgr
+	}
+
+	ipoeComp, err := ipoe.New(coreDeps, srgProvider, ifMgr, dhcp4Provider, dhcp6Provider)
 	if err != nil {
 		log.Fatalf("Failed to create ipoe component: %v", err)
 	}
 
-	subscriberComp, err := subscriber.New(coreDeps, nil)
+	subscriberComp, err := subscriber.New(coreDeps, srgProvider)
 	if err != nil {
 		log.Fatalf("Failed to create subscriber component: %v", err)
 	}
 
-	arpComp, err := arp.New(coreDeps, nil, ifMgr)
+	arpComp, err := arp.New(coreDeps, srgProvider, ifMgr)
 	if err != nil {
 		log.Fatalf("Failed to create arp component: %v", err)
 	}
 
-	pppoeComp, err := pppoe.New(coreDeps, nil, ifMgr)
+	pppoeComp, err := pppoe.New(coreDeps, srgProvider, ifMgr)
 	if err != nil {
 		log.Fatalf("Failed to create pppoe component: %v", err)
 	}
@@ -375,6 +390,9 @@ func main() {
 	})
 
 	orch := component.NewOrchestrator()
+	if haMgr != nil {
+		orch.Register(haMgr)
+	}
 	orch.Register(aaaComp)
 	orch.Register(routingComp)
 	orch.Register(dataplaneComp)
@@ -424,12 +442,14 @@ func main() {
 		CPPM:             cppmManager,
 		Watchdog:         wd,
 		EventBus:         eventBus,
+		HAManager:        haMgr,
 		PluginComponents: pluginComponentsMap,
 	})
 
 	operRegistry.AutoRegisterAll(&deps.OperDeps{
 		Subscriber:       subscriberComp.(*subscriber.Component),
 		EventBus:         eventBus,
+		HAManager:        haMgr,
 		PluginComponents: pluginComponentsMap,
 	})
 

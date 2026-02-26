@@ -31,7 +31,7 @@
       },
       "targets": [{
         "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "expr": "osvbng_subscriber_sessions_total{job=\"osvbng\"}",
+        "expr": "osvbng_subscriber_sessions_total{node=\"bng-1\"}",
         "legendFormat": "Total"
       }],
       "title": "Total Sessions",
@@ -59,7 +59,7 @@
       },
       "targets": [{
         "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "expr": "osvbng_subscriber_sessions_active{job=\"osvbng\"}",
+        "expr": "osvbng_subscriber_sessions_active{node=\"bng-1\"}",
         "legendFormat": "Active"
       }],
       "title": "Active Sessions",
@@ -87,17 +87,17 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "osvbng_subscriber_sessions_ipoe_v4{job=\"osvbng\"}",
+          "expr": "osvbng_subscriber_sessions_ipoe_v4{node=\"bng-1\"}",
           "legendFormat": "IPoE v4"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "osvbng_subscriber_sessions_ipoe_v6{job=\"osvbng\"}",
+          "expr": "osvbng_subscriber_sessions_ipoe_v6{node=\"bng-1\"}",
           "legendFormat": "IPoE v6"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "osvbng_subscriber_sessions_ppp{job=\"osvbng\"}",
+          "expr": "osvbng_subscriber_sessions_ppp{node=\"bng-1\"}",
           "legendFormat": "PPP"
         }
       ],
@@ -149,32 +149,32 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "osvbng_subscriber_sessions_total{job=\"osvbng\"}",
+          "expr": "osvbng_subscriber_sessions_total{node=\"bng-1\"}",
           "legendFormat": "Total"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "osvbng_subscriber_sessions_active{job=\"osvbng\"}",
+          "expr": "osvbng_subscriber_sessions_active{node=\"bng-1\"}",
           "legendFormat": "Active"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "osvbng_subscriber_sessions_released{job=\"osvbng\"}",
+          "expr": "osvbng_subscriber_sessions_released{node=\"bng-1\"}",
           "legendFormat": "Released"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "osvbng_subscriber_sessions_ipoe_v4{job=\"osvbng\"}",
+          "expr": "osvbng_subscriber_sessions_ipoe_v4{node=\"bng-1\"}",
           "legendFormat": "IPoE v4"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "osvbng_subscriber_sessions_ipoe_v6{job=\"osvbng\"}",
+          "expr": "osvbng_subscriber_sessions_ipoe_v6{node=\"bng-1\"}",
           "legendFormat": "IPoE v6"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "osvbng_subscriber_sessions_ppp{job=\"osvbng\"}",
+          "expr": "osvbng_subscriber_sessions_ppp{node=\"bng-1\"}",
           "legendFormat": "PPP"
         }
       ],

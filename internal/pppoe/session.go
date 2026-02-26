@@ -342,6 +342,7 @@ func (s *SessionState) onAuthResult(allowed bool, attributes map[string]interfac
 		resolved := s.resolveServiceGroup(attributes)
 		s.VRF = resolved.VRF
 		s.ServiceGroup = resolved
+		s.SRGName = s.component.resolveSRGName(s.OuterVLAN)
 		s.AllocCtx = s.buildAllocContext(attributes)
 
 		logArgs := []any{"session_id", s.SessionID}
@@ -647,6 +648,7 @@ func (s *SessionState) checkOpen() {
 				IfIndex:      s.SwIfIndex,
 				VRF:          s.VRF,
 				ServiceGroup: s.ServiceGroup.Name,
+				SRGName:      s.SRGName,
 				IPv4Address:  s.IPv4Address,
 				IPv6Address:  s.IPv6Address,
 				Username:     s.Username,
@@ -816,7 +818,7 @@ func (s *SessionState) sendPPPPacket(proto uint16, code, id uint8, data []byte) 
 	var srcMAC string
 	var parentSwIfIndex uint32
 	if s.component.srgMgr != nil {
-		if vmac := s.component.srgMgr.GetVirtualMAC(s.OuterVLAN); vmac != nil {
+		if vmac := s.component.srgMgr.GetVirtualMAC(s.SRGName); vmac != nil {
 			srcMAC = vmac.String()
 		}
 	}
@@ -910,6 +912,7 @@ func (s *SessionState) terminate() {
 		MAC:             s.MAC,
 		OuterVLAN:       s.OuterVLAN,
 		InnerVLAN:       s.InnerVLAN,
+		SRGName:         s.SRGName,
 		Username:        s.Username,
 		AAASessionID: s.AcctSessionID,
 	})

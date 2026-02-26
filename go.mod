@@ -6,15 +6,14 @@ toolchain go1.24.11
 
 require (
 	git.fd.io/govpp.git v0.5.0
-	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/chzyer/readline v1.5.1
 	github.com/getkin/kin-openapi v0.133.0
 	github.com/google/gopacket v1.1.19
 	github.com/google/uuid v1.6.0
 	github.com/mattn/go-sqlite3 v1.14.33
 	github.com/prometheus/client_golang v1.23.2
-	github.com/redis/go-redis/v9 v9.17.2
 	github.com/vishvananda/netlink v1.3.1
+	github.com/vishvananda/netns v0.0.5
 	go.fd.io/govpp v0.13.0
 	golang.org/x/sys v0.38.0
 	google.golang.org/grpc v1.78.0
@@ -25,7 +24,7 @@ require (
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/ftrvxmtrx/fd v0.0.0-20150925145434-c6d800382fff // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
@@ -42,7 +41,6 @@ require (
 	github.com/prometheus/common v0.66.1 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
-	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/woodsbury/decimal128 v1.3.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	go4.org/intern v0.0.0-20211027215823-ae77deb06f29 // indirect

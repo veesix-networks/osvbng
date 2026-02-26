@@ -1,3 +1,7 @@
+// Copyright 2025 Veesix Networks Ltd
+// Licensed under the GNU General Public License v3.0 or later.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package config
 
 import (
@@ -30,6 +34,7 @@ type Config struct {
 	ServiceGroups    map[string]*servicegroup.Config           `json:"service-groups,omitempty" yaml:"service-groups,omitempty"`
 	VRFS             map[string]*ip.VRFSConfig               `json:"vrfs,omitempty" yaml:"vrfs,omitempty"`
 	Watchdog         system.WatchdogConfig                  `json:"watchdog,omitempty" yaml:"watchdog,omitempty"`
+	HA               HAConfig                               `json:"ha,omitempty" yaml:"ha,omitempty"`
 	System           *SystemConfig                          `json:"system,omitempty" yaml:"system,omitempty"`
 	Plugins          map[string]interface{}                 `json:"plugins,omitempty" yaml:"plugins,omitempty"`
 }

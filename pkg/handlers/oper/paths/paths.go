@@ -1,3 +1,7 @@
+// Copyright 2025 Veesix Networks Ltd
+// Licensed under the GNU General Public License v3.0 or later.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package paths
 
 import (
@@ -10,6 +14,8 @@ const (
 	SystemLoggingLevel     Path = "system.logging.level.<*>"
 	SystemEventsDebug      Path = "system.events.debug"
 	SubscriberSessionClear Path = "subscriber.session.clear"
+
+	HASwitchover Path = "ha.switchover"
 )
 
 func (p Path) String() string {

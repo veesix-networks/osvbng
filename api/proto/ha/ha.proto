@@ -1,0 +1,52 @@
+// Copyright 2025 Veesix Networks Ltd
+// Licensed under the GNU General Public License v3.0 or later.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+syntax = "proto3";
+
+package osvbng.ha.v1;
+
+option go_package = "github.com/veesix-networks/osvbng/api/proto/ha;hapb";
+
+service HAPeerService {
+  rpc Heartbeat(stream HeartbeatMessage) returns (stream HeartbeatMessage);
+  rpc NotifySRGState(SRGStateNotification) returns (SRGStateAck);
+  rpc RequestSwitchover(SwitchoverRequest) returns (SwitchoverResponse);
+}
+
+message HeartbeatMessage {
+  string node_id = 1;
+  uint64 sequence = 2;
+  int64 timestamp_ns = 3;
+  repeated SRGStatus srg_statuses = 4;
+  string config_hash = 5;
+}
+
+message SRGStatus {
+  string srg_name = 1;
+  string state = 2;
+  uint64 session_count = 3;
+  uint64 last_sync_seq = 4;
+  uint32 priority = 5;
+}
+
+message SRGStateNotification {
+  string srg_name = 1;
+  string new_state = 2;
+  string prev_state = 3;
+  int64 timestamp_ns = 4;
+}
+
+message SRGStateAck {
+  bool acknowledged = 1;
+}
+
+message SwitchoverRequest {
+  repeated string srg_names = 1;
+  bool graceful = 2;
+}
+
+message SwitchoverResponse {
+  bool success = 1;
+  string message = 2;
+}

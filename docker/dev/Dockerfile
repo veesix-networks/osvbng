@@ -1,3 +1,7 @@
+# Copyright 2025 Veesix Networks Ltd
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 FROM golang:1.24 AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -40,6 +44,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     vpp=25.10-release \
     vpp-plugin-core=25.10-release \
     libvppinfra=25.10-release \
+    libvppinfra-dev=25.10-release \
     vpp-dev=25.10-release \
     && rm -rf /var/lib/apt/lists/*
 

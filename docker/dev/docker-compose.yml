@@ -1,3 +1,7 @@
+# Copyright 2025 Veesix Networks Ltd
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 services:
   bngblaster:
     build:
@@ -20,7 +24,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     privileged: true
-    cpuset: "0-7"
+    cpus: 2
     sysctls:
       - net.unix.max_dgram_qlen=10000
     environment:
@@ -50,6 +54,44 @@ services:
         hard: -1
     shm_size: 2g
     # Ports accessible via management IP (172.30.0.2): 8080, 9090, 50050
+
+  osvbng-2:
+    build:
+      context: ../..
+      dockerfile: docker/dev/Dockerfile
+    container_name: osvbng-2
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    privileged: true
+    cpus: 2
+    sysctls:
+      - net.unix.max_dgram_qlen=10000
+    environment:
+      - OSVBNG_NUM_INTERFACES=2
+      - OSVBNG_ACCESS_INTERFACES=1
+      - OSVBNG_LOG_LEVEL=info
+    network_mode: none
+    volumes:
+      - /sys/kernel/debug:/sys/kernel/debug:ro
+      - /dev/hugepages:/dev/hugepages
+      - ./osvbng-2.yaml:/etc/osvbng/osvbng.yaml:ro
+      - bng2-config-versions:/var/lib/osvbng/config-versions
+      - ../../bin/osvbngd:/usr/local/bin/osvbngd:ro
+      - ../../bin/osvbngcli:/usr/local/bin/osvbngcli:ro
+      - ../../templates:/usr/share/osvbng/templates:ro
+      - ./logs-2:/var/log/osvbng
+    cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+      - IPC_LOCK
+      - SYS_NICE
+      - SYS_RAWIO
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    shm_size: 2g
+    # Ports accessible via management IP (172.30.0.3): 8080, 9090, 50050
 
   frr-peer:
     build:
@@ -90,6 +132,7 @@ services:
 
 volumes:
   bng-config-versions:
+  bng2-config-versions:
   prometheus-data:
   grafana-data:
 

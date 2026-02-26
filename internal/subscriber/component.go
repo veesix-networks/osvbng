@@ -1,3 +1,7 @@
+// Copyright 2025 Veesix Networks Ltd
+// Licensed under the GNU General Public License v3.0 or later.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package subscriber
 
 import (
@@ -15,7 +19,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/session"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
-	"github.com/veesix-networks/osvbng/pkg/srg"
+	"github.com/veesix-networks/osvbng/pkg/ha"
 )
 
 type Component struct {
@@ -23,7 +27,7 @@ type Component struct {
 
 	logger    *slog.Logger
 	eventBus  events.Bus
-	srgMgr    *srg.Manager
+	srgMgr    ha.SRGProvider
 	vpp       southbound.Southbound
 	expiryMgr *session.ExpiryManager
 	cfgMgr    component.ConfigManager
@@ -32,7 +36,7 @@ type Component struct {
 	lifecycleSub events.Subscription
 }
 
-func New(deps component.Dependencies, srgMgr *srg.Manager) (component.Component, error) {
+func New(deps component.Dependencies, srgMgr ha.SRGProvider) (component.Component, error) {
 	log := logger.Get(logger.Subscriber)
 
 	c := &Component{
@@ -54,9 +58,6 @@ func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
 	c.logger.Info("Starting subscriber management component")
 
-	if c.srgMgr != nil {
-		c.srgMgr.Start()
-	}
 	c.expiryMgr.Start()
 
 	c.lifecycleSub = c.eventBus.Subscribe(events.TopicSessionLifecycle, c.handleSessionLifecycle)
@@ -67,9 +68,6 @@ func (c *Component) Start(ctx context.Context) error {
 func (c *Component) Stop(ctx context.Context) error {
 	c.logger.Info("Stopping subscriber management component")
 
-	if c.srgMgr != nil {
-		c.srgMgr.Stop()
-	}
 	c.expiryMgr.Stop()
 
 	c.lifecycleSub.Unsubscribe()
@@ -327,9 +325,7 @@ func (c *Component) handleSessionLifecycle(event events.Event) {
 	}
 
 	sessionID := sess.GetSessionID()
-	macStr := sess.GetMAC().String()
 	outerVLAN := sess.GetOuterVLAN()
-	innerVLAN := sess.GetInnerVLAN()
 	state := sess.GetState()
 
 	if outerVLAN == 0 {
@@ -337,20 +333,20 @@ func (c *Component) handleSessionLifecycle(event events.Event) {
 		return
 	}
 
-	isDF := true
+	isActive := true
 	if c.srgMgr != nil {
-		isDF = c.srgMgr.IsDF(outerVLAN, macStr, innerVLAN)
+		isActive = c.srgMgr.IsActive(sess.GetSRGName())
 	}
 
-	if !isDF {
-		c.logger.Debug("[NOT-DF] Skipping southbound ops",
+	if !isActive {
+		c.logger.Debug("Skipping southbound ops (standby)",
 			"session_id", sessionID,
-			"group", c.srgMgr.GetGroupForSVLAN(outerVLAN))
+			"srg", sess.GetSRGName())
 		c.persistSession(sess)
 		return
 	}
 
-	c.logger.Debug("[DF] Processing session", "session_id", sessionID, "state", state, "username", sess.GetUsername())
+	c.logger.Debug("Processing session", "session_id", sessionID, "state", state, "username", sess.GetUsername())
 
 	if err := c.persistSession(sess); err != nil {
 		c.logger.Error("Failed to persist session", "session_id", sessionID, "error", err)
