@@ -1,3 +1,7 @@
+// Copyright 2025 Veesix Networks Ltd
+// Licensed under the GNU General Public License v3.0 or later.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package ipoe
 
 import (
@@ -31,7 +35,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/opdb"
 	"github.com/veesix-networks/osvbng/pkg/session"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
-	"github.com/veesix-networks/osvbng/pkg/srg"
+	"github.com/veesix-networks/osvbng/pkg/ha"
 	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
 )
@@ -41,7 +45,7 @@ type Component struct {
 
 	logger        *slog.Logger
 	eventBus      events.Bus
-	srgMgr        *srg.Manager
+	srgMgr        ha.SRGProvider
 	ifMgr         *ifmgr.Manager
 	cfgMgr        component.ConfigManager
 	vpp           southbound.Southbound
@@ -105,6 +109,7 @@ type SessionState struct {
 	OuterTPID    uint16
 	VRF          string
 	ServiceGroup svcgroup.ServiceGroup
+	SRGName      string
 	AllocCtx     *allocator.Context
 }
 
@@ -200,6 +205,21 @@ func (c *Component) resolveDHCPv6(ctx *allocator.Context) *dhcp.ResolvedDHCPv6 {
 	return dhcp.ResolveV6(ctx, profile)
 }
 
+func (c *Component) resolveSRGName(svlan uint16) string {
+	if c.srgMgr == nil {
+		return ""
+	}
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+		return ""
+	}
+	groupName := cfg.SubscriberGroups.FindGroupNameBySVLAN(svlan)
+	if groupName == "" {
+		return ""
+	}
+	return c.srgMgr.GetSRGForGroup(groupName)
+}
+
 func (c *Component) resolveOuterTPID(svlan uint16) uint16 {
 	cfg, err := c.cfgMgr.GetRunning()
 	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
@@ -227,7 +247,7 @@ type raPrefixInfo struct {
 	preferredTime uint32
 }
 
-func New(deps component.Dependencies, srgMgr *srg.Manager, ifMgr *ifmgr.Manager, dhcp4Provider dhcp4.DHCPProvider, dhcp6Provider dhcp6.DHCPProvider) (component.Component, error) {
+func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manager, dhcp4Provider dhcp4.DHCPProvider, dhcp6Provider dhcp6.DHCPProvider) (component.Component, error) {
 	log := logger.Get(logger.IPoE)
 
 	c := &Component{
@@ -309,12 +329,11 @@ func (c *Component) processDHCPPacket(pkt *dataplane.ParsedPacket) error {
 		return fmt.Errorf("packet rejected: S-VLAN required (untagged not supported)")
 	}
 
-	isDF := true
 	if c.srgMgr != nil {
-		isDF = c.srgMgr.IsDF(pkt.OuterVLAN, pkt.MAC.String(), pkt.InnerVLAN)
-	}
-	if !isDF {
-		return nil
+		srgName := c.resolveSRGName(pkt.OuterVLAN)
+		if !c.srgMgr.IsActive(srgName) {
+			return nil
+		}
 	}
 
 	msgType := getDHCPMessageType(pkt.DHCPv4.Options)
@@ -861,6 +880,7 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 		OuterVLAN:        pkt.OuterVLAN,
 		InnerVLAN:        pkt.InnerVLAN,
 		VRF:              sess.VRF,
+		SRGName:          sess.SRGName,
 		Username:         sess.Username,
 			})
 }
@@ -882,7 +902,7 @@ func (c *Component) handleServerResponse(pkt *dataplane.ParsedPacket) error {
 	var vmac net.HardwareAddr
 	var parentSwIfIndex uint32
 	if c.srgMgr != nil {
-		vmac = c.srgMgr.GetVirtualMAC(sess.OuterVLAN)
+		vmac = c.srgMgr.GetVirtualMAC(sess.SRGName)
 	}
 	if c.ifMgr != nil {
 		if iface := c.ifMgr.Get(sess.EncapIfIndex); iface != nil {
@@ -1043,6 +1063,7 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 		IfIndex:          ipoeSwIfIndex,
 		VRF:              sess.VRF,
 		ServiceGroup:     sess.ServiceGroup.Name,
+		SRGName:          sess.SRGName,
 		IPv4Address:      sess.IPv4,
 		LeaseTime:        sess.LeaseTime,
 		IPv6Address:      sess.IPv6Address,
@@ -1131,8 +1152,14 @@ func (c *Component) handleAAAResponse(event events.Event) {
 	}
 	c.logger.Info("Resolved service group", logArgs...)
 
+	var srgName string
+	if c.srgMgr != nil && subscriberGroup != "" {
+		srgName = c.srgMgr.GetSRGForGroup(subscriberGroup)
+	}
+
 	c.sessionMu.Lock()
 	sess.ServiceGroup = resolved
+	sess.SRGName = srgName
 	c.sessionMu.Unlock()
 
 	vrfName := resolved.VRF
@@ -1171,7 +1198,7 @@ func (c *Component) handleAAAResponse(event events.Event) {
 		} else {
 			c.sessionMu.Unlock()
 
-			localMAC := c.getLocalMAC(svlan, encapIfIndex)
+			localMAC := c.getLocalMAC(srgName, encapIfIndex)
 			if localMAC == nil {
 				c.logger.Error("No local MAC available for IPoE session", "session_id", sessID, "svlan", svlan)
 				return
@@ -1454,10 +1481,12 @@ func (c *Component) sendDHCPResponse(sessID string, svlan, cvlan uint16, encapIf
 	var srcMAC string
 	var parentSwIfIndex uint32
 	var outerTPID uint16
+	var srgName string
 
 	c.sessionMu.RLock()
 	if sess := c.sessionIndex[sessID]; sess != nil {
 		outerTPID = c.getSessionOuterTPID(sess)
+		srgName = sess.SRGName
 	}
 	c.sessionMu.RUnlock()
 	if outerTPID == 0 {
@@ -1465,7 +1494,7 @@ func (c *Component) sendDHCPResponse(sessID string, svlan, cvlan uint16, encapIf
 	}
 
 	if c.srgMgr != nil {
-		if vmac := c.srgMgr.GetVirtualMAC(svlan); vmac != nil {
+		if vmac := c.srgMgr.GetVirtualMAC(srgName); vmac != nil {
 			srcMAC = vmac.String()
 		}
 	}
@@ -1590,6 +1619,7 @@ func (c *Component) cleanupSessions() {
 					OuterVLAN:   sess.OuterVLAN,
 					InnerVLAN:   sess.InnerVLAN,
 					VRF:         sess.VRF,
+					SRGName:     sess.SRGName,
 					Username:    sess.Username,
 					IPv4Address: sess.IPv4,
 					IPv6Address: sess.IPv6Address,
@@ -1599,9 +1629,9 @@ func (c *Component) cleanupSessions() {
 	}
 }
 
-func (c *Component) getLocalMAC(svlan uint16, encapIfIndex uint32) net.HardwareAddr {
+func (c *Component) getLocalMAC(srgName string, encapIfIndex uint32) net.HardwareAddr {
 	if c.srgMgr != nil {
-		if vmac := c.srgMgr.GetVirtualMAC(svlan); vmac != nil {
+		if vmac := c.srgMgr.GetVirtualMAC(srgName); vmac != nil {
 			return vmac
 		}
 	}
@@ -1677,12 +1707,11 @@ func (c *Component) processDHCPv6Packet(pkt *dataplane.ParsedPacket) error {
 		return fmt.Errorf("no DHCPv6 provider configured")
 	}
 
-	isDF := true
 	if c.srgMgr != nil {
-		isDF = c.srgMgr.IsDF(pkt.OuterVLAN, pkt.MAC.String(), pkt.InnerVLAN)
-	}
-	if !isDF {
-		return nil
+		srgName := c.resolveSRGName(pkt.OuterVLAN)
+		if !c.srgMgr.IsActive(srgName) {
+			return nil
+		}
 	}
 
 	c.logger.Info("Received DHCPv6 packet",
@@ -2033,6 +2062,7 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
 			InnerVLAN:       pkt.InnerVLAN,
 			IfIndex:         ipoeSwIfIndex,
 			VRF:             sess.VRF,
+			SRGName:         sess.SRGName,
 			IPv6Address:     ipv6Address,
 			IPv6Prefix:      prefixStr,
 			Username:        sess.Username,
@@ -2194,6 +2224,7 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, dhcp *layers.DHCPv6) e
 		IfIndex:         ipoeSwIfIndex,
 		VRF:             sess.VRF,
 		ServiceGroup:    sess.ServiceGroup.Name,
+		SRGName:         sess.SRGName,
 		IPv4Address:     sess.IPv4,
 		LeaseTime:       sess.LeaseTime,
 		IPv6Address:     ianaAddr,
@@ -2213,7 +2244,7 @@ func (c *Component) sendDHCPv6Response(sess *SessionState, rawDHCPv6 []byte) err
 	var parentSwIfIndex uint32
 
 	if c.srgMgr != nil {
-		srcMACBytes = c.srgMgr.GetVirtualMAC(sess.OuterVLAN)
+		srcMACBytes = c.srgMgr.GetVirtualMAC(sess.SRGName)
 	}
 	if c.ifMgr != nil {
 		if iface := c.ifMgr.Get(sess.EncapIfIndex); iface != nil {
@@ -2461,7 +2492,8 @@ func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbo
 	var parentSwIfIndex uint32
 
 	if c.srgMgr != nil {
-		srcMACBytes = c.srgMgr.GetVirtualMAC(pkt.OuterVLAN)
+		srgName := c.resolveSRGName(pkt.OuterVLAN)
+		srcMACBytes = c.srgMgr.GetVirtualMAC(srgName)
 	}
 	if c.ifMgr != nil {
 		if iface := c.ifMgr.Get(pkt.SwIfIndex); iface != nil {
@@ -2678,7 +2710,7 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 				}
 			}
 
-			localMAC := c.getLocalMAC(sess.OuterVLAN, sess.EncapIfIndex)
+			localMAC := c.getLocalMAC(sess.SRGName, sess.EncapIfIndex)
 			if localMAC != nil && c.vpp != nil {
 				swIfIndex, err := c.vpp.AddIPoESession(sess.MAC, localMAC, sess.EncapIfIndex, sess.OuterVLAN, sess.InnerVLAN, decapVrfID)
 				if err != nil {
@@ -2792,6 +2824,7 @@ func (c *Component) restoreSessionToCache(ctx context.Context, sess *SessionStat
 		IfIndex:         sess.IPoESwIfIndex,
 		VRF:             sess.VRF,
 		ServiceGroup:    sess.ServiceGroup.Name,
+		SRGName:         sess.SRGName,
 		IPv4Address:     sess.IPv4,
 		LeaseTime:       sess.LeaseTime,
 		IPv6Address:     sess.IPv6Address,

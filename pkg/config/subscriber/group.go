@@ -19,6 +19,17 @@ func (sgc *SubscriberGroupsConfig) FindGroupBySVLAN(svlan uint16) (*SubscriberGr
 	return nil, nil
 }
 
+func (sgc *SubscriberGroupsConfig) FindGroupNameBySVLAN(svlan uint16) string {
+	for name, group := range sgc.Groups {
+		for i := range group.VLANs {
+			if group.VLANs[i].MatchesSVLAN(svlan) {
+				return name
+			}
+		}
+	}
+	return ""
+}
+
 // SessionMode determines how IPv4 and IPv6 sessions are managed
 type SessionMode string
 

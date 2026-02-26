@@ -1,3 +1,7 @@
+# Copyright 2025 Veesix Networks Ltd
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 .PHONY: all build generate generate-proto clean run test cli build-cli docker-local lint fmt
 
 all: generate build
@@ -8,6 +12,9 @@ generate-proto:
 	PATH=$(PATH):$(HOME)/go/bin protoc --go_out=. --go_opt=paths=source_relative \
 		--go-grpc_out=. --go-grpc_opt=paths=source_relative \
 		api/proto/bng.proto
+	PATH=$(PATH):$(HOME)/go/bin protoc --go_out=. --go_opt=paths=source_relative \
+		--go-grpc_out=. --go-grpc_opt=paths=source_relative \
+		api/proto/ha/ha.proto
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")

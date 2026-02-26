@@ -23,6 +23,7 @@ type SubscriberSession interface {
 	GetVLANCount() int
 	GetUsername() string
 	GetServiceGroup() string
+	GetSRGName() string
 	GetActivatedAt() time.Time
 }
 
@@ -40,6 +41,7 @@ type IPoESession struct {
 	IfIndex      uint32
 	VRF          string
 	ServiceGroup string
+	SRGName      string
 
 	IPv4Address net.IP
 	LeaseTime   uint32
@@ -76,6 +78,7 @@ func (s *IPoESession) GetIfIndex() uint32         { return s.IfIndex }
 func (s *IPoESession) GetVLANCount() int          { return s.VLANCount }
 func (s *IPoESession) GetUsername() string         { return s.Username }
 func (s *IPoESession) GetServiceGroup() string     { return s.ServiceGroup }
+func (s *IPoESession) GetSRGName() string          { return s.SRGName }
 func (s *IPoESession) GetActivatedAt() time.Time   { return s.ActivatedAt }
 
 func (s *IPoESession) IsDualStack() bool {
@@ -148,6 +151,7 @@ type PPPSession struct {
 	IfIndex      uint32
 	VRF          string
 	ServiceGroup string
+	SRGName      string
 
 	IPv4Address net.IP
 	IPv6Address net.IP
@@ -178,6 +182,7 @@ func (s *PPPSession) GetIfIndex() uint32         { return s.IfIndex }
 func (s *PPPSession) GetVLANCount() int          { return s.VLANCount }
 func (s *PPPSession) GetUsername() string         { return s.Username }
 func (s *PPPSession) GetServiceGroup() string     { return s.ServiceGroup }
+func (s *PPPSession) GetSRGName() string          { return s.SRGName }
 func (s *PPPSession) GetActivatedAt() time.Time   { return s.ActivatedAt }
 
 func (s *PPPSession) RedisKey() string {
