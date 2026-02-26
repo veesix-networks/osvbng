@@ -1,3 +1,7 @@
+// Copyright 2025 Veesix Networks Ltd
+// Licensed under the GNU General Public License v3.0 or later.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package paths
 
 type Path string
@@ -30,6 +34,8 @@ const (
 	SystemDataplaneBuffers    Path = "system.dataplane.buffers"
 
 	SystemWatchdog Path = "system.watchdog"
+
+	HAStatus Path = "ha.status"
 )
 
 func (p Path) String() string {

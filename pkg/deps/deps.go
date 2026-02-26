@@ -1,3 +1,7 @@
+// Copyright 2025 Veesix Networks Ltd
+// Licensed under the GNU General Public License v3.0 or later.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package deps
 
 import (
@@ -9,6 +13,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/cppm"
 	"github.com/veesix-networks/osvbng/pkg/events"
+	"github.com/veesix-networks/osvbng/pkg/ha"
 	"github.com/veesix-networks/osvbng/pkg/opdb"
 	"github.com/veesix-networks/osvbng/pkg/operations"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
@@ -27,12 +32,14 @@ type ShowDeps struct {
 	CPPM             *cppm.Manager
 	Watchdog         watchdog.StateProvider
 	EventBus         events.Bus
+	HAManager        *ha.Manager
 	PluginComponents map[string]component.Component
 }
 
 type OperDeps struct {
 	Subscriber       *subscriber.Component
 	EventBus         events.Bus
+	HAManager        *ha.Manager
 	PluginComponents map[string]component.Component
 }
 
