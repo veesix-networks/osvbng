@@ -1,3 +1,7 @@
+// Copyright 2025 Veesix Networks Ltd
+// Licensed under the GNU General Public License v3.0 or later.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package config
 
 import (
@@ -92,6 +96,20 @@ func (c *Config) Validate() error {
 			if group.AAAPolicy != "" {
 				if c.AAA.GetPolicy(group.AAAPolicy) == nil {
 					return fmt.Errorf("subscriber_groups.%s.aaa_policy references unknown policy '%s'", groupName, group.AAAPolicy)
+				}
+			}
+		}
+	}
+
+	if err := c.HA.Validate(); err != nil {
+		return err
+	}
+
+	if c.HA.Enabled && c.SubscriberGroups != nil {
+		for srgName, srg := range c.HA.SRGs {
+			for _, sg := range srg.SubscriberGroups {
+				if _, ok := c.SubscriberGroups.Groups[sg]; !ok {
+					return fmt.Errorf("ha.srgs.%s.subscriber_groups: references unknown subscriber group %q", srgName, sg)
 				}
 			}
 		}
