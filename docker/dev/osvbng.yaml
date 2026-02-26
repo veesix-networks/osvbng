@@ -1,3 +1,7 @@
+# Copyright 2025 Veesix Networks Ltd
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 vrfs:
   cgnat:
     address-families:
@@ -34,6 +38,14 @@ subscriber-groups:
                 enabled: true
                 advertise-pools: true
                 redistribute-connected: true
+            aaa-policy: default-policy
+        pppoe:
+            access-type: pppoe
+            ipv4-profile: default
+            vlans:
+                - svlan: "200-210"
+                  cvlan: any
+                  interface: loop100
             aaa-policy: default-policy
 
 ipv4-profiles:
@@ -199,7 +211,7 @@ plugins:
         enabled: true
         listen_address: :8080
     subscriber.auth.local:
-        allow_all: false
+        allow_all: true
         database_path: /tmp/osvbng.db
     subscriber.auth.http:
         endpoint: http://host.docker.internal:8081/api/v1/subscribers
@@ -228,13 +240,6 @@ plugins:
 monitoring:
   collect_interval: 30s
   disabled_collectors:
-    - subscriber.sessions
-    - system.dataplane.system
-    - system.dataplane.memory
-    - system.dataplane.interfaces
-    - system.dataplane.nodes
-    - system.dataplane.errors
-    - system.dataplane.buffers
     - aaa.radius.servers
     - protocols.bgp.statistics
     - protocols.bgp.ipv6.statistics
@@ -257,6 +262,22 @@ system:
                 arp:
                     rate: 1000
                     burst: 500
+ha:
+    enabled: true
+    node_id: bng-1
+    peer:
+        address: 172.30.0.3:50051
+    heartbeat:
+        interval: 1s
+        timeout: 5s
+    srgs:
+        default:
+            virtual_mac: "02:00:5e:00:01:01"
+            priority: 100
+            subscriber_groups:
+                - default
+                - pppoe
+
 logging:
     format: text
     level: info
@@ -264,6 +285,7 @@ logging:
         aaa: debug
         arp: debug
         dataplane: debug
+        ha: debug
         ipoe: info
         pppoe: info
         southbound: info
