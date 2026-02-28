@@ -53,7 +53,11 @@ func (cm *ConfigManager) processBGPForGroup(sessionID conf.SessionID, cfg *confi
 	if group.BGP.AdvertisePools {
 		if profile := cfg.IPv4Profiles[group.IPv4Profile]; profile != nil {
 			for _, pool := range profile.Pools {
-				if err := cm.addBGPNetwork(sessionID, pool.Network, vrf); err != nil {
+				poolVRF := vrf
+				if pool.VRF != "" {
+					poolVRF = pool.VRF
+				}
+				if err := cm.addBGPNetwork(sessionID, pool.Network, poolVRF); err != nil {
 					return fmt.Errorf("pool %s: %w", pool.Name, err)
 				}
 				addPoolBlackholeRoute(cfg, pool.Network)
