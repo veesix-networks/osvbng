@@ -2,6 +2,28 @@
 # Licensed under the GNU General Public License v3.0 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+vrfs:
+  cgnat:
+    address-families:
+      ipv4-unicast: {}
+      ipv6-unicast: {}
+  CUSTOMER-A:
+    description: "Test L3VPN customer"
+    rd: "65000:100"
+    import-route-targets:
+      - "65000:100"
+    export-route-targets:
+      - "65000:100"
+    address-families:
+      ipv4-unicast: {}
+      ipv6-unicast: {}
+
+service-groups:
+    customer-a:
+        vrf: CUSTOMER-A
+        unnumbered: loop101
+        pool: customer-a-pool
+
 subscriber-groups:
     groups:
         default:
@@ -32,6 +54,13 @@ ipv4-profiles:
             - name: subscriber-pool
               network: 10.255.0.0/16
               priority: 1
+            - name: customer-a-pool
+              network: 192.168.123.0/24
+              range_start: 192.168.123.2
+              range_end: 192.168.123.254
+              gateway: 192.168.123.1
+              vrf: CUSTOMER-A
+              priority: 10
         dhcp:
             lease-time: 3600
 
@@ -69,6 +98,22 @@ interfaces:
         description: Access Interface
         enabled: true
         bng_mode: access
+    eth2:
+        description: Core Link (frr-peer)
+        enabled: true
+        lcp: true
+        address:
+            ipv4:
+                - 10.0.1.1/30
+            ipv6:
+                - 2001:db8:c0:f::1/64
+    loop0:
+        description: Control Plane Loopback
+        enabled: true
+        address:
+            ipv4:
+                - 10.254.0.3/32
+        lcp: true
     loop100:
         description: Subscriber Gateway Loopback
         enabled: true
@@ -78,6 +123,66 @@ interfaces:
             ipv6:
                 - 2001:db8:0:1::1/128
         lcp: true
+    loop101:
+        description: CUSTOMER-A Gateway
+        enabled: true
+        address:
+            ipv4:
+                - 192.168.123.1/32
+        lcp: true
+        vrf: CUSTOMER-A
+
+protocols:
+    bgp:
+        asn: 65000
+        router-id: 10.254.0.3
+        neighbors:
+            10.254.0.2:
+                remote-as: 65000
+                peer: loop0
+        ipv4-unicast:
+            redistribute:
+                connected: true
+        ipv4-vpn:
+            neighbors:
+                10.254.0.2:
+                    send-community: both
+        vrf:
+            CUSTOMER-A:
+                ipv4-unicast:
+                    redistribute:
+                        connected: true
+                    label-vpn: auto
+                    export-vpn: true
+                    import-vpn: true
+    ospf:
+        enabled: true
+        router-id: 10.254.0.3
+        log-adjacency-changes: true
+        areas:
+            "0.0.0.0":
+                interfaces:
+                    eth2:
+                        network: point-to-point
+                    loop0:
+                        passive: true
+    ospf6:
+        enabled: true
+        router-id: 10.254.0.3
+        log-adjacency-changes: true
+        areas:
+            "0.0.0.0":
+                interfaces:
+                    eth2:
+                        network: point-to-point
+    mpls:
+        enabled: true
+    ldp:
+        enabled: true
+        router-id: 10.254.0.3
+        address-families:
+            ipv4:
+                transport-address: 10.254.0.3
 
 aaa:
     auth_provider: local
@@ -103,6 +208,11 @@ ha:
             subscriber_groups:
                 - default
                 - pppoe
+            networks:
+                - prefix: 10.255.0.0/16
+                - prefix: 2001:db8:100::/40
+                - prefix: 192.168.123.0/24
+                  vrf: CUSTOMER-A
 
 plugins:
     exporter.prometheus:

@@ -5,6 +5,7 @@
 package ha
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -703,4 +704,169 @@ func TestManager_HandleInterfaceEventMultipleDown(t *testing.T) {
 	if sm.Priority() != 150 {
 		t.Fatalf("expected priority 150 after one restored (200 - 1*50), got %d", sm.Priority())
 	}
+}
+
+type mockRoutingController struct {
+	advertised []config.SRGNetwork
+	withdrawn  []config.SRGNetwork
+}
+
+func (m *mockRoutingController) AdvertiseSRGNetworks(_ context.Context, networks []config.SRGNetwork) error {
+	m.advertised = append(m.advertised, networks...)
+	return nil
+}
+
+func (m *mockRoutingController) WithdrawSRGNetworks(_ context.Context, networks []config.SRGNetwork) error {
+	m.withdrawn = append(m.withdrawn, networks...)
+	return nil
+}
+
+func TestManager_DriveRoutingAdvertiseOnActive(t *testing.T) {
+	rc := &mockRoutingController{}
+	cfg := &config.HAConfig{
+		Enabled: true,
+		NodeID:  "node-a",
+		SRGs: map[string]*config.SRGConfig{
+			"srg1": {
+				VirtualMAC:       "02:ab:cd:00:00:01",
+				Priority:         100,
+				SubscriberGroups: []string{"default"},
+				Networks: []config.SRGNetwork{
+					{Prefix: "10.255.0.0/16"},
+					{Prefix: "192.168.123.0/24", VRF: "CUSTOMER-A"},
+				},
+			},
+		},
+	}
+
+	m, err := NewManager(cfg, local.NewBus(), WithRoutingController(rc))
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	m.StartContext(context.Background())
+
+	m.driveRouting(&StateTransition{SRGName: "srg1", OldState: SRGStateReady, NewState: SRGStateActive})
+
+	if len(rc.advertised) != 2 {
+		t.Fatalf("expected 2 advertised networks, got %d", len(rc.advertised))
+	}
+	if rc.advertised[0].Prefix != "10.255.0.0/16" {
+		t.Fatalf("expected 10.255.0.0/16, got %s", rc.advertised[0].Prefix)
+	}
+	if rc.advertised[1].VRF != "CUSTOMER-A" {
+		t.Fatalf("expected VRF CUSTOMER-A, got %s", rc.advertised[1].VRF)
+	}
+}
+
+func TestManager_DriveRoutingWithdrawOnStandby(t *testing.T) {
+	rc := &mockRoutingController{}
+	cfg := &config.HAConfig{
+		Enabled: true,
+		NodeID:  "node-a",
+		SRGs: map[string]*config.SRGConfig{
+			"srg1": {
+				VirtualMAC:       "02:ab:cd:00:00:01",
+				Priority:         100,
+				SubscriberGroups: []string{"default"},
+				Networks: []config.SRGNetwork{
+					{Prefix: "10.255.0.0/16"},
+				},
+			},
+		},
+	}
+
+	m, err := NewManager(cfg, local.NewBus(), WithRoutingController(rc))
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	m.StartContext(context.Background())
+
+	m.driveRouting(&StateTransition{SRGName: "srg1", OldState: SRGStateActive, NewState: SRGStateStandby})
+
+	if len(rc.withdrawn) != 1 {
+		t.Fatalf("expected 1 withdrawn network, got %d", len(rc.withdrawn))
+	}
+	if rc.withdrawn[0].Prefix != "10.255.0.0/16" {
+		t.Fatalf("expected 10.255.0.0/16, got %s", rc.withdrawn[0].Prefix)
+	}
+}
+
+func TestManager_DriveRoutingNoopOnInitialStandby(t *testing.T) {
+	rc := &mockRoutingController{}
+	cfg := &config.HAConfig{
+		Enabled: true,
+		NodeID:  "node-a",
+		SRGs: map[string]*config.SRGConfig{
+			"srg1": {
+				VirtualMAC:       "02:ab:cd:00:00:01",
+				Priority:         50,
+				SubscriberGroups: []string{"default"},
+				Networks: []config.SRGNetwork{
+					{Prefix: "10.255.0.0/16"},
+				},
+			},
+		},
+	}
+
+	m, err := NewManager(cfg, local.NewBus(), WithRoutingController(rc))
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	m.StartContext(context.Background())
+
+	m.driveRouting(&StateTransition{SRGName: "srg1", OldState: SRGStateReady, NewState: SRGStateStandby})
+
+	if len(rc.withdrawn) != 0 {
+		t.Fatalf("expected no withdrawal on initial STANDBY (never advertised), got %d", len(rc.withdrawn))
+	}
+}
+
+func TestManager_DriveRoutingNoopWithoutNetworks(t *testing.T) {
+	rc := &mockRoutingController{}
+	cfg := &config.HAConfig{
+		Enabled: true,
+		NodeID:  "node-a",
+		SRGs: map[string]*config.SRGConfig{
+			"srg1": {
+				VirtualMAC:       "02:ab:cd:00:00:01",
+				Priority:         100,
+				SubscriberGroups: []string{"default"},
+			},
+		},
+	}
+
+	m, err := NewManager(cfg, local.NewBus(), WithRoutingController(rc))
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	m.StartContext(context.Background())
+
+	m.driveRouting(&StateTransition{SRGName: "srg1", OldState: SRGStateReady, NewState: SRGStateActive})
+
+	if len(rc.advertised) != 0 || len(rc.withdrawn) != 0 {
+		t.Fatalf("expected no routing calls for SRG without networks")
+	}
+}
+
+func TestManager_DriveRoutingNoopNilController(t *testing.T) {
+	cfg := &config.HAConfig{
+		Enabled: true,
+		NodeID:  "node-a",
+		SRGs: map[string]*config.SRGConfig{
+			"srg1": {
+				VirtualMAC:       "02:ab:cd:00:00:01",
+				Priority:         100,
+				SubscriberGroups: []string{"default"},
+				Networks:         []config.SRGNetwork{{Prefix: "10.0.0.0/8"}},
+			},
+		},
+	}
+
+	m, err := NewManager(cfg, local.NewBus())
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	m.StartContext(context.Background())
+
+	m.driveRouting(&StateTransition{SRGName: "srg1", OldState: SRGStateReady, NewState: SRGStateActive})
 }

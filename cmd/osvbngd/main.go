@@ -293,6 +293,10 @@ func main() {
 
 		haOpts = append(haOpts, ha.WithInterfaceWatchCallback(watchSet.Add))
 
+		if cfg.Protocols.BGP != nil && cfg.Protocols.BGP.ASN > 0 {
+			haOpts = append(haOpts, ha.WithRoutingController(routingComp))
+		}
+
 		haMgr, err = ha.NewManager(&cfg.HA, eventBus, haOpts...)
 		if err != nil {
 			log.Fatalf("Failed to create HA manager: %v", err)
@@ -452,7 +456,7 @@ func main() {
 		DataplaneState:   configd.GetDataplaneState(),
 		Southbound:       vpp,
 		AAA:              aaaComp.(*aaa.Component),
-		Routing:          routingComp.(*routing.Component),
+		Routing:          routingComp,
 		VRFManager:       vrfMgr,
 		SvcGroupResolver: svcGroupResolver,
 		CPPM:             cppmManager,
@@ -462,7 +466,7 @@ func main() {
 	showRegistry.AutoRegisterAll(&deps.ShowDeps{
 		Subscriber:       subscriberComp.(*subscriber.Component),
 		Southbound:       coreDeps.Southbound,
-		Routing:          routingComp.(*routing.Component),
+		Routing:          routingComp,
 		VRFManager:       vrfMgr,
 		SvcGroupResolver: svcGroupResolver,
 		Cache:            cache,

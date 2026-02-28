@@ -40,13 +40,19 @@ type HAHeartbeatConfig struct {
 	Timeout  time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
+type SRGNetwork struct {
+	Prefix string `json:"prefix" yaml:"prefix"`
+	VRF    string `json:"vrf,omitempty" yaml:"vrf,omitempty"`
+}
+
 type SRGConfig struct {
-	VirtualMAC             string   `json:"virtual_mac,omitempty" yaml:"virtual_mac,omitempty"`
-	Priority               uint32   `json:"priority,omitempty" yaml:"priority,omitempty"`
-	Preempt                bool     `json:"preempt,omitempty" yaml:"preempt,omitempty"`
-	SubscriberGroups       []string `json:"subscriber_groups,omitempty" yaml:"subscriber_groups,omitempty"`
-	Interfaces             []string `json:"interfaces,omitempty" yaml:"interfaces,omitempty"`
-	TrackPriorityDecrement uint32   `json:"track_priority_decrement,omitempty" yaml:"track_priority_decrement,omitempty"`
+	VirtualMAC             string       `json:"virtual_mac,omitempty" yaml:"virtual_mac,omitempty"`
+	Priority               uint32       `json:"priority,omitempty" yaml:"priority,omitempty"`
+	Preempt                bool         `json:"preempt,omitempty" yaml:"preempt,omitempty"`
+	SubscriberGroups       []string     `json:"subscriber_groups,omitempty" yaml:"subscriber_groups,omitempty"`
+	Interfaces             []string     `json:"interfaces,omitempty" yaml:"interfaces,omitempty"`
+	TrackPriorityDecrement uint32       `json:"track_priority_decrement,omitempty" yaml:"track_priority_decrement,omitempty"`
+	Networks               []SRGNetwork `json:"networks,omitempty" yaml:"networks,omitempty"`
 }
 
 func (c *HAConfig) GetListenAddress() string {
