@@ -53,6 +53,7 @@ nav:
     - VRFs: configuration/vrfs.md
     - Protocols: configuration/protocols.md
     - MPLS: configuration/mpls.md
+    - High Availability: configuration/ha.md
     - System: configuration/system.md
     - Monitoring: configuration/monitoring.md
     - Plugins:
@@ -72,6 +73,7 @@ nav:
       - Plugins: architecture/PLUGINS.md
       - Supported NICs: architecture/SUPPORTED_NICS.md
       - Reference Deployment Methods: architecture/REFERENCE_DEPLOYMENT_METHODS.md
+      - High Availability: architecture/HA.md
   - Contributing:
     - Getting Started: contributing/please_read_first.md
     - Commit Messages: contributing/commit-messages.md
