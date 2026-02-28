@@ -277,6 +277,9 @@ ha:
             subscriber_groups:
                 - default
                 - pppoe
+            interfaces:
+                - eth1
+            track_priority_decrement: 60
 
 logging:
     format: text

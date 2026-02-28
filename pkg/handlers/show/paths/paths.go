@@ -63,9 +63,10 @@ const (
 	SystemEvents   Path = "system.events"
 	SystemWatchdog Path = "system.watchdog"
 
-	HAStatus Path = "ha.status"
-	HASRGs   Path = "ha.srg"
-	HAPeer   Path = "ha.peer"
+	HAStatus      Path = "ha.status"
+	HASRGs        Path = "ha.srg"
+	HAPeer        Path = "ha.peer"
+	HASRGCounters Path = "ha.srg.counters"
 )
 
 func (p Path) String() string {

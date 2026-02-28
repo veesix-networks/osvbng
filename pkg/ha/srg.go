@@ -31,9 +31,10 @@ type SRGStateMachine struct {
 	virtualMAC       net.HardwareAddr
 	subscriberGroups map[string]bool
 
-	peerPriority uint32
-	peerState    SRGState
-	localNodeID  string
+	effectivePriority uint32
+	peerPriority      uint32
+	peerState         SRGState
+	localNodeID       string
 
 	lastTransition time.Time
 	mu             sync.RWMutex
@@ -55,13 +56,14 @@ func NewSRGStateMachine(name string, cfg *config.SRGConfig, localNodeID string) 
 	}
 
 	return &SRGStateMachine{
-		Name:             name,
-		cfg:              cfg,
-		state:            SRGStateInit,
-		virtualMAC:       vmac,
-		subscriberGroups: groups,
-		localNodeID:      localNodeID,
-		lastTransition:   time.Now(),
+		Name:              name,
+		cfg:               cfg,
+		state:             SRGStateInit,
+		virtualMAC:        vmac,
+		subscriberGroups:  groups,
+		effectivePriority: cfg.Priority,
+		localNodeID:       localNodeID,
+		lastTransition:    time.Now(),
 	}, nil
 }
 
@@ -72,7 +74,9 @@ func (sm *SRGStateMachine) State() SRGState {
 }
 
 func (sm *SRGStateMachine) Priority() uint32 {
-	return sm.cfg.Priority
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	return sm.effectivePriority
 }
 
 func (sm *SRGStateMachine) Preempt() bool {
@@ -172,8 +176,8 @@ func (sm *SRGStateMachine) Elect(peerNodeID string) *StateTransition {
 }
 
 func (sm *SRGStateMachine) winsElection(peerNodeID string) bool {
-	if sm.cfg.Priority != sm.peerPriority {
-		return sm.cfg.Priority > sm.peerPriority
+	if sm.effectivePriority != sm.peerPriority {
+		return sm.effectivePriority > sm.peerPriority
 	}
 	return sm.localNodeID < peerNodeID
 }
@@ -208,6 +212,22 @@ func (sm *SRGStateMachine) Switchover() *StateTransition {
 	}
 }
 
+func (sm *SRGStateMachine) AdjustPriority(delta int32) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	base := int32(sm.cfg.Priority)
+	newPrio := base + delta
+	if newPrio < 0 {
+		newPrio = 0
+	}
+	sm.effectivePriority = uint32(newPrio)
+}
+
+func (sm *SRGStateMachine) BasePriority() uint32 {
+	return sm.cfg.Priority
+}
+
 func (sm *SRGStateMachine) PeerHeartbeatUpdate(peerPriority uint32, peerNodeID string, peerState SRGState) *StateTransition {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -217,6 +237,10 @@ func (sm *SRGStateMachine) PeerHeartbeatUpdate(peerPriority uint32, peerNodeID s
 
 	if sm.cfg.Preempt && sm.state == SRGStateStandby && sm.winsElection(peerNodeID) {
 		return sm.transitionTo(SRGStateActive)
+	}
+
+	if sm.state == SRGStateActive && peerState == SRGStateActive && !sm.winsElection(peerNodeID) {
+		return sm.transitionTo(SRGStateStandby)
 	}
 
 	return nil

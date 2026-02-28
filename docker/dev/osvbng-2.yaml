@@ -99,6 +99,7 @@ ha:
         default:
             virtual_mac: "02:00:5e:00:01:01"
             priority: 50
+            preempt: true
             subscriber_groups:
                 - default
                 - pppoe
