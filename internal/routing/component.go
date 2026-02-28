@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/veesix-networks/osvbng/pkg/component"
+	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models/protocols/bgp"
 	"github.com/veesix-networks/osvbng/pkg/models/vrf"
@@ -19,15 +20,17 @@ type Component struct {
 	*component.Base
 	logger     *slog.Logger
 	southbound southbound.Southbound
+	configMgr  component.ConfigManager
 }
 
-func New(deps component.Dependencies) (component.Component, error) {
+func New(deps component.Dependencies) (*Component, error) {
 	log := logger.Get(logger.Routing)
 
 	c := &Component{
 		Base:       component.NewBase("routing"),
 		logger:     log,
 		southbound: deps.Southbound,
+		configMgr:  deps.ConfigManager,
 	}
 
 	return c, nil
@@ -58,6 +61,86 @@ func (c *Component) ConfigureBGP(asn uint32, routerID string) error {
 func (c *Component) RemoveBGP(asn uint32) error {
 	_, err := c.execVtysh("-c", "configure terminal", "-c", fmt.Sprintf("no router bgp %d", asn))
 	return err
+}
+
+func (c *Component) AdvertiseBGPNetwork(asn uint32, vrf string, prefix string, ipv6 bool) error {
+	af := "ipv4"
+	routeCmd := fmt.Sprintf("ip route %s Null0", prefix)
+	if ipv6 {
+		af = "ipv6"
+		routeCmd = fmt.Sprintf("ipv6 route %s Null0", prefix)
+	}
+	if vrf != "" {
+		if ipv6 {
+			routeCmd = fmt.Sprintf("ipv6 route %s Null0 vrf %s", prefix, vrf)
+		} else {
+			routeCmd = fmt.Sprintf("ip route %s Null0 vrf %s", prefix, vrf)
+		}
+	}
+
+	if _, err := c.execVtysh("-c", "configure terminal", "-c", routeCmd); err != nil {
+		return fmt.Errorf("install blackhole route: %w", err)
+	}
+
+	router := fmt.Sprintf("router bgp %d", asn)
+	if vrf != "" {
+		router = fmt.Sprintf("router bgp %d vrf %s", asn, vrf)
+	}
+	_, err := c.execVtysh("-c", "configure terminal",
+		"-c", router,
+		"-c", fmt.Sprintf("address-family %s unicast", af),
+		"-c", fmt.Sprintf("network %s", prefix))
+	return err
+}
+
+func (c *Component) WithdrawBGPNetwork(asn uint32, vrf string, prefix string, ipv6 bool) error {
+	af := "ipv4"
+	if ipv6 {
+		af = "ipv6"
+	}
+	router := fmt.Sprintf("router bgp %d", asn)
+	if vrf != "" {
+		router = fmt.Sprintf("router bgp %d vrf %s", asn, vrf)
+	}
+	_, err := c.execVtysh("-c", "configure terminal",
+		"-c", router,
+		"-c", fmt.Sprintf("address-family %s unicast", af),
+		"-c", fmt.Sprintf("no network %s", prefix))
+	return err
+}
+
+func (c *Component) AdvertiseSRGNetworks(ctx context.Context, networks []config.SRGNetwork) error {
+	cfg, err := c.configMgr.GetRunning()
+	if err != nil {
+		return fmt.Errorf("get running config: %w", err)
+	}
+	if cfg.Protocols.BGP == nil {
+		return fmt.Errorf("BGP not configured")
+	}
+	asn := cfg.Protocols.BGP.ASN
+	for _, n := range networks {
+		if err := c.AdvertiseBGPNetwork(asn, n.VRF, n.Prefix, strings.Contains(n.Prefix, ":")); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Component) WithdrawSRGNetworks(ctx context.Context, networks []config.SRGNetwork) error {
+	cfg, err := c.configMgr.GetRunning()
+	if err != nil {
+		return fmt.Errorf("get running config: %w", err)
+	}
+	if cfg.Protocols.BGP == nil {
+		return fmt.Errorf("BGP not configured")
+	}
+	asn := cfg.Protocols.BGP.ASN
+	for _, n := range networks {
+		if err := c.WithdrawBGPNetwork(asn, n.VRF, n.Prefix, strings.Contains(n.Prefix, ":")); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (c *Component) execVtysh(args ...string) ([]byte, error) {

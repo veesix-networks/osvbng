@@ -63,6 +63,7 @@ ipv4-profiles:
               range_start: 192.168.123.2
               range_end: 192.168.123.254
               gateway: 192.168.123.1
+              vrf: CUSTOMER-A
               priority: 10
         dhcp:
             lease-time: 3600
@@ -280,6 +281,11 @@ ha:
             interfaces:
                 - eth1
             track_priority_decrement: 60
+            networks:
+                - prefix: 10.255.0.0/16
+                - prefix: 2001:db8:100::/40
+                - prefix: 192.168.123.0/24
+                  vrf: CUSTOMER-A
 
 logging:
     format: text

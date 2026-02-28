@@ -45,6 +45,7 @@ type Manager struct {
 	logger   *slog.Logger
 
 	dataplane       southbound.SRGDataplane
+	routingCtrl     RoutingController
 	ifResolver      InterfaceResolver
 	garpCollector   GARPCollector
 	ifWatchCallback func(uint32)
@@ -373,6 +374,7 @@ func (m *Manager) publishTransition(t *StateTransition) {
 	}
 
 	m.driveDataplane(t)
+	m.driveRouting(t)
 
 	if m.eventBus != nil {
 		m.eventBus.Publish(events.TopicHAStateChange, events.Event{
@@ -404,6 +406,34 @@ func (m *Manager) driveDataplane(t *StateTransition) {
 	} else if !isActive && wasActive {
 		if err := m.dataplane.SetSRGState(t.SRGName, false); err != nil {
 			m.logger.Error("Failed to set SRG standby in dataplane", "srg", t.SRGName, "error", err)
+		}
+	}
+}
+
+func (m *Manager) driveRouting(t *StateTransition) {
+	if m.routingCtrl == nil {
+		return
+	}
+
+	srgCfg, ok := m.cfg.SRGs[t.SRGName]
+	if !ok || len(srgCfg.Networks) == 0 {
+		return
+	}
+
+	isActive := t.NewState == SRGStateActive || t.NewState == SRGStateActiveSolo
+	wasActive := t.OldState == SRGStateActive || t.OldState == SRGStateActiveSolo
+
+	if isActive && !wasActive {
+		if err := m.routingCtrl.AdvertiseSRGNetworks(m.Ctx, srgCfg.Networks); err != nil {
+			m.logger.Error("Failed to advertise SRG networks", "srg", t.SRGName, "error", err)
+		} else {
+			m.logger.Info("SRG networks advertised", "srg", t.SRGName, "networks", len(srgCfg.Networks))
+		}
+	} else if !isActive && wasActive {
+		if err := m.routingCtrl.WithdrawSRGNetworks(m.Ctx, srgCfg.Networks); err != nil {
+			m.logger.Error("Failed to withdraw SRG networks", "srg", t.SRGName, "error", err)
+		} else {
+			m.logger.Info("SRG networks withdrawn", "srg", t.SRGName, "networks", len(srgCfg.Networks))
 		}
 	}
 }
