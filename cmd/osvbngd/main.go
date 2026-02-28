@@ -213,12 +213,11 @@ func main() {
 		log.Fatalf("Failed to create dataplane component: %v", err)
 	}
 
-	dpComp := dataplaneComp.(*dataplane.Component)
-	coreDeps.DHCPChan = dpComp.DHCPChan
-	coreDeps.DHCPv6Chan = dpComp.DHCPv6Chan
-	coreDeps.ARPChan = dpComp.ARPChan
-	coreDeps.PPPChan = dpComp.PPPoEChan
-	coreDeps.IPv6NDChan = dpComp.IPv6NDChan
+	coreDeps.DHCPChan = dataplaneComp.DHCPChan
+	coreDeps.DHCPv6Chan = dataplaneComp.DHCPv6Chan
+	coreDeps.ARPChan = dataplaneComp.ARPChan
+	coreDeps.PPPChan = dataplaneComp.PPPoEChan
+	coreDeps.IPv6NDChan = dataplaneComp.IPv6NDChan
 
 	authProviderName := cfg.AAA.AuthProvider
 	if authProviderName == "" {
@@ -341,11 +340,11 @@ func main() {
 			vppTarget.SetCallbacks(targets.VPPCallbacks{
 				OnDown: func() {
 					mainLog.Error("VPP is DOWN, pausing dataplane")
-					dpComp.PauseProcessing()
+					dataplaneComp.PauseProcessing()
 				},
 				OnUp: func() {
 					mainLog.Info("VPP is UP, resuming dataplane")
-					dpComp.ResumeProcessing()
+					dataplaneComp.ResumeProcessing()
 				},
 				OnRecover: func(ctx context.Context) error {
 					mainLog.Info("VPP recovery: reconnecting southbound")
@@ -363,17 +362,17 @@ func main() {
 						}
 
 						mainLog.Info("VPP recovery: reconnecting dataplane SHM")
-						if err := dpComp.Reconnect(); err != nil {
+						if err := dataplaneComp.Reconnect(); err != nil {
 							return fmt.Errorf("dataplane reconnect: %w", err)
 						}
 
 						mainLog.Info("VPP recovery: recovering IPoE sessions")
-						if err := ipoeComp.(*ipoe.Component).RecoverSessions(ctx); err != nil {
+						if err := ipoeComp.RecoverSessions(ctx); err != nil {
 							mainLog.Error("IPoE session recovery failed", "error", err)
 						}
 
 						mainLog.Info("VPP recovery: recovering PPPoE sessions")
-						if err := pppoeComp.(*pppoe.Component).RecoverSessions(ctx); err != nil {
+						if err := pppoeComp.RecoverSessions(ctx); err != nil {
 							mainLog.Error("PPPoE session recovery failed", "error", err)
 						}
 					}
@@ -396,7 +395,7 @@ func main() {
 	if cfg.API.Address != "" {
 		gatewayAddr = cfg.API.Address
 	}
-	gatewayComp, err := gateway.New(coreDeps, showRegistry, operRegistry, subscriberComp.(*subscriber.Component), configd, gatewayAddr)
+	gatewayComp, err := gateway.New(coreDeps, showRegistry, operRegistry, subscriberComp, configd, gatewayAddr)
 	if err != nil {
 		log.Fatalf("Failed to create gateway component: %v", err)
 	}
@@ -455,7 +454,7 @@ func main() {
 	configd.AutoRegisterHandlers(&deps.ConfDeps{
 		DataplaneState:   configd.GetDataplaneState(),
 		Southbound:       vpp,
-		AAA:              aaaComp.(*aaa.Component),
+		AAA:              aaaComp,
 		Routing:          routingComp,
 		VRFManager:       vrfMgr,
 		SvcGroupResolver: svcGroupResolver,
@@ -464,7 +463,7 @@ func main() {
 	})
 
 	showRegistry.AutoRegisterAll(&deps.ShowDeps{
-		Subscriber:       subscriberComp.(*subscriber.Component),
+		Subscriber:       subscriberComp,
 		Southbound:       coreDeps.Southbound,
 		Routing:          routingComp,
 		VRFManager:       vrfMgr,
@@ -479,7 +478,7 @@ func main() {
 	})
 
 	operRegistry.AutoRegisterAll(&deps.OperDeps{
-		Subscriber:       subscriberComp.(*subscriber.Component),
+		Subscriber:       subscriberComp,
 		EventBus:         eventBus,
 		HAManager:        haMgr,
 		PluginComponents: pluginComponentsMap,

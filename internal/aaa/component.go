@@ -48,7 +48,7 @@ type Component struct {
 	acctCacheMu sync.RWMutex
 }
 
-func New(deps component.Dependencies, authProvider auth.AuthProvider) (component.Component, error) {
+func New(deps component.Dependencies, authProvider auth.AuthProvider) (*Component, error) {
 	log := logger.Get(logger.AAA)
 
 	c := &Component{
