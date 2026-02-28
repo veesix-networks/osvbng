@@ -36,7 +36,7 @@ type Component struct {
 	lifecycleSub events.Subscription
 }
 
-func New(deps component.Dependencies, srgMgr ha.SRGProvider) (component.Component, error) {
+func New(deps component.Dependencies, srgMgr ha.SRGProvider) (*Component, error) {
 	log := logger.Get(logger.Subscriber)
 
 	c := &Component{

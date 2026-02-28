@@ -247,7 +247,7 @@ type raPrefixInfo struct {
 	preferredTime uint32
 }
 
-func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manager, dhcp4Provider dhcp4.DHCPProvider, dhcp6Provider dhcp6.DHCPProvider) (component.Component, error) {
+func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manager, dhcp4Provider dhcp4.DHCPProvider, dhcp6Provider dhcp6.DHCPProvider) (*Component, error) {
 	log := logger.Get(logger.IPoE)
 
 	c := &Component{

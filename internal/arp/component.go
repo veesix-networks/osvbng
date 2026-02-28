@@ -38,7 +38,7 @@ type Component struct {
 	arpChan   <-chan *dataplane.ParsedPacket
 }
 
-func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manager) (component.Component, error) {
+func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manager) (*Component, error) {
 	log := logger.Get(logger.ARP)
 
 	return &Component{

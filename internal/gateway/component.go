@@ -38,7 +38,7 @@ type Component struct {
 	configd      *configmgr.ConfigManager
 }
 
-func New(deps component.Dependencies, showRegistry *show.Registry, operRegistry *oper.Registry, subscriberComp *subscriber.Component, configd *configmgr.ConfigManager, bindAddr string) (component.Component, error) {
+func New(deps component.Dependencies, showRegistry *show.Registry, operRegistry *oper.Registry, subscriberComp *subscriber.Component, configd *configmgr.ConfigManager, bindAddr string) (*Component, error) {
 	return &Component{
 		Base:         component.NewBase("gateway"),
 		logger:       logger.Get(logger.Gateway),

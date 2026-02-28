@@ -49,7 +49,7 @@ type Component struct {
 	paused     atomic.Bool
 }
 
-func New(deps component.Dependencies) (component.Component, error) {
+func New(deps component.Dependencies) (*Component, error) {
 	log := logger.Get(logger.Dataplane)
 
 	c := &Component{
