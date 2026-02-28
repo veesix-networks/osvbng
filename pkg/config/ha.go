@@ -41,10 +41,12 @@ type HAHeartbeatConfig struct {
 }
 
 type SRGConfig struct {
-	VirtualMAC       string   `json:"virtual_mac,omitempty" yaml:"virtual_mac,omitempty"`
-	Priority         uint32   `json:"priority,omitempty" yaml:"priority,omitempty"`
-	Preempt          bool     `json:"preempt,omitempty" yaml:"preempt,omitempty"`
-	SubscriberGroups []string `json:"subscriber_groups,omitempty" yaml:"subscriber_groups,omitempty"`
+	VirtualMAC             string   `json:"virtual_mac,omitempty" yaml:"virtual_mac,omitempty"`
+	Priority               uint32   `json:"priority,omitempty" yaml:"priority,omitempty"`
+	Preempt                bool     `json:"preempt,omitempty" yaml:"preempt,omitempty"`
+	SubscriberGroups       []string `json:"subscriber_groups,omitempty" yaml:"subscriber_groups,omitempty"`
+	Interfaces             []string `json:"interfaces,omitempty" yaml:"interfaces,omitempty"`
+	TrackPriorityDecrement uint32   `json:"track_priority_decrement,omitempty" yaml:"track_priority_decrement,omitempty"`
 }
 
 func (c *HAConfig) GetListenAddress() string {

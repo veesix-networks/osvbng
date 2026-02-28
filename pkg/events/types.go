@@ -37,3 +37,11 @@ type HAStateChangeEvent struct {
 	OldState string
 	NewState string
 }
+
+type InterfaceStateEvent struct {
+	SwIfIndex uint32
+	Name      string
+	AdminUp   bool
+	LinkUp    bool
+	Deleted   bool
+}

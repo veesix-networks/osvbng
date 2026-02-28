@@ -23,12 +23,15 @@ type SRGHandler struct {
 }
 
 type SRGDetail struct {
-	Name           string `json:"name"`
-	State          string `json:"state"`
-	Priority       uint32 `json:"priority"`
-	Preempt        bool   `json:"preempt"`
-	VirtualMAC     string `json:"virtual_mac,omitempty"`
-	LastTransition string `json:"last_transition"`
+	Name              string `json:"name"`
+	State             string `json:"state"`
+	Priority          uint32 `json:"priority"`
+	BasePriority      uint32 `json:"base_priority"`
+	Preempt           bool   `json:"preempt"`
+	VirtualMAC        string `json:"virtual_mac,omitempty"`
+	LastTransition    string `json:"last_transition"`
+	TrackedInterfaces int    `json:"tracked_interfaces,omitempty"`
+	InterfacesDown    int    `json:"interfaces_down,omitempty"`
 }
 
 func (h *SRGHandler) Collect(_ context.Context, _ *show.Request) (interface{}, error) {
@@ -36,14 +39,19 @@ func (h *SRGHandler) Collect(_ context.Context, _ *show.Request) (interface{}, e
 		return []SRGDetail{}, nil
 	}
 
+	ifDownCounts := h.deps.HAManager.GetInterfaceDownCounts()
+
 	var result []SRGDetail
 	for name, sm := range h.deps.HAManager.GetSRGs() {
 		detail := SRGDetail{
-			Name:           name,
-			State:          string(sm.State()),
-			Priority:       sm.Priority(),
-			Preempt:        sm.Preempt(),
-			LastTransition: sm.LastTransition().Format("2006-01-02T15:04:05Z07:00"),
+			Name:              name,
+			State:             string(sm.State()),
+			Priority:          sm.Priority(),
+			BasePriority:      sm.BasePriority(),
+			Preempt:           sm.Preempt(),
+			LastTransition:    sm.LastTransition().Format("2006-01-02T15:04:05Z07:00"),
+			TrackedInterfaces: h.deps.HAManager.GetTrackedInterfaceCount(name),
+			InterfacesDown:    ifDownCounts[name],
 		}
 		if vmac := sm.VirtualMAC(); vmac != nil {
 			detail.VirtualMAC = vmac.String()

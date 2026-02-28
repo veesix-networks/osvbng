@@ -41,8 +41,10 @@ func (h *SwitchoverHandler) Execute(ctx context.Context, req *oper.Request) (int
 	}
 
 	var body SwitchoverRequest
-	if err := json.Unmarshal(req.Body, &body); err != nil {
-		return nil, fmt.Errorf("invalid request body: %w", err)
+	if len(req.Body) > 0 {
+		if err := json.Unmarshal(req.Body, &body); err != nil {
+			return nil, fmt.Errorf("invalid request body: %w", err)
+		}
 	}
 
 	if len(body.SRGNames) == 0 {

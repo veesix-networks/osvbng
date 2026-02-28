@@ -271,11 +271,39 @@ func main() {
 	var haMgr *ha.Manager
 	var srgProvider ha.SRGProvider
 	if cfg.HA.Enabled {
-		haMgr, err = ha.NewManager(&cfg.HA, eventBus)
+		var haOpts []ha.ManagerOption
+
+		if vpp.SRGPluginAvailable() {
+			haOpts = append(haOpts, ha.WithSRGDataplane(vpp))
+			mainLog.Info("SRG dataplane plugin detected")
+		} else {
+			haOpts = append(haOpts, ha.WithSRGDataplane(&ha.NoopSRGDataplane{}))
+			mainLog.Warn("SRG dataplane plugin not loaded, HA failover will require session re-creation")
+		}
+
+		haOpts = append(haOpts, ha.WithInterfaceResolver(func(name string) (uint32, error) {
+			idx, ok := ifMgr.GetSwIfIndex(name)
+			if !ok {
+				return 0, fmt.Errorf("interface %q not found", name)
+			}
+			return idx, nil
+		}))
+
+		watchSet := vpp.NewInterfaceWatchSet()
+
+		haOpts = append(haOpts, ha.WithInterfaceWatchCallback(watchSet.Add))
+
+		haMgr, err = ha.NewManager(&cfg.HA, eventBus, haOpts...)
 		if err != nil {
 			log.Fatalf("Failed to create HA manager: %v", err)
 		}
 		srgProvider = haMgr
+
+		watchCtx, watchCancel := context.WithCancel(context.Background())
+		defer watchCancel()
+		if err := vpp.StartInterfaceWatcher(watchCtx, eventBus, watchSet); err != nil {
+			mainLog.Warn("Failed to start VPP interface watcher", "error", err)
+		}
 	}
 
 	ipoeComp, err := ipoe.New(coreDeps, srgProvider, ifMgr, dhcp4Provider, dhcp6Provider)
