@@ -16,11 +16,11 @@ services:
     stdin_open: true
     tty: true
 
-  osvbng:
+  osvbng-1:
     build:
       context: ../..
       dockerfile: docker/dev/Dockerfile
-    container_name: osvbng
+    container_name: osvbng-1
     extra_hosts:
       - "host.docker.internal:host-gateway"
     privileged: true
@@ -29,14 +29,13 @@ services:
       - net.unix.max_dgram_qlen=10000
     environment:
       - OSVBNG_NUM_INTERFACES=3
-      - OSVBNG_ACCESS_INTERFACES=1
       - OSVBNG_LOG_LEVEL=info
     network_mode: none
     volumes:
       - /sys/kernel/debug:/sys/kernel/debug:ro
       - /dev/hugepages:/dev/hugepages
       # - ./dataplane.conf:/etc/osvbng/dataplane.conf:ro
-      - ./osvbng.yaml:/etc/osvbng/osvbng.yaml:ro
+      - ./osvbng-1.yaml:/etc/osvbng/osvbng.yaml:ro
       - bng-config-versions:/var/lib/osvbng/config-versions
       - ../../bin/osvbngd:/usr/local/bin/osvbngd:ro
       - ../../bin/osvbngcli:/usr/local/bin/osvbngcli:ro
@@ -56,6 +55,7 @@ services:
     # Ports accessible via management IP (172.30.0.2): 8080, 9090, 50050
 
   osvbng-2:
+    profiles: ["ha"]
     build:
       context: ../..
       dockerfile: docker/dev/Dockerfile
@@ -67,8 +67,7 @@ services:
     sysctls:
       - net.unix.max_dgram_qlen=10000
     environment:
-      - OSVBNG_NUM_INTERFACES=2
-      - OSVBNG_ACCESS_INTERFACES=1
+      - OSVBNG_NUM_INTERFACES=3
       - OSVBNG_LOG_LEVEL=info
     network_mode: none
     volumes:
@@ -135,4 +134,3 @@ volumes:
   bng2-config-versions:
   prometheus-data:
   grafana-data:
-

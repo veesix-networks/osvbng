@@ -51,7 +51,12 @@ wait_for_interfaces() {
 }
 
 if [ "$OSVBNG_WAIT_FOR_INTERFACES" = "true" ]; then
-    wait_for_interfaces "$OSVBNG_MGMT_INTERFACE"
+    WAIT_IFACES="$OSVBNG_MGMT_INTERFACE"
+    OSVBNG_NUM_INTERFACES="${OSVBNG_NUM_INTERFACES:-2}"
+    for i in $(seq 1 $((OSVBNG_NUM_INTERFACES - 1))); do
+        WAIT_IFACES="$WAIT_IFACES eth$i"
+    done
+    wait_for_interfaces $WAIT_IFACES
 fi
 
 TOTAL_CORES=$(nproc)

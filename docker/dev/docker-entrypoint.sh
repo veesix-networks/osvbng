@@ -1,23 +1,24 @@
 #!/bin/bash
 set -e
 
-# Wait for dataplane interfaces (eth1 through eth$OSVBNG_ACCESS_INTERFACES)
+# Wait for dataplane interfaces (eth1 through eth$(NUM-1))
 # eth0 is always management, eth1+ are dataplane
-OSVBNG_ACCESS_INTERFACES="${OSVBNG_ACCESS_INTERFACES:-1}"
-echo "Waiting for $OSVBNG_ACCESS_INTERFACES dataplane interface(s)..."
+OSVBNG_NUM_INTERFACES="${OSVBNG_NUM_INTERFACES:-2}"
+OSVBNG_DP_INTERFACES=$((OSVBNG_NUM_INTERFACES - 1))
+echo "Waiting for $OSVBNG_DP_INTERFACES dataplane interface(s)..."
 
 WAIT_TIMEOUT=60
 WAIT_COUNT=0
 while true; do
     FOUND=0
-    for i in $(seq 1 $OSVBNG_ACCESS_INTERFACES); do
+    for i in $(seq 1 $OSVBNG_DP_INTERFACES); do
         if [ -e "/sys/class/net/eth$i" ]; then
             FOUND=$((FOUND + 1))
         fi
     done
 
-    if [ $FOUND -eq $OSVBNG_ACCESS_INTERFACES ]; then
-        echo "All $OSVBNG_ACCESS_INTERFACES dataplane interface(s) ready"
+    if [ $FOUND -eq $OSVBNG_DP_INTERFACES ]; then
+        echo "All $OSVBNG_DP_INTERFACES dataplane interface(s) ready"
         break
     fi
 
