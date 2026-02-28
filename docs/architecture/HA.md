@@ -2,6 +2,8 @@
 
 To provide redundancy for subscriber sessions, osvbng supports active/standby high availability using Subscriber Redundancy Groups (SRGs). An SRG is the logical failover unit that groups subscriber sessions, network prefixes, virtual MAC addresses, and tracked interfaces. Two osvbng nodes peer over gRPC and elect an ACTIVE and STANDBY role per SRG using priority-based election.
 
+![HA Overall Architecture](../img/ha_overview.png)
+
 ## Overview
 
 Two BNG nodes serve the same set of subscribers over Ethernet access interfaces. The nodes can be co-located, in separate datacenters, or distributed across the network. The HA model is topology-agnostic. gRPC peer communication (heartbeats, state notifications, switchover requests) runs between the nodes over any IP-reachable path, typically a management network or the core-facing interfaces.
