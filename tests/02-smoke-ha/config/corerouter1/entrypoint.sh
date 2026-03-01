@@ -29,12 +29,17 @@ while [ ! -e /sys/class/net/eth2 ]; do
 done
 
 echo "Interfaces ready, creating L3VPN VRF..."
-ip link add CUSTOMER-A type vrf table 100
-ip link set CUSTOMER-A up
-ip link add dummy-custa type dummy
-ip link set dummy-custa master CUSTOMER-A
-ip link set dummy-custa up
-ip addr add 192.168.100.1/24 dev dummy-custa
+modprobe vrf 2>/dev/null || true
+if ip link add CUSTOMER-A type vrf table 100 2>/dev/null; then
+    ip link set CUSTOMER-A up
+    ip link add dummy-custa type dummy
+    ip link set dummy-custa master CUSTOMER-A
+    ip link set dummy-custa up
+    ip addr add 192.168.100.1/24 dev dummy-custa
+    echo "L3VPN VRF created"
+else
+    echo "WARNING: VRF creation not supported, skipping L3VPN setup"
+fi
 
 echo "Configuring MPLS..."
 sysctl -w net.mpls.platform_labels=1048575 || true

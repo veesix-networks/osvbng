@@ -34,6 +34,12 @@ jobs:
       - name: Install Robot Framework
         run: pip install robotframework
 
+      - name: Load kernel modules
+        run: |
+          sudo modprobe vrf || true
+          sudo modprobe mpls_router || true
+          sudo modprobe mpls_iptunnel || true
+
       - name: Run smoke tests
         run: |
           mkdir -p ./tests/out
@@ -48,7 +54,7 @@ jobs:
         if: always()
         run: |
           mkdir -p test-artifacts
-          for c in $(sudo docker ps -a --filter "label=containerlab" --format '{{.Names}}'); do
+          for c in $(sudo docker ps -a --filter "label=clab-node-name" --format '{{.Names}}'); do
             sudo docker logs "$c" > "test-artifacts/${c}.log" 2>&1 || true
           done
 
