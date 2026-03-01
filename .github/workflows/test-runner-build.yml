@@ -1,0 +1,66 @@
+# Copyright 2025 Veesix Networks Ltd
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: test-runner-build
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag (e.g. test-runner-v1)"
+        required: true
+        default: "test-runner-v1"
+  schedule:
+    - cron: "0 3 1 * *"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Test Runner Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils
+
+      - name: Setup Packer
+        uses: hashicorp/setup-packer@main
+
+      - name: Load versions
+        id: versions
+        run: |
+          source versions.env
+          echo "containerlab_version=${CONTAINERLAB_VERSION:-0.73.0}" >> $GITHUB_OUTPUT
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "version=test-runner-v1" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Packer init
+        working-directory: scripts/qemu/test-runner/packer
+        run: packer init test-runner.pkr.hcl
+
+      - name: Packer build
+        working-directory: scripts/qemu/test-runner/packer
+        run: |
+          packer build \
+            -var "accelerator=tcg" \
+            -var "containerlab_version=${{ steps.versions.outputs.containerlab_version }}" \
+            test-runner.pkr.hcl
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.versions.outputs.version }}
+          name: "Test Runner ${{ steps.versions.outputs.version }}"
+          files: scripts/qemu/test-runner/packer/test-runner.qcow2.gz
+          make_latest: false

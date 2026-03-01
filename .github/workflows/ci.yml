@@ -1,3 +1,7 @@
+# Copyright 2025 Veesix Networks Ltd
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 name: CI
 
 on:
@@ -5,13 +9,47 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
+  file-changes:
     runs-on: ubuntu-latest
-
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      ha: ${{ steps.filter.outputs.ha }}
     steps:
       - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - '**/*.go'
+              - 'go.mod'
+              - 'go.sum'
+              - 'Makefile'
+              - 'docker/**'
+              - 'api/proto/**'
+              - 'templates/**'
+              - 'tests/**'
+              - '.github/workflows/**'
+            ha:
+              - 'pkg/ha/**'
+              - 'api/proto/ha/**'
+              - 'tests/02-smoke-ha/**'
+
+  build:
+    runs-on: ubuntu-latest
+    needs: file-changes
+    if: needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Load versions
         id: versions
@@ -36,5 +74,25 @@ jobs:
       - name: Build
         run: make build
 
-      # - name: Test
-      #   run: go test -v ./...
+      - name: Build Docker image
+        run: make docker-local
+
+      - name: Save Docker image
+        run: docker save veesixnetworks/osvbng:local -o /tmp/osvbng-local.tar
+
+      - name: Upload Docker image
+        uses: actions/upload-artifact@v4
+        with:
+          name: osvbng-image
+          path: /tmp/osvbng-local.tar
+          retention-days: 1
+
+  smoke-tests:
+    uses: ./.github/workflows/smoke-tests.yml
+    needs: [file-changes, build]
+    if: needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
+
+  smoke-ha-tests:
+    uses: ./.github/workflows/smoke-ha-tests.yml
+    needs: [file-changes, build]
+    if: needs.file-changes.outputs.ha == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'

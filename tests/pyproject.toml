@@ -1,0 +1,15 @@
+# Copyright 2025 Veesix Networks Ltd
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+[project]
+name = "osvbng-tests"
+version = "0.1.0"
+description = "Robot Framework integration tests for osvbng"
+requires-python = ">=3.10"
+
+[project.optional-dependencies]
+test = [
+    "robotframework>=7.0",
+    "robotframework-sshlibrary>=3.8.0",
+]

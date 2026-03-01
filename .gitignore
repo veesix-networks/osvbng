@@ -6,6 +6,14 @@
 
 bin/
 build/
+
+# Robot Framework test output
+tests/out/
+tests/.venv/
+
+# Containerlab generated files
+clab-*/
+tests/**/clab-*/
 /osvbngd
 /osvbngcli
 
