@@ -42,11 +42,11 @@ jobs:
 
       - name: Test report
         if: ${{ !cancelled() }}
-        uses: dorny/test-reporter@v2
+        uses: joonvena/robotframework-reporter-action@v2.5
         with:
-          name: HA Smoke Test Results
-          path: test-results/out/02-smoke-ha-xunit.xml
-          reporter: java-junit
+          gh_access_token: ${{ secrets.GITHUB_TOKEN }}
+          report_path: test-results/out
+          only_summary: true
 
       - name: Upload test results
         if: always()
