@@ -34,12 +34,6 @@ jobs:
       - name: Install Robot Framework
         run: pip install robotframework
 
-      - name: Load kernel modules
-        run: |
-          sudo modprobe vrf || true
-          sudo modprobe mpls_router || true
-          sudo modprobe mpls_iptunnel || true
-
       - name: Run smoke tests
         run: |
           mkdir -p ./tests/out
