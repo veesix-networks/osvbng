@@ -87,12 +87,50 @@ jobs:
           path: /tmp/osvbng-local.tar
           retention-days: 1
 
+  prepare-test-runner:
+    name: Prepare Test Runner
+    runs-on: ubuntu-latest
+    needs: [file-changes, build]
+    if: needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load versions
+        id: versions
+        run: |
+          source versions.env
+          echo "test_runner_version=${TEST_RUNNER_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Cache test runner image
+        id: cache-test-runner
+        uses: actions/cache@v4
+        with:
+          path: /tmp/test-runner.qcow2
+          key: test-runner-${{ steps.versions.outputs.test_runner_version }}
+
+      - name: Download test runner image
+        if: steps.cache-test-runner.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "${{ steps.versions.outputs.test_runner_version }}" \
+            --pattern "test-runner.qcow2.gz" \
+            --output /tmp/test-runner.qcow2.gz
+          gunzip /tmp/test-runner.qcow2.gz
+
+      - name: Upload test runner image
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-runner-image
+          path: /tmp/test-runner.qcow2
+          retention-days: 1
+
   smoke-tests:
     uses: ./.github/workflows/smoke-tests.yml
-    needs: [file-changes, build]
+    needs: [file-changes, prepare-test-runner]
     if: needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
 
   smoke-ha-tests:
     uses: ./.github/workflows/smoke-ha-tests.yml
-    needs: [file-changes, build]
+    needs: [file-changes, prepare-test-runner]
     if: needs.file-changes.outputs.ha == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'

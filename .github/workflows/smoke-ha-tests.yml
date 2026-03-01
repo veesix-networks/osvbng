@@ -21,34 +21,16 @@ jobs:
           name: osvbng-image
           path: /tmp
 
-      - name: Load versions
-        id: versions
-        run: |
-          source versions.env
-          echo "test_runner_version=${TEST_RUNNER_VERSION}" >> $GITHUB_OUTPUT
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-runner-image
+          path: /tmp
 
       - name: Install QEMU and tools
         run: |
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86 qemu-utils sshpass
           sudo chmod 666 /dev/kvm || true
-
-      - name: Cache test runner image
-        id: cache-test-runner
-        uses: actions/cache@v4
-        with:
-          path: /tmp/test-runner.qcow2
-          key: test-runner-${{ steps.versions.outputs.test_runner_version }}
-
-      - name: Download test runner image
-        if: steps.cache-test-runner.outputs.cache-hit != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release download "${{ steps.versions.outputs.test_runner_version }}" \
-            --pattern "test-runner.qcow2.gz" \
-            --output /tmp/test-runner.qcow2.gz
-          gunzip /tmp/test-runner.qcow2.gz
 
       - name: Run HA smoke tests
         run: |
@@ -57,6 +39,14 @@ jobs:
             /tmp/osvbng-local.tar \
             02-smoke-ha \
             ./test-results
+
+      - name: Test report
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: HA Smoke Test Results
+          path: test-results/out/02-smoke-ha-xunit.xml
+          reporter: java-junit
 
       - name: Upload test results
         if: always()
