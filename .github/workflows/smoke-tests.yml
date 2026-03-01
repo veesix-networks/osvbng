@@ -1,0 +1,67 @@
+# Copyright 2025 Veesix Networks Ltd
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: smoke-tests
+
+on:
+  workflow_call:
+
+jobs:
+  smoke:
+    name: Smoke Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: osvbng-image
+          path: /tmp
+
+      - name: Load Docker image
+        run: docker load -i /tmp/osvbng-local.tar
+
+      - name: Install containerlab
+        run: bash -c "$(curl -sL https://get.containerlab.dev)"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Robot Framework
+        run: pip install robotframework
+
+      - name: Run smoke tests
+        run: |
+          mkdir -p ./tests/out
+          robot \
+            --consolecolors on \
+            -r none \
+            -l ./tests/out/01-smoke-log \
+            --output ./tests/out/01-smoke-out.xml \
+            ./tests/01-smoke/
+
+      - name: Collect logs
+        if: always()
+        run: |
+          mkdir -p test-artifacts
+          for c in $(sudo docker ps -a --filter "label=containerlab" --format '{{.Names}}'); do
+            sudo docker logs "$c" > "test-artifacts/${c}.log" 2>&1 || true
+          done
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-results
+          path: |
+            tests/out/
+            test-artifacts/
+          retention-days: 14
+
+      - name: Cleanup
+        if: always()
+        run: sudo containerlab destroy --all --cleanup 2>/dev/null || true

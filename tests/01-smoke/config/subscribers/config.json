@@ -1,0 +1,24 @@
+{
+  "interfaces": {
+    "access": [
+      {
+        "interface": "eth1",
+        "type": "ipoe",
+        "vlan-mode": "1:1",
+        "outer-vlan-min": 100,
+        "outer-vlan-max": 100,
+        "inner-vlan-min": 2,
+        "inner-vlan-max": 6
+      }
+    ]
+  },
+  "dhcp": {
+    "enable": true
+  },
+  "sessions": {
+    "count": 5,
+    "max-outstanding": 5,
+    "start-rate": 5,
+    "stop-rate": 5
+  }
+}
