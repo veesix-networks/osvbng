@@ -41,8 +41,8 @@ jobs:
             ./test-results
 
       - name: Test report
-        if: always()
-        uses: dorny/test-reporter@v1
+        if: ${{ !cancelled() }}
+        uses: dorny/test-reporter@v2
         with:
           name: Smoke Test Results
           path: test-results/out/01-smoke-xunit.xml

@@ -11,6 +11,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: read
+  checks: write
+
 concurrency:
   group: ci-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
