@@ -33,7 +33,7 @@ echo "==> Starting VM..."
 "${SCRIPT_DIR}/vm-start.sh" "${QCOW2}" "${SSH_PORT}"
 
 echo "==> Waiting for SSH..."
-"${SCRIPT_DIR}/vm-wait-ssh.sh" "${SSH_PORT}" 120
+"${SCRIPT_DIR}/vm-wait-ssh.sh" "${SSH_PORT}" 300
 
 echo "==> Loading kernel modules..."
 "${SCRIPT_DIR}/vm-exec.sh" "modprobe vrf mpls_router mpls_iptunnel dummy" "${SSH_PORT}"
