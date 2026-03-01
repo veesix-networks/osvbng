@@ -5,6 +5,9 @@
 
 set -euo pipefail
 
+apt-get update
+apt-get install -y linux-modules-extra-$(uname -r)
+
 cat > /etc/modules-load.d/osvbng-test.conf <<EOF
 vrf
 mpls_router
