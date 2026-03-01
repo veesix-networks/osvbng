@@ -24,10 +24,6 @@ ${bng1}             clab-${lab-name}-bng1
 ${corerouter1}      clab-${lab-name}-corerouter1
 
 *** Test Cases ***
-Verify osvbng Is Healthy
-    [Documentation]    Wait for osvbng REST API to respond on bng1.
-    Wait For osvbng Healthy    bng1    ${lab-name}
-
 Verify VPP Is Running
     [Documentation]    Check VPP is running and responsive via vppctl.
     ${output} =    Execute VPP Command    ${bng1}    show version
@@ -62,6 +58,7 @@ Verify VPP Interfaces Configured
 *** Keywords ***
 Deploy Smoke Topology
     Deploy Topology    ${lab-file}
+    Wait For osvbng Healthy    bng1    ${lab-name}
 
 Destroy Smoke Topology
     Destroy Topology    ${lab-file}

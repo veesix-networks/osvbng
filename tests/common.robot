@@ -12,7 +12,7 @@ Library             Collections
 ${CLAB_BIN}             sudo containerlab
 ${runtime}              docker
 ${OSVBNG_API_PORT}      8080
-${HEALTH_RETRIES}       30
+${HEALTH_RETRIES}       12
 ${HEALTH_INTERVAL}      5s
 ${VPPCTL_SOCK}          /run/osvbng/cli.sock
 
