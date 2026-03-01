@@ -15,7 +15,7 @@ qemu-img create -f qcow2 -b "$(realpath "$QCOW2")" -F qcow2 "$OVERLAY"
 
 ACCEL="kvm"
 ACCEL_FLAGS="-enable-kvm -cpu host"
-if [ ! -e /dev/kvm ]; then
+if [ ! -w /dev/kvm ]; then
   echo "KVM not available, falling back to TCG (slower)"
   ACCEL="tcg"
   ACCEL_FLAGS=""
