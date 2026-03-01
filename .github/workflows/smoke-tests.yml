@@ -54,7 +54,8 @@ jobs:
         if: always()
         run: |
           mkdir -p test-artifacts
-          for c in $(sudo docker ps -a --filter "label=clab-node-name" --format '{{.Names}}'); do
+          sudo docker ps -a
+          for c in $(sudo docker ps -a --filter "label=containerlab" --format '{{.Names}}'); do
             sudo docker logs "$c" > "test-artifacts/${c}.log" 2>&1 || true
           done
 
