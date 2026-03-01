@@ -92,8 +92,7 @@ jobs:
     needs: [file-changes, build]
     if: needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
 
-  # TODO: re-enable once 01-smoke passes on CI
-  # smoke-ha-tests:
-  #   uses: ./.github/workflows/smoke-ha-tests.yml
-  #   needs: [file-changes, build]
-  #   if: needs.file-changes.outputs.ha == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
+  smoke-ha-tests:
+    uses: ./.github/workflows/smoke-ha-tests.yml
+    needs: [file-changes, build]
+    if: needs.file-changes.outputs.ha == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'

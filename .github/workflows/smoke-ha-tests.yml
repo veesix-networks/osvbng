@@ -11,7 +11,7 @@ jobs:
   smoke-ha:
     name: HA Smoke Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -21,47 +21,46 @@ jobs:
           name: osvbng-image
           path: /tmp
 
-      - name: Load Docker image
-        run: docker load -i /tmp/osvbng-local.tar
+      - name: Load versions
+        id: versions
+        run: |
+          source versions.env
+          echo "test_runner_version=${TEST_RUNNER_VERSION}" >> $GITHUB_OUTPUT
 
-      - name: Install containerlab
-        run: bash -c "$(curl -sL https://get.containerlab.dev)" -- -v 0.73.0
+      - name: Install QEMU and tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils sshpass
 
-      - uses: actions/setup-python@v5
+      - name: Cache test runner image
+        id: cache-test-runner
+        uses: actions/cache@v4
         with:
-          python-version: "3.12"
+          path: /tmp/test-runner.qcow2
+          key: test-runner-${{ steps.versions.outputs.test_runner_version }}
 
-      - name: Install Robot Framework
-        run: pip install robotframework
+      - name: Download test runner image
+        if: steps.cache-test-runner.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "${{ steps.versions.outputs.test_runner_version }}" \
+            --pattern "test-runner.qcow2.gz" \
+            --output /tmp/test-runner.qcow2.gz
+          gunzip /tmp/test-runner.qcow2.gz
 
       - name: Run HA smoke tests
         run: |
-          mkdir -p ./tests/out
-          robot \
-            --consolecolors on \
-            -r none \
-            -l ./tests/out/02-smoke-ha-log \
-            --output ./tests/out/02-smoke-ha-out.xml \
-            ./tests/02-smoke-ha/
-
-      - name: Collect logs
-        if: always()
-        run: |
-          mkdir -p test-artifacts
-          for c in $(sudo docker ps -a --filter "label=clab-node-name" --format '{{.Names}}'); do
-            sudo docker logs "$c" > "test-artifacts/${c}.log" 2>&1 || true
-          done
+          scripts/qemu/test-runner/scripts/vm-run-tests.sh \
+            /tmp/test-runner.qcow2 \
+            /tmp/osvbng-local.tar \
+            02-smoke-ha \
+            ./test-results
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: smoke-ha-test-results
-          path: |
-            tests/out/
-            test-artifacts/
+          path: test-results/
           retention-days: 14
-
-      - name: Cleanup
-        if: always()
-        run: sudo containerlab destroy --all --cleanup 2>/dev/null || true
