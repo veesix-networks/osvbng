@@ -29,7 +29,6 @@ topology:
     subscribers:
       kind: linux
       image: veesixnetworks/bngblaster:0.9.30
-      image-pull-policy: Never
       binds:
         - config/subscribers/config.json:/config/config.json:ro
 
