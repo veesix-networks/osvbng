@@ -15,7 +15,6 @@ Resource            ../common.robot
 Resource            ../bngblaster.robot
 
 Suite Setup         Deploy Smoke Topology
-Suite Teardown      Destroy Smoke Topology
 
 *** Variables ***
 ${lab-name}         osvbng-smoke
@@ -60,5 +59,3 @@ Deploy Smoke Topology
     Deploy Topology    ${lab-file}
     Wait For osvbng Healthy    bng1    ${lab-name}
 
-Destroy Smoke Topology
-    Destroy Topology    ${lab-file}
