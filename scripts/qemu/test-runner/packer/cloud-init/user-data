@@ -14,7 +14,12 @@ chpasswd:
       password: testrunner
       type: text
 
+write_files:
+  - path: /etc/ssh/sshd_config.d/99-packer.conf
+    content: |
+      PermitRootLogin yes
+      PasswordAuthentication yes
+    permissions: "0644"
+
 runcmd:
-  - sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
-  - sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
-  - systemctl restart sshd
+  - systemctl restart ssh
