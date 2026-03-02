@@ -16,9 +16,9 @@ Start BNG Blaster
     RETURN    ${rc}    ${output}
 
 Start BNG Blaster In Background
-    [Arguments]    ${container}    ${config}=/config/config.json    ${report}=/tmp/report.json
+    [Arguments]    ${container}    ${config}=/config/config.json    ${report}=/tmp/report.json    ${socket}=/run/bngblaster.sock
     ${rc}    ${output} =    Run And Return Rc And Output
-    ...    sudo docker exec -d ${container} bngblaster -C ${config} -J ${report} -L /tmp/bngblaster.log -b -f
+    ...    sudo docker exec -d ${container} bngblaster -C ${config} -J ${report} -L /tmp/bngblaster.log -S ${socket} -b -f
     Should Be Equal As Integers    ${rc}    0
 
 Stop BNG Blaster
@@ -52,6 +52,6 @@ Verify BNG Blaster Sessions Established
 BNG Blaster CLI Command
     [Arguments]    ${container}    ${command}    ${socket}=/run/bngblaster.sock
     ${rc}    ${output} =    Run And Return Rc And Output
-    ...    sudo docker exec ${container} bngblaster-cli -s ${socket} ${command}
+    ...    sudo docker exec ${container} /usr/sbin/bngblaster-cli ${socket} ${command}
     Log    ${output}
     RETURN    ${rc}    ${output}

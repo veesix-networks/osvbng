@@ -7,11 +7,12 @@ RUN apt-get update && apt-get install -y \
     wget \
     iproute2 \
     iputils-ping \
+    python3 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN wget https://github.com/rtbrick/bngblaster/releases/download/0.9.26/bngblaster-0.9.26-ubuntu-24.04_amd64.deb && \
-    dpkg -i bngblaster-0.9.26-ubuntu-24.04_amd64.deb && \
-    rm bngblaster-0.9.26-ubuntu-24.04_amd64.deb
+RUN wget https://github.com/rtbrick/bngblaster/releases/download/0.9.30/bngblaster-0.9.30-ubuntu-24.04_amd64.deb && \
+    dpkg -i bngblaster-0.9.30-ubuntu-24.04_amd64.deb && \
+    rm bngblaster-0.9.30-ubuntu-24.04_amd64.deb
 
 RUN bngblaster -v
 

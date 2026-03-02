@@ -55,7 +55,7 @@ Setup IPoE Test
     Wait For osvbng Healthy    bng1    ${lab-name}
     Create IPoE Users    ${bng1}    ${session-count}
     Start BNG Blaster In Background    ${subscribers}
-    Wait For Sessions Established    ${bng1}    ${session-count}    check_ipv6=true
+    Wait For Sessions Established    ${bng1}    ${subscribers}    ${session-count}    check_ipv6=true
 
 Teardown IPoE Test
     Run Keyword And Ignore Error    Stop BNG Blaster    ${subscribers}

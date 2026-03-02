@@ -11,12 +11,12 @@ Resource            bngblaster.robot
 
 *** Keywords ***
 Wait For Sessions Established
-    [Arguments]    ${container}    ${expected_count}    ${check_ipv6}=false    ${timeout}=120s    ${interval}=2s
+    [Arguments]    ${container}    ${bngblaster}    ${expected_count}    ${check_ipv6}=false    ${timeout}=120s    ${interval}=2s
     Wait Until Keyword Succeeds    ${timeout}    ${interval}
-    ...    All Sessions Ready    ${container}    ${expected_count}    ${check_ipv6}
+    ...    All Sessions Ready    ${container}    ${bngblaster}    ${expected_count}    ${check_ipv6}
 
 All Sessions Ready
-    [Arguments]    ${container}    ${expected_count}    ${check_ipv6}=false
+    [Arguments]    ${container}    ${bngblaster}    ${expected_count}    ${check_ipv6}=false
     ${output} =    Get osvbng API Response    ${container}    /api/show/subscriber/sessions
     ${rc}    ${result} =    Run And Return Rc And Output
     ...    echo '${output}' | python3 -c "import sys,json; d=json.load(sys.stdin); sessions=d.get('data') or []; total=len(sessions); v4=len([x for x in sessions if x.get('IPv4Address') and x['IPv4Address']!='<nil>']); v6=len([x for x in sessions if x.get('IPv6Address') and x['IPv6Address']!='<nil>']); print(f'{total} {v4} {v6}')"
@@ -27,6 +27,11 @@ All Sessions Ready
     IF    '${check_ipv6}' == 'true'
         Should Be Equal As Strings    ${parts}[2]    ${expected_count}    ${parts}[2]/${expected_count} sessions have IPv6
     END
+    ${rc}    ${cli_output} =    BNG Blaster CLI Command    ${bngblaster}    session-counters
+    Should Be Equal As Integers    ${rc}    0
+    ${rc}    ${established} =    Run And Return Rc And Output
+    ...    echo '${cli_output}' | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('session-counters',{}).get('sessions-established',0))"
+    Should Be Equal As Strings    ${established}    ${expected_count}    BNG Blaster established ${established}/${expected_count} sessions
 
 Run BNG Blaster And Verify Sessions
     [Arguments]    ${container}    ${subscribers}    ${expected_count}    ${timeout}=120
