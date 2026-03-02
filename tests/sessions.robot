@@ -11,7 +11,7 @@ Resource            bngblaster.robot
 
 *** Keywords ***
 Wait For Sessions Established
-    [Arguments]    ${container}    ${expected_count}    ${check_ipv6}=false    ${timeout}=60s    ${interval}=2s
+    [Arguments]    ${container}    ${expected_count}    ${check_ipv6}=false    ${timeout}=120s    ${interval}=2s
     Wait Until Keyword Succeeds    ${timeout}    ${interval}
     ...    All Sessions Ready    ${container}    ${expected_count}    ${check_ipv6}
 

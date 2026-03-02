@@ -127,8 +127,9 @@ type SessionState struct {
 	ServiceGroup svcgroup.ServiceGroup
 	SRGName      string
 
-	AllocCtx      *allocator.Context
-	allocatedPool string
+	AllocCtx          *allocator.Context
+	allocatedPool     string
+	allocatedIANAPool string
 
 	component *Component
 	mu        sync.Mutex

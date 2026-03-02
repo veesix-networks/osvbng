@@ -396,13 +396,19 @@ func (s *SessionState) extractIPFromAttributes() {
 		}
 	}
 
+	if v6addr, ok := s.Attributes[aaa.AttrIPv6Address]; ok {
+		if parsed := net.ParseIP(v6addr); parsed != nil {
+			s.IPv6Address = parsed
+			s.component.logger.Debug("Got IPv6 address from AAA", "ip", v6addr)
+		}
+	}
+
 	if prefix, ok := s.Attributes[aaa.AttrIPv6Prefix]; ok {
 		if _, ipnet, err := net.ParseCIDR(prefix); err == nil {
 			s.IPv6Prefix = ipnet
 			s.component.logger.Debug("Got IPv6 prefix from AAA", "prefix", prefix)
 		}
 	}
-
 }
 
 func (s *SessionState) resolveServiceGroup(aaaAttrs map[string]interface{}) svcgroup.ServiceGroup {
@@ -425,15 +431,16 @@ func (s *SessionState) resolveServiceGroup(aaaAttrs map[string]interface{}) svcg
 }
 
 func (s *SessionState) buildAllocContext(aaaAttrs map[string]interface{}) *allocator.Context {
-	var profileName string
+	var profileName, ipv6ProfileName string
 	cfg, err := s.component.cfgMgr.GetRunning()
 	if err == nil && cfg != nil && cfg.SubscriberGroups != nil {
 		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(s.OuterVLAN); group != nil {
 			profileName = group.IPv4Profile
+			ipv6ProfileName = group.IPv6Profile
 		}
 	}
 
-	ctx := allocator.NewContext(s.SessionID, s.MAC, s.OuterVLAN, s.InnerVLAN, s.VRF, s.ServiceGroup.Name, profileName, aaaAttrs)
+	ctx := allocator.NewContext(s.SessionID, s.MAC, s.OuterVLAN, s.InnerVLAN, s.VRF, s.ServiceGroup.Name, profileName, ipv6ProfileName, aaaAttrs)
 
 	if ctx.PoolOverride == "" && s.ServiceGroup.Pool != "" {
 		ctx.PoolOverride = s.ServiceGroup.Pool
@@ -499,6 +506,18 @@ func (s *SessionState) startNCP() {
 		}
 	}
 
+	if s.IPv6Address == nil {
+		s.allocateIANAFromPool()
+	} else if registry := s.component.registry; registry != nil {
+		if err := registry.ReserveIANA(s.IPv6Address, s.SessionID); err != nil {
+			s.component.logger.Error("IPv6 IANA reservation conflict",
+				"session_id", s.SessionID,
+				"address", s.IPv6Address,
+				"error", err)
+			s.IPv6Address = nil
+		}
+	}
+
 	if s.IPv6Prefix != nil {
 		if registry := s.component.registry; registry != nil {
 			if err := registry.ReservePD(s.IPv6Prefix, s.SessionID); err != nil {
@@ -561,6 +580,37 @@ func (s *SessionState) allocateFromPool() {
 	s.IPv4Address = allocated
 	s.allocatedPool = poolName
 	s.component.logger.Debug("Allocated IPv4 from pool",
+		"session_id", s.SessionID,
+		"pool", poolName,
+		"ip", allocated)
+}
+
+func (s *SessionState) allocateIANAFromPool() {
+	if s.AllocCtx == nil || s.AllocCtx.IPv6ProfileName == "" {
+		return
+	}
+
+	registry := s.component.registry
+	if registry == nil {
+		return
+	}
+
+	allocated, poolName, err := registry.AllocateIANAFromProfile(
+		s.AllocCtx.IPv6ProfileName,
+		s.AllocCtx.IANAPoolOverride,
+		s.AllocCtx.VRF,
+		s.SessionID,
+	)
+	if err != nil {
+		s.component.logger.Warn("No available IANA pool addresses",
+			"session_id", s.SessionID,
+			"profile", s.AllocCtx.IPv6ProfileName)
+		return
+	}
+
+	s.IPv6Address = allocated
+	s.allocatedIANAPool = poolName
+	s.component.logger.Debug("Allocated IPv6 IANA from pool",
 		"session_id", s.SessionID,
 		"pool", poolName,
 		"ip", allocated)
@@ -873,6 +923,11 @@ func (s *SessionState) terminate() {
 			registry.Release(s.allocatedPool, s.IPv4Address)
 		} else if s.IPv4Address != nil {
 			registry.ReleaseIP(s.IPv4Address)
+		}
+		if s.allocatedIANAPool != "" && s.IPv6Address != nil {
+			registry.ReleaseIANA(s.allocatedIANAPool, s.IPv6Address)
+		} else if s.IPv6Address != nil {
+			registry.ReleaseIANAByIP(s.IPv6Address)
 		}
 		if s.IPv6Prefix != nil {
 			registry.ReleasePDByPrefix(s.IPv6Prefix)
