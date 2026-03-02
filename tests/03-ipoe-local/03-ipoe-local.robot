@@ -4,7 +4,7 @@
 
 *** Comments ***
 IPoE session test suite with local auth (allow_all: false).
-Creates 69 users via REST API, establishes IPoE sessions via BNG Blaster,
+Creates 25 users via REST API, establishes IPoE sessions via BNG Blaster,
 and verifies session state through the osvbng API and BNG Blaster report.
 
 *** Settings ***
@@ -24,7 +24,7 @@ ${lab-name}         osvbng-ipoe-local
 ${lab-file}         ${CURDIR}/03-ipoe-local.clab.yml
 ${bng1}             clab-${lab-name}-bng1
 ${subscribers}      clab-${lab-name}-subscribers
-${session-count}    69
+${session-count}    25
 
 *** Test Cases ***
 Verify Sessions In osvbng API

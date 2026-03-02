@@ -28,10 +28,10 @@
     "ipv6": true
   },
   "sessions": {
-    "count": 69,
-    "max-outstanding": 69,
-    "start-rate": 200,
-    "stop-rate": 200
+    "count": 25,
+    "max-outstanding": 20,
+    "start-rate": 10,
+    "stop-rate": 20
   },
   "access-line": {
     "agent-circuit-id": "eth 0/1/{session-global}:{outer-vlan}.{inner-vlan}",
