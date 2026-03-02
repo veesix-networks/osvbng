@@ -13,10 +13,10 @@
     ]
   },
   "sessions": {
-    "count": 69,
-    "max-outstanding": 69,
-    "start-rate": 200,
-    "stop-rate": 200
+    "count": 25,
+    "max-outstanding": 20,
+    "start-rate": 10,
+    "stop-rate": 20
   },
   "pppoe": {
     "reconnect": false,

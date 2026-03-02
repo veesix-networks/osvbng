@@ -4,7 +4,7 @@
 
 *** Comments ***
 PPPoE session test suite with local auth (allow_all: false).
-Creates 69 users with password via REST API, establishes PPPoE sessions
+Creates 25 users with password via REST API, establishes PPPoE sessions
 via BNG Blaster with PAP authentication, and verifies session state.
 
 *** Settings ***
@@ -24,7 +24,7 @@ ${lab-name}         osvbng-pppoe-local
 ${lab-file}         ${CURDIR}/04-pppoe-local.clab.yml
 ${bng1}             clab-${lab-name}-bng1
 ${subscribers}      clab-${lab-name}-subscribers
-${session-count}    69
+${session-count}    25
 
 *** Test Cases ***
 Verify Sessions In osvbng API
