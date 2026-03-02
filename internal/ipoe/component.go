@@ -133,15 +133,16 @@ func (c *Component) resolveServiceGroup(svlan uint16, aaaAttrs map[string]interf
 }
 
 func (c *Component) buildAllocContext(sess *SessionState, aaaAttrs map[string]interface{}) *allocator.Context {
-	var profileName string
+	var profileName, ipv6ProfileName string
 	cfg, err := c.cfgMgr.GetRunning()
 	if err == nil && cfg != nil && cfg.SubscriberGroups != nil {
 		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(sess.OuterVLAN); group != nil {
 			profileName = group.IPv4Profile
+			ipv6ProfileName = group.IPv6Profile
 		}
 	}
 
-	ctx := allocator.NewContext(sess.SessionID, sess.MAC, sess.OuterVLAN, sess.InnerVLAN, sess.VRF, sess.ServiceGroup.Name, profileName, aaaAttrs)
+	ctx := allocator.NewContext(sess.SessionID, sess.MAC, sess.OuterVLAN, sess.InnerVLAN, sess.VRF, sess.ServiceGroup.Name, profileName, ipv6ProfileName, aaaAttrs)
 
 	if ctx.PoolOverride == "" && sess.ServiceGroup.Pool != "" {
 		ctx.PoolOverride = sess.ServiceGroup.Pool
@@ -181,25 +182,16 @@ func (c *Component) resolveDHCPv4(ctx *allocator.Context) *dhcp.ResolvedDHCPv4 {
 }
 
 func (c *Component) resolveDHCPv6(ctx *allocator.Context) *dhcp.ResolvedDHCPv6 {
-	if ctx == nil {
+	if ctx == nil || ctx.IPv6ProfileName == "" {
 		return nil
 	}
 	cfg, err := c.cfgMgr.GetRunning()
 	if err != nil || cfg == nil {
 		return nil
 	}
-	var profileName string
-	if cfg.SubscriberGroups != nil {
-		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(ctx.SVLAN); group != nil {
-			profileName = group.IPv6Profile
-		}
-	}
-	if profileName == "" {
-		return nil
-	}
-	profile := cfg.IPv6Profiles[profileName]
+	profile := cfg.IPv6Profiles[ctx.IPv6ProfileName]
 	if profile == nil {
-		c.logger.Error("IPv6 profile not found", "profile", profileName, "session_id", ctx.SessionID)
+		c.logger.Error("IPv6 profile not found", "profile", ctx.IPv6ProfileName, "session_id", ctx.SessionID)
 		return nil
 	}
 	return dhcp.ResolveV6(ctx, profile)

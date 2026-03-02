@@ -317,7 +317,7 @@ func TestResolveV6AllocateIANAAndPD(t *testing.T) {
 	}
 	initRegistry(t, nil, v6)
 
-	ctx := &allocator.Context{SessionID: "s1", ProfileName: "prof1"}
+	ctx := &allocator.Context{SessionID: "s1", IPv6ProfileName: "prof1"}
 	res := ResolveV6(ctx, v6["prof1"])
 	if res == nil {
 		t.Fatal("expected non-nil result")
@@ -349,9 +349,9 @@ func TestResolveV6ReserveAAAAddresses(t *testing.T) {
 	initRegistry(t, nil, v6)
 
 	ctx := &allocator.Context{
-		SessionID:   "s1",
-		ProfileName: "prof1",
-		IPv6Address: net.ParseIP("2001:db8::5"),
+		SessionID:       "s1",
+		IPv6ProfileName: "prof1",
+		IPv6Address:     net.ParseIP("2001:db8::5"),
 		IPv6Prefix: &net.IPNet{
 			IP:   net.ParseIP("2001:db8:1::"),
 			Mask: net.CIDRMask(56, 128),
@@ -385,7 +385,7 @@ func TestResolveV6IANAOnlyNoPD(t *testing.T) {
 	}
 	initRegistry(t, nil, v6)
 
-	ctx := &allocator.Context{SessionID: "s1", ProfileName: "prof1"}
+	ctx := &allocator.Context{SessionID: "s1", IPv6ProfileName: "prof1"}
 	res := ResolveV6(ctx, v6["prof1"])
 	if res == nil {
 		t.Fatal("expected non-nil result (IANA only)")
@@ -401,7 +401,7 @@ func TestResolveV6IANAOnlyNoPD(t *testing.T) {
 func TestResolveV6NeitherAllocated(t *testing.T) {
 	initRegistry(t, nil, nil)
 
-	ctx := &allocator.Context{SessionID: "s1", ProfileName: "prof1"}
+	ctx := &allocator.Context{SessionID: "s1", IPv6ProfileName: "prof1"}
 	profile := &ip.IPv6Profile{}
 	res := ResolveV6(ctx, profile)
 	if res != nil {
@@ -424,9 +424,9 @@ func TestResolveV6DNSPrecedence(t *testing.T) {
 	initRegistry(t, nil, v6)
 
 	ctx := &allocator.Context{
-		SessionID:   "s1",
-		ProfileName: "prof1",
-		DNSv6:       []net.IP{net.ParseIP("fd00::53")},
+		SessionID:       "s1",
+		IPv6ProfileName: "prof1",
+		DNSv6:           []net.IP{net.ParseIP("fd00::53")},
 	}
 	res := ResolveV6(ctx, v6["prof1"])
 	if len(res.DNS) != 1 || !res.DNS[0].Equal(net.ParseIP("fd00::53")) {
@@ -456,7 +456,7 @@ func TestResolveV6PoolTimingOverrides(t *testing.T) {
 	}
 	initRegistry(t, nil, v6)
 
-	ctx := &allocator.Context{SessionID: "s1", ProfileName: "prof1"}
+	ctx := &allocator.Context{SessionID: "s1", IPv6ProfileName: "prof1"}
 	res := ResolveV6(ctx, v6["prof1"])
 	if res.IANAPreferredTime != 600 {
 		t.Fatalf("IANAPreferredTime = %d, want 600 (pool override)", res.IANAPreferredTime)
@@ -531,16 +531,16 @@ func TestResolveV6ReserveIANACollision(t *testing.T) {
 	}
 	initRegistry(t, nil, v6)
 
-	ctx1 := &allocator.Context{SessionID: "s1", ProfileName: "prof1"}
+	ctx1 := &allocator.Context{SessionID: "s1", IPv6ProfileName: "prof1"}
 	res1 := ResolveV6(ctx1, v6["prof1"])
 	if res1 == nil {
 		t.Fatal("first allocation should succeed")
 	}
 
 	ctx2 := &allocator.Context{
-		SessionID:   "s2",
-		ProfileName: "prof1",
-		IPv6Address: res1.IANAAddress,
+		SessionID:       "s2",
+		IPv6ProfileName: "prof1",
+		IPv6Address:     res1.IANAAddress,
 	}
 	res2 := ResolveV6(ctx2, v6["prof1"])
 	if res2 != nil {
@@ -554,16 +554,16 @@ func TestResolveV6ReservePDCollision(t *testing.T) {
 	}
 	initRegistry(t, nil, v6)
 
-	ctx1 := &allocator.Context{SessionID: "s1", ProfileName: "prof1"}
+	ctx1 := &allocator.Context{SessionID: "s1", IPv6ProfileName: "prof1"}
 	res1 := ResolveV6(ctx1, v6["prof1"])
 	if res1 == nil {
 		t.Fatal("first allocation should succeed")
 	}
 
 	ctx2 := &allocator.Context{
-		SessionID:  "s2",
-		ProfileName: "prof1",
-		IPv6Prefix: res1.PDPrefix,
+		SessionID:       "s2",
+		IPv6ProfileName: "prof1",
+		IPv6Prefix:      res1.PDPrefix,
 	}
 	res2 := ResolveV6(ctx2, v6["prof1"])
 	if res2 != nil {

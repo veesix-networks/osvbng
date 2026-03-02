@@ -16,6 +16,7 @@ type Context struct {
 	SubscriberGroup string
 	ServiceGroup    string
 	ProfileName     string
+	IPv6ProfileName string
 
 	IPv4Address net.IP
 	IPv4Netmask net.IPMask
@@ -31,15 +32,16 @@ type Context struct {
 	PDPoolOverride   string
 }
 
-func NewContext(sessionID string, mac net.HardwareAddr, svlan, cvlan uint16, vrf, serviceGroup, profileName string, aaaAttrs map[string]interface{}) *Context {
+func NewContext(sessionID string, mac net.HardwareAddr, svlan, cvlan uint16, vrf, serviceGroup, profileName, ipv6ProfileName string, aaaAttrs map[string]interface{}) *Context {
 	ctx := &Context{
-		SessionID:    sessionID,
-		MAC:          mac,
-		SVLAN:        svlan,
-		CVLAN:        cvlan,
-		VRF:          vrf,
-		ServiceGroup: serviceGroup,
-		ProfileName:  profileName,
+		SessionID:       sessionID,
+		MAC:             mac,
+		SVLAN:           svlan,
+		CVLAN:           cvlan,
+		VRF:             vrf,
+		ServiceGroup:    serviceGroup,
+		ProfileName:     profileName,
+		IPv6ProfileName: ipv6ProfileName,
 	}
 
 	if v, ok := aaaAttrs[aaa.AttrIPv4Address]; ok {
