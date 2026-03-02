@@ -23,9 +23,16 @@ Start BNG Blaster In Background
 
 Stop BNG Blaster
     [Arguments]    ${container}
-    ${rc}    ${output} =    Run And Return Rc And Output
+    Run And Return Rc And Output
     ...    sudo docker exec ${container} bash -c 'kill -INT $(pidof bngblaster) 2>/dev/null'
-    Sleep    3s
+    Wait Until Keyword Succeeds    30s    1s
+    ...    BNG Blaster Has Exited    ${container}
+
+BNG Blaster Has Exited
+    [Arguments]    ${container}
+    ${rc}    ${output} =    Run And Return Rc And Output
+    ...    sudo docker exec ${container} pidof bngblaster
+    Should Not Be Equal As Integers    ${rc}    0
 
 Get BNG Blaster Report
     [Arguments]    ${container}    ${report}=/tmp/report.json
