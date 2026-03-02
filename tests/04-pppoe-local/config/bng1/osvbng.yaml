@@ -42,6 +42,7 @@ subscriber-groups:
         pppoe:
             access-type: pppoe
             ipv4-profile: default
+            ipv6-profile: default-v6
             vlans:
                 - svlan: "200-210"
                   cvlan: any
