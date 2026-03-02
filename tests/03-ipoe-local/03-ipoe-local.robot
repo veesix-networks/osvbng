@@ -1,0 +1,62 @@
+# Copyright 2025 Veesix Networks Ltd
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+*** Comments ***
+IPoE session test suite with local auth (allow_all: false).
+Creates 69 users via REST API, establishes IPoE sessions via BNG Blaster,
+and verifies session state through the osvbng API and BNG Blaster report.
+
+*** Settings ***
+Library             OperatingSystem
+Library             String
+Library             Process
+Resource            ../common.robot
+Resource            ../bngblaster.robot
+Resource            ../sessions.robot
+Resource            ../localauth.robot
+
+Suite Setup         Setup IPoE Test
+Suite Teardown      Teardown IPoE Test
+
+*** Variables ***
+${lab-name}         osvbng-ipoe-local
+${lab-file}         ${CURDIR}/03-ipoe-local.clab.yml
+${bng1}             clab-${lab-name}-bng1
+${subscribers}      clab-${lab-name}-subscribers
+${session-count}    69
+
+*** Test Cases ***
+Verify Sessions In osvbng API
+    [Documentation]    Verify osvbng REST API reports the correct session count.
+    Verify Sessions In API    ${bng1}    ${session-count}
+
+Verify DHCPv4 Addresses Assigned
+    [Documentation]    Verify all sessions received an IPv4 address.
+    Verify Sessions Have IPv4    ${bng1}
+
+Verify DHCPv6 Addresses Assigned
+    [Documentation]    Verify all sessions received an IPv6 address via IA-NA.
+    Verify Sessions Have IPv6    ${bng1}
+
+Verify VPP Sub-Interfaces Created
+    [Documentation]    Verify QinQ sub-interfaces exist in VPP.
+    Verify VPP Sub-Interfaces Created    ${bng1}    eth1.100
+
+Verify BNG Blaster Report
+    [Documentation]    Stop BNG Blaster and verify report shows all sessions established.
+    Stop BNG Blaster    ${subscribers}
+    ${established} =    Get BNG Blaster Report Field    ${subscribers}    sessions-established
+    Should Be Equal As Strings    ${established}    ${session-count}
+
+*** Keywords ***
+Setup IPoE Test
+    Deploy Topology    ${lab-file}
+    Wait For osvbng Healthy    bng1    ${lab-name}
+    Create IPoE Users    ${bng1}    ${session-count}
+    Start BNG Blaster In Background    ${subscribers}
+    Wait For Sessions Established    ${bng1}    ${session-count}
+
+Teardown IPoE Test
+    Run Keyword And Ignore Error    Stop BNG Blaster    ${subscribers}
+    Destroy Topology    ${lab-file}

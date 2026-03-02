@@ -10,6 +10,9 @@ build/
 # Robot Framework test output
 tests/out/
 tests/.venv/
+tests/output.xml
+tests/log.html
+tests/report.html
 
 # Containerlab generated files
 clab-*/
