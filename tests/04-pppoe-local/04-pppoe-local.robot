@@ -31,9 +31,13 @@ Verify Sessions In osvbng API
     [Documentation]    Verify osvbng REST API reports the correct session count.
     Verify Sessions In API    ${bng1}    ${session-count}
 
-Verify IPCP Addresses Assigned
-    [Documentation]    Verify all PPPoE sessions received an IPv4 address via IPCP.
+Verify IPv4 Addresses Assigned
+    [Documentation]    Verify all PPPoE sessions have an IPv4 address in the API.
     Verify Sessions Have IPv4    ${bng1}
+
+Verify IPv6 Addresses Assigned
+    [Documentation]    Verify all PPPoE sessions have an IPv6 address in the API.
+    Verify Sessions Have IPv6    ${bng1}
 
 Verify VPP Sub-Interfaces Created
     [Documentation]    Verify PPPoE sub-interfaces exist in VPP.
@@ -51,7 +55,7 @@ Setup PPPoE Test
     Wait For osvbng Healthy    bng1    ${lab-name}
     Create PPPoE Users    ${bng1}    ${session-count}
     Start BNG Blaster In Background    ${subscribers}
-    Wait For Sessions Established    ${bng1}    ${session-count}
+    Wait For Sessions Established    ${bng1}    ${session-count}    check_ipv6=true
 
 Teardown PPPoE Test
     Run Keyword And Ignore Error    Stop BNG Blaster    ${subscribers}

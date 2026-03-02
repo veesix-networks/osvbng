@@ -31,12 +31,12 @@ Verify Sessions In osvbng API
     [Documentation]    Verify osvbng REST API reports the correct session count.
     Verify Sessions In API    ${bng1}    ${session-count}
 
-Verify DHCPv4 Addresses Assigned
-    [Documentation]    Verify all sessions received an IPv4 address.
+Verify IPv4 Addresses Assigned
+    [Documentation]    Verify all sessions have an IPv4 address in the API.
     Verify Sessions Have IPv4    ${bng1}
 
-Verify DHCPv6 Addresses Assigned
-    [Documentation]    Verify all sessions received an IPv6 address via IA-NA.
+Verify IPv6 Addresses Assigned
+    [Documentation]    Verify all sessions have an IPv6 address in the API.
     Verify Sessions Have IPv6    ${bng1}
 
 Verify VPP Sub-Interfaces Created
@@ -55,7 +55,7 @@ Setup IPoE Test
     Wait For osvbng Healthy    bng1    ${lab-name}
     Create IPoE Users    ${bng1}    ${session-count}
     Start BNG Blaster In Background    ${subscribers}
-    Wait For Sessions Established    ${bng1}    ${session-count}
+    Wait For Sessions Established    ${bng1}    ${session-count}    check_ipv6=true
 
 Teardown IPoE Test
     Run Keyword And Ignore Error    Stop BNG Blaster    ${subscribers}
