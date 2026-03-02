@@ -22,17 +22,10 @@
     "ia-pd": true,
     "rapid-commit": false,
     "access-line": true,
-    "ldra": true,
-    "retry": 10
+    "ldra": true
   },
   "ipoe": {
     "ipv6": true
-  },
-  "sessions": {
-    "count": 25,
-    "max-outstanding": 25,
-    "start-rate": 25,
-    "stop-rate": 25
   },
   "access-line": {
     "agent-circuit-id": "eth 0/1/{session-global}:{outer-vlan}.{inner-vlan}",

@@ -12,12 +12,6 @@
       }
     ]
   },
-  "sessions": {
-    "count": 25,
-    "max-outstanding": 25,
-    "start-rate": 25,
-    "stop-rate": 25
-  },
   "pppoe": {
     "reconnect": false,
     "discovery-timeout": 5,
