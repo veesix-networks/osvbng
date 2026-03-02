@@ -21,6 +21,7 @@ jobs:
     outputs:
       code: ${{ steps.filter.outputs.code }}
       ha: ${{ steps.filter.outputs.ha }}
+      sessions: ${{ steps.filter.outputs.sessions }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -41,6 +42,17 @@ jobs:
               - 'pkg/ha/**'
               - 'api/proto/ha/**'
               - 'tests/02-smoke-ha/**'
+            sessions:
+              - 'internal/ipoe/**'
+              - 'internal/pppoe/**'
+              - 'pkg/config/aaa/**'
+              - 'pkg/dhcp/**'
+              - 'plugins/auth/**'
+              - 'tests/03-ipoe-local/**'
+              - 'tests/04-pppoe-local/**'
+              - 'tests/sessions.robot'
+              - 'tests/localauth.robot'
+              - 'tests/bngblaster.robot'
 
   build:
     runs-on: ubuntu-latest
@@ -134,3 +146,13 @@ jobs:
     uses: ./.github/workflows/smoke-ha-tests.yml
     needs: [file-changes, prepare-test-runner]
     if: needs.file-changes.outputs.ha == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
+
+  ipoe-local-tests:
+    uses: ./.github/workflows/ipoe-local-tests.yml
+    needs: [file-changes, prepare-test-runner]
+    if: needs.file-changes.outputs.sessions == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
+
+  pppoe-local-tests:
+    uses: ./.github/workflows/pppoe-local-tests.yml
+    needs: [file-changes, prepare-test-runner]
+    if: needs.file-changes.outputs.sessions == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
