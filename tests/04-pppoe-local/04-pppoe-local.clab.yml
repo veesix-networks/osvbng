@@ -1,0 +1,45 @@
+# Copyright 2025 Veesix Networks Ltd
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: osvbng-pppoe-local
+
+topology:
+  nodes:
+    bng1:
+      kind: linux
+      image: veesixnetworks/osvbng:local
+      image-pull-policy: Never
+      cap-add:
+        - SYS_ADMIN
+        - NET_ADMIN
+        - IPC_LOCK
+        - SYS_NICE
+      env:
+        OSVBNG_WAIT_FOR_INTERFACES: "true"
+        OSVBNG_NUM_INTERFACES: "3"
+      binds:
+        - config/bng1/osvbng.yaml:/etc/osvbng/osvbng.yaml:ro
+
+    corerouter1:
+      kind: linux
+      image: frrouting/frr:v8.4.1
+      cap-add:
+        - SYS_ADMIN
+        - NET_ADMIN
+      binds:
+        - config/corerouter1/daemons:/etc/frr/daemons:ro
+        - config/corerouter1/frr.conf:/etc/frr/frr.conf:ro
+        - config/corerouter1/entrypoint.sh:/entrypoint.sh:ro
+      exec:
+        - bash /entrypoint.sh
+
+    subscribers:
+      kind: linux
+      image: veesixnetworks/bngblaster:0.9.30
+      binds:
+        - config/subscribers/config-pppoe.json:/config/config.json:ro
+
+  links:
+    - endpoints: [bng1:eth1, subscribers:eth1]
+    - endpoints: [bng1:eth2, corerouter1:eth1]

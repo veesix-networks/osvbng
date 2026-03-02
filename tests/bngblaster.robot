@@ -11,9 +11,21 @@ Library             Process
 Start BNG Blaster
     [Arguments]    ${container}    ${config}=/config/config.json    ${report}=/tmp/report.json    ${timeout}=120
     ${rc}    ${output} =    Run And Return Rc And Output
-    ...    timeout ${timeout} sudo docker exec ${container} bngblaster -C ${config} -j ${report} -L /tmp/bngblaster.log
+    ...    sudo docker exec ${container} timeout --signal=INT ${timeout} bngblaster -C ${config} -J ${report} -L /tmp/bngblaster.log -b -f
     Log    ${output}
     RETURN    ${rc}    ${output}
+
+Start BNG Blaster In Background
+    [Arguments]    ${container}    ${config}=/config/config.json    ${report}=/tmp/report.json
+    ${rc}    ${output} =    Run And Return Rc And Output
+    ...    sudo docker exec -d ${container} bngblaster -C ${config} -J ${report} -L /tmp/bngblaster.log -b -f
+    Should Be Equal As Integers    ${rc}    0
+
+Stop BNG Blaster
+    [Arguments]    ${container}
+    ${rc}    ${output} =    Run And Return Rc And Output
+    ...    sudo docker exec ${container} bash -c 'kill -INT $(pidof bngblaster) 2>/dev/null'
+    Sleep    3s
 
 Get BNG Blaster Report
     [Arguments]    ${container}    ${report}=/tmp/report.json
