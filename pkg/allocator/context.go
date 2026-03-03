@@ -30,6 +30,10 @@ type Context struct {
 	PoolOverride     string
 	IANAPoolOverride string
 	PDPoolOverride   string
+
+	AllocatedPool     string
+	AllocatedIANAPool string
+	AllocatedPDPool   string
 }
 
 func NewContext(sessionID string, mac net.HardwareAddr, svlan, cvlan uint16, vrf, serviceGroup, profileName, ipv6ProfileName string, aaaAttrs map[string]interface{}) *Context {
