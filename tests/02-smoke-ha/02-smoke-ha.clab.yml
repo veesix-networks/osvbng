@@ -53,7 +53,8 @@ topology:
       kind: linux
       image: veesixnetworks/bngblaster:0.9.30
       binds:
-        - config/subscribers/config.json:/config/config.json:ro
+        - config/subscribers/bng1.json:/config/bng1.json:ro
+        - config/subscribers/bng2.json:/config/bng2.json:ro
 
   links:
     - endpoints: [bng1:eth1, subscribers:eth1]
