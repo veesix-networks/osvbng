@@ -11,6 +11,7 @@ import (
 	"time"
 
 	hapb "github.com/veesix-networks/osvbng/api/proto/ha"
+	"github.com/veesix-networks/osvbng/pkg/models"
 )
 
 type HAPeerServer struct {
@@ -113,47 +114,92 @@ func (s *HAPeerServer) BulkSync(req *hapb.BulkSyncRequest, stream hapb.HAPeerSer
 	for _, srgName := range srgNames {
 		s.manager.IncrementBulkSync(srgName)
 		backlog := s.manager.syncSender.GetBacklog(srgName)
-		if backlog == nil {
-			continue
-		}
 
-		oldest := backlog.OldestSeq()
-		newest := backlog.NewestSeq()
-		if oldest == 0 || newest == 0 {
-			if err := stream.Send(&hapb.BulkSyncResponse{
-				SrgName:  srgName,
-				LastPage: true,
-			}); err != nil {
-				return err
-			}
-			continue
-		}
+		sentFromBacklog := false
+		if backlog != nil {
+			oldest := backlog.OldestSeq()
+			newest := backlog.NewestSeq()
+			if oldest != 0 && newest != 0 {
+				sentFromBacklog = true
+				entries := backlog.Range(oldest, newest)
+				for i := 0; i < len(entries); i += pageSize {
+					end := i + pageSize
+					if end > len(entries) {
+						end = len(entries)
+					}
 
-		entries := backlog.Range(oldest, newest)
-		for i := 0; i < len(entries); i += pageSize {
-			end := i + pageSize
-			if end > len(entries) {
-				end = len(entries)
-			}
+					page := make([]*hapb.SessionCheckpoint, 0, end-i)
+					for _, entry := range entries[i:end] {
+						if entry.Session != nil {
+							page = append(page, entry.Session)
+						}
+					}
 
-			page := make([]*hapb.SessionCheckpoint, 0, end-i)
-			for _, entry := range entries[i:end] {
-				if entry.Session != nil {
-					page = append(page, entry.Session)
+					resp := &hapb.BulkSyncResponse{
+						SrgName:  srgName,
+						Sessions: page,
+						Sequence: entries[end-1].Sequence,
+						LastPage: end >= len(entries),
+					}
+					if err := stream.Send(resp); err != nil {
+						return err
+					}
 				}
 			}
+		}
 
-			resp := &hapb.BulkSyncResponse{
-				SrgName:  srgName,
-				Sessions: page,
-				Sequence: entries[end-1].Sequence,
-				LastPage: end >= len(entries),
-			}
-			if err := stream.Send(resp); err != nil {
+		if !sentFromBacklog {
+			if err := s.bulkSyncFromIterators(srgName, pageSize, stream); err != nil {
 				return err
 			}
 		}
 	}
 
 	return nil
+}
+
+func (s *HAPeerServer) bulkSyncFromIterators(srgName string, pageSize int, stream hapb.HAPeerService_BulkSyncServer) error {
+	s.manager.mu.RLock()
+	iterators := s.manager.sessionIterators
+	s.manager.mu.RUnlock()
+
+	if len(iterators) == 0 {
+		return stream.Send(&hapb.BulkSyncResponse{
+			SrgName:  srgName,
+			LastPage: true,
+		})
+	}
+
+	var page []*hapb.SessionCheckpoint
+	var seq uint64
+
+	for _, iter := range iterators {
+		iter.ForEachSession(func(sess models.SubscriberSession) bool {
+			if sess.GetSRGName() != srgName {
+				return true
+			}
+
+			seq++
+			page = append(page, sessionToCheckpoint(sess))
+
+			if len(page) >= pageSize {
+				if err := stream.Send(&hapb.BulkSyncResponse{
+					SrgName:  srgName,
+					Sessions: page,
+					Sequence: seq,
+				}); err != nil {
+					return false
+				}
+				page = nil
+			}
+			return true
+		})
+	}
+
+	return stream.Send(&hapb.BulkSyncResponse{
+		SrgName:  srgName,
+		Sessions: page,
+		Sequence: seq,
+		LastPage: true,
+	})
 }

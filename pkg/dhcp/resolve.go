@@ -21,6 +21,7 @@ func ResolveV4(ctx *allocator.Context, profile *ip.IPv4Profile) *ResolvedDHCPv4 
 		}
 		ctx.IPv4Address = allocated
 		poolName = pn
+		ctx.AllocatedPool = pn
 	} else {
 		if registry := allocator.GetGlobalRegistry(); registry != nil {
 			if err := registry.ReserveIP(ctx.IPv4Address, ctx.SessionID); err != nil {
@@ -100,6 +101,7 @@ func ResolveV6(ctx *allocator.Context, profile *ip.IPv6Profile) *ResolvedDHCPv6 
 			if err == nil {
 				ctx.IPv6Address = allocated
 				ianaPoolName = pn
+				ctx.AllocatedIANAPool = pn
 			}
 		}
 	} else if registry != nil {
@@ -115,6 +117,7 @@ func ResolveV6(ctx *allocator.Context, profile *ip.IPv6Profile) *ResolvedDHCPv6 
 			if err == nil {
 				ctx.IPv6Prefix = allocated
 				pdPoolName = pn
+				ctx.AllocatedPDPool = pn
 			}
 		}
 	} else if registry != nil {

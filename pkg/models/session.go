@@ -61,6 +61,11 @@ type IPoESession struct {
 	AAASessionID string
 
 	ActivatedAt time.Time
+
+	IPv4Pool  string
+	IANAPool  string
+	PDPool    string
+	OuterTPID uint16
 }
 
 func (s *IPoESession) GetSessionID() string      { return s.SessionID }
@@ -71,15 +76,15 @@ func (s *IPoESession) GetMAC() net.HardwareAddr  { return s.MAC }
 func (s *IPoESession) GetOuterVLAN() uint16      { return s.OuterVLAN }
 func (s *IPoESession) GetInnerVLAN() uint16      { return s.InnerVLAN }
 func (s *IPoESession) GetAAASessionID() string   { return s.AAASessionID }
-func (s *IPoESession) GetIPv4Address() net.IP     { return s.IPv4Address }
-func (s *IPoESession) GetIPv6Address() net.IP     { return s.IPv6Address }
-func (s *IPoESession) GetIPv6Prefix() string      { return s.IPv6Prefix }
-func (s *IPoESession) GetIfIndex() uint32         { return s.IfIndex }
-func (s *IPoESession) GetVLANCount() int          { return s.VLANCount }
-func (s *IPoESession) GetUsername() string         { return s.Username }
-func (s *IPoESession) GetServiceGroup() string     { return s.ServiceGroup }
-func (s *IPoESession) GetSRGName() string          { return s.SRGName }
-func (s *IPoESession) GetActivatedAt() time.Time   { return s.ActivatedAt }
+func (s *IPoESession) GetIPv4Address() net.IP    { return s.IPv4Address }
+func (s *IPoESession) GetIPv6Address() net.IP    { return s.IPv6Address }
+func (s *IPoESession) GetIPv6Prefix() string     { return s.IPv6Prefix }
+func (s *IPoESession) GetIfIndex() uint32        { return s.IfIndex }
+func (s *IPoESession) GetVLANCount() int         { return s.VLANCount }
+func (s *IPoESession) GetUsername() string       { return s.Username }
+func (s *IPoESession) GetServiceGroup() string   { return s.ServiceGroup }
+func (s *IPoESession) GetSRGName() string        { return s.SRGName }
+func (s *IPoESession) GetActivatedAt() time.Time { return s.ActivatedAt }
 
 func (s *IPoESession) IsDualStack() bool {
 	return s.IPv4Address != nil && (s.IPv6Address != nil || s.IPv6Prefix != "")
@@ -165,6 +170,10 @@ type PPPSession struct {
 	AAASessionID string
 
 	ActivatedAt time.Time
+
+	IPv4Pool  string
+	IANAPool  string
+	OuterTPID uint16
 }
 
 func (s *PPPSession) GetSessionID() string      { return s.SessionID }
@@ -175,15 +184,15 @@ func (s *PPPSession) GetMAC() net.HardwareAddr  { return s.MAC }
 func (s *PPPSession) GetOuterVLAN() uint16      { return s.OuterVLAN }
 func (s *PPPSession) GetInnerVLAN() uint16      { return s.InnerVLAN }
 func (s *PPPSession) GetAAASessionID() string   { return s.AAASessionID }
-func (s *PPPSession) GetIPv4Address() net.IP     { return s.IPv4Address }
-func (s *PPPSession) GetIPv6Address() net.IP     { return s.IPv6Address }
-func (s *PPPSession) GetIPv6Prefix() string      { return s.IPv6Prefix }
-func (s *PPPSession) GetIfIndex() uint32         { return s.IfIndex }
-func (s *PPPSession) GetVLANCount() int          { return s.VLANCount }
-func (s *PPPSession) GetUsername() string         { return s.Username }
-func (s *PPPSession) GetServiceGroup() string     { return s.ServiceGroup }
-func (s *PPPSession) GetSRGName() string          { return s.SRGName }
-func (s *PPPSession) GetActivatedAt() time.Time   { return s.ActivatedAt }
+func (s *PPPSession) GetIPv4Address() net.IP    { return s.IPv4Address }
+func (s *PPPSession) GetIPv6Address() net.IP    { return s.IPv6Address }
+func (s *PPPSession) GetIPv6Prefix() string     { return s.IPv6Prefix }
+func (s *PPPSession) GetIfIndex() uint32        { return s.IfIndex }
+func (s *PPPSession) GetVLANCount() int         { return s.VLANCount }
+func (s *PPPSession) GetUsername() string       { return s.Username }
+func (s *PPPSession) GetServiceGroup() string   { return s.ServiceGroup }
+func (s *PPPSession) GetSRGName() string        { return s.SRGName }
+func (s *PPPSession) GetActivatedAt() time.Time { return s.ActivatedAt }
 
 func (s *PPPSession) RedisKey() string {
 	return fmt.Sprintf("osvbng:sessions:%s", s.SessionID)

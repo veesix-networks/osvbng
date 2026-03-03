@@ -335,6 +335,11 @@ func main() {
 		log.Fatalf("Failed to create pppoe component: %v", err)
 	}
 
+	if haMgr != nil {
+		haMgr.RegisterSessionIterator(ipoeComp)
+		haMgr.RegisterSessionIterator(pppoeComp)
+	}
+
 	wdCfg := cfg.Watchdog
 
 	var wd *watchdog.Watchdog

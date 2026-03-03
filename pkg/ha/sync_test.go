@@ -199,6 +199,10 @@ func TestSessionToCheckpoint_IPoE(t *testing.T) {
 		DUID:         []byte{0x00, 0x03, 0x00, 0x01},
 		RelayInfo:    map[uint8][]byte{1: {0x10, 0x20}, 2: {0x30, 0x40}},
 		ActivatedAt:  time.Unix(1000000, 0),
+		IPv4Pool:     "residential/pool-1",
+		IANAPool:     "residential-v6/iana-1",
+		PDPool:       "residential-v6/pd-1",
+		OuterTPID:    0x88a8,
 	}
 
 	cp := sessionToCheckpoint(sess)
@@ -220,6 +224,11 @@ func TestSessionToCheckpoint_IPoE(t *testing.T) {
 	require.NotNil(t, cp.Ipv6Prefix)
 	assert.Equal(t, uint32(48), cp.Ipv6PrefixLen)
 	assert.Equal(t, time.Unix(1000000, 0).UnixNano(), cp.BoundAtNs)
+
+	assert.Equal(t, "residential/pool-1", cp.Ipv4Pool)
+	assert.Equal(t, "residential-v6/iana-1", cp.IanaPool)
+	assert.Equal(t, "residential-v6/pd-1", cp.PdPool)
+	assert.Equal(t, uint32(0x88a8), cp.OuterTpid)
 }
 
 func TestSessionToCheckpoint_PPPoE(t *testing.T) {
@@ -239,6 +248,9 @@ func TestSessionToCheckpoint_PPPoE(t *testing.T) {
 		IPv4Address:  net.ParseIP("10.1.0.1"),
 		IPv6Prefix:   "2001:db8:2::/56",
 		ActivatedAt:  time.Unix(2000000, 0),
+		IPv4Pool:     "business/pool-1",
+		IANAPool:     "business-v6/iana-1",
+		OuterTPID:    0x8100,
 	}
 
 	cp := sessionToCheckpoint(sess)
@@ -249,4 +261,8 @@ func TestSessionToCheckpoint_PPPoE(t *testing.T) {
 	assert.Equal(t, "Opened", cp.IpcpState)
 	assert.Equal(t, "Opened", cp.Ipv6CpState)
 	assert.Equal(t, uint32(56), cp.Ipv6PrefixLen)
+
+	assert.Equal(t, "business/pool-1", cp.Ipv4Pool)
+	assert.Equal(t, "business-v6/iana-1", cp.IanaPool)
+	assert.Equal(t, uint32(0x8100), cp.OuterTpid)
 }

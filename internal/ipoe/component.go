@@ -29,13 +29,13 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/dhcp4"
 	"github.com/veesix-networks/osvbng/pkg/dhcp6"
 	"github.com/veesix-networks/osvbng/pkg/events"
+	"github.com/veesix-networks/osvbng/pkg/ha"
 	"github.com/veesix-networks/osvbng/pkg/ifmgr"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/opdb"
 	"github.com/veesix-networks/osvbng/pkg/session"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
-	"github.com/veesix-networks/osvbng/pkg/ha"
 	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
 )
@@ -43,27 +43,27 @@ import (
 type Component struct {
 	*component.Base
 
-	logger        *slog.Logger
-	eventBus      events.Bus
-	srgMgr        ha.SRGProvider
-	ifMgr         *ifmgr.Manager
-	cfgMgr        component.ConfigManager
-	vpp           southbound.Southbound
+	logger           *slog.Logger
+	eventBus         events.Bus
+	srgMgr           ha.SRGProvider
+	ifMgr            *ifmgr.Manager
+	cfgMgr           component.ConfigManager
+	vpp              southbound.Southbound
 	vrfMgr           *vrfmgr.Manager
 	svcGroupResolver *svcgroup.Resolver
-	cache         cache.Cache
-	opdb          opdb.Store
-	dhcp4Provider dhcp4.DHCPProvider
-	dhcp6Provider dhcp6.DHCPProvider
-	sessions      map[string]*SessionState
-	xidIndex      map[uint32]*SessionState
-	xid6Index     map[[3]byte]*SessionState
-	sessionIndex  map[string]*SessionState
-	sessionMu     sync.RWMutex
+	cache            cache.Cache
+	opdb             opdb.Store
+	dhcp4Provider    dhcp4.DHCPProvider
+	dhcp6Provider    dhcp6.DHCPProvider
+	sessions         map[string]*SessionState
+	xidIndex         map[uint32]*SessionState
+	xid6Index        map[[3]byte]*SessionState
+	sessionIndex     map[string]*SessionState
+	sessionMu        sync.RWMutex
 
-	dhcpChan    <-chan *dataplane.ParsedPacket
-	dhcp6Chan   <-chan *dataplane.ParsedPacket
-	ipv6NDChan  <-chan *dataplane.ParsedPacket
+	dhcpChan   <-chan *dataplane.ParsedPacket
+	dhcp6Chan  <-chan *dataplane.ParsedPacket
+	ipv6NDChan <-chan *dataplane.ParsedPacket
 
 	aaaRespSub events.Subscription
 }
@@ -243,26 +243,26 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 	log := logger.Get(logger.IPoE)
 
 	c := &Component{
-		Base:          component.NewBase("ipoe"),
-		logger:        log,
-		eventBus:      deps.EventBus,
-		srgMgr:        srgMgr,
-		ifMgr:         ifMgr,
+		Base:             component.NewBase("ipoe"),
+		logger:           log,
+		eventBus:         deps.EventBus,
+		srgMgr:           srgMgr,
+		ifMgr:            ifMgr,
 		vrfMgr:           deps.VRFManager,
 		svcGroupResolver: deps.SvcGroupResolver,
-		cfgMgr:        deps.ConfigManager,
-		vpp:           deps.Southbound,
-		cache:         deps.Cache,
-		opdb:          deps.OpDB,
-		dhcp4Provider: dhcp4Provider,
-		dhcp6Provider: dhcp6Provider,
-		sessions:      make(map[string]*SessionState),
-		xidIndex:      make(map[uint32]*SessionState),
-		xid6Index:     make(map[[3]byte]*SessionState),
-		sessionIndex:  make(map[string]*SessionState),
-		dhcpChan:      deps.DHCPChan,
-		dhcp6Chan:     deps.DHCPv6Chan,
-		ipv6NDChan:    deps.IPv6NDChan,
+		cfgMgr:           deps.ConfigManager,
+		vpp:              deps.Southbound,
+		cache:            deps.Cache,
+		opdb:             deps.OpDB,
+		dhcp4Provider:    dhcp4Provider,
+		dhcp6Provider:    dhcp6Provider,
+		sessions:         make(map[string]*SessionState),
+		xidIndex:         make(map[uint32]*SessionState),
+		xid6Index:        make(map[[3]byte]*SessionState),
+		sessionIndex:     make(map[string]*SessionState),
+		dhcpChan:         deps.DHCPChan,
+		dhcp6Chan:        deps.DHCPv6Chan,
+		ipv6NDChan:       deps.IPv6NDChan,
 	}
 
 	return c, nil
@@ -863,18 +863,18 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 	}
 
 	return c.publishSessionLifecycle(&models.IPoESession{
-		SessionID:        sessID,
-		State:            models.SessionStateReleased,
-		AccessType:       string(models.AccessTypeIPoE),
-		Protocol:         string(models.ProtocolDHCPv4),
-		AAASessionID:  acctSessionID,
-		MAC:              mac,
-		OuterVLAN:        pkt.OuterVLAN,
-		InnerVLAN:        pkt.InnerVLAN,
-		VRF:              sess.VRF,
-		SRGName:          sess.SRGName,
-		Username:         sess.Username,
-			})
+		SessionID:    sessID,
+		State:        models.SessionStateReleased,
+		AccessType:   string(models.AccessTypeIPoE),
+		Protocol:     string(models.ProtocolDHCPv4),
+		AAASessionID: acctSessionID,
+		MAC:          mac,
+		OuterVLAN:    pkt.OuterVLAN,
+		InnerVLAN:    pkt.InnerVLAN,
+		VRF:          sess.VRF,
+		SRGName:      sess.SRGName,
+		Username:     sess.Username,
+	})
 }
 
 func (c *Component) handleServerResponse(pkt *dataplane.ParsedPacket) error {
@@ -1044,26 +1044,32 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 	c.logger.Info("Publishing session lifecycle event", "session_id", sess.SessionID, "sw_if_index", ipoeSwIfIndex, "ipv4", sess.IPv4.String())
 
 	ipoeSess := &models.IPoESession{
-		SessionID:        sess.SessionID,
-		State:            models.SessionStateActive,
-		AccessType:       string(models.AccessTypeIPoE),
-		Protocol:         string(models.ProtocolDHCPv4),
-		MAC:              sess.MAC,
-		OuterVLAN:        sess.OuterVLAN,
-		InnerVLAN:        sess.InnerVLAN,
-		VLANCount:        c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
-		IfIndex:          ipoeSwIfIndex,
-		VRF:              sess.VRF,
-		ServiceGroup:     sess.ServiceGroup.Name,
-		SRGName:          sess.SRGName,
-		IPv4Address:      sess.IPv4,
-		LeaseTime:        sess.LeaseTime,
-		IPv6Address:      sess.IPv6Address,
-		IPv6LeaseTime:    sess.IPv6LeaseTime,
-		DUID:             sess.DHCPv6DUID,
-		Username:         sess.Username,
-		AAASessionID: sess.AcctSessionID,
-		ActivatedAt:  time.Now(),
+		SessionID:     sess.SessionID,
+		State:         models.SessionStateActive,
+		AccessType:    string(models.AccessTypeIPoE),
+		Protocol:      string(models.ProtocolDHCPv4),
+		MAC:           sess.MAC,
+		OuterVLAN:     sess.OuterVLAN,
+		InnerVLAN:     sess.InnerVLAN,
+		VLANCount:     c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
+		IfIndex:       ipoeSwIfIndex,
+		VRF:           sess.VRF,
+		ServiceGroup:  sess.ServiceGroup.Name,
+		SRGName:       sess.SRGName,
+		IPv4Address:   sess.IPv4,
+		LeaseTime:     sess.LeaseTime,
+		IPv6Address:   sess.IPv6Address,
+		IPv6LeaseTime: sess.IPv6LeaseTime,
+		DUID:          sess.DHCPv6DUID,
+		Username:      sess.Username,
+		AAASessionID:  sess.AcctSessionID,
+		ActivatedAt:   time.Now(),
+		OuterTPID:     sess.OuterTPID,
+	}
+	if sess.AllocCtx != nil {
+		ipoeSess.IPv4Pool = sess.AllocCtx.AllocatedPool
+		ipoeSess.IANAPool = sess.AllocCtx.AllocatedIANAPool
+		ipoeSess.PDPool = sess.AllocCtx.AllocatedPDPool
 	}
 	if sess.IPv6Prefix != nil {
 		ipoeSess.IPv6Prefix = sess.IPv6Prefix.String()
@@ -1227,10 +1233,10 @@ func (c *Component) handleAAAResponse(event events.Event) {
 					c.vpp.IPoESetSessionIPv4Async(swIfIndex, pendingIPv4, true, func(err error) {
 						if err != nil {
 							if errors.Is(err, southbound.ErrUnavailable) {
-							c.logger.Debug("VPP unavailable, cannot bind pending IPv4", "session_id", sessID)
-						} else {
-							c.logger.Error("Failed to bind pending IPv4", "session_id", sessID, "error", err)
-						}
+								c.logger.Debug("VPP unavailable, cannot bind pending IPv4", "session_id", sessID)
+							} else {
+								c.logger.Error("Failed to bind pending IPv4", "session_id", sessID, "error", err)
+							}
 							return
 						}
 						c.logger.Info("Bound pending IPv4 to IPoE session", "session_id", sessID, "ipv4", pendingIPv4.String())
@@ -1240,10 +1246,10 @@ func (c *Component) handleAAAResponse(event events.Event) {
 					c.vpp.IPoESetSessionIPv6Async(swIfIndex, pendingIPv6, true, func(err error) {
 						if err != nil {
 							if errors.Is(err, southbound.ErrUnavailable) {
-							c.logger.Debug("VPP unavailable, cannot bind pending IPv6", "session_id", sessID)
-						} else {
-							c.logger.Error("Failed to bind pending IPv6", "session_id", sessID, "error", err)
-						}
+								c.logger.Debug("VPP unavailable, cannot bind pending IPv6", "session_id", sessID)
+							} else {
+								c.logger.Error("Failed to bind pending IPv6", "session_id", sessID, "error", err)
+							}
 							return
 						}
 						c.logger.Info("Bound pending IPv6 to IPoE session", "session_id", sessID, "ipv6", pendingIPv6.String())
@@ -1257,10 +1263,10 @@ func (c *Component) handleAAAResponse(event events.Event) {
 					c.vpp.IPoESetDelegatedPrefixAsync(swIfIndex, *pendingPD, nextHop, true, func(err error) {
 						if err != nil {
 							if errors.Is(err, southbound.ErrUnavailable) {
-							c.logger.Debug("VPP unavailable, cannot bind pending PD", "session_id", sessID)
-						} else {
-							c.logger.Error("Failed to bind pending delegated prefix", "session_id", sessID, "error", err)
-						}
+								c.logger.Debug("VPP unavailable, cannot bind pending PD", "session_id", sessID)
+							} else {
+								c.logger.Error("Failed to bind pending delegated prefix", "session_id", sessID, "error", err)
+							}
 							return
 						}
 						c.logger.Info("Bound pending delegated prefix", "session_id", sessID, "prefix", pendingPD.String())
@@ -1536,8 +1542,8 @@ func (c *Component) cleanupSessions() {
 			c.sessionMu.Lock()
 			now := time.Now()
 			var toDelete []struct {
-				key           string
-				sess          *SessionState
+				key  string
+				sess *SessionState
 			}
 			for sessionID, session := range c.sessions {
 				if now.Sub(session.LastSeen) > 30*time.Minute {
@@ -1648,7 +1654,6 @@ func (c *Component) getSessionMode(svlan uint16) subscriber.SessionMode {
 
 	return group.GetSessionMode()
 }
-
 
 func (c *Component) makeSessionKeyV4(mac net.HardwareAddr, svlan, cvlan uint16) string {
 	mode := c.getSessionMode(svlan)
@@ -2045,19 +2050,19 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
 		}
 
 		return c.publishSessionLifecycle(&models.IPoESession{
-			SessionID:       sessID,
-			State:           models.SessionStateReleased,
-			AccessType:      string(models.AccessTypeIPoE),
-			Protocol:        string(models.ProtocolDHCPv6),
-			MAC:             mac,
-			OuterVLAN:       pkt.OuterVLAN,
-			InnerVLAN:       pkt.InnerVLAN,
-			IfIndex:         ipoeSwIfIndex,
-			VRF:             sess.VRF,
-			SRGName:         sess.SRGName,
-			IPv6Address:     ipv6Address,
-			IPv6Prefix:      prefixStr,
-			Username:        sess.Username,
+			SessionID:    sessID,
+			State:        models.SessionStateReleased,
+			AccessType:   string(models.AccessTypeIPoE),
+			Protocol:     string(models.ProtocolDHCPv6),
+			MAC:          mac,
+			OuterVLAN:    pkt.OuterVLAN,
+			InnerVLAN:    pkt.InnerVLAN,
+			IfIndex:      ipoeSwIfIndex,
+			VRF:          sess.VRF,
+			SRGName:      sess.SRGName,
+			IPv6Address:  ipv6Address,
+			IPv6Prefix:   prefixStr,
+			Username:     sess.Username,
 			AAASessionID: "",
 		})
 	}
@@ -2205,27 +2210,33 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, dhcp *layers.DHCPv6) e
 	}
 
 	ipoeSess := &models.IPoESession{
-		SessionID:       sess.SessionID,
-		State:           models.SessionStateActive,
-		AccessType:      string(models.AccessTypeIPoE),
-		Protocol:        string(models.ProtocolDHCPv6),
-		MAC:             sess.MAC,
-		OuterVLAN:       sess.OuterVLAN,
-		InnerVLAN:       sess.InnerVLAN,
-		VLANCount:       c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
-		IfIndex:         ipoeSwIfIndex,
-		VRF:             sess.VRF,
-		ServiceGroup:    sess.ServiceGroup.Name,
-		SRGName:         sess.SRGName,
-		IPv4Address:     sess.IPv4,
-		LeaseTime:       sess.LeaseTime,
-		IPv6Address:     ianaAddr,
-		IPv6Prefix:      prefixStr,
-		IPv6LeaseTime:   sess.IPv6LeaseTime,
-		DUID:            sess.DHCPv6DUID,
-		Username:     sess.Username,
-		AAASessionID: sess.AcctSessionID,
-		ActivatedAt: time.Now(),
+		SessionID:     sess.SessionID,
+		State:         models.SessionStateActive,
+		AccessType:    string(models.AccessTypeIPoE),
+		Protocol:      string(models.ProtocolDHCPv6),
+		MAC:           sess.MAC,
+		OuterVLAN:     sess.OuterVLAN,
+		InnerVLAN:     sess.InnerVLAN,
+		VLANCount:     c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
+		IfIndex:       ipoeSwIfIndex,
+		VRF:           sess.VRF,
+		ServiceGroup:  sess.ServiceGroup.Name,
+		SRGName:       sess.SRGName,
+		IPv4Address:   sess.IPv4,
+		LeaseTime:     sess.LeaseTime,
+		IPv6Address:   ianaAddr,
+		IPv6Prefix:    prefixStr,
+		IPv6LeaseTime: sess.IPv6LeaseTime,
+		DUID:          sess.DHCPv6DUID,
+		Username:      sess.Username,
+		AAASessionID:  sess.AcctSessionID,
+		ActivatedAt:   time.Now(),
+		OuterTPID:     sess.OuterTPID,
+	}
+	if sess.AllocCtx != nil {
+		ipoeSess.IPv4Pool = sess.AllocCtx.AllocatedPool
+		ipoeSess.IANAPool = sess.AllocCtx.AllocatedIANAPool
+		ipoeSess.PDPool = sess.AllocCtx.AllocatedPDPool
 	}
 
 	return c.publishSessionLifecycle(ipoeSess)
@@ -2805,25 +2816,25 @@ func (c *Component) restoreSessionToCache(ctx context.Context, sess *SessionStat
 	}
 
 	ipoeSess := &models.IPoESession{
-		SessionID:       sess.SessionID,
-		State:           models.SessionStateActive,
-		AccessType:      string(models.AccessTypeIPoE),
-		Protocol:        protocol,
-		MAC:             sess.MAC,
-		OuterVLAN:       sess.OuterVLAN,
-		InnerVLAN:       sess.InnerVLAN,
-		VLANCount:       c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
-		IfIndex:         sess.IPoESwIfIndex,
-		VRF:             sess.VRF,
-		ServiceGroup:    sess.ServiceGroup.Name,
-		SRGName:         sess.SRGName,
-		IPv4Address:     sess.IPv4,
-		LeaseTime:       sess.LeaseTime,
-		IPv6Address:     sess.IPv6Address,
-		IPv6LeaseTime:   sess.IPv6LeaseTime,
-		DUID:            sess.DHCPv6DUID,
-		AAASessionID: sess.AcctSessionID,
-		ActivatedAt:  sess.BoundAt,
+		SessionID:     sess.SessionID,
+		State:         models.SessionStateActive,
+		AccessType:    string(models.AccessTypeIPoE),
+		Protocol:      protocol,
+		MAC:           sess.MAC,
+		OuterVLAN:     sess.OuterVLAN,
+		InnerVLAN:     sess.InnerVLAN,
+		VLANCount:     c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
+		IfIndex:       sess.IPoESwIfIndex,
+		VRF:           sess.VRF,
+		ServiceGroup:  sess.ServiceGroup.Name,
+		SRGName:       sess.SRGName,
+		IPv4Address:   sess.IPv4,
+		LeaseTime:     sess.LeaseTime,
+		IPv6Address:   sess.IPv6Address,
+		IPv6LeaseTime: sess.IPv6LeaseTime,
+		DUID:          sess.DHCPv6DUID,
+		AAASessionID:  sess.AcctSessionID,
+		ActivatedAt:   sess.BoundAt,
 	}
 	if sess.IPv6Prefix != nil {
 		ipoeSess.IPv6Prefix = sess.IPv6Prefix.String()
@@ -2878,4 +2889,59 @@ func (c *Component) RecoverSessions(ctx context.Context) error {
 
 	c.logger.Info("IPoE session recovery complete", "recovered", recovered)
 	return nil
+}
+
+func (c *Component) ForEachSession(fn func(models.SubscriberSession) bool) {
+	c.sessionMu.RLock()
+	defer c.sessionMu.RUnlock()
+
+	for _, sess := range c.sessions {
+		if sess.State != "bound" {
+			continue
+		}
+
+		snapshot := &models.IPoESession{
+			SessionID:     sess.SessionID,
+			State:         models.SessionStateActive,
+			AccessType:    string(models.AccessTypeIPoE),
+			MAC:           sess.MAC,
+			OuterVLAN:     sess.OuterVLAN,
+			InnerVLAN:     sess.InnerVLAN,
+			VLANCount:     c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
+			IfIndex:       sess.IPoESwIfIndex,
+			VRF:           sess.VRF,
+			ServiceGroup:  sess.ServiceGroup.Name,
+			SRGName:       sess.SRGName,
+			IPv4Address:   sess.IPv4,
+			LeaseTime:     sess.LeaseTime,
+			IPv6Address:   sess.IPv6Address,
+			IPv6LeaseTime: sess.IPv6LeaseTime,
+			DUID:          sess.DHCPv6DUID,
+			ClientID:      sess.ClientID,
+			Hostname:      sess.Hostname,
+			Username:      sess.Username,
+			AAASessionID:  sess.AcctSessionID,
+			ActivatedAt:   sess.BoundAt,
+			OuterTPID:     sess.OuterTPID,
+			RelayInfo:     map[uint8][]byte{},
+		}
+		if sess.AllocCtx != nil {
+			snapshot.IPv4Pool = sess.AllocCtx.AllocatedPool
+			snapshot.IANAPool = sess.AllocCtx.AllocatedIANAPool
+			snapshot.PDPool = sess.AllocCtx.AllocatedPDPool
+		}
+		if sess.IPv6Prefix != nil {
+			snapshot.IPv6Prefix = sess.IPv6Prefix.String()
+		}
+		if len(sess.CircuitID) > 0 {
+			snapshot.RelayInfo[1] = sess.CircuitID
+		}
+		if len(sess.RemoteID) > 0 {
+			snapshot.RelayInfo[2] = sess.RemoteID
+		}
+
+		if !fn(snapshot) {
+			return
+		}
+	}
 }

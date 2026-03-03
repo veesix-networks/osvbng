@@ -202,6 +202,10 @@ func sessionToCheckpoint(sess models.SubscriberSession) *hapb.SessionCheckpoint 
 		cp.ClientId = s.ClientID
 		cp.Hostname = s.Hostname
 		cp.Dhcpv6Duid = s.DUID
+		cp.Ipv4Pool = s.IPv4Pool
+		cp.IanaPool = s.IANAPool
+		cp.PdPool = s.PDPool
+		cp.OuterTpid = uint32(s.OuterTPID)
 		if !s.ActivatedAt.IsZero() {
 			cp.BoundAtNs = s.ActivatedAt.UnixNano()
 		}
@@ -226,6 +230,9 @@ func sessionToCheckpoint(sess models.SubscriberSession) *hapb.SessionCheckpoint 
 		cp.LcpState = s.LCPState
 		cp.IpcpState = s.IPCPState
 		cp.Ipv6CpState = s.IPv6CPState
+		cp.Ipv4Pool = s.IPv4Pool
+		cp.IanaPool = s.IANAPool
+		cp.OuterTpid = uint32(s.OuterTPID)
 		if !s.ActivatedAt.IsZero() {
 			cp.BoundAtNs = s.ActivatedAt.UnixNano()
 		}

@@ -579,6 +579,7 @@ func (s *SessionState) allocateFromPool() {
 
 	s.IPv4Address = allocated
 	s.allocatedPool = poolName
+	s.AllocCtx.AllocatedPool = poolName
 	s.component.logger.Debug("Allocated IPv4 from pool",
 		"session_id", s.SessionID,
 		"pool", poolName,
@@ -610,6 +611,7 @@ func (s *SessionState) allocateIANAFromPool() {
 
 	s.IPv6Address = allocated
 	s.allocatedIANAPool = poolName
+	s.AllocCtx.AllocatedIANAPool = poolName
 	s.component.logger.Debug("Allocated IPv6 IANA from pool",
 		"session_id", s.SessionID,
 		"pool", poolName,
@@ -704,6 +706,9 @@ func (s *SessionState) checkOpen() {
 				Username:     s.Username,
 				AAASessionID: s.AcctSessionID,
 				ActivatedAt:  time.Now(),
+				IPv4Pool:     s.allocatedPool,
+				IANAPool:     s.allocatedIANAPool,
+				OuterTPID:    s.OuterTPID,
 			})
 
 			if s.component.vpp != nil && s.IPv4Address != nil {
