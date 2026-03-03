@@ -18,7 +18,14 @@ type HAConfig struct {
 	Peer      HAPeerConfig          `json:"peer,omitempty" yaml:"peer,omitempty"`
 	TLS       HATLSConfig           `json:"tls,omitempty" yaml:"tls,omitempty"`
 	Heartbeat HAHeartbeatConfig     `json:"heartbeat,omitempty" yaml:"heartbeat,omitempty"`
+	Sync      HASyncConfig          `json:"sync,omitempty" yaml:"sync,omitempty"`
 	SRGs      map[string]*SRGConfig `json:"srgs,omitempty" yaml:"srgs,omitempty"`
+}
+
+type HASyncConfig struct {
+	BacklogSize     int           `json:"backlog_size,omitempty" yaml:"backlog_size,omitempty"`
+	PageSize        int           `json:"page_size,omitempty" yaml:"page_size,omitempty"`
+	BulkSyncTimeout time.Duration `json:"bulk_sync_timeout,omitempty" yaml:"bulk_sync_timeout,omitempty"`
 }
 
 type HATLSConfig struct {
@@ -74,6 +81,27 @@ func (c *HAConfig) GetHeartbeatTimeout() time.Duration {
 		return c.Heartbeat.Timeout
 	}
 	return 5 * time.Second
+}
+
+func (c *HAConfig) GetSyncBacklogSize() int {
+	if c.Sync.BacklogSize > 0 {
+		return c.Sync.BacklogSize
+	}
+	return 10000
+}
+
+func (c *HAConfig) GetSyncPageSize() int {
+	if c.Sync.PageSize > 0 {
+		return c.Sync.PageSize
+	}
+	return 1000
+}
+
+func (c *HAConfig) GetBulkSyncTimeout() time.Duration {
+	if c.Sync.BulkSyncTimeout > 0 {
+		return c.Sync.BulkSyncTimeout
+	}
+	return 60 * time.Second
 }
 
 func (c *HAConfig) Validate() error {

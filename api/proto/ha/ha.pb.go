@@ -25,6 +25,58 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type SyncAction int32
+
+const (
+	SyncAction_SYNC_ACTION_UNSPECIFIED SyncAction = 0
+	SyncAction_SYNC_ACTION_CREATE      SyncAction = 1
+	SyncAction_SYNC_ACTION_UPDATE      SyncAction = 2
+	SyncAction_SYNC_ACTION_DELETE      SyncAction = 3
+)
+
+// Enum value maps for SyncAction.
+var (
+	SyncAction_name = map[int32]string{
+		0: "SYNC_ACTION_UNSPECIFIED",
+		1: "SYNC_ACTION_CREATE",
+		2: "SYNC_ACTION_UPDATE",
+		3: "SYNC_ACTION_DELETE",
+	}
+	SyncAction_value = map[string]int32{
+		"SYNC_ACTION_UNSPECIFIED": 0,
+		"SYNC_ACTION_CREATE":      1,
+		"SYNC_ACTION_UPDATE":      2,
+		"SYNC_ACTION_DELETE":      3,
+	}
+)
+
+func (x SyncAction) Enum() *SyncAction {
+	p := new(SyncAction)
+	*p = x
+	return p
+}
+
+func (x SyncAction) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SyncAction) Descriptor() protoreflect.EnumDescriptor {
+	return file_api_proto_ha_ha_proto_enumTypes[0].Descriptor()
+}
+
+func (SyncAction) Type() protoreflect.EnumType {
+	return &file_api_proto_ha_ha_proto_enumTypes[0]
+}
+
+func (x SyncAction) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SyncAction.Descriptor instead.
+func (SyncAction) EnumDescriptor() ([]byte, []int) {
+	return file_api_proto_ha_ha_proto_rawDescGZIP(), []int{0}
+}
+
 type HeartbeatMessage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
@@ -393,6 +445,562 @@ func (x *SwitchoverResponse) GetMessage() string {
 	return ""
 }
 
+type SessionCheckpoint struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	SessionId       string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	SrgName         string                 `protobuf:"bytes,2,opt,name=srg_name,json=srgName,proto3" json:"srg_name,omitempty"`
+	AccessType      string                 `protobuf:"bytes,3,opt,name=access_type,json=accessType,proto3" json:"access_type,omitempty"`
+	Mac             []byte                 `protobuf:"bytes,4,opt,name=mac,proto3" json:"mac,omitempty"`
+	OuterVlan       uint32                 `protobuf:"varint,5,opt,name=outer_vlan,json=outerVlan,proto3" json:"outer_vlan,omitempty"`
+	InnerVlan       uint32                 `protobuf:"varint,6,opt,name=inner_vlan,json=innerVlan,proto3" json:"inner_vlan,omitempty"`
+	Username        string                 `protobuf:"bytes,7,opt,name=username,proto3" json:"username,omitempty"`
+	AaaSessionId    string                 `protobuf:"bytes,8,opt,name=aaa_session_id,json=aaaSessionId,proto3" json:"aaa_session_id,omitempty"`
+	Ipv4Address     []byte                 `protobuf:"bytes,9,opt,name=ipv4_address,json=ipv4Address,proto3" json:"ipv4_address,omitempty"`
+	Ipv4Netmask     []byte                 `protobuf:"bytes,10,opt,name=ipv4_netmask,json=ipv4Netmask,proto3" json:"ipv4_netmask,omitempty"`
+	Ipv4Gateway     []byte                 `protobuf:"bytes,11,opt,name=ipv4_gateway,json=ipv4Gateway,proto3" json:"ipv4_gateway,omitempty"`
+	Ipv6Address     []byte                 `protobuf:"bytes,12,opt,name=ipv6_address,json=ipv6Address,proto3" json:"ipv6_address,omitempty"`
+	Ipv6Prefix      []byte                 `protobuf:"bytes,13,opt,name=ipv6_prefix,json=ipv6Prefix,proto3" json:"ipv6_prefix,omitempty"`
+	Ipv6PrefixLen   uint32                 `protobuf:"varint,14,opt,name=ipv6_prefix_len,json=ipv6PrefixLen,proto3" json:"ipv6_prefix_len,omitempty"`
+	Ipv4LeaseTime   uint32                 `protobuf:"varint,15,opt,name=ipv4_lease_time,json=ipv4LeaseTime,proto3" json:"ipv4_lease_time,omitempty"`
+	Ipv6LeaseTime   uint32                 `protobuf:"varint,16,opt,name=ipv6_lease_time,json=ipv6LeaseTime,proto3" json:"ipv6_lease_time,omitempty"`
+	BoundAtNs       int64                  `protobuf:"varint,17,opt,name=bound_at_ns,json=boundAtNs,proto3" json:"bound_at_ns,omitempty"`
+	Ipv6BoundAtNs   int64                  `protobuf:"varint,18,opt,name=ipv6_bound_at_ns,json=ipv6BoundAtNs,proto3" json:"ipv6_bound_at_ns,omitempty"`
+	CircuitId       []byte                 `protobuf:"bytes,19,opt,name=circuit_id,json=circuitId,proto3" json:"circuit_id,omitempty"`
+	RemoteId        []byte                 `protobuf:"bytes,20,opt,name=remote_id,json=remoteId,proto3" json:"remote_id,omitempty"`
+	ClientId        []byte                 `protobuf:"bytes,21,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	Hostname        string                 `protobuf:"bytes,22,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	Dhcpv6Duid      []byte                 `protobuf:"bytes,23,opt,name=dhcpv6_duid,json=dhcpv6Duid,proto3" json:"dhcpv6_duid,omitempty"`
+	Vrf             string                 `protobuf:"bytes,24,opt,name=vrf,proto3" json:"vrf,omitempty"`
+	ServiceGroup    string                 `protobuf:"bytes,25,opt,name=service_group,json=serviceGroup,proto3" json:"service_group,omitempty"`
+	SubscriberGroup string                 `protobuf:"bytes,26,opt,name=subscriber_group,json=subscriberGroup,proto3" json:"subscriber_group,omitempty"`
+	PppoeSessionId  uint32                 `protobuf:"varint,27,opt,name=pppoe_session_id,json=pppoeSessionId,proto3" json:"pppoe_session_id,omitempty"`
+	LcpState        string                 `protobuf:"bytes,28,opt,name=lcp_state,json=lcpState,proto3" json:"lcp_state,omitempty"`
+	IpcpState       string                 `protobuf:"bytes,29,opt,name=ipcp_state,json=ipcpState,proto3" json:"ipcp_state,omitempty"`
+	Ipv6CpState     string                 `protobuf:"bytes,30,opt,name=ipv6cp_state,json=ipv6cpState,proto3" json:"ipv6cp_state,omitempty"`
+	ServiceName     string                 `protobuf:"bytes,31,opt,name=service_name,json=serviceName,proto3" json:"service_name,omitempty"`
+	Ipv4Pool        string                 `protobuf:"bytes,32,opt,name=ipv4_pool,json=ipv4Pool,proto3" json:"ipv4_pool,omitempty"`
+	IanaPool        string                 `protobuf:"bytes,33,opt,name=iana_pool,json=ianaPool,proto3" json:"iana_pool,omitempty"`
+	PdPool          string                 `protobuf:"bytes,34,opt,name=pd_pool,json=pdPool,proto3" json:"pd_pool,omitempty"`
+	OuterTpid       uint32                 `protobuf:"varint,35,opt,name=outer_tpid,json=outerTpid,proto3" json:"outer_tpid,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *SessionCheckpoint) Reset() {
+	*x = SessionCheckpoint{}
+	mi := &file_api_proto_ha_ha_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SessionCheckpoint) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SessionCheckpoint) ProtoMessage() {}
+
+func (x *SessionCheckpoint) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_ha_ha_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SessionCheckpoint.ProtoReflect.Descriptor instead.
+func (*SessionCheckpoint) Descriptor() ([]byte, []int) {
+	return file_api_proto_ha_ha_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *SessionCheckpoint) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *SessionCheckpoint) GetSrgName() string {
+	if x != nil {
+		return x.SrgName
+	}
+	return ""
+}
+
+func (x *SessionCheckpoint) GetAccessType() string {
+	if x != nil {
+		return x.AccessType
+	}
+	return ""
+}
+
+func (x *SessionCheckpoint) GetMac() []byte {
+	if x != nil {
+		return x.Mac
+	}
+	return nil
+}
+
+func (x *SessionCheckpoint) GetOuterVlan() uint32 {
+	if x != nil {
+		return x.OuterVlan
+	}
+	return 0
+}
+
+func (x *SessionCheckpoint) GetInnerVlan() uint32 {
+	if x != nil {
+		return x.InnerVlan
+	}
+	return 0
+}
+
+func (x *SessionCheckpoint) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *SessionCheckpoint) GetAaaSessionId() string {
+	if x != nil {
+		return x.AaaSessionId
+	}
+	return ""
+}
+
+func (x *SessionCheckpoint) GetIpv4Address() []byte {
+	if x != nil {
+		return x.Ipv4Address
+	}
+	return nil
+}
+
+func (x *SessionCheckpoint) GetIpv4Netmask() []byte {
+	if x != nil {
+		return x.Ipv4Netmask
+	}
+	return nil
+}
+
+func (x *SessionCheckpoint) GetIpv4Gateway() []byte {
+	if x != nil {
+		return x.Ipv4Gateway
+	}
+	return nil
+}
+
+func (x *SessionCheckpoint) GetIpv6Address() []byte {
+	if x != nil {
+		return x.Ipv6Address
+	}
+	return nil
+}
+
+func (x *SessionCheckpoint) GetIpv6Prefix() []byte {
+	if x != nil {
+		return x.Ipv6Prefix
+	}
+	return nil
+}
+
+func (x *SessionCheckpoint) GetIpv6PrefixLen() uint32 {
+	if x != nil {
+		return x.Ipv6PrefixLen
+	}
+	return 0
+}
+
+func (x *SessionCheckpoint) GetIpv4LeaseTime() uint32 {
+	if x != nil {
+		return x.Ipv4LeaseTime
+	}
+	return 0
+}
+
+func (x *SessionCheckpoint) GetIpv6LeaseTime() uint32 {
+	if x != nil {
+		return x.Ipv6LeaseTime
+	}
+	return 0
+}
+
+func (x *SessionCheckpoint) GetBoundAtNs() int64 {
+	if x != nil {
+		return x.BoundAtNs
+	}
+	return 0
+}
+
+func (x *SessionCheckpoint) GetIpv6BoundAtNs() int64 {
+	if x != nil {
+		return x.Ipv6BoundAtNs
+	}
+	return 0
+}
+
+func (x *SessionCheckpoint) GetCircuitId() []byte {
+	if x != nil {
+		return x.CircuitId
+	}
+	return nil
+}
+
+func (x *SessionCheckpoint) GetRemoteId() []byte {
+	if x != nil {
+		return x.RemoteId
+	}
+	return nil
+}
+
+func (x *SessionCheckpoint) GetClientId() []byte {
+	if x != nil {
+		return x.ClientId
+	}
+	return nil
+}
+
+func (x *SessionCheckpoint) GetHostname() string {
+	if x != nil {
+		return x.Hostname
+	}
+	return ""
+}
+
+func (x *SessionCheckpoint) GetDhcpv6Duid() []byte {
+	if x != nil {
+		return x.Dhcpv6Duid
+	}
+	return nil
+}
+
+func (x *SessionCheckpoint) GetVrf() string {
+	if x != nil {
+		return x.Vrf
+	}
+	return ""
+}
+
+func (x *SessionCheckpoint) GetServiceGroup() string {
+	if x != nil {
+		return x.ServiceGroup
+	}
+	return ""
+}
+
+func (x *SessionCheckpoint) GetSubscriberGroup() string {
+	if x != nil {
+		return x.SubscriberGroup
+	}
+	return ""
+}
+
+func (x *SessionCheckpoint) GetPppoeSessionId() uint32 {
+	if x != nil {
+		return x.PppoeSessionId
+	}
+	return 0
+}
+
+func (x *SessionCheckpoint) GetLcpState() string {
+	if x != nil {
+		return x.LcpState
+	}
+	return ""
+}
+
+func (x *SessionCheckpoint) GetIpcpState() string {
+	if x != nil {
+		return x.IpcpState
+	}
+	return ""
+}
+
+func (x *SessionCheckpoint) GetIpv6CpState() string {
+	if x != nil {
+		return x.Ipv6CpState
+	}
+	return ""
+}
+
+func (x *SessionCheckpoint) GetServiceName() string {
+	if x != nil {
+		return x.ServiceName
+	}
+	return ""
+}
+
+func (x *SessionCheckpoint) GetIpv4Pool() string {
+	if x != nil {
+		return x.Ipv4Pool
+	}
+	return ""
+}
+
+func (x *SessionCheckpoint) GetIanaPool() string {
+	if x != nil {
+		return x.IanaPool
+	}
+	return ""
+}
+
+func (x *SessionCheckpoint) GetPdPool() string {
+	if x != nil {
+		return x.PdPool
+	}
+	return ""
+}
+
+func (x *SessionCheckpoint) GetOuterTpid() uint32 {
+	if x != nil {
+		return x.OuterTpid
+	}
+	return 0
+}
+
+type SyncSessionRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SrgName       string                 `protobuf:"bytes,1,opt,name=srg_name,json=srgName,proto3" json:"srg_name,omitempty"`
+	Sequence      uint64                 `protobuf:"varint,2,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	Action        SyncAction             `protobuf:"varint,3,opt,name=action,proto3,enum=osvbng.ha.v1.SyncAction" json:"action,omitempty"`
+	Session       *SessionCheckpoint     `protobuf:"bytes,4,opt,name=session,proto3" json:"session,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncSessionRequest) Reset() {
+	*x = SyncSessionRequest{}
+	mi := &file_api_proto_ha_ha_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncSessionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncSessionRequest) ProtoMessage() {}
+
+func (x *SyncSessionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_ha_ha_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncSessionRequest.ProtoReflect.Descriptor instead.
+func (*SyncSessionRequest) Descriptor() ([]byte, []int) {
+	return file_api_proto_ha_ha_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *SyncSessionRequest) GetSrgName() string {
+	if x != nil {
+		return x.SrgName
+	}
+	return ""
+}
+
+func (x *SyncSessionRequest) GetSequence() uint64 {
+	if x != nil {
+		return x.Sequence
+	}
+	return 0
+}
+
+func (x *SyncSessionRequest) GetAction() SyncAction {
+	if x != nil {
+		return x.Action
+	}
+	return SyncAction_SYNC_ACTION_UNSPECIFIED
+}
+
+func (x *SyncSessionRequest) GetSession() *SessionCheckpoint {
+	if x != nil {
+		return x.Session
+	}
+	return nil
+}
+
+type SyncSessionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	LastSyncSeq   uint64                 `protobuf:"varint,2,opt,name=last_sync_seq,json=lastSyncSeq,proto3" json:"last_sync_seq,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncSessionResponse) Reset() {
+	*x = SyncSessionResponse{}
+	mi := &file_api_proto_ha_ha_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncSessionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncSessionResponse) ProtoMessage() {}
+
+func (x *SyncSessionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_ha_ha_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncSessionResponse.ProtoReflect.Descriptor instead.
+func (*SyncSessionResponse) Descriptor() ([]byte, []int) {
+	return file_api_proto_ha_ha_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *SyncSessionResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *SyncSessionResponse) GetLastSyncSeq() uint64 {
+	if x != nil {
+		return x.LastSyncSeq
+	}
+	return 0
+}
+
+type BulkSyncRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SrgNames      []string               `protobuf:"bytes,1,rep,name=srg_names,json=srgNames,proto3" json:"srg_names,omitempty"`
+	FromSequence  uint64                 `protobuf:"varint,2,opt,name=from_sequence,json=fromSequence,proto3" json:"from_sequence,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BulkSyncRequest) Reset() {
+	*x = BulkSyncRequest{}
+	mi := &file_api_proto_ha_ha_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BulkSyncRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BulkSyncRequest) ProtoMessage() {}
+
+func (x *BulkSyncRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_ha_ha_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BulkSyncRequest.ProtoReflect.Descriptor instead.
+func (*BulkSyncRequest) Descriptor() ([]byte, []int) {
+	return file_api_proto_ha_ha_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *BulkSyncRequest) GetSrgNames() []string {
+	if x != nil {
+		return x.SrgNames
+	}
+	return nil
+}
+
+func (x *BulkSyncRequest) GetFromSequence() uint64 {
+	if x != nil {
+		return x.FromSequence
+	}
+	return 0
+}
+
+type BulkSyncResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SrgName       string                 `protobuf:"bytes,1,opt,name=srg_name,json=srgName,proto3" json:"srg_name,omitempty"`
+	Sessions      []*SessionCheckpoint   `protobuf:"bytes,2,rep,name=sessions,proto3" json:"sessions,omitempty"`
+	Sequence      uint64                 `protobuf:"varint,3,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	LastPage      bool                   `protobuf:"varint,4,opt,name=last_page,json=lastPage,proto3" json:"last_page,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BulkSyncResponse) Reset() {
+	*x = BulkSyncResponse{}
+	mi := &file_api_proto_ha_ha_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BulkSyncResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BulkSyncResponse) ProtoMessage() {}
+
+func (x *BulkSyncResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_ha_ha_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BulkSyncResponse.ProtoReflect.Descriptor instead.
+func (*BulkSyncResponse) Descriptor() ([]byte, []int) {
+	return file_api_proto_ha_ha_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *BulkSyncResponse) GetSrgName() string {
+	if x != nil {
+		return x.SrgName
+	}
+	return ""
+}
+
+func (x *BulkSyncResponse) GetSessions() []*SessionCheckpoint {
+	if x != nil {
+		return x.Sessions
+	}
+	return nil
+}
+
+func (x *BulkSyncResponse) GetSequence() uint64 {
+	if x != nil {
+		return x.Sequence
+	}
+	return 0
+}
+
+func (x *BulkSyncResponse) GetLastPage() bool {
+	if x != nil {
+		return x.LastPage
+	}
+	return false
+}
+
 var File_api_proto_ha_ha_proto protoreflect.FileDescriptor
 
 const file_api_proto_ha_ha_proto_rawDesc = "" +
@@ -424,11 +1032,81 @@ const file_api_proto_ha_ha_proto_rawDesc = "" +
 	"\bgraceful\x18\x02 \x01(\bR\bgraceful\"H\n" +
 	"\x12SwitchoverResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage2\x89\x02\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\x84\t\n" +
+	"\x11SessionCheckpoint\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x19\n" +
+	"\bsrg_name\x18\x02 \x01(\tR\asrgName\x12\x1f\n" +
+	"\vaccess_type\x18\x03 \x01(\tR\n" +
+	"accessType\x12\x10\n" +
+	"\x03mac\x18\x04 \x01(\fR\x03mac\x12\x1d\n" +
+	"\n" +
+	"outer_vlan\x18\x05 \x01(\rR\touterVlan\x12\x1d\n" +
+	"\n" +
+	"inner_vlan\x18\x06 \x01(\rR\tinnerVlan\x12\x1a\n" +
+	"\busername\x18\a \x01(\tR\busername\x12$\n" +
+	"\x0eaaa_session_id\x18\b \x01(\tR\faaaSessionId\x12!\n" +
+	"\fipv4_address\x18\t \x01(\fR\vipv4Address\x12!\n" +
+	"\fipv4_netmask\x18\n" +
+	" \x01(\fR\vipv4Netmask\x12!\n" +
+	"\fipv4_gateway\x18\v \x01(\fR\vipv4Gateway\x12!\n" +
+	"\fipv6_address\x18\f \x01(\fR\vipv6Address\x12\x1f\n" +
+	"\vipv6_prefix\x18\r \x01(\fR\n" +
+	"ipv6Prefix\x12&\n" +
+	"\x0fipv6_prefix_len\x18\x0e \x01(\rR\ripv6PrefixLen\x12&\n" +
+	"\x0fipv4_lease_time\x18\x0f \x01(\rR\ripv4LeaseTime\x12&\n" +
+	"\x0fipv6_lease_time\x18\x10 \x01(\rR\ripv6LeaseTime\x12\x1e\n" +
+	"\vbound_at_ns\x18\x11 \x01(\x03R\tboundAtNs\x12'\n" +
+	"\x10ipv6_bound_at_ns\x18\x12 \x01(\x03R\ripv6BoundAtNs\x12\x1d\n" +
+	"\n" +
+	"circuit_id\x18\x13 \x01(\fR\tcircuitId\x12\x1b\n" +
+	"\tremote_id\x18\x14 \x01(\fR\bremoteId\x12\x1b\n" +
+	"\tclient_id\x18\x15 \x01(\fR\bclientId\x12\x1a\n" +
+	"\bhostname\x18\x16 \x01(\tR\bhostname\x12\x1f\n" +
+	"\vdhcpv6_duid\x18\x17 \x01(\fR\n" +
+	"dhcpv6Duid\x12\x10\n" +
+	"\x03vrf\x18\x18 \x01(\tR\x03vrf\x12#\n" +
+	"\rservice_group\x18\x19 \x01(\tR\fserviceGroup\x12)\n" +
+	"\x10subscriber_group\x18\x1a \x01(\tR\x0fsubscriberGroup\x12(\n" +
+	"\x10pppoe_session_id\x18\x1b \x01(\rR\x0epppoeSessionId\x12\x1b\n" +
+	"\tlcp_state\x18\x1c \x01(\tR\blcpState\x12\x1d\n" +
+	"\n" +
+	"ipcp_state\x18\x1d \x01(\tR\tipcpState\x12!\n" +
+	"\fipv6cp_state\x18\x1e \x01(\tR\vipv6cpState\x12!\n" +
+	"\fservice_name\x18\x1f \x01(\tR\vserviceName\x12\x1b\n" +
+	"\tipv4_pool\x18  \x01(\tR\bipv4Pool\x12\x1b\n" +
+	"\tiana_pool\x18! \x01(\tR\bianaPool\x12\x17\n" +
+	"\apd_pool\x18\" \x01(\tR\x06pdPool\x12\x1d\n" +
+	"\n" +
+	"outer_tpid\x18# \x01(\rR\touterTpid\"\xb8\x01\n" +
+	"\x12SyncSessionRequest\x12\x19\n" +
+	"\bsrg_name\x18\x01 \x01(\tR\asrgName\x12\x1a\n" +
+	"\bsequence\x18\x02 \x01(\x04R\bsequence\x120\n" +
+	"\x06action\x18\x03 \x01(\x0e2\x18.osvbng.ha.v1.SyncActionR\x06action\x129\n" +
+	"\asession\x18\x04 \x01(\v2\x1f.osvbng.ha.v1.SessionCheckpointR\asession\"S\n" +
+	"\x13SyncSessionResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\"\n" +
+	"\rlast_sync_seq\x18\x02 \x01(\x04R\vlastSyncSeq\"S\n" +
+	"\x0fBulkSyncRequest\x12\x1b\n" +
+	"\tsrg_names\x18\x01 \x03(\tR\bsrgNames\x12#\n" +
+	"\rfrom_sequence\x18\x02 \x01(\x04R\ffromSequence\"\xa3\x01\n" +
+	"\x10BulkSyncResponse\x12\x19\n" +
+	"\bsrg_name\x18\x01 \x01(\tR\asrgName\x12;\n" +
+	"\bsessions\x18\x02 \x03(\v2\x1f.osvbng.ha.v1.SessionCheckpointR\bsessions\x12\x1a\n" +
+	"\bsequence\x18\x03 \x01(\x04R\bsequence\x12\x1b\n" +
+	"\tlast_page\x18\x04 \x01(\bR\blastPage*q\n" +
+	"\n" +
+	"SyncAction\x12\x1b\n" +
+	"\x17SYNC_ACTION_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12SYNC_ACTION_CREATE\x10\x01\x12\x16\n" +
+	"\x12SYNC_ACTION_UPDATE\x10\x02\x12\x16\n" +
+	"\x12SYNC_ACTION_DELETE\x10\x032\xaa\x03\n" +
 	"\rHAPeerService\x12O\n" +
 	"\tHeartbeat\x12\x1e.osvbng.ha.v1.HeartbeatMessage\x1a\x1e.osvbng.ha.v1.HeartbeatMessage(\x010\x01\x12O\n" +
 	"\x0eNotifySRGState\x12\".osvbng.ha.v1.SRGStateNotification\x1a\x19.osvbng.ha.v1.SRGStateAck\x12V\n" +
-	"\x11RequestSwitchover\x12\x1f.osvbng.ha.v1.SwitchoverRequest\x1a .osvbng.ha.v1.SwitchoverResponseB5Z3github.com/veesix-networks/osvbng/api/proto/ha;hapbb\x06proto3"
+	"\x11RequestSwitchover\x12\x1f.osvbng.ha.v1.SwitchoverRequest\x1a .osvbng.ha.v1.SwitchoverResponse\x12R\n" +
+	"\vSyncSession\x12 .osvbng.ha.v1.SyncSessionRequest\x1a!.osvbng.ha.v1.SyncSessionResponse\x12K\n" +
+	"\bBulkSync\x12\x1d.osvbng.ha.v1.BulkSyncRequest\x1a\x1e.osvbng.ha.v1.BulkSyncResponse0\x01B5Z3github.com/veesix-networks/osvbng/api/proto/ha;hapbb\x06proto3"
 
 var (
 	file_api_proto_ha_ha_proto_rawDescOnce sync.Once
@@ -442,28 +1120,42 @@ func file_api_proto_ha_ha_proto_rawDescGZIP() []byte {
 	return file_api_proto_ha_ha_proto_rawDescData
 }
 
-var file_api_proto_ha_ha_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_api_proto_ha_ha_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_api_proto_ha_ha_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_api_proto_ha_ha_proto_goTypes = []any{
-	(*HeartbeatMessage)(nil),     // 0: osvbng.ha.v1.HeartbeatMessage
-	(*SRGStatus)(nil),            // 1: osvbng.ha.v1.SRGStatus
-	(*SRGStateNotification)(nil), // 2: osvbng.ha.v1.SRGStateNotification
-	(*SRGStateAck)(nil),          // 3: osvbng.ha.v1.SRGStateAck
-	(*SwitchoverRequest)(nil),    // 4: osvbng.ha.v1.SwitchoverRequest
-	(*SwitchoverResponse)(nil),   // 5: osvbng.ha.v1.SwitchoverResponse
+	(SyncAction)(0),              // 0: osvbng.ha.v1.SyncAction
+	(*HeartbeatMessage)(nil),     // 1: osvbng.ha.v1.HeartbeatMessage
+	(*SRGStatus)(nil),            // 2: osvbng.ha.v1.SRGStatus
+	(*SRGStateNotification)(nil), // 3: osvbng.ha.v1.SRGStateNotification
+	(*SRGStateAck)(nil),          // 4: osvbng.ha.v1.SRGStateAck
+	(*SwitchoverRequest)(nil),    // 5: osvbng.ha.v1.SwitchoverRequest
+	(*SwitchoverResponse)(nil),   // 6: osvbng.ha.v1.SwitchoverResponse
+	(*SessionCheckpoint)(nil),    // 7: osvbng.ha.v1.SessionCheckpoint
+	(*SyncSessionRequest)(nil),   // 8: osvbng.ha.v1.SyncSessionRequest
+	(*SyncSessionResponse)(nil),  // 9: osvbng.ha.v1.SyncSessionResponse
+	(*BulkSyncRequest)(nil),      // 10: osvbng.ha.v1.BulkSyncRequest
+	(*BulkSyncResponse)(nil),     // 11: osvbng.ha.v1.BulkSyncResponse
 }
 var file_api_proto_ha_ha_proto_depIdxs = []int32{
-	1, // 0: osvbng.ha.v1.HeartbeatMessage.srg_statuses:type_name -> osvbng.ha.v1.SRGStatus
-	0, // 1: osvbng.ha.v1.HAPeerService.Heartbeat:input_type -> osvbng.ha.v1.HeartbeatMessage
-	2, // 2: osvbng.ha.v1.HAPeerService.NotifySRGState:input_type -> osvbng.ha.v1.SRGStateNotification
-	4, // 3: osvbng.ha.v1.HAPeerService.RequestSwitchover:input_type -> osvbng.ha.v1.SwitchoverRequest
-	0, // 4: osvbng.ha.v1.HAPeerService.Heartbeat:output_type -> osvbng.ha.v1.HeartbeatMessage
-	3, // 5: osvbng.ha.v1.HAPeerService.NotifySRGState:output_type -> osvbng.ha.v1.SRGStateAck
-	5, // 6: osvbng.ha.v1.HAPeerService.RequestSwitchover:output_type -> osvbng.ha.v1.SwitchoverResponse
-	4, // [4:7] is the sub-list for method output_type
-	1, // [1:4] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	2,  // 0: osvbng.ha.v1.HeartbeatMessage.srg_statuses:type_name -> osvbng.ha.v1.SRGStatus
+	0,  // 1: osvbng.ha.v1.SyncSessionRequest.action:type_name -> osvbng.ha.v1.SyncAction
+	7,  // 2: osvbng.ha.v1.SyncSessionRequest.session:type_name -> osvbng.ha.v1.SessionCheckpoint
+	7,  // 3: osvbng.ha.v1.BulkSyncResponse.sessions:type_name -> osvbng.ha.v1.SessionCheckpoint
+	1,  // 4: osvbng.ha.v1.HAPeerService.Heartbeat:input_type -> osvbng.ha.v1.HeartbeatMessage
+	3,  // 5: osvbng.ha.v1.HAPeerService.NotifySRGState:input_type -> osvbng.ha.v1.SRGStateNotification
+	5,  // 6: osvbng.ha.v1.HAPeerService.RequestSwitchover:input_type -> osvbng.ha.v1.SwitchoverRequest
+	8,  // 7: osvbng.ha.v1.HAPeerService.SyncSession:input_type -> osvbng.ha.v1.SyncSessionRequest
+	10, // 8: osvbng.ha.v1.HAPeerService.BulkSync:input_type -> osvbng.ha.v1.BulkSyncRequest
+	1,  // 9: osvbng.ha.v1.HAPeerService.Heartbeat:output_type -> osvbng.ha.v1.HeartbeatMessage
+	4,  // 10: osvbng.ha.v1.HAPeerService.NotifySRGState:output_type -> osvbng.ha.v1.SRGStateAck
+	6,  // 11: osvbng.ha.v1.HAPeerService.RequestSwitchover:output_type -> osvbng.ha.v1.SwitchoverResponse
+	9,  // 12: osvbng.ha.v1.HAPeerService.SyncSession:output_type -> osvbng.ha.v1.SyncSessionResponse
+	11, // 13: osvbng.ha.v1.HAPeerService.BulkSync:output_type -> osvbng.ha.v1.BulkSyncResponse
+	9,  // [9:14] is the sub-list for method output_type
+	4,  // [4:9] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_api_proto_ha_ha_proto_init() }
@@ -476,13 +1168,14 @@ func file_api_proto_ha_ha_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_ha_ha_proto_rawDesc), len(file_api_proto_ha_ha_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   6,
+			NumEnums:      1,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_api_proto_ha_ha_proto_goTypes,
 		DependencyIndexes: file_api_proto_ha_ha_proto_depIdxs,
+		EnumInfos:         file_api_proto_ha_ha_proto_enumTypes,
 		MessageInfos:      file_api_proto_ha_ha_proto_msgTypes,
 	}.Build()
 	File_api_proto_ha_ha_proto = out.File

@@ -182,6 +182,30 @@ func (p *PeerClient) RequestSwitchover(ctx context.Context, req *hapb.Switchover
 	return client.RequestSwitchover(ctx, req)
 }
 
+func (p *PeerClient) BulkSync(ctx context.Context, req *hapb.BulkSyncRequest) (hapb.HAPeerService_BulkSyncClient, error) {
+	p.mu.RLock()
+	client := p.client
+	p.mu.RUnlock()
+
+	if client == nil {
+		return nil, errNotConnected
+	}
+
+	return client.BulkSync(ctx, req)
+}
+
+func (p *PeerClient) SyncSession(ctx context.Context, req *hapb.SyncSessionRequest) (*hapb.SyncSessionResponse, error) {
+	p.mu.RLock()
+	client := p.client
+	p.mu.RUnlock()
+
+	if client == nil {
+		return nil, errNotConnected
+	}
+
+	return client.SyncSession(ctx, req)
+}
+
 func (p *PeerClient) GetState() PeerState {
 	p.mu.RLock()
 	defer p.mu.RUnlock()

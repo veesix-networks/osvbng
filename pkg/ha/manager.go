@@ -10,13 +10,16 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	hapb "github.com/veesix-networks/osvbng/api/proto/ha"
+	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/logger"
+	"github.com/veesix-networks/osvbng/pkg/opdb"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -50,6 +53,14 @@ type Manager struct {
 	garpCollector   GARPCollector
 	ifWatchCallback func(uint32)
 
+	syncSender   *SyncSender
+	syncReceiver *SyncReceiver
+	registry     *allocator.Registry
+	opdbStore    opdb.Store
+
+	peerSyncSeqs   map[string]uint64
+	bulkSyncCounts map[string]*atomic.Uint64
+
 	ifToSRG     map[uint32]string
 	ifDownCount map[string]int
 	peerNodeID  string
@@ -72,15 +83,30 @@ func WithInterfaceWatchCallback(fn func(uint32)) ManagerOption {
 	return func(m *Manager) { m.ifWatchCallback = fn }
 }
 
+func WithAllocatorRegistry(r *allocator.Registry) ManagerOption {
+	return func(m *Manager) { m.registry = r }
+}
+
+func WithOpDB(store opdb.Store) ManagerOption {
+	return func(m *Manager) { m.opdbStore = store }
+}
+
 func NewManager(cfg *config.HAConfig, eventBus events.Bus, opts ...ManagerOption) (*Manager, error) {
 	log := logger.Get(logger.HA)
 
+	bulkCounts := make(map[string]*atomic.Uint64, len(cfg.SRGs))
+	for name := range cfg.SRGs {
+		bulkCounts[name] = &atomic.Uint64{}
+	}
+
 	m := &Manager{
-		Base:     component.NewBase("ha"),
-		cfg:      cfg,
-		srgs:     make(map[string]*SRGStateMachine),
-		eventBus: eventBus,
-		logger:   log,
+		Base:           component.NewBase("ha"),
+		cfg:            cfg,
+		srgs:           make(map[string]*SRGStateMachine),
+		eventBus:       eventBus,
+		logger:         log,
+		peerSyncSeqs:   make(map[string]uint64),
+		bulkSyncCounts: bulkCounts,
 	}
 
 	for _, opt := range opts {
@@ -110,6 +136,10 @@ func (m *Manager) Start(ctx context.Context) error {
 		if t := sm.Start(); t != nil {
 			m.publishTransition(t)
 		}
+	}
+
+	if m.opdbStore != nil {
+		m.syncReceiver = NewSyncReceiver(m.opdbStore, m.registry, m.logger)
 	}
 
 	m.registerSRGsWithDataplane()
@@ -158,6 +188,14 @@ func (m *Manager) Start(ctx context.Context) error {
 		}
 
 		m.peer = NewPeerClient(m.cfg.Peer.Address, dialOpts, m.logger)
+
+		srgNames := make([]string, 0, len(m.srgs))
+		for name := range m.srgs {
+			srgNames = append(srgNames, name)
+		}
+		m.syncSender = NewSyncSender(m.peer, m.cfg.GetSyncBacklogSize(), srgNames, m.logger)
+		m.eventBus.Subscribe(events.TopicSessionLifecycle, m.syncSender.HandleEvent)
+		m.Go(func() { m.syncSender.Run(m.Ctx) })
 
 		hb := NewHeartbeatLoop(m, m.logger,
 			m.cfg.GetHeartbeatInterval(),
@@ -301,6 +339,9 @@ func (m *Manager) handlePeerHeartbeat(msg *hapb.HeartbeatMessage) {
 	m.mu.Lock()
 	firstContact := m.peerNodeID == ""
 	m.peerNodeID = msg.NodeId
+	for _, s := range msg.SrgStatuses {
+		m.peerSyncSeqs[s.SrgName] = s.LastSyncSeq
+	}
 	m.mu.Unlock()
 
 	peerSRGStates := make(map[string]*hapb.SRGStatus)
@@ -364,7 +405,7 @@ func (m *Manager) buildHeartbeatMessage() *hapb.HeartbeatMessage {
 	return &hapb.HeartbeatMessage{
 		NodeId:      m.cfg.NodeID,
 		TimestampNs: time.Now().UnixNano(),
-		SrgStatuses: buildSRGStatuses(m.srgs),
+		SrgStatuses: buildSRGStatuses(m.srgs, m.syncSender, m.syncReceiver),
 	}
 }
 
@@ -373,6 +414,7 @@ func (m *Manager) publishTransition(t *StateTransition) {
 		return
 	}
 
+	m.driveSync(t)
 	m.driveDataplane(t)
 	m.driveRouting(t)
 
@@ -434,6 +476,31 @@ func (m *Manager) driveRouting(t *StateTransition) {
 			m.logger.Error("Failed to withdraw SRG networks", "srg", t.SRGName, "error", err)
 		} else {
 			m.logger.Info("SRG networks withdrawn", "srg", t.SRGName, "networks", len(srgCfg.Networks))
+		}
+	}
+}
+
+func (m *Manager) driveSync(t *StateTransition) {
+	isActive := t.NewState == SRGStateActive || t.NewState == SRGStateActiveSolo
+	wasActive := t.OldState == SRGStateActive || t.OldState == SRGStateActiveSolo
+
+	if m.syncSender != nil {
+		if isActive && !wasActive {
+			m.syncSender.SetActive(true)
+		} else if !isActive && wasActive {
+			m.syncSender.SetActive(false)
+		}
+	}
+
+	if m.registry != nil && (t.NewState == SRGStateActive || t.NewState == SRGStateStandby) && t.OldState == SRGStateReady {
+		sm, ok := m.getSRG(t.SRGName)
+		if ok {
+			m.mu.RLock()
+			peerNodeID := m.peerNodeID
+			m.mu.RUnlock()
+			ascending := sm.winsElection(peerNodeID)
+			m.registry.SetAllocDirection(ascending)
+			m.logger.Info("Allocator direction set", "srg", t.SRGName, "ascending", ascending)
 		}
 	}
 }
@@ -521,6 +588,71 @@ func (m *Manager) GetTrackedInterfaceCount(srgName string) int {
 		}
 	}
 	return count
+}
+
+type SyncSRGStatus struct {
+	SRGName      string  `json:"srg_name"`
+	Role         string  `json:"role"`
+	LastSyncSeq  uint64  `json:"last_sync_seq"`
+	BacklogDepth int     `json:"backlog_depth"`
+	PeerAckedSeq uint64  `json:"peer_acked_seq"`
+	SyncLagSecs  float64 `json:"sync_lag_seconds"`
+	Creates      uint64  `json:"creates"`
+	Updates      uint64  `json:"updates"`
+	Deletes      uint64  `json:"deletes"`
+	BulkSyncs    uint64  `json:"bulk_syncs"`
+}
+
+func (m *Manager) GetSyncStatus() []SyncSRGStatus {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	result := make([]SyncSRGStatus, 0, len(m.srgs))
+	for name, sm := range m.srgs {
+		status := SyncSRGStatus{SRGName: name}
+
+		isActive := sm.IsActive()
+		if isActive {
+			status.Role = "active"
+		} else if sm.State() == SRGStateStandby || sm.State() == SRGStateStandbyAlone {
+			status.Role = "standby"
+		}
+
+		if m.syncSender != nil && isActive {
+			status.LastSyncSeq = m.syncSender.GetSeq(name)
+			if bl := m.syncSender.GetBacklog(name); bl != nil {
+				status.BacklogDepth = bl.Size()
+			}
+			creates, updates, deletes := m.syncSender.GetCounts(name)
+			status.Creates = creates
+			status.Updates = updates
+			status.Deletes = deletes
+			if t := m.syncSender.GetLastSendTime(name); !t.IsZero() {
+				status.SyncLagSecs = time.Since(t).Seconds()
+			}
+		}
+
+		if m.syncReceiver != nil && !isActive {
+			status.LastSyncSeq = m.syncReceiver.GetLastSeq(name)
+			if t := m.syncReceiver.GetLastRecvTime(name); !t.IsZero() {
+				status.SyncLagSecs = time.Since(t).Seconds()
+			}
+		}
+
+		status.PeerAckedSeq = m.peerSyncSeqs[name]
+		if c, ok := m.bulkSyncCounts[name]; ok {
+			status.BulkSyncs = c.Load()
+		}
+
+		result = append(result, status)
+	}
+	return result
+}
+
+func (m *Manager) IncrementBulkSync(srgName string) {
+	if c, ok := m.bulkSyncCounts[srgName]; ok {
+		c.Add(1)
+	}
 }
 
 func (m *Manager) buildInterfaceMap() {

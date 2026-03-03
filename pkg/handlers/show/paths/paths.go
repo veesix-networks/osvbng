@@ -67,6 +67,7 @@ const (
 	HASRGs        Path = "ha.srg"
 	HAPeer        Path = "ha.peer"
 	HASRGCounters Path = "ha.srg.counters"
+	HASync        Path = "ha.sync"
 )
 
 func (p Path) String() string {

@@ -86,3 +86,74 @@ func (s *HAPeerServer) RequestSwitchover(_ context.Context, req *hapb.Switchover
 		Message: "switchover completed at " + time.Now().Format(time.RFC3339),
 	}, nil
 }
+
+func (s *HAPeerServer) SyncSession(ctx context.Context, req *hapb.SyncSessionRequest) (*hapb.SyncSessionResponse, error) {
+	if s.manager.syncReceiver == nil {
+		return &hapb.SyncSessionResponse{Success: false}, nil
+	}
+	return s.manager.syncReceiver.HandleSyncSession(ctx, req)
+}
+
+func (s *HAPeerServer) BulkSync(req *hapb.BulkSyncRequest, stream hapb.HAPeerService_BulkSyncServer) error {
+	if s.manager.syncSender == nil {
+		return nil
+	}
+
+	s.logger.Info("Bulk sync requested", "srgs", req.SrgNames, "from_seq", req.FromSequence)
+
+	srgNames := req.SrgNames
+	if len(srgNames) == 0 {
+		for name := range s.manager.srgs {
+			srgNames = append(srgNames, name)
+		}
+	}
+
+	pageSize := s.manager.cfg.GetSyncPageSize()
+
+	for _, srgName := range srgNames {
+		s.manager.IncrementBulkSync(srgName)
+		backlog := s.manager.syncSender.GetBacklog(srgName)
+		if backlog == nil {
+			continue
+		}
+
+		oldest := backlog.OldestSeq()
+		newest := backlog.NewestSeq()
+		if oldest == 0 || newest == 0 {
+			if err := stream.Send(&hapb.BulkSyncResponse{
+				SrgName:  srgName,
+				LastPage: true,
+			}); err != nil {
+				return err
+			}
+			continue
+		}
+
+		entries := backlog.Range(oldest, newest)
+		for i := 0; i < len(entries); i += pageSize {
+			end := i + pageSize
+			if end > len(entries) {
+				end = len(entries)
+			}
+
+			page := make([]*hapb.SessionCheckpoint, 0, end-i)
+			for _, entry := range entries[i:end] {
+				if entry.Session != nil {
+					page = append(page, entry.Session)
+				}
+			}
+
+			resp := &hapb.BulkSyncResponse{
+				SrgName:  srgName,
+				Sessions: page,
+				Sequence: entries[end-1].Sequence,
+				LastPage: end >= len(entries),
+			}
+			if err := stream.Send(resp); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
