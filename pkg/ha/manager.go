@@ -266,14 +266,14 @@ func (m *Manager) getSRG(name string) (*SRGStateMachine, bool) {
 	return sm, ok
 }
 
-func (m *Manager) RequestSwitchover(ctx context.Context, srgNames []string) error {
+func (m *Manager) RequestSwitchover(ctx context.Context, srgNames []string, force bool) error {
 	for _, name := range srgNames {
 		sm, ok := m.getSRG(name)
 		if !ok {
 			continue
 		}
 
-		transition := sm.Switchover()
+		transition := sm.Switchover(force)
 		if transition != nil {
 			m.publishTransition(transition)
 			m.logger.Info("Local switchover",
