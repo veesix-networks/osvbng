@@ -1,8 +1,16 @@
 {
   "interfaces": {
+    "network": [
+      {
+        "interface": "eth3",
+        "address": "10.100.0.2/24",
+        "gateway": "10.100.0.1"
+      }
+    ],
     "access": [
       {
         "interface": "eth1",
+        "network-interface": "eth3",
         "type": "ipoe",
         "vlan-mode": "1:1",
         "outer-vlan-min": 100,
@@ -11,6 +19,9 @@
         "inner-vlan-max": 6
       }
     ]
+  },
+  "session-traffic": {
+    "ipv4-pps": 10
   },
   "dhcp": {
     "enable": true

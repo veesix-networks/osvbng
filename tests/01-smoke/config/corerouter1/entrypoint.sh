@@ -17,7 +17,18 @@ while [ ! -e /sys/class/net/eth1 ]; do
     fi
 done
 
-echo "eth1 ready, creating L3VPN VRF..."
+echo "Waiting for eth2..."
+WAIT_COUNT=0
+while [ ! -e /sys/class/net/eth2 ]; do
+    sleep 1
+    WAIT_COUNT=$((WAIT_COUNT + 1))
+    if [ $WAIT_COUNT -ge $WAIT_TIMEOUT ]; then
+        echo "ERROR: Timeout waiting for eth2"
+        exit 1
+    fi
+done
+
+echo "Interfaces ready, creating L3VPN VRF..."
 modprobe vrf 2>/dev/null || true
 if ip link add CUSTOMER-A type vrf table 100 2>/dev/null; then
     ip link set CUSTOMER-A up
@@ -29,6 +40,9 @@ if ip link add CUSTOMER-A type vrf table 100 2>/dev/null; then
 else
     echo "WARNING: VRF creation not supported, skipping L3VPN setup"
 fi
+
+echo "Enabling IP forwarding..."
+sysctl -w net.ipv4.ip_forward=1 || true
 
 echo "Configuring MPLS..."
 sysctl -w net.mpls.platform_labels=1048575 || true

@@ -61,3 +61,4 @@ topology:
     - endpoints: [bng2:eth1, subscribers:eth2]
     - endpoints: [bng1:eth2, corerouter1:eth1]
     - endpoints: [bng2:eth2, corerouter1:eth2]
+    - endpoints: [corerouter1:eth3, subscribers:eth3]

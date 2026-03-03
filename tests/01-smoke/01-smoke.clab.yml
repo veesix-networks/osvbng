@@ -43,3 +43,4 @@ topology:
   links:
     - endpoints: [bng1:eth1, subscribers:eth1]
     - endpoints: [bng1:eth2, corerouter1:eth1]
+    - endpoints: [corerouter1:eth2, subscribers:eth2]

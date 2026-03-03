@@ -55,3 +55,17 @@ BNG Blaster CLI Command
     ...    sudo docker exec ${container} /usr/sbin/bngblaster-cli ${socket} ${command}
     Log    ${output}
     RETURN    ${rc}    ${output}
+
+Verify Traffic Flowing
+    [Arguments]    ${container}    ${expected_flows}=5
+    [Documentation]    Verify all BNG Blaster session-traffic flows (both directions) are verified.
+    ${expected_total} =    Evaluate    ${expected_flows} * 2
+    ${rc}    ${output} =    BNG Blaster CLI Command    ${container}    session-counters
+    Should Be Equal As Integers    ${rc}    0    session-counters CLI failed
+    Log    \nSession Counters:\n${output}    console=yes
+    ${rc}    ${result} =    Run And Return Rc And Output
+    ...    echo '${output}' | python3 -c "import sys,json;d=json.load(sys.stdin);c=d.get('session-counters',{});flows=c.get('session-traffic-flows',0);verified=c.get('session-traffic-flows-verified',0);print('%d %d'%(flows,verified))"
+    Should Be Equal As Integers    ${rc}    0
+    @{parts} =    Split String    ${result}
+    Should Be True    ${parts}[0] == ${expected_total}    Expected ${expected_total} flows (${expected_flows} sessions x 2 directions) but got ${parts}[0]
+    Should Be True    ${parts}[1] == ${expected_total}    Only ${parts}[1]/${expected_total} traffic flows verified — traffic not flowing bidirectionally through BNG
