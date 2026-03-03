@@ -216,6 +216,20 @@ func (r *Registry) initV6Pools(profiles map[string]*ip.IPv6Profile) {
 	}
 }
 
+func (r *Registry) SetAllocDirection(ascending bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, alloc := range r.allocators {
+		alloc.SetDirection(ascending)
+	}
+	for _, alloc := range r.ianaAllocators {
+		alloc.SetDirection(ascending)
+	}
+	for _, alloc := range r.pdAllocators {
+		alloc.SetDirection(ascending)
+	}
+}
+
 func (r *Registry) AllocateFromProfile(profileName, poolOverride, subscriberVRF, sessionID string) (net.IP, string, error) {
 	if r == nil {
 		return nil, "", ErrPoolExhausted

@@ -194,3 +194,75 @@ func TestPoolExcludeAddresses(t *testing.T) {
 		t.Fatalf("got %v, want ErrPoolExhausted", err)
 	}
 }
+
+func TestPoolAllocateDescending(t *testing.T) {
+	p := newTestPool("10.0.0.1", "10.0.0.10")
+	p.SetDirection(false)
+	ip1, _ := p.Allocate("s1")
+	ip2, _ := p.Allocate("s2")
+	if !ip1.Equal(net.ParseIP("10.0.0.10")) {
+		t.Fatalf("first got %v, want 10.0.0.10", ip1)
+	}
+	if !ip2.Equal(net.ParseIP("10.0.0.9")) {
+		t.Fatalf("second got %v, want 10.0.0.9", ip2)
+	}
+}
+
+func TestPoolAllocateDescendingExhausted(t *testing.T) {
+	p := newTestPool("10.0.0.1", "10.0.0.2")
+	p.SetDirection(false)
+	ip1, _ := p.Allocate("s1")
+	ip2, _ := p.Allocate("s2")
+	if !ip1.Equal(net.ParseIP("10.0.0.2")) {
+		t.Fatalf("first got %v, want 10.0.0.2", ip1)
+	}
+	if !ip2.Equal(net.ParseIP("10.0.0.1")) {
+		t.Fatalf("second got %v, want 10.0.0.1", ip2)
+	}
+	_, err := p.Allocate("s3")
+	if !errors.Is(err, ErrPoolExhausted) {
+		t.Fatalf("got %v, want ErrPoolExhausted", err)
+	}
+}
+
+func TestPoolAllocateDescendingWithExclusions(t *testing.T) {
+	p := newTestPool("10.0.0.1", "10.0.0.5", "10.0.0.4")
+	p.SetDirection(false)
+	ip1, _ := p.Allocate("s1")
+	ip2, _ := p.Allocate("s2")
+	if !ip1.Equal(net.ParseIP("10.0.0.5")) {
+		t.Fatalf("first got %v, want 10.0.0.5", ip1)
+	}
+	if !ip2.Equal(net.ParseIP("10.0.0.3")) {
+		t.Fatalf("second got %v, want 10.0.0.3 (skipping excluded .4)", ip2)
+	}
+}
+
+func TestPoolDirectionalNoCollision(t *testing.T) {
+	asc := newTestPool("10.0.0.1", "10.0.0.10")
+	desc := newTestPool("10.0.0.1", "10.0.0.10")
+	desc.SetDirection(false)
+
+	allocated := make(map[string]bool)
+	for i := 0; i < 5; i++ {
+		ip, err := asc.Allocate("asc")
+		if err != nil {
+			t.Fatalf("asc allocation %d failed: %v", i, err)
+		}
+		s := ip.String()
+		if allocated[s] {
+			t.Fatalf("collision at %s", s)
+		}
+		allocated[s] = true
+
+		ip, err = desc.Allocate("desc")
+		if err != nil {
+			t.Fatalf("desc allocation %d failed: %v", i, err)
+		}
+		s = ip.String()
+		if allocated[s] {
+			t.Fatalf("collision at %s", s)
+		}
+		allocated[s] = true
+	}
+}

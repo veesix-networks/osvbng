@@ -13,6 +13,7 @@ type PrefixAllocator struct {
 	prefixLength int
 	count        uint64
 	leases       map[uint64]string
+	ascending    bool
 	mu           sync.Mutex
 }
 
@@ -27,16 +28,35 @@ func NewPrefixAllocator(network netip.Prefix, prefixLength int) *PrefixAllocator
 		prefixLength: prefixLength,
 		count:        1 << uint(delegBits),
 		leases:       make(map[uint64]string),
+		ascending:    true,
 	}
+}
+
+func (a *PrefixAllocator) SetDirection(ascending bool) {
+	a.mu.Lock()
+	a.ascending = ascending
+	a.mu.Unlock()
 }
 
 func (a *PrefixAllocator) Allocate(sessionID string) (*net.IPNet, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	for i := uint64(0); i < a.count; i++ {
-		if _, used := a.leases[i]; !used {
-			a.leases[i] = sessionID
-			return a.indexToIPNet(i), nil
+	if a.ascending {
+		for i := uint64(0); i < a.count; i++ {
+			if _, used := a.leases[i]; !used {
+				a.leases[i] = sessionID
+				return a.indexToIPNet(i), nil
+			}
+		}
+	} else {
+		for i := a.count - 1; ; i-- {
+			if _, used := a.leases[i]; !used {
+				a.leases[i] = sessionID
+				return a.indexToIPNet(i), nil
+			}
+			if i == 0 {
+				break
+			}
 		}
 	}
 	return nil, ErrPoolExhausted

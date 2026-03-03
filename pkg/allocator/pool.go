@@ -10,7 +10,8 @@ type PoolAllocator struct {
 	rangeStart netip.Addr
 	rangeEnd   netip.Addr
 	excluded   map[netip.Addr]bool
-	leases     map[netip.Addr]string // addr → session ID
+	leases     map[netip.Addr]string
+	ascending  bool
 	mu         sync.Mutex
 }
 
@@ -24,23 +25,67 @@ func NewPoolAllocator(rangeStart, rangeEnd netip.Addr, excludeAddrs []netip.Addr
 		rangeEnd:   rangeEnd.Unmap(),
 		excluded:   excluded,
 		leases:     make(map[netip.Addr]string),
+		ascending:  true,
 	}
+}
+
+func (a *PoolAllocator) SetDirection(ascending bool) {
+	a.mu.Lock()
+	a.ascending = ascending
+	a.mu.Unlock()
 }
 
 func (a *PoolAllocator) Allocate(sessionID string) (net.IP, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	for addr := a.rangeStart; addr.Compare(a.rangeEnd) <= 0; addr = addr.Next() {
-		if a.excluded[addr] {
-			continue
+	if a.ascending {
+		for addr := a.rangeStart; addr.Compare(a.rangeEnd) <= 0; addr = addr.Next() {
+			if a.excluded[addr] {
+				continue
+			}
+			if _, used := a.leases[addr]; !used {
+				a.leases[addr] = sessionID
+				return net.IP(addr.AsSlice()), nil
+			}
 		}
-		if _, used := a.leases[addr]; !used {
-			a.leases[addr] = sessionID
-			return net.IP(addr.AsSlice()), nil
+	} else {
+		for addr := a.rangeEnd; ; addr = prevAddr(addr) {
+			if !a.excluded[addr] {
+				if _, used := a.leases[addr]; !used {
+					a.leases[addr] = sessionID
+					return net.IP(addr.AsSlice()), nil
+				}
+			}
+			if addr == a.rangeStart {
+				break
+			}
 		}
 	}
 	return nil, ErrPoolExhausted
+}
+
+func prevAddr(a netip.Addr) netip.Addr {
+	if a.Is4() {
+		b := a.As4()
+		for i := 3; i >= 0; i-- {
+			if b[i] > 0 {
+				b[i]--
+				break
+			}
+			b[i] = 0xff
+		}
+		return netip.AddrFrom4(b)
+	}
+	b := a.As16()
+	for i := 15; i >= 0; i-- {
+		if b[i] > 0 {
+			b[i]--
+			break
+		}
+		b[i] = 0xff
+	}
+	return netip.AddrFrom16(b)
 }
 
 func (a *PoolAllocator) Release(ip net.IP) error {

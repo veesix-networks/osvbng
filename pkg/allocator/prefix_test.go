@@ -160,6 +160,31 @@ func TestPrefixReserveDifferentSession(t *testing.T) {
 	}
 }
 
+func TestPrefixAllocateDescending(t *testing.T) {
+	a := newTestPrefix("fd00::/48", 56)
+	a.SetDirection(false)
+	pfx1, _ := a.Allocate("s1")
+	pfx2, _ := a.Allocate("s2")
+	if pfx1.String() != "fd00:0:0:ff00::/56" {
+		t.Fatalf("first got %v, want fd00:0:0:ff00::/56", pfx1)
+	}
+	if pfx2.String() != "fd00:0:0:fe00::/56" {
+		t.Fatalf("second got %v, want fd00:0:0:fe00::/56", pfx2)
+	}
+}
+
+func TestPrefixDirectionalNoCollision(t *testing.T) {
+	asc := newTestPrefix("fd00::/126", 127)
+	desc := newTestPrefix("fd00::/126", 127)
+	desc.SetDirection(false)
+
+	p1, _ := asc.Allocate("s1")
+	p2, _ := desc.Allocate("s2")
+	if p1.String() == p2.String() {
+		t.Fatalf("collision: both allocated %s", p1)
+	}
+}
+
 func TestPrefixContains(t *testing.T) {
 	a := newTestPrefix("fd00::/48", 56)
 
