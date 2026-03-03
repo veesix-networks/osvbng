@@ -19,6 +19,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/logger"
+	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/opdb"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"google.golang.org/grpc"
@@ -35,6 +36,10 @@ type SRGProvider interface {
 	GetVirtualMAC(srgName string) net.HardwareAddr
 	IsActive(srgName string) bool
 	GetSRGForGroup(subscriberGroup string) string
+}
+
+type SessionIterator interface {
+	ForEachSession(fn func(models.SubscriberSession) bool)
 }
 
 type Manager struct {
@@ -60,6 +65,8 @@ type Manager struct {
 
 	peerSyncSeqs   map[string]uint64
 	bulkSyncCounts map[string]*atomic.Uint64
+
+	sessionIterators []SessionIterator
 
 	ifToSRG     map[uint32]string
 	ifDownCount map[string]int
@@ -273,6 +280,12 @@ func (m *Manager) GetSRGForGroup(subscriberGroup string) string {
 		}
 	}
 	return ""
+}
+
+func (m *Manager) RegisterSessionIterator(iter SessionIterator) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sessionIterators = append(m.sessionIterators, iter)
 }
 
 func (m *Manager) GetSRGs() map[string]*SRGStateMachine {

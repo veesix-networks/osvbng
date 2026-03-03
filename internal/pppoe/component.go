@@ -21,6 +21,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
 	"github.com/veesix-networks/osvbng/pkg/events"
+	"github.com/veesix-networks/osvbng/pkg/ha"
 	"github.com/veesix-networks/osvbng/pkg/ifmgr"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
@@ -29,31 +30,30 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/pppoe"
 	"github.com/veesix-networks/osvbng/pkg/session"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
-	"github.com/veesix-networks/osvbng/pkg/ha"
 	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
 )
 
 const (
-	defaultACName  = "osvbng"
-	cookieTTL      = 60 * time.Second
-	pppoeVersion   = 1
-	pppoeType      = 1
+	defaultACName = "osvbng"
+	cookieTTL     = 60 * time.Second
+	pppoeVersion  = 1
+	pppoeType     = 1
 )
 
 type Component struct {
 	*component.Base
 
-	logger   *slog.Logger
-	eventBus events.Bus
-	srgMgr   ha.SRGProvider
-	ifMgr    *ifmgr.Manager
-	cfgMgr   component.ConfigManager
-	vpp      southbound.Southbound
+	logger           *slog.Logger
+	eventBus         events.Bus
+	srgMgr           ha.SRGProvider
+	ifMgr            *ifmgr.Manager
+	cfgMgr           component.ConfigManager
+	vpp              southbound.Southbound
 	vrfMgr           *vrfmgr.Manager
 	svcGroupResolver *svcgroup.Resolver
-	cache    cache.Cache
-	opdb     opdb.Store
+	cache            cache.Cache
+	opdb             opdb.Store
 
 	acName    string
 	cookieMgr *pppoe.CookieManager
@@ -110,10 +110,10 @@ type SessionState struct {
 	ipcpOpen   bool
 	ipv6cpOpen bool
 
-	pap           *ppp.PAPHandler
-	chap          *ppp.CHAPHandler
-	chapChallenge []byte
-	chapID        uint8
+	pap            *ppp.PAPHandler
+	chap           *ppp.CHAPHandler
+	chapChallenge  []byte
+	chapID         uint8
 	chapRetryTimer *time.Timer
 	chapRetryCount int
 
@@ -122,8 +122,8 @@ type SessionState struct {
 	pendingPAPID         uint8
 	pendingCHAPID        uint8
 
-	OuterTPID uint16
-	VRF       string
+	OuterTPID    uint16
+	VRF          string
 	ServiceGroup svcgroup.ServiceGroup
 	SRGName      string
 
@@ -144,24 +144,24 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 	}
 
 	c := &Component{
-		Base:          component.NewBase("pppoe"),
-		logger:        log,
-		eventBus:      deps.EventBus,
-		srgMgr:        srgMgr,
-		ifMgr:         ifMgr,
-		cfgMgr:        deps.ConfigManager,
-		vpp:           deps.Southbound,
+		Base:             component.NewBase("pppoe"),
+		logger:           log,
+		eventBus:         deps.EventBus,
+		srgMgr:           srgMgr,
+		ifMgr:            ifMgr,
+		cfgMgr:           deps.ConfigManager,
+		vpp:              deps.Southbound,
 		vrfMgr:           deps.VRFManager,
 		svcGroupResolver: deps.SvcGroupResolver,
-		cache:         deps.Cache,
-		opdb:          deps.OpDB,
-		acName:    defaultACName,
-		cookieMgr: cookieMgr,
-		sessions:       make(map[string]*SessionState),
-		sidIndex:       make(map[uint16]*SessionState),
-		registry: allocator.GetGlobalRegistry(),
-		pppoeChan:      deps.PPPChan,
-		nextSessionID: 1,
+		cache:            deps.Cache,
+		opdb:             deps.OpDB,
+		acName:           defaultACName,
+		cookieMgr:        cookieMgr,
+		sessions:         make(map[string]*SessionState),
+		sidIndex:         make(map[uint16]*SessionState),
+		registry:         allocator.GetGlobalRegistry(),
+		pppoeChan:        deps.PPPChan,
+		nextSessionID:    1,
 	}
 
 	c.echoGen = NewEchoGenerator(DefaultEchoConfig(), c.sendEchoRequest, c.handleDeadPeer)
@@ -204,7 +204,6 @@ func (c *Component) getSessionOuterTPID(sess *SessionState) uint16 {
 	sess.OuterTPID = tpid
 	return tpid
 }
-
 
 func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
@@ -813,4 +812,54 @@ func (c *Component) RecoverSessions(ctx context.Context) error {
 
 	c.logger.Info("PPPoE session recovery complete", "recovered", recovered)
 	return nil
+}
+
+func (c *Component) ForEachSession(fn func(models.SubscriberSession) bool) {
+	c.sessionMu.RLock()
+	defer c.sessionMu.RUnlock()
+
+	for _, sess := range c.sessions {
+		if sess.Phase != ppp.PhaseOpen {
+			continue
+		}
+
+		snapshot := &models.PPPSession{
+			SessionID:    sess.SessionID,
+			State:        models.SessionStateActive,
+			AccessType:   string(models.AccessTypePPPoE),
+			Protocol:     string(models.ProtocolPPPoESession),
+			PPPSessionID: sess.PPPoESessionID,
+			MAC:          sess.MAC,
+			OuterVLAN:    sess.OuterVLAN,
+			InnerVLAN:    sess.InnerVLAN,
+			IfIndex:      sess.SwIfIndex,
+			VRF:          sess.VRF,
+			ServiceGroup: sess.ServiceGroup.Name,
+			SRGName:      sess.SRGName,
+			IPv4Address:  sess.IPv4Address,
+			IPv6Address:  sess.IPv6Address,
+			Username:     sess.Username,
+			AAASessionID: sess.AcctSessionID,
+			ActivatedAt:  sess.BoundAt,
+			IPv4Pool:     sess.allocatedPool,
+			IANAPool:     sess.allocatedIANAPool,
+			OuterTPID:    sess.OuterTPID,
+		}
+		if sess.IPv6Prefix != nil {
+			snapshot.IPv6Prefix = sess.IPv6Prefix.String()
+		}
+		if sess.lcp != nil {
+			snapshot.LCPState = sess.lcp.FSM().State().String()
+		}
+		if sess.ipcp != nil {
+			snapshot.IPCPState = sess.ipcp.FSM().State().String()
+		}
+		if sess.ipv6cp != nil {
+			snapshot.IPv6CPState = sess.ipv6cp.FSM().State().String()
+		}
+
+		if !fn(snapshot) {
+			return
+		}
+	}
 }
