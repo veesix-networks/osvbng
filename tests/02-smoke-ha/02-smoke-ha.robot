@@ -96,6 +96,11 @@ Verify Sessions Have IPv4 On bng1
     [Documentation]    All sessions on bng1 have an IPv4 address assigned.
     Verify Sessions Have IPv4    ${bng1}
 
+Verify Traffic Flowing On bng1
+    [Documentation]    Verify end-to-end traffic for bng1 sessions.
+    Wait Until Keyword Succeeds    6 x    10s
+    ...    Verify Traffic Flowing    ${subscribers}
+
 Verify Session Sync Updates On ACTIVE
     [Documentation]    Verify sync status on bng1 shows updates from session events.
     Wait Until Keyword Succeeds    30 x    2s
@@ -142,6 +147,11 @@ Establish Subscriber Sessions On bng2
 Verify Sessions Have IPv4 On bng2
     [Documentation]    All sessions on bng2 have an IPv4 address assigned.
     Verify Sessions Have IPv4    ${bng2}
+
+Verify Traffic Flowing On bng2
+    [Documentation]    Verify end-to-end traffic for bng2 sessions.
+    Wait Until Keyword Succeeds    6 x    10s
+    ...    Verify Traffic Flowing    ${subscribers}
 
 *** Keywords ***
 Deploy HA Topology

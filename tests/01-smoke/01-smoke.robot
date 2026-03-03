@@ -13,14 +13,18 @@ Library             String
 Library             Process
 Resource            ../common.robot
 Resource            ../bngblaster.robot
+Resource            ../sessions.robot
 
 Suite Setup         Deploy Smoke Topology
+Suite Teardown      Teardown Smoke Topology
 
 *** Variables ***
 ${lab-name}         osvbng-smoke
 ${lab-file}         ${CURDIR}/01-smoke.clab.yml
 ${bng1}             clab-${lab-name}-bng1
 ${corerouter1}      clab-${lab-name}-corerouter1
+${subscribers}      clab-${lab-name}-subscribers
+${session-count}    5
 
 *** Test Cases ***
 Verify VPP Is Running
@@ -54,8 +58,26 @@ Verify VPP Interfaces Configured
     Should Contain    ${output}    eth1
     Should Contain    ${output}    eth2
 
+Establish Subscriber Sessions
+    [Documentation]    Start BNG Blaster in background and wait for sessions.
+    Start BNG Blaster In Background    ${subscribers}
+    Wait For Sessions Established    ${bng1}    ${subscribers}    ${session-count}
+
+Verify Sessions Have IPv4
+    [Documentation]    All sessions have an IPv4 address assigned.
+    Verify Sessions Have IPv4    ${bng1}
+
+Verify Traffic Flowing
+    [Documentation]    Verify end-to-end traffic between access and network interfaces.
+    Wait Until Keyword Succeeds    6 x    10s
+    ...    Verify Traffic Flowing    ${subscribers}    expected_flows=${session-count}
+
 *** Keywords ***
 Deploy Smoke Topology
     Deploy Topology    ${lab-file}
     Wait For osvbng Healthy    bng1    ${lab-name}
+
+Teardown Smoke Topology
+    Run Keyword And Ignore Error    Stop BNG Blaster    ${subscribers}
+    Destroy Topology    ${lab-file}
 
