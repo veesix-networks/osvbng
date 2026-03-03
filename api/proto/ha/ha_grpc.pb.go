@@ -26,6 +26,8 @@ const (
 	HAPeerService_Heartbeat_FullMethodName         = "/osvbng.ha.v1.HAPeerService/Heartbeat"
 	HAPeerService_NotifySRGState_FullMethodName    = "/osvbng.ha.v1.HAPeerService/NotifySRGState"
 	HAPeerService_RequestSwitchover_FullMethodName = "/osvbng.ha.v1.HAPeerService/RequestSwitchover"
+	HAPeerService_SyncSession_FullMethodName       = "/osvbng.ha.v1.HAPeerService/SyncSession"
+	HAPeerService_BulkSync_FullMethodName          = "/osvbng.ha.v1.HAPeerService/BulkSync"
 )
 
 // HAPeerServiceClient is the client API for HAPeerService service.
@@ -35,6 +37,8 @@ type HAPeerServiceClient interface {
 	Heartbeat(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[HeartbeatMessage, HeartbeatMessage], error)
 	NotifySRGState(ctx context.Context, in *SRGStateNotification, opts ...grpc.CallOption) (*SRGStateAck, error)
 	RequestSwitchover(ctx context.Context, in *SwitchoverRequest, opts ...grpc.CallOption) (*SwitchoverResponse, error)
+	SyncSession(ctx context.Context, in *SyncSessionRequest, opts ...grpc.CallOption) (*SyncSessionResponse, error)
+	BulkSync(ctx context.Context, in *BulkSyncRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[BulkSyncResponse], error)
 }
 
 type hAPeerServiceClient struct {
@@ -78,6 +82,35 @@ func (c *hAPeerServiceClient) RequestSwitchover(ctx context.Context, in *Switcho
 	return out, nil
 }
 
+func (c *hAPeerServiceClient) SyncSession(ctx context.Context, in *SyncSessionRequest, opts ...grpc.CallOption) (*SyncSessionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SyncSessionResponse)
+	err := c.cc.Invoke(ctx, HAPeerService_SyncSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *hAPeerServiceClient) BulkSync(ctx context.Context, in *BulkSyncRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[BulkSyncResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &HAPeerService_ServiceDesc.Streams[1], HAPeerService_BulkSync_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[BulkSyncRequest, BulkSyncResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HAPeerService_BulkSyncClient = grpc.ServerStreamingClient[BulkSyncResponse]
+
 // HAPeerServiceServer is the server API for HAPeerService service.
 // All implementations must embed UnimplementedHAPeerServiceServer
 // for forward compatibility.
@@ -85,6 +118,8 @@ type HAPeerServiceServer interface {
 	Heartbeat(grpc.BidiStreamingServer[HeartbeatMessage, HeartbeatMessage]) error
 	NotifySRGState(context.Context, *SRGStateNotification) (*SRGStateAck, error)
 	RequestSwitchover(context.Context, *SwitchoverRequest) (*SwitchoverResponse, error)
+	SyncSession(context.Context, *SyncSessionRequest) (*SyncSessionResponse, error)
+	BulkSync(*BulkSyncRequest, grpc.ServerStreamingServer[BulkSyncResponse]) error
 	mustEmbedUnimplementedHAPeerServiceServer()
 }
 
@@ -103,6 +138,12 @@ func (UnimplementedHAPeerServiceServer) NotifySRGState(context.Context, *SRGStat
 }
 func (UnimplementedHAPeerServiceServer) RequestSwitchover(context.Context, *SwitchoverRequest) (*SwitchoverResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RequestSwitchover not implemented")
+}
+func (UnimplementedHAPeerServiceServer) SyncSession(context.Context, *SyncSessionRequest) (*SyncSessionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SyncSession not implemented")
+}
+func (UnimplementedHAPeerServiceServer) BulkSync(*BulkSyncRequest, grpc.ServerStreamingServer[BulkSyncResponse]) error {
+	return status.Error(codes.Unimplemented, "method BulkSync not implemented")
 }
 func (UnimplementedHAPeerServiceServer) mustEmbedUnimplementedHAPeerServiceServer() {}
 func (UnimplementedHAPeerServiceServer) testEmbeddedByValue()                       {}
@@ -168,6 +209,35 @@ func _HAPeerService_RequestSwitchover_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HAPeerService_SyncSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HAPeerServiceServer).SyncSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HAPeerService_SyncSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HAPeerServiceServer).SyncSession(ctx, req.(*SyncSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HAPeerService_BulkSync_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(BulkSyncRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(HAPeerServiceServer).BulkSync(m, &grpc.GenericServerStream[BulkSyncRequest, BulkSyncResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HAPeerService_BulkSyncServer = grpc.ServerStreamingServer[BulkSyncResponse]
+
 // HAPeerService_ServiceDesc is the grpc.ServiceDesc for HAPeerService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -183,6 +253,10 @@ var HAPeerService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "RequestSwitchover",
 			Handler:    _HAPeerService_RequestSwitchover_Handler,
 		},
+		{
+			MethodName: "SyncSession",
+			Handler:    _HAPeerService_SyncSession_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -190,6 +264,11 @@ var HAPeerService_ServiceDesc = grpc.ServiceDesc{
 			Handler:       _HAPeerService_Heartbeat_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "BulkSync",
+			Handler:       _HAPeerService_BulkSync_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "api/proto/ha/ha.proto",

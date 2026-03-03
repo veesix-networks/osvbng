@@ -12,6 +12,8 @@ service HAPeerService {
   rpc Heartbeat(stream HeartbeatMessage) returns (stream HeartbeatMessage);
   rpc NotifySRGState(SRGStateNotification) returns (SRGStateAck);
   rpc RequestSwitchover(SwitchoverRequest) returns (SwitchoverResponse);
+  rpc SyncSession(SyncSessionRequest) returns (SyncSessionResponse);
+  rpc BulkSync(BulkSyncRequest) returns (stream BulkSyncResponse);
 }
 
 message HeartbeatMessage {
@@ -49,4 +51,81 @@ message SwitchoverRequest {
 message SwitchoverResponse {
   bool success = 1;
   string message = 2;
+}
+
+enum SyncAction {
+  SYNC_ACTION_UNSPECIFIED = 0;
+  SYNC_ACTION_CREATE = 1;
+  SYNC_ACTION_UPDATE = 2;
+  SYNC_ACTION_DELETE = 3;
+}
+
+message SessionCheckpoint {
+  string session_id = 1;
+  string srg_name = 2;
+  string access_type = 3;
+
+  bytes mac = 4;
+  uint32 outer_vlan = 5;
+  uint32 inner_vlan = 6;
+  string username = 7;
+  string aaa_session_id = 8;
+
+  bytes ipv4_address = 9;
+  bytes ipv4_netmask = 10;
+  bytes ipv4_gateway = 11;
+  bytes ipv6_address = 12;
+  bytes ipv6_prefix = 13;
+  uint32 ipv6_prefix_len = 14;
+
+  uint32 ipv4_lease_time = 15;
+  uint32 ipv6_lease_time = 16;
+  int64 bound_at_ns = 17;
+  int64 ipv6_bound_at_ns = 18;
+
+  bytes circuit_id = 19;
+  bytes remote_id = 20;
+  bytes client_id = 21;
+  string hostname = 22;
+  bytes dhcpv6_duid = 23;
+
+  string vrf = 24;
+  string service_group = 25;
+  string subscriber_group = 26;
+
+  uint32 pppoe_session_id = 27;
+  string lcp_state = 28;
+  string ipcp_state = 29;
+  string ipv6cp_state = 30;
+  string service_name = 31;
+
+  string ipv4_pool = 32;
+  string iana_pool = 33;
+  string pd_pool = 34;
+
+  uint32 outer_tpid = 35;
+}
+
+message SyncSessionRequest {
+  string srg_name = 1;
+  uint64 sequence = 2;
+  SyncAction action = 3;
+  SessionCheckpoint session = 4;
+}
+
+message SyncSessionResponse {
+  bool success = 1;
+  uint64 last_sync_seq = 2;
+}
+
+message BulkSyncRequest {
+  repeated string srg_names = 1;
+  uint64 from_sequence = 2;
+}
+
+message BulkSyncResponse {
+  string srg_name = 1;
+  repeated SessionCheckpoint sessions = 2;
+  uint64 sequence = 3;
+  bool last_page = 4;
 }
