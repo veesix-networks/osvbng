@@ -24,6 +24,7 @@ type SwitchoverHandler struct {
 
 type SwitchoverRequest struct {
 	SRGNames []string `json:"srg_names"`
+	Force    bool     `json:"force"`
 }
 
 type SwitchoverResponse struct {
@@ -53,7 +54,7 @@ func (h *SwitchoverHandler) Execute(ctx context.Context, req *oper.Request) (int
 		}
 	}
 
-	if err := h.deps.HAManager.RequestSwitchover(ctx, body.SRGNames); err != nil {
+	if err := h.deps.HAManager.RequestSwitchover(ctx, body.SRGNames, body.Force); err != nil {
 		return &SwitchoverResponse{
 			Success: false,
 			Message: err.Error(),

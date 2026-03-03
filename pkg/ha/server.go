@@ -71,7 +71,7 @@ func (s *HAPeerServer) RequestSwitchover(_ context.Context, req *hapb.Switchover
 			}, nil
 		}
 
-		transition := sm.Switchover()
+		transition := sm.Switchover(false)
 		if transition != nil {
 			s.manager.publishTransition(transition)
 			s.logger.Info("SRG switchover executed",

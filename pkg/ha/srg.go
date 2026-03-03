@@ -21,7 +21,8 @@ const (
 	SRGStateReady      SRGState = "READY"
 	SRGStateActive     SRGState = "ACTIVE"
 	SRGStateStandby    SRGState = "STANDBY"
-	SRGStateActiveSolo SRGState = "ACTIVE_SOLO"
+	SRGStateActiveSolo    SRGState = "ACTIVE_SOLO"
+	SRGStateStandbyAlone SRGState = "STANDBY_ALONE"
 )
 
 type SRGStateMachine struct {
@@ -156,6 +157,8 @@ func (sm *SRGStateMachine) PeerDiscovered(peerPriority uint32, peerNodeID string
 		return sm.transitionTo(SRGStateReady)
 	case SRGStateActiveSolo:
 		return sm.transitionTo(SRGStateReady)
+	case SRGStateStandbyAlone:
+		return sm.transitionTo(SRGStateReady)
 	default:
 		return nil
 	}
@@ -190,7 +193,7 @@ func (sm *SRGStateMachine) PeerLost() *StateTransition {
 	case SRGStateActive:
 		return sm.transitionTo(SRGStateActiveSolo)
 	case SRGStateStandby:
-		return sm.transitionTo(SRGStateActive)
+		return sm.transitionTo(SRGStateStandbyAlone)
 	case SRGStateReady:
 		return sm.transitionTo(SRGStateWaiting)
 	default:
@@ -198,7 +201,7 @@ func (sm *SRGStateMachine) PeerLost() *StateTransition {
 	}
 }
 
-func (sm *SRGStateMachine) Switchover() *StateTransition {
+func (sm *SRGStateMachine) Switchover(force bool) *StateTransition {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -206,6 +209,11 @@ func (sm *SRGStateMachine) Switchover() *StateTransition {
 	case SRGStateActive:
 		return sm.transitionTo(SRGStateStandby)
 	case SRGStateStandby:
+		return sm.transitionTo(SRGStateActive)
+	case SRGStateStandbyAlone:
+		if !force {
+			return nil
+		}
 		return sm.transitionTo(SRGStateActive)
 	default:
 		return nil

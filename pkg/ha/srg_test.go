@@ -138,7 +138,7 @@ func TestSRGStateMachine_PeerLostActiveToSolo(t *testing.T) {
 	}
 }
 
-func TestSRGStateMachine_PeerLostStandbyToActive(t *testing.T) {
+func TestSRGStateMachine_PeerLostStandbyToStandbyAlone(t *testing.T) {
 	sm := newTestSM("srg1", 50, false, "node-a")
 	sm.Start()
 	sm.PeerDiscovered(200, "node-b", SRGStateWaiting)
@@ -152,8 +152,105 @@ func TestSRGStateMachine_PeerLostStandbyToActive(t *testing.T) {
 	if tr == nil {
 		t.Fatal("expected transition")
 	}
+	if tr.NewState != SRGStateStandbyAlone {
+		t.Fatalf("expected STANDBY_ALONE, got %s", tr.NewState)
+	}
+}
+
+func TestStandbyAlone_IsNotActive(t *testing.T) {
+	sm := newTestSM("srg1", 50, false, "node-a")
+	sm.Start()
+	sm.PeerDiscovered(200, "node-b", SRGStateWaiting)
+	sm.Elect("node-b")
+	sm.PeerLost()
+
+	if sm.State() != SRGStateStandbyAlone {
+		t.Fatalf("expected STANDBY_ALONE, got %s", sm.State())
+	}
+	if sm.IsActive() {
+		t.Fatal("STANDBY_ALONE must not be active")
+	}
+}
+
+func TestStandbyAlone_PeerReturns_TransitionsToReady(t *testing.T) {
+	sm := newTestSM("srg1", 50, false, "node-a")
+	sm.Start()
+	sm.PeerDiscovered(200, "node-b", SRGStateWaiting)
+	sm.Elect("node-b")
+	sm.PeerLost()
+
+	if sm.State() != SRGStateStandbyAlone {
+		t.Fatalf("expected STANDBY_ALONE, got %s", sm.State())
+	}
+
+	tr := sm.PeerDiscovered(200, "node-b", SRGStateWaiting)
+	if tr == nil {
+		t.Fatal("expected transition")
+	}
+	if tr.NewState != SRGStateReady {
+		t.Fatalf("expected READY, got %s", tr.NewState)
+	}
+}
+
+func TestStandbyAlone_SwitchoverRequiresForce(t *testing.T) {
+	sm := newTestSM("srg1", 50, false, "node-a")
+	sm.Start()
+	sm.PeerDiscovered(200, "node-b", SRGStateWaiting)
+	sm.Elect("node-b")
+	sm.PeerLost()
+
+	if sm.State() != SRGStateStandbyAlone {
+		t.Fatalf("expected STANDBY_ALONE, got %s", sm.State())
+	}
+
+	tr := sm.Switchover(false)
+	if tr != nil {
+		t.Fatal("expected no transition without force flag")
+	}
+	if sm.State() != SRGStateStandbyAlone {
+		t.Fatalf("expected still STANDBY_ALONE, got %s", sm.State())
+	}
+
+	tr = sm.Switchover(true)
+	if tr == nil {
+		t.Fatal("expected transition with force flag")
+	}
 	if tr.NewState != SRGStateActive {
-		t.Fatalf("expected ACTIVE (peer lost while standby), got %s", tr.NewState)
+		t.Fatalf("expected ACTIVE after forced switchover, got %s", tr.NewState)
+	}
+}
+
+func TestStandbyAlone_PeerLostAgain_NoOp(t *testing.T) {
+	sm := newTestSM("srg1", 50, false, "node-a")
+	sm.Start()
+	sm.PeerDiscovered(200, "node-b", SRGStateWaiting)
+	sm.Elect("node-b")
+	sm.PeerLost()
+
+	if sm.State() != SRGStateStandbyAlone {
+		t.Fatalf("expected STANDBY_ALONE, got %s", sm.State())
+	}
+
+	tr := sm.PeerLost()
+	if tr != nil {
+		t.Fatal("expected no transition on repeated PeerLost in STANDBY_ALONE")
+	}
+}
+
+func TestActiveSolo_PeerLost_Unchanged(t *testing.T) {
+	sm := newTestSM("srg1", 200, false, "node-a")
+	sm.Start()
+	sm.PeerDiscovered(100, "node-b", SRGStateWaiting)
+	sm.Elect("node-b")
+	sm.PeerLost()
+
+	if sm.State() != SRGStateActiveSolo {
+		t.Fatalf("expected ACTIVE_SOLO, got %s", sm.State())
+	}
+
+	tr := sm.PeerLost()
+	if tr != nil {
+		t.Fatal("expected no transition on repeated PeerLost in ACTIVE_SOLO")
 	}
 }
 
@@ -187,7 +284,7 @@ func TestSRGStateMachine_GracefulSwitchover(t *testing.T) {
 		t.Fatalf("expected ACTIVE, got %s", sm.State())
 	}
 
-	tr := sm.Switchover()
+	tr := sm.Switchover(false)
 	if tr == nil {
 		t.Fatal("expected transition")
 	}
@@ -201,7 +298,7 @@ func TestSRGStateMachine_PreemptReelection(t *testing.T) {
 	sm.Start()
 	sm.PeerDiscovered(100, "node-b", SRGStateWaiting)
 	sm.Elect("node-b")
-	sm.Switchover()
+	sm.Switchover(false)
 
 	if sm.State() != SRGStateStandby {
 		t.Fatalf("expected STANDBY, got %s", sm.State())
@@ -258,7 +355,7 @@ func TestSRGStateMachine_NoPreemptStaysStandby(t *testing.T) {
 	sm.Start()
 	sm.PeerDiscovered(100, "node-b", SRGStateWaiting)
 	sm.Elect("node-b")
-	sm.Switchover()
+	sm.Switchover(false)
 
 	tr := sm.PeerHeartbeatUpdate(100, "node-b", SRGStateActive)
 	if tr != nil {
@@ -483,7 +580,7 @@ func TestSRGStateMachine_PreemptWithReducedPriority(t *testing.T) {
 		t.Fatalf("expected ACTIVE, got %s", sm.State())
 	}
 
-	sm.Switchover()
+	sm.Switchover(false)
 	if sm.State() != SRGStateStandby {
 		t.Fatalf("expected STANDBY after switchover, got %s", sm.State())
 	}
