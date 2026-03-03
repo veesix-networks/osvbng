@@ -708,3 +708,129 @@ func TestRegistryAllocateVRFIsolation(t *testing.T) {
 		}
 	})
 }
+
+func TestRegistryReserveIPInPool(t *testing.T) {
+	profiles := map[string]*ip.IPv4Profile{
+		"prof1": makeV4Profile("", ip.IPv4Pool{
+			Name:       "pool1",
+			Network:    "10.0.0.0/24",
+			RangeStart: "10.0.0.1",
+			RangeEnd:   "10.0.0.5",
+		}),
+	}
+	r := newRegistry(profiles, nil)
+	err := r.ReserveIPInPool("prof1/pool1", net.ParseIP("10.0.0.3"), "s1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	allocated, _, _ := r.AllocateFromProfile("prof1", "", "", "s2")
+	if !allocated.Equal(net.ParseIP("10.0.0.1")) {
+		t.Fatalf("got %v, want 10.0.0.1", allocated)
+	}
+}
+
+func TestRegistryReserveIPInPool_FallbackToScan(t *testing.T) {
+	profiles := map[string]*ip.IPv4Profile{
+		"prof1": makeV4Profile("", ip.IPv4Pool{
+			Name:       "pool1",
+			Network:    "10.0.0.0/24",
+			RangeStart: "10.0.0.1",
+			RangeEnd:   "10.0.0.5",
+		}),
+	}
+	r := newRegistry(profiles, nil)
+	err := r.ReserveIPInPool("unknown/pool", net.ParseIP("10.0.0.3"), "s1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	allocated, _, _ := r.AllocateFromProfile("prof1", "", "", "s2")
+	if !allocated.Equal(net.ParseIP("10.0.0.1")) {
+		t.Fatalf("got %v, want 10.0.0.1", allocated)
+	}
+}
+
+func TestRegistryReserveIANAInPool(t *testing.T) {
+	profiles := map[string]*ip.IPv6Profile{
+		"prof1": makeV6Profile([]ip.IANAPool{{
+			Name:       "iana1",
+			Network:    "2001:db8::/64",
+			RangeStart: "2001:db8::1",
+			RangeEnd:   "2001:db8::5",
+		}}, nil),
+	}
+	r := newRegistry(nil, profiles)
+	err := r.ReserveIANAInPool("prof1/iana1", net.ParseIP("2001:db8::3"), "s1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	allocated, _, _ := r.AllocateIANAFromProfile("prof1", "", "", "s2")
+	if !allocated.Equal(net.ParseIP("2001:db8::1")) {
+		t.Fatalf("got %v, want 2001:db8::1", allocated)
+	}
+}
+
+func TestRegistryReserveIANAInPool_FallbackToScan(t *testing.T) {
+	profiles := map[string]*ip.IPv6Profile{
+		"prof1": makeV6Profile([]ip.IANAPool{{
+			Name:       "iana1",
+			Network:    "2001:db8::/64",
+			RangeStart: "2001:db8::1",
+			RangeEnd:   "2001:db8::5",
+		}}, nil),
+	}
+	r := newRegistry(nil, profiles)
+	err := r.ReserveIANAInPool("unknown/pool", net.ParseIP("2001:db8::3"), "s1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	allocated, _, _ := r.AllocateIANAFromProfile("prof1", "", "", "s2")
+	if !allocated.Equal(net.ParseIP("2001:db8::1")) {
+		t.Fatalf("got %v, want 2001:db8::1", allocated)
+	}
+}
+
+func TestRegistryReservePDInPool(t *testing.T) {
+	profiles := map[string]*ip.IPv6Profile{
+		"prof1": makeV6Profile(nil, []ip.PDPool{{
+			Name:         "pd1",
+			Network:      "2001:db8::/126",
+			PrefixLength: 127,
+		}}),
+	}
+	r := newRegistry(nil, profiles)
+	reserved := &net.IPNet{
+		IP:   net.ParseIP("2001:db8::"),
+		Mask: net.CIDRMask(127, 128),
+	}
+	err := r.ReservePDInPool("prof1/pd1", reserved, "s1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	pfx, _, _ := r.AllocatePDFromProfile("prof1", "", "", "s2")
+	if pfx.String() != "2001:db8::2/127" {
+		t.Fatalf("got %v, want 2001:db8::2/127", pfx)
+	}
+}
+
+func TestRegistryReservePDInPool_FallbackToScan(t *testing.T) {
+	profiles := map[string]*ip.IPv6Profile{
+		"prof1": makeV6Profile(nil, []ip.PDPool{{
+			Name:         "pd1",
+			Network:      "2001:db8::/126",
+			PrefixLength: 127,
+		}}),
+	}
+	r := newRegistry(nil, profiles)
+	reserved := &net.IPNet{
+		IP:   net.ParseIP("2001:db8::"),
+		Mask: net.CIDRMask(127, 128),
+	}
+	err := r.ReservePDInPool("unknown/pool", reserved, "s1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	pfx, _, _ := r.AllocatePDFromProfile("prof1", "", "", "s2")
+	if pfx.String() != "2001:db8::2/127" {
+		t.Fatalf("got %v, want 2001:db8::2/127", pfx)
+	}
+}

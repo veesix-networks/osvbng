@@ -425,6 +425,66 @@ func (r *Registry) ReservePD(prefix *net.IPNet, sessionID string) error {
 	return nil
 }
 
+func (r *Registry) ReserveIPInPool(poolKey string, ip net.IP, sessionID string) error {
+	if r == nil {
+		return nil
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if alloc, ok := r.allocators[poolKey]; ok {
+		return alloc.Reserve(ip, sessionID)
+	}
+
+	for _, alloc := range r.allocators {
+		if alloc.Contains(ip) {
+			return alloc.Reserve(ip, sessionID)
+		}
+	}
+	return nil
+}
+
+func (r *Registry) ReserveIANAInPool(poolKey string, ip net.IP, sessionID string) error {
+	if r == nil {
+		return nil
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if alloc, ok := r.ianaAllocators[poolKey]; ok {
+		return alloc.Reserve(ip, sessionID)
+	}
+
+	for _, alloc := range r.ianaAllocators {
+		if alloc.Contains(ip) {
+			return alloc.Reserve(ip, sessionID)
+		}
+	}
+	return nil
+}
+
+func (r *Registry) ReservePDInPool(poolKey string, prefix *net.IPNet, sessionID string) error {
+	if r == nil {
+		return nil
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if alloc, ok := r.pdAllocators[poolKey]; ok {
+		return alloc.Reserve(prefix, sessionID)
+	}
+
+	for _, alloc := range r.pdAllocators {
+		if alloc.Contains(prefix) {
+			return alloc.Reserve(prefix, sessionID)
+		}
+	}
+	return nil
+}
+
 func (r *Registry) ReleaseIANAByIP(ip net.IP) {
 	if r == nil {
 		return

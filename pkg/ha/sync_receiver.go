@@ -152,12 +152,24 @@ func (r *SyncReceiver) reserveAddresses(cp *hapb.SessionCheckpoint) {
 		return
 	}
 	if len(cp.Ipv4Address) > 0 {
-		if err := r.registry.ReserveIP(net.IP(cp.Ipv4Address), cp.SessionId); err != nil {
+		var err error
+		if cp.Ipv4Pool != "" {
+			err = r.registry.ReserveIPInPool(cp.Ipv4Pool, net.IP(cp.Ipv4Address), cp.SessionId)
+		} else {
+			err = r.registry.ReserveIP(net.IP(cp.Ipv4Address), cp.SessionId)
+		}
+		if err != nil {
 			r.logger.Debug("Failed to reserve IPv4 from sync", "session", cp.SessionId, "error", err)
 		}
 	}
 	if len(cp.Ipv6Address) > 0 {
-		if err := r.registry.ReserveIANA(net.IP(cp.Ipv6Address), cp.SessionId); err != nil {
+		var err error
+		if cp.IanaPool != "" {
+			err = r.registry.ReserveIANAInPool(cp.IanaPool, net.IP(cp.Ipv6Address), cp.SessionId)
+		} else {
+			err = r.registry.ReserveIANA(net.IP(cp.Ipv6Address), cp.SessionId)
+		}
+		if err != nil {
 			r.logger.Debug("Failed to reserve IANA from sync", "session", cp.SessionId, "error", err)
 		}
 	}
@@ -166,7 +178,13 @@ func (r *SyncReceiver) reserveAddresses(cp *hapb.SessionCheckpoint) {
 			IP:   net.IP(cp.Ipv6Prefix),
 			Mask: net.CIDRMask(int(cp.Ipv6PrefixLen), 128),
 		}
-		if err := r.registry.ReservePD(ipNet, cp.SessionId); err != nil {
+		var err error
+		if cp.PdPool != "" {
+			err = r.registry.ReservePDInPool(cp.PdPool, ipNet, cp.SessionId)
+		} else {
+			err = r.registry.ReservePD(ipNet, cp.SessionId)
+		}
+		if err != nil {
 			r.logger.Debug("Failed to reserve PD from sync", "session", cp.SessionId, "error", err)
 		}
 	}
