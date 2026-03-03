@@ -12,6 +12,7 @@ Active/standby HA configuration using Subscriber Redundancy Groups. See [archite
 | `peer` | [Peer](#peer) | Peer node connection | |
 | `tls` | [TLS](#tls) | mTLS configuration | |
 | `heartbeat` | [Heartbeat](#heartbeat) | Heartbeat timing | |
+| `sync` | [Sync](#sync) | Session sync tuning | |
 | `srgs` | map of [SRG](#srgs) | Subscriber Redundancy Groups (at least one required) | |
 
 ### Listen
@@ -42,6 +43,14 @@ All three fields required together, or omit entirely for plaintext.
 |-------|------|---------|-------------|---------|
 | `interval` | duration | `1s` | Heartbeat send interval | `1s` |
 | `timeout` | duration | `5s` | Peer loss detection timeout (must be greater than interval) | `5s` |
+
+### Sync
+
+| Field | Type | Default | Description | Example |
+|-------|------|---------|-------------|---------|
+| `backlog_size` | int | `10000` | Per-SRG incremental sync backlog depth | `20000` |
+| `page_size` | int | `1000` | Sessions per page during bulk sync | `500` |
+| `bulk_sync_timeout` | duration | `60s` | Timeout for a full bulk sync operation | `120s` |
 
 ### SRGs
 
@@ -138,4 +147,5 @@ ha:
 | `/api/show/ha/srg` | GET | SRG details: state, priority, base priority, preempt, virtual MAC, tracked/down interfaces |
 | `/api/show/ha/peer` | GET | Peer info: connected, node ID, last heartbeat, RTT, clock skew |
 | `/api/show/ha/srg/counters` | GET | Dataplane counters: GARP sent, NA sent, MAC adds/removes |
+| `/api/show/ha/sync` | GET | Session sync status: role, sequence numbers, backlog depth, sync lag, counters |
 | `/api/exec/ha/switchover` | POST | Trigger graceful switchover (optional JSON body with `srg_names` array to limit scope) |
