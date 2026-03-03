@@ -37,6 +37,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/dhcp4"
 	"github.com/veesix-networks/osvbng/pkg/dhcp6"
 	"github.com/veesix-networks/osvbng/pkg/events/local"
+	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/ha"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/conf/all"
 	"github.com/veesix-networks/osvbng/pkg/handlers/oper"
@@ -294,6 +295,11 @@ func main() {
 
 		if cfg.Protocols.BGP != nil && cfg.Protocols.BGP.ASN > 0 {
 			haOpts = append(haOpts, ha.WithRoutingController(routingComp))
+		}
+
+		haOpts = append(haOpts, ha.WithOpDB(opdbStore))
+		if reg := allocator.GetGlobalRegistry(); reg != nil {
+			haOpts = append(haOpts, ha.WithAllocatorRegistry(reg))
 		}
 
 		haMgr, err = ha.NewManager(&cfg.HA, eventBus, haOpts...)

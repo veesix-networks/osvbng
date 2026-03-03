@@ -36,6 +36,7 @@ const (
 	SystemWatchdog Path = "system.watchdog"
 
 	HAStatus Path = "ha.status"
+	HASync   Path = "ha.sync"
 )
 
 func (p Path) String() string {
