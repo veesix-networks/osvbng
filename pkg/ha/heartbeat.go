@@ -142,14 +142,21 @@ func abs(d time.Duration) time.Duration {
 	return d
 }
 
-func buildSRGStatuses(srgs map[string]*SRGStateMachine) []*hapb.SRGStatus {
+func buildSRGStatuses(srgs map[string]*SRGStateMachine, sender *SyncSender, receiver *SyncReceiver) []*hapb.SRGStatus {
 	statuses := make([]*hapb.SRGStatus, 0, len(srgs))
 	for name, sm := range srgs {
-		statuses = append(statuses, &hapb.SRGStatus{
+		s := &hapb.SRGStatus{
 			SrgName:  name,
 			State:    string(sm.State()),
 			Priority: sm.Priority(),
-		})
+		}
+		if sender != nil {
+			s.LastSyncSeq = sender.GetSeq(name)
+		}
+		if receiver != nil {
+			s.LastSyncSeq = receiver.GetLastSeq(name)
+		}
+		statuses = append(statuses, s)
 	}
 	return statuses
 }

@@ -22,6 +22,8 @@ type Stats struct {
 }
 
 const (
-	NamespaceIPoESessions  = "ipoe_sessions"
-	NamespacePPPoESessions = "pppoe_sessions"
+	NamespaceIPoESessions      = "ipoe_sessions"
+	NamespacePPPoESessions     = "pppoe_sessions"
+	NamespaceHASyncedIPoE      = "ha_synced_ipoe"
+	NamespaceHASyncedPPPoE     = "ha_synced_pppoe"
 )
