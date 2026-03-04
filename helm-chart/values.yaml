@@ -1,0 +1,35 @@
+osvbng:
+  image: "ghcr.io/infinitydon/osvbng:v0.0.3"
+  pullPolicy: Always #IfNotPresent
+  accessInterface: "net1"
+  coreInterface: "net2"
+  privileged: true
+  serviceType: ClusterIP
+  ports:
+    grpc: 50050
+    prometheus: 9090
+    http: 8080
+  mountSysKernelDebug: true
+  mountHugepages: true
+  shmSize: "2Gi"
+  resources:
+    cpu: 4
+    memory: "6Gi"
+
+bngblaster:
+  enabled: true
+  image: "ghcr.io/infinitydon/bng-blaster:v0.9.30"
+  pullPolicy: IfNotPresent
+  accessInterface: "net1"
+  coreInterface: "net2"
+
+multus:
+  enabled: true
+  osvbng:
+    devices:
+      accessHostDevice: "ens21"
+      coreHostDevice: "ens22"
+  bngblaster:
+    devices:
+      accessHostDevice: "ens19"
+      coreHostDevice: "ens20"
