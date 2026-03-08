@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.4.0](https://github.com/veesix-networks/osvbng/compare/v0.3.1...v0.4.0) (2026-03-03)
+
+
+### Features
+
+* **ha:** add HA foundation with SRG state machine, gRPC peer, and component integration ([#137](https://github.com/veesix-networks/osvbng/issues/137)) ([2df141b](https://github.com/veesix-networks/osvbng/commit/2df141b1d6aeae3a6744855a91dc0baab46750ed))
+* **ha:** add interface tracking, SRG counters handler, and split-brain resolution ([#141](https://github.com/veesix-networks/osvbng/issues/141)) ([d6f5c5e](https://github.com/veesix-networks/osvbng/commit/d6f5c5ec6610a169961ba5aa52aed2bf64d93260))
+* **ha:** add pool-targeted sync and full bulk sync from live sessions ([#165](https://github.com/veesix-networks/osvbng/issues/165)) ([573e145](https://github.com/veesix-networks/osvbng/commit/573e145e3c48be938ad897bea2ba44a38680c441))
+* **ha:** add session sync for HA standby replication ([#164](https://github.com/veesix-networks/osvbng/issues/164)) ([0b2bf44](https://github.com/veesix-networks/osvbng/commit/0b2bf447fcca42849a51ccf50661a34932d8a566))
+* **ha:** add SRG BGP route advertisement and withdrawal on failover ([#142](https://github.com/veesix-networks/osvbng/issues/142)) ([1e3613f](https://github.com/veesix-networks/osvbng/commit/1e3613faec9d5ea9483a03b7c1acb09d3d801cfd))
+* **ha:** add SRG dataplane abstraction with VPP implementation and no-op fallback ([#140](https://github.com/veesix-networks/osvbng/issues/140)) ([89888e5](https://github.com/veesix-networks/osvbng/commit/89888e57e600bc5ac716ff5a44cb84432779f0d7))
+
+
+### Bug Fixes
+
+* **ha:** standby does not auto-promote on peer loss ([#163](https://github.com/veesix-networks/osvbng/issues/163)) ([0693571](https://github.com/veesix-networks/osvbng/commit/0693571e0f83cea5d3c54f3cabcfc969f3d03d5b))
+* **ipv6:** use separate IPv6 profile name in allocator and add PPPoE IANA allocation ([#159](https://github.com/veesix-networks/osvbng/issues/159)) ([34a6dca](https://github.com/veesix-networks/osvbng/commit/34a6dcae44cd3d811135b22b66a131ba82190c7f))
+* poll for bngblaster exit instead of fixed sleep ([#157](https://github.com/veesix-networks/osvbng/issues/157)) ([76d613d](https://github.com/veesix-networks/osvbng/commit/76d613dd88c501d54ccdbcc0fac49a85da16c71d))
+* poll for IPv6 readiness in session tests and enable IP6CP for PPPoE ([#158](https://github.com/veesix-networks/osvbng/issues/158)) ([9bd142d](https://github.com/veesix-networks/osvbng/commit/9bd142d45dfbc9d121cf5e9344a3b7fe88860925))
+
 ## [0.3.1](https://github.com/veesix-networks/osvbng/compare/v0.3.0...v0.3.1) (2026-02-23)
 
 
