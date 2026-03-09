@@ -16,7 +16,6 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
-	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/aaa"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/ip"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/protocols/bgp"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/subscriber"

@@ -567,6 +567,17 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 	c.logger.WithGroup(logger.IPoEDHCP4).Info("Publishing AAA request for DISCOVER", "session_id", sess.SessionID, "username", username)
 	requestID := uuid.New().String()
 
+	aaaAttrs := make(map[string]string)
+	if len(circuitID) > 0 {
+		aaaAttrs[aaa.AttrCircuitID] = string(circuitID)
+	}
+	if len(remoteID) > 0 {
+		aaaAttrs[aaa.AttrRemoteID] = string(remoteID)
+	}
+	if hostname != "" {
+		aaaAttrs[aaa.AttrHostname] = hostname
+	}
+
 	aaaPayload := &models.AAARequest{
 		RequestID:     requestID,
 		Username:      username,
@@ -576,6 +587,7 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 		CVLAN:         pkt.InnerVLAN,
 		Interface:     accessInterface,
 		PolicyName:    policyName,
+		Attributes:    aaaAttrs,
 	}
 
 	c.eventBus.Publish(events.TopicAAARequest, events.Event{
@@ -718,6 +730,17 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 	c.logger.WithGroup(logger.IPoEDHCP4).Info("Publishing AAA request", "session_id", sess.SessionID, "username", username)
 	requestID := uuid.New().String()
 
+	aaaAttrs := make(map[string]string)
+	if len(circuitID) > 0 {
+		aaaAttrs[aaa.AttrCircuitID] = string(circuitID)
+	}
+	if len(remoteID) > 0 {
+		aaaAttrs[aaa.AttrRemoteID] = string(remoteID)
+	}
+	if hostname != "" {
+		aaaAttrs[aaa.AttrHostname] = hostname
+	}
+
 	aaaPayload := &models.AAARequest{
 		RequestID:     requestID,
 		Username:      username,
@@ -727,6 +750,7 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 		CVLAN:         pkt.InnerVLAN,
 		Interface:     accessInterface,
 		PolicyName:    policyName,
+		Attributes:    aaaAttrs,
 	}
 
 	c.eventBus.Publish(events.TopicAAARequest, events.Event{
@@ -1852,6 +1876,15 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, relayInterf
 	sess.Username = username
 
 	requestID := uuid.New().String()
+
+	aaaAttrs := make(map[string]string)
+	if len(circuitID) > 0 {
+		aaaAttrs[aaa.AttrCircuitID] = string(circuitID)
+	}
+	if len(remoteID) > 0 {
+		aaaAttrs[aaa.AttrRemoteID] = string(remoteID)
+	}
+
 	aaaPayload := &models.AAARequest{
 		RequestID:     requestID,
 		Username:      username,
@@ -1861,6 +1894,7 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, relayInterf
 		CVLAN:         pkt.InnerVLAN,
 		Interface:     accessInterface,
 		PolicyName:    policyName,
+		Attributes:    aaaAttrs,
 	}
 
 	c.logger.Info("Publishing AAA request for DHCPv6 SOLICIT", "session_id", sess.SessionID, "username", username)
