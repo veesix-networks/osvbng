@@ -4,7 +4,7 @@ Authentication, Authorization, and Accounting configuration.
 
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
-| `auth_provider` | string | AAA provider: `local`, `http` | `local` |
+| `auth_provider` | string | AAA provider: `local`, `http`, `radius` | `local` |
 | `nas_identifier` | string | NAS identifier string | `osvbng` |
 | `nas_ip` | string | NAS IP address | `10.255.0.1` |
 | `policy` | [AAAPolicy](#aaa-policies) | AAA policies | |
