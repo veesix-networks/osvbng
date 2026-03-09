@@ -198,7 +198,7 @@ protocols:
             ipv4:
                 transport-address: 10.254.0.1
 aaa:
-    auth_provider: local
+    auth_provider: radius
     nas_identifier: osvbng
     policy:
         - name: default-policy
@@ -214,6 +214,12 @@ plugins:
     subscriber.auth.local:
         allow_all: true
         database_path: /tmp/osvbng.db
+    subscriber.auth.radius:
+        servers:
+            - host: 172.30.0.4
+              secret: testing123
+        nas_identifier: osvbng
+        nas_ip: 172.30.0.2
     subscriber.auth.http:
         endpoint: http://host.docker.internal:8081/api/v1/subscribers
         method: POST
@@ -241,7 +247,6 @@ plugins:
 monitoring:
   collect_interval: 30s
   disabled_collectors:
-    - aaa.radius.servers
     - protocols.bgp.statistics
     - protocols.bgp.ipv6.statistics
     - protocols.bgp.neighbors.<*:ip>
@@ -264,7 +269,7 @@ system:
                     rate: 1000
                     burst: 500
 ha:
-    enabled: true
+    enabled: false
     node_id: bng-1
     peer:
         address: 172.30.0.3:50051
