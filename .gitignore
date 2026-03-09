@@ -21,7 +21,6 @@ tests/**/clab-*/
 /osvbngcli
 
 # Commercial plugins
-plugins/auth/radius/
 plugins/cache/redis/
 
 # Binaries for programs and plugins

@@ -60,6 +60,7 @@ nav:
       - Overview: configuration/plugins.md
       - subscriber.auth.local: configuration/plugins/auth-local.md
       - subscriber.auth.http: configuration/plugins/auth-http.md
+      - subscriber.auth.radius: configuration/plugins/auth-radius.md
       - exporter.prometheus: configuration/plugins/exporter-prometheus.md
       - northbound.api: configuration/plugins/northbound-api.md
       - example.hello: configuration/plugins/example-hello.md

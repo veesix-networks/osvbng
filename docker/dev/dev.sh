@@ -42,6 +42,7 @@ case "$ACTION" in
         until [ "$(docker inspect -f '{{.State.Running}}' osvbng-1 2>/dev/null)" = "true" ]; do sleep 1; done
         until [ "$(docker inspect -f '{{.State.Running}}' bng-blaster 2>/dev/null)" = "true" ]; do sleep 1; done
         until [ "$(docker inspect -f '{{.State.Running}}' frr-peer 2>/dev/null)" = "true" ]; do sleep 1; done
+        until [ "$(docker inspect -f '{{.State.Running}}' freeradius 2>/dev/null)" = "true" ]; do sleep 1; done
         if [ "$HA_MODE" = true ]; then
             until [ "$(docker inspect -f '{{.State.Running}}' osvbng-2 2>/dev/null)" = "true" ]; do sleep 1; done
         fi
@@ -49,10 +50,12 @@ case "$ACTION" in
         OSVBNG_PID=$(docker inspect -f '{{.State.Pid}}' osvbng-1)
         BLASTER_PID=$(docker inspect -f '{{.State.Pid}}' bng-blaster)
         FRRPEER_PID=$(docker inspect -f '{{.State.Pid}}' frr-peer)
+        FREERADIUS_PID=$(docker inspect -f '{{.State.Pid}}' freeradius)
 
         sudo ip link del osvbng-mgmt-br 2>/dev/null || true
         sudo ip link del osvbng1-mgmt-br 2>/dev/null || true
         sudo ip link del osvbng2-mgmt-br 2>/dev/null || true
+        sudo ip link del radius-mgmt-br 2>/dev/null || true
         sudo ip link del osvbng-access 2>/dev/null || true
         sudo ip link del bng2-acc-br 2>/dev/null || true
         sudo ip link del osvbng-core 2>/dev/null || true
@@ -73,6 +76,15 @@ case "$ACTION" in
         docker exec osvbng-1 ip link set eth0 up
         docker exec osvbng-1 ip addr add 172.30.0.2/24 dev eth0
         docker exec osvbng-1 ip route add default via 172.30.0.1
+
+        echo "Connecting freeradius to management bridge..."
+        sudo ip link add radius-mgmt type veth peer name radius-mgmt-br
+        sudo ip link set radius-mgmt netns $FREERADIUS_PID name eth0
+        sudo ip link set radius-mgmt-br master osvbng-mgmt-br
+        sudo ip link set radius-mgmt-br up
+        docker exec freeradius ip link set eth0 up
+        docker exec freeradius ip addr add 172.30.0.4/24 dev eth0
+        docker exec freeradius ip route add default via 172.30.0.1
 
         if [ "$HA_MODE" = true ]; then
             OSVBNG2_PID=$(docker inspect -f '{{.State.Pid}}' osvbng-2)
@@ -128,6 +140,7 @@ case "$ACTION" in
         if [ "$HA_MODE" = true ]; then
             echo "  frr-peer:         10.0.1.2 (core link to osvbng-2)"
         fi
+        echo "  freeradius:       172.30.0.4 (1812/auth, 1813/acct, secret: testing123)"
         echo "  Prometheus:       http://localhost:9090"
         echo "  Grafana:          http://localhost:3000 (admin/admin)"
         ;;
@@ -136,6 +149,7 @@ case "$ACTION" in
         sudo ip link del osvbng-mgmt-br 2>/dev/null || true
         sudo ip link del osvbng1-mgmt-br 2>/dev/null || true
         sudo ip link del osvbng2-mgmt-br 2>/dev/null || true
+        sudo ip link del radius-mgmt-br 2>/dev/null || true
         sudo ip link del bng2-acc-br 2>/dev/null || true
         sudo ip link del osvbng-core 2>/dev/null || true
         sudo ip link del osvbng2-core 2>/dev/null || true

@@ -15,29 +15,29 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/allocator"
 	aaacfg "github.com/veesix-networks/osvbng/pkg/config/aaa"
 	"github.com/veesix-networks/osvbng/pkg/events"
-	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/ppp"
+	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 )
 
 func (s *SessionState) initPPP() {
 	s.lcp = ppp.NewLCP(ppp.Callbacks{
-		Send:     s.sendLCP,
-		LayerUp:  s.onLCPUp,
+		Send:      s.sendLCP,
+		LayerUp:   s.onLCPUp,
 		LayerDown: s.onLCPDown,
 	})
 
 	s.lcp.SetAuthProto(ppp.ProtoCHAP, ppp.CHAPMD5)
 
 	s.ipcp = ppp.NewIPCP(ppp.Callbacks{
-		Send:     s.sendIPCP,
-		LayerUp:  s.onIPCPUp,
+		Send:      s.sendIPCP,
+		LayerUp:   s.onIPCPUp,
 		LayerDown: s.onIPCPDown,
 	})
 
 	s.ipv6cp = ppp.NewIPv6CP(ppp.Callbacks{
-		Send:     s.sendIPv6CP,
-		LayerUp:  s.onIPv6CPUp,
+		Send:      s.sendIPv6CP,
+		LayerUp:   s.onIPv6CPUp,
 		LayerDown: s.onIPv6CPDown,
 	})
 
@@ -220,6 +220,13 @@ func (s *SessionState) publishAAARequest(attrs map[string]string) {
 				"format", policy.Format,
 				"username", username)
 		}
+	}
+
+	if s.AgentCircuitID != "" {
+		attrs[aaa.AttrCircuitID] = s.AgentCircuitID
+	}
+	if s.AgentRemoteID != "" {
+		attrs[aaa.AttrRemoteID] = s.AgentRemoteID
 	}
 
 	aaaPayload := &models.AAARequest{
@@ -964,16 +971,16 @@ func (s *SessionState) terminate() {
 	s.component.deleteSessionCheckpoint(s.SessionID)
 
 	s.component.publishSessionLifecycle(&models.PPPSession{
-		SessionID:       s.SessionID,
-		State:           models.SessionStateReleased,
-		AccessType:      string(models.AccessTypePPPoE),
-		Protocol:        string(models.ProtocolPPPoESession),
-		PPPSessionID:    s.PPPoESessionID,
-		MAC:             s.MAC,
-		OuterVLAN:       s.OuterVLAN,
-		InnerVLAN:       s.InnerVLAN,
-		SRGName:         s.SRGName,
-		Username:        s.Username,
+		SessionID:    s.SessionID,
+		State:        models.SessionStateReleased,
+		AccessType:   string(models.AccessTypePPPoE),
+		Protocol:     string(models.ProtocolPPPoESession),
+		PPPSessionID: s.PPPoESessionID,
+		MAC:          s.MAC,
+		OuterVLAN:    s.OuterVLAN,
+		InnerVLAN:    s.InnerVLAN,
+		SRGName:      s.SRGName,
+		Username:     s.Username,
 		AAASessionID: s.AcctSessionID,
 	})
 }

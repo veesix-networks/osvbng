@@ -6,6 +6,7 @@ Plugin-specific configuration. Each key under `plugins` is a plugin namespace wi
 
 - [subscriber.auth.local](plugins/auth-local.md) - Local subscriber authentication
 - [subscriber.auth.http](plugins/auth-http.md) - HTTP-based subscriber authentication
+- [subscriber.auth.radius](plugins/auth-radius.md) - RADIUS authentication and accounting
 
 ## Exporters
 

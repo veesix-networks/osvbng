@@ -1,4 +1,4 @@
-# Copyright 2025 Veesix Networks Ltd
+# Copyright 2026 Veesix Networks Ltd
 # Licensed under the GNU General Public License v3.0 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -100,15 +100,8 @@ dhcpv6:
         router_lifetime: 1800
         max_interval: 600
         min_interval: 200
+
 interfaces:
-    eth0:
-        description: Management Interface
-        enabled: true
-        address:
-            ipv4:
-                - 192.168.100.10/24
-            ipv6:
-                - 2001:db8:100::10/64
     loop0:
         description: Control Plane Loopback
         enabled: true
@@ -121,7 +114,7 @@ interfaces:
         enabled: true
         bng_mode: access
     eth2:
-        description: Core Link (frr-peer)
+        description: Core Link (corerouter1)
         enabled: true
         lcp: true
         address:
@@ -146,6 +139,7 @@ interfaces:
                 - 192.168.123.1/32
         lcp: true
         vrf: CUSTOMER-A
+
 protocols:
     bgp:
         asn: 65000
@@ -197,13 +191,15 @@ protocols:
         address-families:
             ipv4:
                 transport-address: 10.254.0.1
+
 aaa:
     auth_provider: radius
     nas_identifier: osvbng
     policy:
         - name: default-policy
-          format: $mac-address$
+          format: $remote-id$
           max_concurrent_sessions: 1
+
 plugins:
     exporter.prometheus:
         enabled: true
@@ -211,122 +207,25 @@ plugins:
     northbound.api:
         enabled: true
         listen_address: :8080
-    subscriber.auth.local:
-        allow_all: true
-        database_path: /tmp/osvbng.db
     subscriber.auth.radius:
         servers:
-            - host: 172.30.0.4
+            - host: 172.20.20.10
               secret: testing123
-        nas_identifier: osvbng
-        nas_ip: 172.30.0.2
-    subscriber.auth.http:
-        endpoint: http://host.docker.internal:8081/api/v1/subscribers
-        method: POST
-        timeout: 30s
-        # tls:
-        #     insecure_skip_verify: false
-        #     ca_cert_file: /etc/osvbng/ca.crt
-        # auth:
-        #     type: bearer
-        #     token: your-api-token
-        headers:
-            osvbng-dev: True
-        response:
-            allowed_condition:
-                jsonpath: status
-                value: "allowed"
-        accounting:
-            enabled: true
-            start:
-                endpoint: http://host.docker.internal:8081/api/v1/subscribers/{{.AcctSessionID}}/accounting/start
-            update:
-                endpoint: http://host.docker.internal:8081/api/v1/subscribers/{{.AcctSessionID}}/accounting/update
-            stop:
-                endpoint: http://host.docker.internal:8081/api/v1/subscribers/{{.AcctSessionID}}/accounting/stop
+        nas_ip: 172.20.20.2
+
 monitoring:
   collect_interval: 30s
-  disabled_collectors:
-    - protocols.bgp.statistics
-    - protocols.bgp.ipv6.statistics
-    - protocols.bgp.neighbors.<*:ip>
-system:
-    cppm:
-        dataplane:
-            policer:
-                dhcpv4:
-                    rate: 1000
-                    burst: 500
-                arp:
-                    rate: 1000
-                    burst: 500
-        controlplane:
-            policer:
-                dhcpv4:
-                    rate: 1000
-                    burst: 500
-                arp:
-                    rate: 1000
-                    burst: 500
-ha:
-    enabled: false
-    node_id: bng-1
-    peer:
-        address: 172.30.0.3:50051
-    heartbeat:
-        interval: 1s
-        timeout: 5s
-    srgs:
-        default:
-            virtual_mac: "02:00:5e:00:01:01"
-            priority: 100
-            subscriber_groups:
-                - default
-                - pppoe
-            interfaces:
-                - eth1
-            track_priority_decrement: 60
-            networks:
-                - prefix: 10.255.0.0/16
-                - prefix: 2001:db8:100::/40
-                - prefix: 192.168.123.0/24
-                  vrf: CUSTOMER-A
 
 logging:
     format: text
     level: info
     components:
         aaa: debug
-        arp: debug
         dataplane: debug
-        ha: debug
-        ipoe: info
-        pppoe: info
-        southbound: info
-        subscriber: info
+
 dataplane:
     lcp-netns: dataplane
     statseg:
         size: "512m"
         page-size: "4k"
         per-node-counters: false
-
-watchdog:
-  enabled: true
-  check-interval: 3s
-  targets:
-    vpp:
-      enabled: true
-      timeout: 2s
-      failure-threshold: 3
-      on-failure: restart
-      min-restart-interval: 30s
-      reconnect-backoff: 2s
-      reconnect-max-backoff: 30s
-      critical: true
-    frr:
-      enabled: true
-      timeout: 2s
-      failure-threshold: 3
-      on-failure: warn
-      critical: false

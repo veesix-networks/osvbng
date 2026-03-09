@@ -84,6 +84,7 @@ The complete list of AAA attributes recognised by osvbng. Auth plugins map their
 | `dns_secondary` | string | Secondary DNS server |
 | `ipv6_address` | string | Subscriber IPv6 IANA address |
 | `ipv6_prefix` | string | Delegated IPv6 prefix (e.g. `2001:db8:100::/56`) |
+| `ipv6_wan_prefix` | string | IPv6 WAN link prefix (e.g. `2001:db8:0:1::/64`) |
 | `ipv6_dns_primary` | string | Primary IPv6 DNS server |
 | `ipv6_dns_secondary` | string | Secondary IPv6 DNS server |
 
@@ -116,6 +117,8 @@ The complete list of AAA attributes recognised by osvbng. Auth plugins map their
 |-----------|------|-------------|
 | `session_timeout` | int | Session timeout in seconds |
 | `idle_timeout` | int | Idle timeout in seconds |
+| `acct_interim_interval` | int | Accounting interim interval in seconds |
+| `routed_prefix` | string | Per-subscriber static route (Framed-Route) |
 
 ## HTTP Auth Plugin Default Mappings
 
