@@ -196,6 +196,8 @@ func (sm *SRGStateMachine) PeerLost() *StateTransition {
 		return sm.transitionTo(SRGStateStandbyAlone)
 	case SRGStateReady:
 		return sm.transitionTo(SRGStateWaiting)
+	case SRGStateWaiting:
+		return sm.transitionTo(SRGStateActiveSolo)
 	default:
 		return nil
 	}

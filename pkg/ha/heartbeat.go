@@ -17,19 +17,21 @@ const (
 )
 
 type HeartbeatLoop struct {
-	manager  *Manager
-	logger   *slog.Logger
-	interval time.Duration
-	timeout  time.Duration
-	seq      uint64
+	manager   *Manager
+	logger    *slog.Logger
+	interval  time.Duration
+	timeout   time.Duration
+	seq       uint64
+	startedAt time.Time
 }
 
 func NewHeartbeatLoop(manager *Manager, logger *slog.Logger, interval, timeout time.Duration) *HeartbeatLoop {
 	return &HeartbeatLoop{
-		manager:  manager,
-		logger:   logger,
-		interval: interval,
-		timeout:  timeout,
+		manager:   manager,
+		logger:    logger,
+		interval:  interval,
+		timeout:   timeout,
+		startedAt: time.Now(),
 	}
 }
 
@@ -73,6 +75,11 @@ func (h *HeartbeatLoop) checkPeerTimeout() {
 
 	ps := h.manager.peer.GetState()
 	if !ps.Connected {
+		if time.Since(h.startedAt) > h.timeout && h.manager.hasWaitingSRGs() {
+			h.logger.Warn("Peer not connected and SRGs stuck in WAITING, promoting to ACTIVE_SOLO",
+				"timeout", h.timeout)
+			h.manager.handlePeerLost()
+		}
 		return
 	}
 
