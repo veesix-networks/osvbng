@@ -208,13 +208,13 @@ func (m *Manager) Start(ctx context.Context) error {
 			m.cfg.GetHeartbeatInterval(),
 			m.cfg.GetHeartbeatTimeout())
 
+		m.Go(hb.Run)
 		m.Go(func() {
 			m.peer.ConnectWithBackoff()
 			if err := m.peer.OpenHeartbeatStream(); err != nil {
 				m.logger.Warn("Failed to open heartbeat stream", "error", err)
 			}
 			m.Go(hb.ReceiveLoop)
-			hb.Run()
 		})
 	}
 
@@ -315,6 +315,17 @@ func (m *Manager) getSRG(name string) (*SRGStateMachine, bool) {
 	defer m.mu.RUnlock()
 	sm, ok := m.srgs[name]
 	return sm, ok
+}
+
+func (m *Manager) hasWaitingSRGs() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, sm := range m.srgs {
+		if sm.State() == SRGStateWaiting {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *Manager) RequestSwitchover(ctx context.Context, srgNames []string, force bool) error {

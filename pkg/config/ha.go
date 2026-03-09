@@ -43,8 +43,9 @@ type HAPeerConfig struct {
 }
 
 type HAHeartbeatConfig struct {
-	Interval time.Duration `json:"interval,omitempty" yaml:"interval,omitempty"`
-	Timeout  time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	Interval       time.Duration `json:"interval,omitempty" yaml:"interval,omitempty"`
+	Timeout        time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	StartupTimeout time.Duration `json:"startup_timeout,omitempty" yaml:"startup_timeout,omitempty"`
 }
 
 type SRGNetwork struct {

@@ -237,6 +237,41 @@ func TestStandbyAlone_PeerLostAgain_NoOp(t *testing.T) {
 	}
 }
 
+func TestSRGStateMachine_PeerLostWaitingToActiveSolo(t *testing.T) {
+	sm := newTestSM("srg1", 100, false, "node-a")
+	sm.Start()
+
+	if sm.State() != SRGStateWaiting {
+		t.Fatalf("expected WAITING, got %s", sm.State())
+	}
+
+	tr := sm.PeerLost()
+	if tr == nil {
+		t.Fatal("expected transition")
+	}
+	if tr.OldState != SRGStateWaiting || tr.NewState != SRGStateActiveSolo {
+		t.Fatalf("expected WAITING->ACTIVE_SOLO, got %s->%s", tr.OldState, tr.NewState)
+	}
+	if !sm.IsActive() {
+		t.Fatal("should be active in ACTIVE_SOLO")
+	}
+}
+
+func TestSRGStateMachine_WaitingPeerDiscoveredCancelsPromotion(t *testing.T) {
+	sm := newTestSM("srg1", 200, false, "node-a")
+	sm.Start()
+
+	tr := sm.PeerDiscovered(100, "node-b", SRGStateWaiting)
+	if tr == nil || tr.NewState != SRGStateReady {
+		t.Fatalf("expected WAITING->READY, got %v", tr)
+	}
+
+	tr = sm.Elect("node-b")
+	if tr == nil || tr.NewState != SRGStateActive {
+		t.Fatalf("expected READY->ACTIVE, got %v", tr)
+	}
+}
+
 func TestActiveSolo_PeerLost_Unchanged(t *testing.T) {
 	sm := newTestSM("srg1", 200, false, "node-a")
 	sm.Start()
@@ -942,6 +977,47 @@ func TestManager_DriveRoutingNoopWithoutNetworks(t *testing.T) {
 
 	if len(rc.advertised) != 0 || len(rc.withdrawn) != 0 {
 		t.Fatalf("expected no routing calls for SRG without networks")
+	}
+}
+
+func TestManager_HasWaitingSRGs(t *testing.T) {
+	m := newTestManager(t)
+
+	for _, sm := range m.srgs {
+		sm.Start()
+	}
+
+	if !m.hasWaitingSRGs() {
+		t.Fatal("expected hasWaitingSRGs true after Start")
+	}
+
+	for _, sm := range m.srgs {
+		sm.PeerDiscovered(200, "node-b", SRGStateWaiting)
+		sm.Elect("node-b")
+	}
+
+	if m.hasWaitingSRGs() {
+		t.Fatal("expected hasWaitingSRGs false after election")
+	}
+}
+
+func TestManager_HasWaitingSRGsAfterPeerLost(t *testing.T) {
+	m := newTestManager(t)
+
+	for _, sm := range m.srgs {
+		sm.Start()
+	}
+
+	m.handlePeerLost()
+
+	if m.hasWaitingSRGs() {
+		t.Fatal("expected no WAITING SRGs after handlePeerLost promotes to ACTIVE_SOLO")
+	}
+
+	for _, sm := range m.srgs {
+		if sm.State() != SRGStateActiveSolo {
+			t.Fatalf("expected ACTIVE_SOLO, got %s", sm.State())
+		}
 	}
 }
 
