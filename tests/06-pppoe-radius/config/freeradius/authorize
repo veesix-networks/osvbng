@@ -1,0 +1,11 @@
+user1   Cleartext-Password := "test"
+        Framed-Pool := "subscriber-pool",
+        Session-Timeout := 86400
+
+user2   Cleartext-Password := "test"
+        Framed-Pool := "subscriber-pool",
+        Session-Timeout := 86400
+
+user3   Cleartext-Password := "test"
+        Framed-Pool := "subscriber-pool",
+        Session-Timeout := 86400
