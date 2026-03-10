@@ -22,6 +22,8 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
       ha: ${{ steps.filter.outputs.ha }}
       sessions: ${{ steps.filter.outputs.sessions }}
+      dhcp: ${{ steps.filter.outputs.dhcp }}
+      radius: ${{ steps.filter.outputs.radius }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -53,6 +55,17 @@ jobs:
               - 'tests/sessions.robot'
               - 'tests/localauth.robot'
               - 'tests/bngblaster.robot'
+            dhcp:
+              - 'pkg/dhcp/**'
+              - 'plugins/dhcp4/**'
+              - 'plugins/dhcp6/**'
+              - 'tests/07-dhcp-relay-proxy/**'
+            radius:
+              - 'plugins/auth/radius/**'
+              - 'internal/aaa/**'
+              - 'pkg/config/aaa/**'
+              - 'tests/05-ipoe-radius/**'
+              - 'tests/06-pppoe-radius/**'
 
   build:
     runs-on: ubuntu-latest
@@ -97,6 +110,19 @@ jobs:
         with:
           name: osvbng-image
           path: /tmp/osvbng-local.tar
+          retention-days: 1
+
+      - name: Build Kea Docker image
+        run: make docker-kea-local
+
+      - name: Save Kea Docker image
+        run: docker save veesixnetworks/kea:local -o /tmp/kea-local.tar
+
+      - name: Upload Kea Docker image
+        uses: actions/upload-artifact@v4
+        with:
+          name: kea-image
+          path: /tmp/kea-local.tar
           retention-days: 1
 
   prepare-test-runner:
@@ -156,3 +182,18 @@ jobs:
     uses: ./.github/workflows/pppoe-local-tests.yml
     needs: [file-changes, prepare-test-runner]
     if: needs.file-changes.outputs.sessions == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
+
+  dhcp-relay-proxy-tests:
+    uses: ./.github/workflows/dhcp-relay-proxy-tests.yml
+    needs: [file-changes, prepare-test-runner]
+    if: needs.file-changes.outputs.dhcp == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
+
+  ipoe-radius-tests:
+    uses: ./.github/workflows/ipoe-radius-tests.yml
+    needs: [file-changes, prepare-test-runner]
+    if: needs.file-changes.outputs.radius == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
+
+  pppoe-radius-tests:
+    uses: ./.github/workflows/pppoe-radius-tests.yml
+    needs: [file-changes, prepare-test-runner]
+    if: needs.file-changes.outputs.radius == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'

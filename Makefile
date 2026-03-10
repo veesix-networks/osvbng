@@ -2,7 +2,7 @@
 # Licensed under the GNU General Public License v3.0 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-.PHONY: all build generate generate-proto clean run test cli build-cli docker-local lint fmt robot-test
+.PHONY: all build generate generate-proto clean run test cli build-cli docker-local docker-kea-local lint fmt robot-test
 
 all: generate build
 
@@ -52,6 +52,10 @@ docker-local:
 		--build-arg COMMIT=$(COMMIT) \
 		--build-arg DATE=$(DATE) \
 		-t veesixnetworks/osvbng:local .
+
+docker-kea-local:
+	docker build -f docker/dev/Dockerfile.kea \
+		-t veesixnetworks/kea:local docker/dev
 
 lint:
 	golangci-lint run

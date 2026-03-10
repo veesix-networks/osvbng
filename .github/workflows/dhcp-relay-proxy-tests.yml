@@ -1,0 +1,63 @@
+# Copyright 2026 Veesix Networks Ltd
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: dhcp-relay-proxy-tests
+
+on:
+  workflow_call:
+
+jobs:
+  dhcp-relay-proxy:
+    name: DHCP Relay/Proxy Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: osvbng-image
+          path: /tmp
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: kea-image
+          path: /tmp
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-runner-image
+          path: /tmp
+
+      - name: Install QEMU and tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils sshpass
+          sudo chmod 666 /dev/kvm || true
+
+      - name: Run DHCP relay/proxy tests
+        run: |
+          scripts/qemu/test-runner/scripts/vm-run-tests.sh \
+            /tmp/test-runner.qcow2 \
+            /tmp/osvbng-local.tar \
+            07-dhcp-relay-proxy \
+            ./test-results \
+            /tmp/kea-local.tar
+
+      - name: Test report
+        if: ${{ !cancelled() }}
+        uses: joonvena/robotframework-reporter-action@v2.5
+        with:
+          gh_access_token: ${{ secrets.GITHUB_TOKEN }}
+          report_path: test-results/out
+          only_summary: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dhcp-relay-proxy-test-results
+          path: test-results/
+          retention-days: 14
