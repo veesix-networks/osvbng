@@ -4,8 +4,6 @@ osvbng supports DHCPv4 and DHCPv6 relay and proxy modes as certified provider pl
 
 Both modes support server failover with priority-based selection and automatic dead-server quarantine.
 
-<!-- TODO: Add architecture diagram (dhcp_relay_proxy.png) showing IPoE/PPPoE -> DHCPv4/v6 Provider -> Relay Client -> Upstream Servers -->
-
 ## Relay Mode
 
 ### DHCPv4
