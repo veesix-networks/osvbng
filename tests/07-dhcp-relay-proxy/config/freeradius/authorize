@@ -1,0 +1,3 @@
+DEFAULT Auth-Type := Accept
+        Framed-Pool := "subscriber-pool",
+        Session-Timeout := 86400
