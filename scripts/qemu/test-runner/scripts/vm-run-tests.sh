@@ -41,6 +41,10 @@ echo "==> Loading kernel modules..."
 "${SCRIPT_DIR}/vm-exec.sh" "modprobe vrf mpls_router mpls_iptunnel dummy" "${SSH_PORT}"
 "${SCRIPT_DIR}/vm-exec.sh" "sysctl -w net.mpls.platform_labels=1048575" "${SSH_PORT}"
 
+echo "==> Enabling Docker IPv6..."
+"${SCRIPT_DIR}/vm-exec.sh" "mkdir -p /etc/docker && echo '{\"ipv6\": true, \"fixed-cidr-v6\": \"fd00:d0ce::/64\", \"ip6tables\": true, \"experimental\": true}' > /etc/docker/daemon.json && systemctl restart docker" "${SSH_PORT}"
+"${SCRIPT_DIR}/vm-exec.sh" "while ! docker info >/dev/null 2>&1; do sleep 1; done" "${SSH_PORT}"
+
 echo "==> Copying Docker image to VM..."
 "${SCRIPT_DIR}/vm-copy.sh" to "${DOCKER_TAR}" "/tmp/osvbng-local.tar" "${SSH_PORT}"
 
