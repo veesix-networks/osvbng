@@ -75,6 +75,7 @@ nav:
       - Supported NICs: architecture/SUPPORTED_NICS.md
       - Reference Deployment Methods: architecture/REFERENCE_DEPLOYMENT_METHODS.md
       - High Availability: architecture/HA.md
+      - DHCP Relay & Proxy: architecture/DHCP_RELAY_PROXY.md
   - Contributing:
     - Getting Started: contributing/please_read_first.md
     - Commit Messages: contributing/commit-messages.md
