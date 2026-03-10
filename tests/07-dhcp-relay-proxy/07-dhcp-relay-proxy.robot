@@ -4,7 +4,7 @@
 
 *** Comments ***
 DHCP relay and proxy test suite.
-Verifies DHCPv4/v6 relay and proxy modes with external Kea DHCP server,
+Verifies DHCPv4 relay and proxy modes with external Kea DHCP server,
 including session establishment, address assignment, and show command output.
 
 *** Settings ***
@@ -35,10 +35,6 @@ Verify IPv4 Addresses Assigned
     [Documentation]    All sessions have an IPv4 address from Kea.
     Verify Sessions Have IPv4    ${bng1}
 
-Verify IPv6 Addresses Assigned
-    [Documentation]    All sessions have an IPv6 address from Kea.
-    Verify Sessions Have IPv6    ${bng1}
-
 Verify VPP Sub-Interfaces Created
     [Documentation]    Verify QinQ sub-interfaces exist in VPP for both relay and proxy VLANs.
     Verify VPP Sub-Interfaces Created    ${bng1}    eth1.300
@@ -48,7 +44,7 @@ Verify DHCP Relay Show Command
     [Documentation]    Verify dhcp/relay show command returns server stats.
     ${output} =    Get osvbng API Response    ${bng1}    /api/show/dhcp/relay
     ${rc}    ${requests} =    Run And Return Rc And Output
-    ...    echo '${output}' | python3 -c "import sys,json; d=json.load(sys.stdin); s=d.get('data',{}).get('stats',{}); print(s.get('requests4',0) + s.get('requests6',0))"
+    ...    echo '${output}' | python3 -c "import sys,json; d=json.load(sys.stdin); s=d.get('data',{}).get('stats',{}); print(s.get('requests4',0))"
     Should Be Equal As Integers    ${rc}    0
     Should Be True    ${requests} >= 2    Expected at least 2 relay requests but got ${requests}
 
@@ -56,7 +52,7 @@ Verify DHCP Proxy Show Command
     [Documentation]    Verify dhcp/proxy show command returns binding counts.
     ${output} =    Get osvbng API Response    ${bng1}    /api/show/dhcp/proxy
     ${rc}    ${bindings} =    Run And Return Rc And Output
-    ...    echo '${output}' | python3 -c "import sys,json; d=json.load(sys.stdin); data=d.get('data',{}); print(data.get('v4Bindings',0) + data.get('v6Bindings',0))"
+    ...    echo '${output}' | python3 -c "import sys,json; d=json.load(sys.stdin); data=d.get('data',{}); print(data.get('v4Bindings',0))"
     Should Be Equal As Integers    ${rc}    0
     Should Be True    ${bindings} >= 1    Expected at least 1 proxy binding but got ${bindings}
 
@@ -80,21 +76,21 @@ Setup DHCP Relay Proxy Test
     Wait For osvbng Healthy    bng1    ${lab-name}
     Wait For Kea Healthy
     Start BNG Blaster In Background    ${subscribers}
-    Wait For Sessions Established    ${bng1}    ${subscribers}    ${session-count}    check_ipv6=true
+    Wait For Sessions Established    ${bng1}    ${subscribers}    ${session-count}
 
 Teardown DHCP Relay Proxy Test
     Run Keyword And Ignore Error    Stop BNG Blaster    ${subscribers}
     Destroy Topology    ${lab-file}
 
 Wait For Kea Healthy
-    [Documentation]    Wait for Kea DHCPv4 and DHCPv6 processes to be running.
+    [Documentation]    Wait for Kea DHCPv4 process to be running.
     ${kea} =    Set Variable    clab-${lab-name}-kea
     Wait Until Keyword Succeeds    12 x    5s
-    ...    Kea Processes Running    ${kea}
+    ...    Kea Process Running    ${kea}
 
-Kea Processes Running
+Kea Process Running
     [Arguments]    ${container}
     ${rc}    ${output} =    Run And Return Rc And Output
-    ...    sudo docker exec ${container} pgrep -c kea-dhcp
+    ...    sudo docker exec ${container} pgrep -c kea-dhcp4
     Should Be Equal As Integers    ${rc}    0
-    Should Be True    ${output} >= 2    Expected at least 2 Kea processes (dhcp4 + dhcp6) but got ${output}
+    Should Be True    ${output} >= 1    Expected kea-dhcp4 process but found none

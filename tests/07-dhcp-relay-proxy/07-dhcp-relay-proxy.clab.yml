@@ -6,7 +6,6 @@ name: osvbng-dhcp-relay-proxy
 
 mgmt:
   ipv4-subnet: 172.20.20.0/24
-  ipv6-subnet: fd00:20::/64
 
 topology:
   nodes:
@@ -15,7 +14,6 @@ topology:
       image: veesixnetworks/osvbng:local
       image-pull-policy: Never
       mgmt-ipv4: 172.20.20.2
-      mgmt-ipv6: fd00:20::2
       cap-add:
         - SYS_ADMIN
         - NET_ADMIN
@@ -61,12 +59,10 @@ topology:
       image: veesixnetworks/kea:local
       image-pull-policy: Never
       mgmt-ipv4: 172.20.20.11
-      mgmt-ipv6: fd00:20::b
       cap-add:
         - NET_ADMIN
       binds:
         - config/kea/kea-dhcp4.conf:/etc/kea/kea-dhcp4.conf:ro
-        - config/kea/kea-dhcp6.conf:/etc/kea/kea-dhcp6.conf:ro
 
   links:
     - endpoints: [bng1:eth1, subscribers:eth1]

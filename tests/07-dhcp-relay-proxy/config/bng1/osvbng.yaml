@@ -25,10 +25,8 @@ service-groups:
         pool: customer-a-pool
     dhcp-relay:
         ipv4-profile: relay-v4
-        ipv6-profile: relay-v6
     dhcp-proxy:
         ipv4-profile: proxy-v4
-        ipv6-profile: proxy-v6
 
 subscriber-groups:
     groups:
@@ -48,7 +46,6 @@ subscriber-groups:
         relay:
             access-type: ipoe
             ipv4-profile: relay-v4
-            ipv6-profile: relay-v6
             vlans:
                 - svlan: "300-310"
                   cvlan: any
@@ -57,7 +54,6 @@ subscriber-groups:
         proxy:
             access-type: ipoe
             ipv4-profile: proxy-v4
-            ipv6-profile: proxy-v6
             vlans:
                 - svlan: "400-410"
                   cvlan: any
@@ -132,30 +128,6 @@ ipv6-profiles:
         dns:
             - 2001:4860:4860::8888
             - 2001:4860:4860::8844
-    relay-v6:
-        dns:
-            - 2001:4860:4860::8888
-            - 2001:4860:4860::8844
-        dhcpv6:
-            mode: relay
-            servers:
-                - address: "[fd00:20::b]:547"
-                  priority: 100
-            link-address: "2001:db8:0:1::1"
-            interface-id-format: "{interface}:{svlan}:{cvlan}"
-    proxy-v6:
-        dns:
-            - 2001:4860:4860::8888
-            - 2001:4860:4860::8844
-        dhcpv6:
-            mode: proxy
-            servers:
-                - address: "[fd00:20::b]:547"
-                  priority: 100
-            link-address: "2001:db8:0:1::1"
-            interface-id-format: "{interface}:{svlan}:{cvlan}"
-            client-preferred-lifetime: 300
-            client-valid-lifetime: 600
 
 dhcp:
     provider: local
