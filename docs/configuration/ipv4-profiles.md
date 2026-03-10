@@ -18,12 +18,47 @@ Profiles are referenced by [subscriber groups](subscriber-groups.md) via `ipv4-p
 
 Protocol-specific settings applied only when delivering addresses via DHCPv4.
 
+| Field | Type | Description | Default | Example |
+|-------|------|-------------|---------|---------|
+| `mode` | string | `server`, `relay`, or `proxy` | `server` | `relay` |
+| `address-model` | string | `connected-subnet` or `unnumbered-ptp` | `connected-subnet` | `connected-subnet` |
+| `server-id` | string | DHCP server identifier (server mode only); defaults to gateway | | `10.255.0.1` |
+| `lease-time` | int | Lease time in seconds (server mode only) | `3600` | `3600` |
+| `servers` | array | Upstream DHCP servers (relay/proxy only) | | see below |
+| `giaddr` | string | Relay agent IP inserted into GIAddr field | | `10.0.0.1` |
+| `server-timeout` | duration | Time to wait for upstream server response | `5s` | `5s` |
+| `client-lease` | int | Lease time offered to clients (proxy only), in seconds | `300` | `300` |
+| `option82` | [Option82](#option-82) | Option 82 (Relay Agent Information) settings | | see below |
+| `dead-time` | duration | How long to quarantine a failed server before retrying | `30s` | `30s` |
+| `dead-threshold` | int | Consecutive failures before marking a server dead | `3` | `3` |
+
+### Servers
+
+Each entry in the `servers` array:
+
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
-| `mode` | string | Profile mode (default: `server`) | `server` |
-| `address-model` | string | `connected-subnet` (default) or `unnumbered-ptp` | `connected-subnet` |
-| `server-id` | string | DHCP server identifier; defaults to gateway | `10.255.0.1` |
-| `lease-time` | int | Default lease time in seconds (default: 3600) | `3600` |
+| `address` | string | Server address in `host:port` format | `192.168.1.1:67` |
+| `priority` | int | Higher priority servers are tried first | `100` |
+
+### Option 82
+
+Relay Agent Information option (RFC 3046). Supported in both relay and proxy modes.
+
+| Field | Type | Description | Default | Example |
+|-------|------|-------------|---------|---------|
+| `circuit-id-format` | string | Circuit ID sub-option format string | `{interface}:{svlan}:{cvlan}` | `{interface}:{svlan}:{cvlan}` |
+| `remote-id-format` | string | Remote ID sub-option format string | `{mac}` | `{mac}` |
+| `policy` | string | `keep`, `replace`, or `drop` | `replace` | `keep` |
+| `include-flags` | bool | Include flags sub-option (unicast flag) | `false` | `true` |
+
+Format variables: `{interface}`, `{svlan}`, `{cvlan}`, `{mac}`.
+
+**Policies:**
+
+- `keep` - if the packet already contains Option 82 (e.g. inserted by a DSLAM or access node), leave it untouched
+- `replace` - remove any existing Option 82 and insert osvbng's own (default)
+- `drop` - remove existing Option 82 without inserting a replacement
 
 ### Address Models
 
@@ -60,7 +95,11 @@ When a subscriber session is created, the [provisioning pipeline](provisioning.m
 
 All pool allocation is handled by a shared registry, so IPs are never double-allocated across IPoE and PPPoE.
 
-## Example
+In relay and proxy modes, pools are not used. The address comes from the upstream DHCP server.
+
+## Examples
+
+### Local Server
 
 ```yaml
 ipv4-profiles:
@@ -72,25 +111,90 @@ ipv4-profiles:
     pools:
       - name: subscriber-pool
         network: 10.255.0.0/16
-      - name: overflow-pool
-        network: 10.254.0.0/16
-        gateway: 10.254.0.1
-        priority: 10
-        exclude:
-          - 10.254.0.2-10.254.0.10
     dhcp:
       lease-time: 3600
+```
 
-  business:
-    gateway: 172.16.0.1
+### Relay
+
+Forwards DHCP packets to an external server. osvbng sets the GIAddr, increments the hop count, and inserts Option 82.
+
+```yaml
+ipv4-profiles:
+  relay-profile:
+    gateway: 10.255.0.1
     dns:
-      - 1.1.1.1
-      - 1.0.0.1
-    pools:
-      - name: business-pool
-        network: 172.16.0.0/22
+      - 8.8.8.8
     dhcp:
-      address-model: unnumbered-ptp
-      server-id: 172.16.0.1
-      lease-time: 86400
+      mode: relay
+      servers:
+        - address: "192.168.1.1:67"
+          priority: 100
+        - address: "192.168.1.2:67"
+          priority: 50
+      giaddr: 10.0.0.1
+      option82:
+        circuit-id-format: "{interface}:{svlan}:{cvlan}"
+        remote-id-format: "{mac}"
+```
+
+### Relay with Passthrough Option 82
+
+When the access node (DSLAM, OLT) already inserts Option 82, use `policy: keep` to preserve it.
+
+```yaml
+ipv4-profiles:
+  relay-passthrough:
+    gateway: 10.255.0.1
+    dhcp:
+      mode: relay
+      servers:
+        - address: "192.168.1.1:67"
+          priority: 100
+      giaddr: 10.0.0.1
+      option82:
+        policy: keep
+```
+
+### Proxy
+
+Relays to an external server but presents osvbng as the DHCP server to the client. The client sees a shorter lease (`client-lease`) while osvbng maintains the full upstream lease.
+
+```yaml
+ipv4-profiles:
+  proxy-profile:
+    gateway: 10.255.0.1
+    dns:
+      - 8.8.8.8
+    dhcp:
+      mode: proxy
+      servers:
+        - address: "192.168.1.1:67"
+          priority: 100
+      giaddr: 10.0.0.1
+      client-lease: 300
+      option82:
+        circuit-id-format: "{interface}:{svlan}:{cvlan}"
+        remote-id-format: "{mac}"
+```
+
+### Server Failover
+
+Both relay and proxy modes support server failover. Servers are tried in priority order (highest first). After `dead-threshold` consecutive failures, a server is quarantined for `dead-time` before being retried.
+
+```yaml
+ipv4-profiles:
+  resilient:
+    gateway: 10.255.0.1
+    dhcp:
+      mode: relay
+      servers:
+        - address: "10.1.1.1:67"
+          priority: 100
+        - address: "10.1.1.2:67"
+          priority: 50
+      giaddr: 10.0.0.1
+      server-timeout: 3s
+      dead-time: 60s
+      dead-threshold: 5
 ```

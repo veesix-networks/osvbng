@@ -9,6 +9,18 @@ DHCPv6 provider configuration. IANA pools, prefix delegation pools, and timing p
 | `domain_list` | array | DNS search domain list | `[example.com]` |
 | `ra` | [RA](#router-advertisement) | Router Advertisement defaults | |
 
+## Modes
+
+osvbng supports three DHCPv6 modes, selected per IPv6 profile:
+
+| Mode | Description |
+|------|-------------|
+| `server` | Local DHCPv6 server, allocates addresses and prefixes from configured pools (default) |
+| `relay` | RFC 8415 relay agent, wraps client messages in Relay-Forward envelopes with Interface-ID, Remote-ID, and Subscriber-ID options |
+| `proxy` | DHCPv6 proxy, relays to external servers but manages client-facing lifetimes independently |
+
+Mode is configured under `ipv6-profiles.<name>.dhcpv6.mode`. See [IPv6 Profiles](ipv6-profiles.md#dhcpv6-options) for the full configuration reference.
+
 ## Router Advertisement
 
 Default RA settings applied to subscriber sessions.
@@ -36,3 +48,5 @@ dhcpv6:
     max_interval: 600
     min_interval: 200
 ```
+
+See [IPv6 Profiles](ipv6-profiles.md) for relay and proxy configuration examples and [DHCP Relay & Proxy](../architecture/DHCP_RELAY_PROXY.md) for architecture details.

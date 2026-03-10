@@ -19,11 +19,43 @@ Profiles are referenced by [subscriber groups](subscriber-groups.md) via `ipv6-p
 
 Protocol-specific settings applied only when delivering addresses via DHCPv6.
 
+| Field | Type | Description | Default | Example |
+|-------|------|-------------|---------|---------|
+| `mode` | string | `server`, `relay`, or `proxy` | `server` | `relay` |
+| `preferred-time` | int | Default preferred lifetime in seconds (server mode) | `3600` | `3600` |
+| `valid-time` | int | Default valid lifetime in seconds (server mode) | `7200` | `7200` |
+| `servers` | array | Upstream DHCPv6 servers (relay/proxy only) | | see below |
+| `link-address` | string | IPv6 link address for Relay-Forward envelope | `::` | `2001:db8::1` |
+| `server-timeout` | duration | Time to wait for upstream server response | `5s` | `5s` |
+| `client-preferred-lifetime` | int | Preferred lifetime offered to clients (proxy only), in seconds | `300` | `300` |
+| `client-valid-lifetime` | int | Valid lifetime offered to clients (proxy only), in seconds | `300` | `600` |
+| `interface-id-format` | string | Interface-ID option format string (relay/proxy) | `{interface}:{svlan}:{cvlan}` | `{interface}:{svlan}:{cvlan}` |
+| `remote-id-format` | string | Remote-ID option format string (relay/proxy) | | `{mac}` |
+| `subscriber-id-format` | string | Subscriber-ID option format string (relay/proxy) | | `{mac}` |
+| `dead-time` | duration | How long to quarantine a failed server before retrying | `30s` | `30s` |
+| `dead-threshold` | int | Consecutive failures before marking a server dead | `3` | `3` |
+
+### Servers
+
+Each entry in the `servers` array:
+
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
-| `mode` | string | Profile mode (default: `server`) | `server` |
-| `preferred-time` | int | Default preferred lifetime in seconds (default: 3600) | `3600` |
-| `valid-time` | int | Default valid lifetime in seconds (default: 7200) | `7200` |
+| `address` | string | Server address in `[host]:port` format | `[2001:db8::100]:547` |
+| `priority` | int | Higher priority servers are tried first | `100` |
+
+### Relay Options
+
+DHCPv6 relay wraps client messages in a Relay-Forward envelope (message type 12) per RFC 8415. The envelope includes:
+
+- **Link-Address** - configured via `link-address`, used by the server to select the correct subnet
+- **Interface-ID** (option 18) - identifies the access interface, formatted from `interface-id-format`
+- **Remote-ID** (option 37) - optional, formatted from `remote-id-format`
+- **Subscriber-ID** (option 38) - optional, formatted from `subscriber-id-format`
+
+Format variables: `{interface}`, `{svlan}`, `{cvlan}`, `{mac}`.
+
+The relay agent binds on UDP port 547 per RFC 8415 section 8.1.
 
 ## IPv6CP Options
 
@@ -51,7 +83,9 @@ Reserved for future IPv6CP-specific delivery options when provisioning PPPoE sub
 | `preferred_time` | int | Preferred lifetime in seconds | `3600` |
 | `valid_time` | int | Valid lifetime in seconds | `7200` |
 
-## Example
+## Examples
+
+### Local Server
 
 ```yaml
 ipv6-profiles:
@@ -76,4 +110,63 @@ ipv6-profiles:
     dhcpv6:
       preferred-time: 3600
       valid-time: 7200
+```
+
+### Relay
+
+Wraps DHCPv6 client messages in Relay-Forward envelopes and forwards to an external server. The server uses the link-address to select the correct subnet for address allocation.
+
+```yaml
+ipv6-profiles:
+  relay-v6:
+    dns:
+      - 2001:4860:4860::8888
+    dhcpv6:
+      mode: relay
+      servers:
+        - address: "[2001:db8::100]:547"
+          priority: 100
+      link-address: "2001:db8::1"
+      interface-id-format: "{interface}:{svlan}:{cvlan}"
+      remote-id-format: "{mac}"
+```
+
+### Proxy
+
+Relays to an external server but presents osvbng as the DHCPv6 server to the client. osvbng generates its own DUID, rewrites the Server-ID in replies, and offers shorter lifetimes to clients while maintaining the full upstream lease.
+
+```yaml
+ipv6-profiles:
+  proxy-v6:
+    dns:
+      - 2001:4860:4860::8888
+    dhcpv6:
+      mode: proxy
+      servers:
+        - address: "[2001:db8::100]:547"
+          priority: 100
+      link-address: "2001:db8::1"
+      client-preferred-lifetime: 300
+      client-valid-lifetime: 600
+      interface-id-format: "{interface}:{svlan}:{cvlan}"
+```
+
+### Server Failover
+
+Both relay and proxy modes support server failover with the same logic as DHCPv4.
+
+```yaml
+ipv6-profiles:
+  resilient-v6:
+    dhcpv6:
+      mode: relay
+      servers:
+        - address: "[2001:db8::100]:547"
+          priority: 100
+        - address: "[2001:db8::101]:547"
+          priority: 50
+      link-address: "2001:db8::1"
+      server-timeout: 3s
+      dead-time: 60s
+      dead-threshold: 5
 ```
