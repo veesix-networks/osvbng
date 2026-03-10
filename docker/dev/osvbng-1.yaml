@@ -23,6 +23,12 @@ service-groups:
         vrf: CUSTOMER-A
         unnumbered: loop101
         pool: customer-a-pool
+    dhcp-relay:
+        ipv4-profile: relay-v4
+        ipv6-profile: relay-v6
+    dhcp-proxy:
+        ipv4-profile: proxy-v4
+        ipv6-profile: proxy-v6
 
 subscriber-groups:
     groups:
@@ -38,6 +44,24 @@ subscriber-groups:
                 enabled: true
                 advertise-pools: true
                 redistribute-connected: true
+            aaa-policy: default-policy
+        relay:
+            access-type: ipoe
+            ipv4-profile: relay-v4
+            ipv6-profile: relay-v6
+            vlans:
+                - svlan: "300-310"
+                  cvlan: any
+                  interface: loop100
+            aaa-policy: default-policy
+        proxy:
+            access-type: ipoe
+            ipv4-profile: proxy-v4
+            ipv6-profile: proxy-v6
+            vlans:
+                - svlan: "400-410"
+                  cvlan: any
+                  interface: loop100
             aaa-policy: default-policy
         pppoe:
             access-type: pppoe
@@ -67,6 +91,35 @@ ipv4-profiles:
               priority: 10
         dhcp:
             lease-time: 3600
+    relay-v4:
+        gateway: 10.255.0.1
+        dns:
+            - 8.8.8.8
+            - 8.8.4.4
+        dhcp:
+            mode: relay
+            servers:
+                - address: "172.30.0.5:67"
+                  priority: 100
+            giaddr: 172.30.0.2
+            option82:
+                circuit-id-format: "{interface}:{svlan}:{cvlan}"
+                remote-id-format: "{mac}"
+    proxy-v4:
+        gateway: 10.255.0.1
+        dns:
+            - 8.8.8.8
+            - 8.8.4.4
+        dhcp:
+            mode: proxy
+            servers:
+                - address: "172.30.0.5:67"
+                  priority: 100
+            giaddr: 172.30.0.2
+            client-lease: 300
+            option82:
+                circuit-id-format: "{interface}:{svlan}:{cvlan}"
+                remote-id-format: "{mac}"
 
 ipv6-profiles:
     default-v6:
@@ -87,6 +140,30 @@ ipv6-profiles:
         dns:
             - 2001:4860:4860::8888
             - 2001:4860:4860::8844
+    relay-v6:
+        dns:
+            - 2001:4860:4860::8888
+            - 2001:4860:4860::8844
+        dhcpv6:
+            mode: relay
+            servers:
+                - address: "[fd00:30::5]:547"
+                  priority: 100
+            link-address: "2001:db8:0:1::1"
+            interface-id-format: "{interface}:{svlan}:{cvlan}"
+    proxy-v6:
+        dns:
+            - 2001:4860:4860::8888
+            - 2001:4860:4860::8844
+        dhcpv6:
+            mode: proxy
+            servers:
+                - address: "[fd00:30::5]:547"
+                  priority: 100
+            link-address: "2001:db8:0:1::1"
+            interface-id-format: "{interface}:{svlan}:{cvlan}"
+            client-preferred-lifetime: 300
+            client-valid-lifetime: 600
 
 dhcp:
     provider: local

@@ -43,6 +43,7 @@ case "$ACTION" in
         until [ "$(docker inspect -f '{{.State.Running}}' bng-blaster 2>/dev/null)" = "true" ]; do sleep 1; done
         until [ "$(docker inspect -f '{{.State.Running}}' frr-peer 2>/dev/null)" = "true" ]; do sleep 1; done
         until [ "$(docker inspect -f '{{.State.Running}}' freeradius 2>/dev/null)" = "true" ]; do sleep 1; done
+        until [ "$(docker inspect -f '{{.State.Running}}' kea-dhcp 2>/dev/null)" = "true" ]; do sleep 1; done
         if [ "$HA_MODE" = true ]; then
             until [ "$(docker inspect -f '{{.State.Running}}' osvbng-2 2>/dev/null)" = "true" ]; do sleep 1; done
         fi
@@ -51,11 +52,13 @@ case "$ACTION" in
         BLASTER_PID=$(docker inspect -f '{{.State.Pid}}' bng-blaster)
         FRRPEER_PID=$(docker inspect -f '{{.State.Pid}}' frr-peer)
         FREERADIUS_PID=$(docker inspect -f '{{.State.Pid}}' freeradius)
+        KEA_PID=$(docker inspect -f '{{.State.Pid}}' kea-dhcp)
 
         sudo ip link del osvbng-mgmt-br 2>/dev/null || true
         sudo ip link del osvbng1-mgmt-br 2>/dev/null || true
         sudo ip link del osvbng2-mgmt-br 2>/dev/null || true
         sudo ip link del radius-mgmt-br 2>/dev/null || true
+        sudo ip link del kea-mgmt-br 2>/dev/null || true
         sudo ip link del osvbng-access 2>/dev/null || true
         sudo ip link del bng2-acc-br 2>/dev/null || true
         sudo ip link del osvbng-core 2>/dev/null || true
@@ -65,6 +68,7 @@ case "$ACTION" in
         sudo ip link add osvbng-mgmt-br type bridge
         sudo ip link set osvbng-mgmt-br up
         sudo ip addr add 172.30.0.1/24 dev osvbng-mgmt-br 2>/dev/null || true
+        sudo ip -6 addr add fd00:30::1/64 dev osvbng-mgmt-br 2>/dev/null || true
         sudo sysctl -w net.ipv4.ip_forward=1 >/dev/null
         sudo iptables -t nat -A POSTROUTING -s 172.30.0.0/24 -j MASQUERADE 2>/dev/null || true
 
@@ -75,6 +79,7 @@ case "$ACTION" in
         sudo ip link set osvbng1-mgmt-br up
         docker exec osvbng-1 ip link set eth0 up
         docker exec osvbng-1 ip addr add 172.30.0.2/24 dev eth0
+        docker exec osvbng-1 ip -6 addr add fd00:30::2/64 dev eth0
         docker exec osvbng-1 ip route add default via 172.30.0.1
 
         echo "Connecting freeradius to management bridge..."
@@ -85,6 +90,16 @@ case "$ACTION" in
         docker exec freeradius ip link set eth0 up
         docker exec freeradius ip addr add 172.30.0.4/24 dev eth0
         docker exec freeradius ip route add default via 172.30.0.1
+
+        echo "Connecting kea-dhcp to management bridge..."
+        sudo ip link add kea-mgmt type veth peer name kea-mgmt-br
+        sudo ip link set kea-mgmt netns $KEA_PID name eth0
+        sudo ip link set kea-mgmt-br master osvbng-mgmt-br
+        sudo ip link set kea-mgmt-br up
+        docker exec kea-dhcp ip link set eth0 up
+        docker exec kea-dhcp ip addr add 172.30.0.5/24 dev eth0
+        docker exec kea-dhcp ip -6 addr add fd00:30::5/64 dev eth0
+        docker exec kea-dhcp ip route add default via 172.30.0.1
 
         if [ "$HA_MODE" = true ]; then
             OSVBNG2_PID=$(docker inspect -f '{{.State.Pid}}' osvbng-2)
@@ -141,6 +156,7 @@ case "$ACTION" in
             echo "  frr-peer:         10.0.1.2 (core link to osvbng-2)"
         fi
         echo "  freeradius:       172.30.0.4 (1812/auth, 1813/acct, secret: testing123)"
+        echo "  kea-dhcp:         172.30.0.5 (DHCPv4:67, DHCPv6:547)"
         echo "  Prometheus:       http://localhost:9090"
         echo "  Grafana:          http://localhost:3000 (admin/admin)"
         ;;
@@ -150,6 +166,7 @@ case "$ACTION" in
         sudo ip link del osvbng1-mgmt-br 2>/dev/null || true
         sudo ip link del osvbng2-mgmt-br 2>/dev/null || true
         sudo ip link del radius-mgmt-br 2>/dev/null || true
+        sudo ip link del kea-mgmt-br 2>/dev/null || true
         sudo ip link del bng2-acc-br 2>/dev/null || true
         sudo ip link del osvbng-core 2>/dev/null || true
         sudo ip link del osvbng2-core 2>/dev/null || true

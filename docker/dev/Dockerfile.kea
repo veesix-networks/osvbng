@@ -1,0 +1,23 @@
+# Copyright 2026 Veesix Networks Ltd
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+FROM debian:12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    gnupg \
+    iproute2 \
+    procps \
+    && curl -1sLf 'https://dl.cloudsmith.io/public/isc/kea-3-0/setup.deb.sh' | bash \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    isc-kea-dhcp4-server \
+    isc-kea-dhcp6-server \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY kea/ /etc/kea/
+COPY kea/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+CMD ["/entrypoint.sh"]
