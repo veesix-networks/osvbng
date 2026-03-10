@@ -5,10 +5,12 @@
 
 set -euo pipefail
 
-QCOW2="${1:?Usage: vm-run-tests.sh <qcow2> <docker-tar> <test-suite> [output-dir]}"
+QCOW2="${1:?Usage: vm-run-tests.sh <qcow2> <docker-tar> <test-suite> [output-dir] [extra-image-tar...]}"
 DOCKER_TAR="${2:?Missing docker tarball}"
 TEST_SUITE="${3:?Missing test suite (e.g. 01-smoke)}"
 OUTPUT_DIR="${4:-./test-results}"
+shift 4 2>/dev/null || shift $#
+EXTRA_IMAGES=("$@")
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SSH_PORT=2222
@@ -44,6 +46,16 @@ echo "==> Copying Docker image to VM..."
 
 echo "==> Loading Docker image in VM..."
 "${SCRIPT_DIR}/vm-exec.sh" "docker load -i /tmp/osvbng-local.tar && rm -f /tmp/osvbng-local.tar" "${SSH_PORT}"
+
+for extra_tar in "${EXTRA_IMAGES[@]}"; do
+  if [ -n "${extra_tar}" ] && [ -f "${extra_tar}" ]; then
+    extra_name="$(basename "${extra_tar}")"
+    echo "==> Copying extra image ${extra_name} to VM..."
+    "${SCRIPT_DIR}/vm-copy.sh" to "${extra_tar}" "/tmp/${extra_name}" "${SSH_PORT}"
+    echo "==> Loading extra image ${extra_name} in VM..."
+    "${SCRIPT_DIR}/vm-exec.sh" "docker load -i /tmp/${extra_name} && rm -f /tmp/${extra_name}" "${SSH_PORT}"
+  fi
+done
 
 echo "==> Copying tests to VM..."
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"

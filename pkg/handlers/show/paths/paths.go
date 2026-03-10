@@ -68,6 +68,9 @@ const (
 	HAPeer        Path = "ha.peer"
 	HASRGCounters Path = "ha.srg.counters"
 	HASync        Path = "ha.sync"
+
+	DHCPRelay Path = "dhcp.relay"
+	DHCPProxy Path = "dhcp.proxy"
 )
 
 func (p Path) String() string {

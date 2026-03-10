@@ -115,6 +115,17 @@ services:
       - ./freeradius/authorize:/etc/freeradius/mods-config/files/authorize:ro
     command: ["-X"]
 
+  kea-dhcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.kea
+    container_name: kea-dhcp
+    cap_add:
+      - NET_ADMIN
+    network_mode: none
+    volumes:
+      - ./kea:/etc/kea:ro
+
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus

@@ -37,6 +37,9 @@ const (
 
 	HAStatus Path = "ha.status"
 	HASync   Path = "ha.sync"
+
+	DHCPRelay Path = "dhcp.relay"
+	DHCPProxy Path = "dhcp.proxy"
 )
 
 func (p Path) String() string {

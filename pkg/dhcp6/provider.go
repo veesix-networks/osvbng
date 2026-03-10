@@ -2,7 +2,9 @@ package dhcp6
 
 import (
 	"context"
+	"net"
 
+	"github.com/veesix-networks/osvbng/pkg/config/ip"
 	"github.com/veesix-networks/osvbng/pkg/dhcp"
 	"github.com/veesix-networks/osvbng/pkg/provider"
 )
@@ -13,6 +15,10 @@ type DHCPProvider interface {
 	ReleaseLease(duid []byte)
 }
 
+type BindingCounter interface {
+	BindingCount() int
+}
+
 type Packet struct {
 	SessionID string
 	MAC       string
@@ -21,4 +27,8 @@ type Packet struct {
 	DUID      []byte
 	Raw       []byte
 	Resolved  *dhcp.ResolvedDHCPv6
+	SwIfIndex uint32
+	Interface string
+	PeerAddr  net.IP
+	Profile   *ip.IPv6Profile
 }
