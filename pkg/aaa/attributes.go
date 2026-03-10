@@ -31,6 +31,8 @@ const (
 	AttrIANAPool            = "iana_pool"
 	AttrPDPool              = "pd_pool"
 	AttrUsername            = "username"
+	AttrIPv4Profile         = "ipv4-profile"
+	AttrIPv6Profile         = "ipv6-profile"
 )
 
 const (

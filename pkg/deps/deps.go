@@ -12,6 +12,8 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/cppm"
+	"github.com/veesix-networks/osvbng/pkg/dhcp4"
+	"github.com/veesix-networks/osvbng/pkg/dhcp6"
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/ha"
 	"github.com/veesix-networks/osvbng/pkg/opdb"
@@ -34,6 +36,8 @@ type ShowDeps struct {
 	EventBus         events.Bus
 	HAManager        *ha.Manager
 	PluginComponents map[string]component.Component
+	DHCPv4Providers  map[string]dhcp4.DHCPProvider
+	DHCPv6Providers  map[string]dhcp6.DHCPProvider
 }
 
 type OperDeps struct {

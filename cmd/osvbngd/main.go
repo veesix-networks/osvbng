@@ -240,32 +240,26 @@ func main() {
 		log.Fatalf("Failed to create routing component: %v", err)
 	}
 
-	dhcp4ProviderName := cfg.DHCP.Provider
-	if dhcp4ProviderName == "" {
-		dhcp4ProviderName = "local"
-	}
-
-	dhcp4Factory, ok := dhcp4.Get(dhcp4ProviderName)
-	if !ok {
-		log.Fatalf("DHCP4 provider '%s' not found. Available providers: %v", dhcp4ProviderName, dhcp4.List())
-	}
-
-	dhcp4Provider, err := dhcp4Factory(cfg)
-	if err != nil {
-		log.Fatalf("Failed to create DHCP4 provider '%s': %v", dhcp4ProviderName, err)
-	}
-
-	dhcp6ProviderName := cfg.DHCPv6.Provider
-	if dhcp6ProviderName == "" {
-		dhcp6ProviderName = "local"
-	}
-
-	var dhcp6Provider dhcp6.DHCPProvider
-	if dhcp6Factory, ok := dhcp6.Get(dhcp6ProviderName); ok {
-		dhcp6Provider, err = dhcp6Factory(cfg)
+	dhcp4Providers := make(map[string]dhcp4.DHCPProvider)
+	for _, name := range dhcp4.List() {
+		factory, _ := dhcp4.Get(name)
+		p, err := factory(cfg)
 		if err != nil {
-			log.Fatalf("Failed to create DHCP6 provider '%s': %v", dhcp6ProviderName, err)
+			log.Fatalf("Failed to create DHCP4 provider '%s': %v", name, err)
 		}
+		dhcp4Providers[name] = p
+		mainLog.Info("Loaded DHCPv4 provider", "name", name)
+	}
+
+	dhcp6Providers := make(map[string]dhcp6.DHCPProvider)
+	for _, name := range dhcp6.List() {
+		factory, _ := dhcp6.Get(name)
+		p, err := factory(cfg)
+		if err != nil {
+			log.Fatalf("Failed to create DHCP6 provider '%s': %v", name, err)
+		}
+		dhcp6Providers[name] = p
+		mainLog.Info("Loaded DHCPv6 provider", "name", name)
 	}
 
 	var haMgr *ha.Manager
@@ -315,7 +309,7 @@ func main() {
 		}
 	}
 
-	ipoeComp, err := ipoe.New(coreDeps, srgProvider, ifMgr, dhcp4Provider, dhcp6Provider)
+	ipoeComp, err := ipoe.New(coreDeps, srgProvider, ifMgr, dhcp4Providers, dhcp6Providers)
 	if err != nil {
 		log.Fatalf("Failed to create ipoe component: %v", err)
 	}
@@ -486,6 +480,8 @@ func main() {
 		EventBus:         eventBus,
 		HAManager:        haMgr,
 		PluginComponents: pluginComponentsMap,
+		DHCPv4Providers:  dhcp4Providers,
+		DHCPv6Providers:  dhcp6Providers,
 	})
 
 	operRegistry.AutoRegisterAll(&deps.OperDeps{

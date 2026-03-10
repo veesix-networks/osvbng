@@ -25,6 +25,7 @@ import (
 	aaacfg "github.com/veesix-networks/osvbng/pkg/config/aaa"
 	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
+	"github.com/veesix-networks/osvbng/pkg/config/ip"
 	"github.com/veesix-networks/osvbng/pkg/dhcp"
 	"github.com/veesix-networks/osvbng/pkg/dhcp4"
 	"github.com/veesix-networks/osvbng/pkg/dhcp6"
@@ -53,8 +54,8 @@ type Component struct {
 	svcGroupResolver *svcgroup.Resolver
 	cache            cache.Cache
 	opdb             opdb.Store
-	dhcp4Provider    dhcp4.DHCPProvider
-	dhcp6Provider    dhcp6.DHCPProvider
+	dhcp4Providers   map[string]dhcp4.DHCPProvider
+	dhcp6Providers   map[string]dhcp6.DHCPProvider
 	sessions         map[string]*SessionState
 	xidIndex         map[uint32]*SessionState
 	xid6Index        map[[3]byte]*SessionState
@@ -154,7 +155,70 @@ func (c *Component) buildAllocContext(sess *SessionState, aaaAttrs map[string]in
 		ctx.PDPoolOverride = sess.ServiceGroup.PDPool
 	}
 
+	if sess.ServiceGroup.IPv4Profile != "" {
+		ctx.ProfileName = sess.ServiceGroup.IPv4Profile
+	}
+	if sess.ServiceGroup.IPv6Profile != "" {
+		ctx.IPv6ProfileName = sess.ServiceGroup.IPv6Profile
+	}
+
 	return ctx
+}
+
+func (c *Component) getDHCP4Provider(profile *ip.IPv4Profile) dhcp4.DHCPProvider {
+	mode := "local"
+	if profile != nil {
+		m := profile.GetMode()
+		if m == "relay" || m == "proxy" {
+			mode = m
+		}
+	}
+	return c.dhcp4Providers[mode]
+}
+
+func (c *Component) getDHCP6Provider(profile *ip.IPv6Profile) dhcp6.DHCPProvider {
+	mode := "local"
+	if profile != nil {
+		m := profile.GetMode()
+		if m == "relay" || m == "proxy" {
+			mode = m
+		}
+	}
+	return c.dhcp6Providers[mode]
+}
+
+func (c *Component) resolveIPv4Profile(ctx *allocator.Context) *ip.IPv4Profile {
+	if ctx == nil || ctx.ProfileName == "" {
+		return nil
+	}
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil {
+		return nil
+	}
+	return cfg.IPv4Profiles[ctx.ProfileName]
+}
+
+func (c *Component) resolveIPv6Profile(ctx *allocator.Context) *ip.IPv6Profile {
+	if ctx == nil || ctx.IPv6ProfileName == "" {
+		return nil
+	}
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil {
+		return nil
+	}
+	return cfg.IPv6Profiles[ctx.IPv6ProfileName]
+}
+
+func (c *Component) resolveAccessInterfaceName(encapIfIndex uint32) string {
+	iface := c.ifMgr.Get(encapIfIndex)
+	if iface == nil {
+		return ""
+	}
+	parent := c.ifMgr.Get(iface.SupSwIfIndex)
+	if parent == nil {
+		return iface.Name
+	}
+	return parent.Name
 }
 
 func (c *Component) resolveDHCPv4(ctx *allocator.Context) *dhcp.ResolvedDHCPv4 {
@@ -239,7 +303,7 @@ type raPrefixInfo struct {
 	preferredTime uint32
 }
 
-func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manager, dhcp4Provider dhcp4.DHCPProvider, dhcp6Provider dhcp6.DHCPProvider) (*Component, error) {
+func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manager, dhcp4Providers map[string]dhcp4.DHCPProvider, dhcp6Providers map[string]dhcp6.DHCPProvider) (*Component, error) {
 	log := logger.Get(logger.IPoE)
 
 	c := &Component{
@@ -254,8 +318,8 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 		vpp:              deps.Southbound,
 		cache:            deps.Cache,
 		opdb:             deps.OpDB,
-		dhcp4Provider:    dhcp4Provider,
-		dhcp6Provider:    dhcp6Provider,
+		dhcp4Providers:   dhcp4Providers,
+		dhcp6Providers:   dhcp6Providers,
 		sessions:         make(map[string]*SessionState),
 		xidIndex:         make(map[uint32]*SessionState),
 		xid6Index:        make(map[[3]byte]*SessionState),
@@ -507,15 +571,27 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 
 	if alreadyApproved && ipoeCreated {
 		c.logger.WithGroup(logger.IPoEDHCP4).Info("Session already approved, forwarding DISCOVER to provider", "session_id", sess.SessionID)
+		v4Profile := c.resolveIPv4Profile(sess.AllocCtx)
+		var resolved *dhcp.ResolvedDHCPv4
+		if v4Profile == nil || v4Profile.GetMode() == "server" {
+			resolved = c.resolveDHCPv4(sess.AllocCtx)
+		}
 		pkt := &dhcp4.Packet{
 			SessionID: sess.SessionID,
 			MAC:       sess.MAC.String(),
 			SVLAN:     sess.OuterVLAN,
 			CVLAN:     sess.InnerVLAN,
 			Raw:       buf.Bytes(),
-			Resolved:  c.resolveDHCPv4(sess.AllocCtx),
+			Resolved:  resolved,
+			SwIfIndex: sess.EncapIfIndex,
+			Interface: c.resolveAccessInterfaceName(sess.EncapIfIndex),
+			Profile:   v4Profile,
 		}
-		response, err := c.dhcp4Provider.HandlePacket(c.Ctx, pkt)
+		provider := c.getDHCP4Provider(v4Profile)
+		if provider == nil {
+			return fmt.Errorf("no DHCPv4 provider for mode %s", v4Profile.GetMode())
+		}
+		response, err := provider.HandlePacket(c.Ctx, pkt)
 		if err != nil {
 			return fmt.Errorf("dhcp provider failed: %w", err)
 		}
@@ -651,16 +727,28 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 			return fmt.Errorf("serialize DHCP: %w", err)
 		}
 
+		v4Profile := c.resolveIPv4Profile(sess.AllocCtx)
+		var resolved *dhcp.ResolvedDHCPv4
+		if v4Profile == nil || v4Profile.GetMode() == "server" {
+			resolved = c.resolveDHCPv4(sess.AllocCtx)
+		}
 		dhcpPkt := &dhcp4.Packet{
 			SessionID: sess.SessionID,
 			MAC:       pkt.MAC.String(),
 			SVLAN:     pkt.OuterVLAN,
 			CVLAN:     pkt.InnerVLAN,
 			Raw:       buf.Bytes(),
-			Resolved:  c.resolveDHCPv4(sess.AllocCtx),
+			Resolved:  resolved,
+			SwIfIndex: sess.EncapIfIndex,
+			Interface: c.resolveAccessInterfaceName(sess.EncapIfIndex),
+			Profile:   v4Profile,
 		}
 
-		response, err := c.dhcp4Provider.HandlePacket(c.Ctx, dhcpPkt)
+		provider := c.getDHCP4Provider(v4Profile)
+		if provider == nil {
+			return fmt.Errorf("no DHCPv4 provider for mode %s", v4Profile.GetMode())
+		}
+		response, err := provider.HandlePacket(c.Ctx, dhcpPkt)
 		if err != nil {
 			c.logger.WithGroup(logger.IPoEDHCP4).Error("DHCP provider failed for REQUEST", "session_id", sess.SessionID, "error", err)
 			return fmt.Errorf("dhcp provider failed: %w", err)
@@ -825,8 +913,8 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 	if ipv4 != nil {
 		allocator.GetGlobalRegistry().ReleaseIP(ipv4)
 	}
-	if c.dhcp4Provider != nil {
-		c.dhcp4Provider.ReleaseLease(mac.String())
+	for _, p := range c.dhcp4Providers {
+		p.ReleaseLease(mac.String())
 	}
 	if deleteSession {
 		if ipv6Address != nil {
@@ -835,8 +923,10 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 		if ipv6Prefix != nil {
 			allocator.GetGlobalRegistry().ReleasePDByPrefix(ipv6Prefix)
 		}
-		if c.dhcp6Provider != nil && v6duid != nil {
-			c.dhcp6Provider.ReleaseLease(v6duid)
+		if v6duid != nil {
+			for _, p := range c.dhcp6Providers {
+				p.ReleaseLease(v6duid)
+			}
 		}
 	}
 
@@ -1316,19 +1406,35 @@ func (c *Component) handleAAAResponse(event events.Event) {
 	sess.PendingDHCPv6Request = nil
 	c.sessionMu.Unlock()
 
+	v4Profile := c.resolveIPv4Profile(allocCtx)
+	v6Profile := c.resolveIPv6Profile(allocCtx)
+	accessIfName := c.resolveAccessInterfaceName(encapIfIndex)
+
 	if pendingDiscover != nil {
 		c.logger.Info("Forwarding pending DHCP DISCOVER", "session_id", sessID)
 
+		var resolved *dhcp.ResolvedDHCPv4
+		if v4Profile == nil || v4Profile.GetMode() == "server" {
+			resolved = c.resolveDHCPv4(allocCtx)
+		}
 		pkt := &dhcp4.Packet{
 			SessionID: sessID,
 			MAC:       mac.String(),
 			SVLAN:     svlan,
 			CVLAN:     cvlan,
 			Raw:       pendingDiscover,
-			Resolved:  c.resolveDHCPv4(allocCtx),
+			Resolved:  resolved,
+			SwIfIndex: encapIfIndex,
+			Interface: accessIfName,
+			Profile:   v4Profile,
 		}
 
-		response, err := c.dhcp4Provider.HandlePacket(c.Ctx, pkt)
+		provider := c.getDHCP4Provider(v4Profile)
+		if provider == nil {
+			c.logger.Error("No DHCPv4 provider available", "session_id", sessID)
+			return
+		}
+		response, err := provider.HandlePacket(c.Ctx, pkt)
 		if err != nil {
 			c.logger.Error("DHCP provider failed for DISCOVER", "session_id", sessID, "error", err)
 			return
@@ -1345,16 +1451,28 @@ func (c *Component) handleAAAResponse(event events.Event) {
 	if pendingRequest != nil {
 		c.logger.Info("Forwarding pending DHCP REQUEST", "session_id", sessID)
 
+		var resolved *dhcp.ResolvedDHCPv4
+		if v4Profile == nil || v4Profile.GetMode() == "server" {
+			resolved = c.resolveDHCPv4(allocCtx)
+		}
 		pkt := &dhcp4.Packet{
 			SessionID: sessID,
 			MAC:       mac.String(),
 			SVLAN:     svlan,
 			CVLAN:     cvlan,
 			Raw:       pendingRequest,
-			Resolved:  c.resolveDHCPv4(allocCtx),
+			Resolved:  resolved,
+			SwIfIndex: encapIfIndex,
+			Interface: accessIfName,
+			Profile:   v4Profile,
 		}
 
-		response, err := c.dhcp4Provider.HandlePacket(c.Ctx, pkt)
+		provider := c.getDHCP4Provider(v4Profile)
+		if provider == nil {
+			c.logger.Error("No DHCPv4 provider available", "session_id", sessID)
+			return
+		}
+		response, err := provider.HandlePacket(c.Ctx, pkt)
 		if err != nil {
 			c.logger.Error("DHCP provider failed for REQUEST", "session_id", sessID, "error", err)
 			return
@@ -1368,9 +1486,15 @@ func (c *Component) handleAAAResponse(event events.Event) {
 		}
 	}
 
-	if pendingDHCPv6Solicit != nil && c.dhcp6Provider != nil {
+	v6Provider := c.getDHCP6Provider(v6Profile)
+
+	if pendingDHCPv6Solicit != nil && v6Provider != nil {
 		c.logger.Info("Forwarding pending DHCPv6 SOLICIT", "session_id", sessID)
 
+		var resolved *dhcp.ResolvedDHCPv6
+		if v6Profile == nil || v6Profile.GetMode() == "server" {
+			resolved = c.resolveDHCPv6(allocCtx)
+		}
 		pkt := &dhcp6.Packet{
 			SessionID: sessID,
 			MAC:       mac.String(),
@@ -1378,10 +1502,14 @@ func (c *Component) handleAAAResponse(event events.Event) {
 			CVLAN:     cvlan,
 			DUID:      dhcpv6DUID,
 			Raw:       pendingDHCPv6Solicit,
-			Resolved:  c.resolveDHCPv6(allocCtx),
+			Resolved:  resolved,
+			SwIfIndex: encapIfIndex,
+			Interface: accessIfName,
+			PeerAddr:  sess.ClientLinkLocal,
+			Profile:   v6Profile,
 		}
 
-		response, err := c.dhcp6Provider.HandlePacket(c.Ctx, pkt)
+		response, err := v6Provider.HandlePacket(c.Ctx, pkt)
 		if err != nil {
 			c.logger.Error("DHCPv6 provider failed for SOLICIT", "session_id", sessID, "error", err)
 		} else if response == nil || len(response.Raw) == 0 {
@@ -1394,9 +1522,13 @@ func (c *Component) handleAAAResponse(event events.Event) {
 		}
 	}
 
-	if pendingDHCPv6Request != nil && c.dhcp6Provider != nil {
+	if pendingDHCPv6Request != nil && v6Provider != nil {
 		c.logger.Info("Forwarding pending DHCPv6 REQUEST", "session_id", sessID)
 
+		var resolved *dhcp.ResolvedDHCPv6
+		if v6Profile == nil || v6Profile.GetMode() == "server" {
+			resolved = c.resolveDHCPv6(allocCtx)
+		}
 		pkt := &dhcp6.Packet{
 			SessionID: sessID,
 			MAC:       mac.String(),
@@ -1404,10 +1536,14 @@ func (c *Component) handleAAAResponse(event events.Event) {
 			CVLAN:     cvlan,
 			DUID:      dhcpv6DUID,
 			Raw:       pendingDHCPv6Request,
-			Resolved:  c.resolveDHCPv6(allocCtx),
+			Resolved:  resolved,
+			SwIfIndex: encapIfIndex,
+			Interface: accessIfName,
+			PeerAddr:  sess.ClientLinkLocal,
+			Profile:   v6Profile,
 		}
 
-		response, err := c.dhcp6Provider.HandlePacket(c.Ctx, pkt)
+		response, err := v6Provider.HandlePacket(c.Ctx, pkt)
 		if err != nil {
 			c.logger.Error("DHCPv6 provider failed for REQUEST", "session_id", sessID, "error", err)
 		} else if response == nil || len(response.Raw) == 0 {
@@ -1598,8 +1734,8 @@ func (c *Component) cleanupSessions() {
 				if sess.IPv6Prefix != nil {
 					allocator.GetGlobalRegistry().ReleasePDByPrefix(sess.IPv6Prefix)
 				}
-				if c.dhcp4Provider != nil {
-					c.dhcp4Provider.ReleaseLease(sess.MAC.String())
+				for _, p := range c.dhcp4Providers {
+					p.ReleaseLease(sess.MAC.String())
 				}
 
 				if c.vpp != nil && sess.IPoESwIfIndex != 0 {
@@ -1724,7 +1860,7 @@ func (c *Component) processDHCPv6Packet(pkt *dataplane.ParsedPacket) error {
 		return fmt.Errorf("packet rejected: S-VLAN required")
 	}
 
-	if c.dhcp6Provider == nil {
+	if len(c.dhcp6Providers) == 0 {
 		return fmt.Errorf("no DHCPv6 provider configured")
 	}
 
@@ -1993,24 +2129,32 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
 
 	c.logger.Info("IPv6 released by client", "session_id", sessID, "delete_session", deleteSession)
 
-	if c.dhcp6Provider != nil {
-		buf := gopacket.NewSerializeBuffer()
-		opts := gopacket.SerializeOptions{FixLengths: true}
-		if err := pkt.DHCPv6.SerializeTo(buf, opts); err == nil {
-			dhcpPkt := &dhcp6.Packet{
-				SessionID: sessID,
-				MAC:       mac.String(),
-				SVLAN:     pkt.OuterVLAN,
-				CVLAN:     pkt.InnerVLAN,
-				DUID:      duid,
-				Raw:       buf.Bytes(),
-			}
-			response, err := c.dhcp6Provider.HandlePacket(c.Ctx, dhcpPkt)
-			if err != nil {
-				c.logger.Warn("DHCPv6 provider failed on Release", "session_id", sessID, "error", err)
-			} else if response != nil && len(response.Raw) > 0 {
-				if err := c.sendDHCPv6Response(sess, response.Raw); err != nil {
-					c.logger.Debug("Failed to send DHCPv6 Release Reply", "session_id", sessID, "error", err)
+	if len(c.dhcp6Providers) > 0 {
+		v6Prof := c.resolveIPv6Profile(sess.AllocCtx)
+		v6Prov := c.getDHCP6Provider(v6Prof)
+		if v6Prov != nil {
+			buf := gopacket.NewSerializeBuffer()
+			opts := gopacket.SerializeOptions{FixLengths: true}
+			if err := pkt.DHCPv6.SerializeTo(buf, opts); err == nil {
+				dhcpPkt := &dhcp6.Packet{
+					SessionID: sessID,
+					MAC:       mac.String(),
+					SVLAN:     pkt.OuterVLAN,
+					CVLAN:     pkt.InnerVLAN,
+					DUID:      duid,
+					Raw:       buf.Bytes(),
+					SwIfIndex: sess.EncapIfIndex,
+					Interface: c.resolveAccessInterfaceName(sess.EncapIfIndex),
+					PeerAddr:  sess.ClientLinkLocal,
+					Profile:   v6Prof,
+				}
+				response, err := v6Prov.HandlePacket(c.Ctx, dhcpPkt)
+				if err != nil {
+					c.logger.Warn("DHCPv6 provider failed on Release", "session_id", sessID, "error", err)
+				} else if response != nil && len(response.Raw) > 0 {
+					if err := c.sendDHCPv6Response(sess, response.Raw); err != nil {
+						c.logger.Debug("Failed to send DHCPv6 Release Reply", "session_id", sessID, "error", err)
+					}
 				}
 			}
 		}
@@ -2026,8 +2170,8 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
 		if ipv4 != nil {
 			allocator.GetGlobalRegistry().ReleaseIP(ipv4)
 		}
-		if c.dhcp4Provider != nil {
-			c.dhcp4Provider.ReleaseLease(mac.String())
+		for _, p := range c.dhcp4Providers {
+			p.ReleaseLease(mac.String())
 		}
 	}
 
@@ -2105,6 +2249,11 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
 }
 
 func (c *Component) forwardDHCPv6ToProvider(sess *SessionState, pkt *dataplane.ParsedPacket, raw []byte) error {
+	v6Profile := c.resolveIPv6Profile(sess.AllocCtx)
+	var resolved *dhcp.ResolvedDHCPv6
+	if v6Profile == nil || v6Profile.GetMode() == "server" {
+		resolved = c.resolveDHCPv6(sess.AllocCtx)
+	}
 	dhcpPkt := &dhcp6.Packet{
 		SessionID: sess.SessionID,
 		MAC:       sess.MAC.String(),
@@ -2112,10 +2261,18 @@ func (c *Component) forwardDHCPv6ToProvider(sess *SessionState, pkt *dataplane.P
 		CVLAN:     sess.InnerVLAN,
 		DUID:      sess.DHCPv6DUID,
 		Raw:       raw,
-		Resolved:  c.resolveDHCPv6(sess.AllocCtx),
+		Resolved:  resolved,
+		SwIfIndex: sess.EncapIfIndex,
+		Interface: c.resolveAccessInterfaceName(sess.EncapIfIndex),
+		PeerAddr:  sess.ClientLinkLocal,
+		Profile:   v6Profile,
 	}
 
-	response, err := c.dhcp6Provider.HandlePacket(c.Ctx, dhcpPkt)
+	provider := c.getDHCP6Provider(v6Profile)
+	if provider == nil {
+		return fmt.Errorf("no DHCPv6 provider available")
+	}
+	response, err := provider.HandlePacket(c.Ctx, dhcpPkt)
 	if err != nil {
 		return fmt.Errorf("dhcp6 provider failed: %w", err)
 	}

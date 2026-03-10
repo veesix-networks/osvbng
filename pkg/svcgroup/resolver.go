@@ -25,6 +25,8 @@ type ServiceGroup struct {
 	Pool         string
 	IANAPool     string
 	PDPool       string
+	IPv4Profile  string
+	IPv6Profile  string
 }
 
 func (r ServiceGroup) LogAttrs() []slog.Attr {
@@ -67,6 +69,12 @@ func (r ServiceGroup) LogAttrs() []slog.Attr {
 	}
 	if r.PDPool != "" {
 		attrs = append(attrs, slog.String("pd_pool", r.PDPool))
+	}
+	if r.IPv4Profile != "" {
+		attrs = append(attrs, slog.String("ipv4_profile", r.IPv4Profile))
+	}
+	if r.IPv6Profile != "" {
+		attrs = append(attrs, slog.String("ipv6_profile", r.IPv6Profile))
 	}
 	return attrs
 }
@@ -192,6 +200,12 @@ func applyConfig(r *ServiceGroup, cfg *servicegroup.Config) {
 	if cfg.PDPool != "" {
 		r.PDPool = cfg.PDPool
 	}
+	if cfg.IPv4Profile != "" {
+		r.IPv4Profile = cfg.IPv4Profile
+	}
+	if cfg.IPv6Profile != "" {
+		r.IPv6Profile = cfg.IPv6Profile
+	}
 }
 
 func applyAAAOverrides(r *ServiceGroup, attrs map[string]interface{}) {
@@ -224,6 +238,12 @@ func applyAAAOverrides(r *ServiceGroup, attrs map[string]interface{}) {
 	}
 	if v := getUint64Attr(attrs, aaa.AttrQoSDownloadRate); v != 0 {
 		r.DownloadRate = v
+	}
+	if v := getStringAttr(attrs, aaa.AttrIPv4Profile); v != "" {
+		r.IPv4Profile = v
+	}
+	if v := getStringAttr(attrs, aaa.AttrIPv6Profile); v != "" {
+		r.IPv6Profile = v
 	}
 }
 
