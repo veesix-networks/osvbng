@@ -2,6 +2,7 @@ package dhcp4
 
 import (
 	"context"
+	"net"
 
 	"github.com/veesix-networks/osvbng/pkg/config/ip"
 	"github.com/veesix-networks/osvbng/pkg/dhcp"
@@ -28,4 +29,5 @@ type Packet struct {
 	SwIfIndex uint32
 	Interface string
 	Profile   *ip.IPv4Profile
+	LocalMAC  net.HardwareAddr
 }
