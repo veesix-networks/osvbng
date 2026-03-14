@@ -23,12 +23,13 @@ const (
 )
 
 type RelayForwardParams struct {
-	HopCount    uint8
-	LinkAddress net.IP
-	PeerAddress net.IP
-	InterfaceID []byte
-	RemoteID    []byte
-	SubscriberID []byte
+	HopCount         uint8
+	LinkAddress      net.IP
+	PeerAddress      net.IP
+	InterfaceID      []byte
+	RemoteID         []byte
+	EnterpriseNumber uint32
+	SubscriberID     []byte
 }
 
 // BuildRelayForward wraps a DHCPv6 client message in a Relay-Forward envelope.
@@ -40,7 +41,7 @@ func BuildRelayForward(clientMsg []byte, p *RelayForwardParams) []byte {
 		totalOpts += 4 + len(p.InterfaceID)
 	}
 	if len(p.RemoteID) > 0 {
-		totalOpts += 4 + len(p.RemoteID)
+		totalOpts += 4 + 4 + len(p.RemoteID)
 	}
 	if len(p.SubscriberID) > 0 {
 		totalOpts += 4 + len(p.SubscriberID)
@@ -73,9 +74,10 @@ func BuildRelayForward(clientMsg []byte, p *RelayForwardParams) []byte {
 
 	if len(p.RemoteID) > 0 {
 		binary.BigEndian.PutUint16(buf[offset:], DHCPv6OptRemoteID)
-		binary.BigEndian.PutUint16(buf[offset+2:], uint16(len(p.RemoteID)))
-		copy(buf[offset+4:], p.RemoteID)
-		offset += 4 + len(p.RemoteID)
+		binary.BigEndian.PutUint16(buf[offset+2:], uint16(4+len(p.RemoteID)))
+		binary.BigEndian.PutUint32(buf[offset+4:], p.EnterpriseNumber)
+		copy(buf[offset+8:], p.RemoteID)
+		offset += 4 + 4 + len(p.RemoteID)
 	}
 
 	if len(p.SubscriberID) > 0 {

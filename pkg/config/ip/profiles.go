@@ -127,6 +127,7 @@ type IPv6DHCPv6Options struct {
 	ClientValidLifetime     uint32            `json:"client_valid_lifetime,omitempty" yaml:"client-valid-lifetime,omitempty"`
 	InterfaceIDFormat       string            `json:"interface_id_format,omitempty" yaml:"interface-id-format,omitempty"`
 	RemoteIDFormat          string            `json:"remote_id_format,omitempty" yaml:"remote-id-format,omitempty"`
+	EnterpriseNumber        uint32            `json:"enterprise_number,omitempty" yaml:"enterprise-number,omitempty"`
 	SubscriberIDFormat      string            `json:"subscriber_id_format,omitempty" yaml:"subscriber-id-format,omitempty"`
 	Leasequery              *LeasequeryConfig `json:"leasequery,omitempty" yaml:"leasequery,omitempty"`
 	DeadTime                time.Duration     `json:"dead_time,omitempty" yaml:"dead-time,omitempty"`
