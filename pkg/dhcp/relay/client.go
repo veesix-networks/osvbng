@@ -37,6 +37,10 @@ type ClientStats struct {
 type Client struct {
 	conn4     *net.UDPConn
 	conn6     *net.UDPConn
+	conn4Once sync.Once
+	conn6Once sync.Once
+	conn4Err  error
+	conn6Err  error
 	pending4  map[uint32]chan<- []byte
 	pending6  map[[3]byte]chan<- []byte
 	mu4       sync.Mutex
@@ -45,8 +49,9 @@ type Client struct {
 	closed    chan struct{}
 	logger    *slog.Logger
 
-	serversMu sync.RWMutex
-	servers   map[string]*Server
+	serversMu     sync.RWMutex
+	servers       map[string]*Server
+	resolvedCache sync.Map
 
 	requests4 atomic.Uint64
 	replies4  atomic.Uint64
@@ -86,30 +91,29 @@ func newClient() *Client {
 }
 
 func (c *Client) ensureConn4() error {
-	if c.conn4 != nil {
-		return nil
-	}
-	// Bind to port 67: DHCP servers reply to GIAddr:67 per RFC 2131 §4.1
-	conn, err := net.ListenUDP("udp4", &net.UDPAddr{Port: 67})
-	if err != nil {
-		return fmt.Errorf("listen udp4:67: %w", err)
-	}
-	c.conn4 = conn
-	go c.readLoop4()
-	return nil
+	c.conn4Once.Do(func() {
+		conn, err := net.ListenUDP("udp4", &net.UDPAddr{Port: 67})
+		if err != nil {
+			c.conn4Err = fmt.Errorf("listen udp4:67: %w", err)
+			return
+		}
+		c.conn4 = conn
+		go c.readLoop4()
+	})
+	return c.conn4Err
 }
 
 func (c *Client) ensureConn6() error {
-	if c.conn6 != nil {
-		return nil
-	}
-	conn, err := net.ListenUDP("udp6", &net.UDPAddr{Port: 547})
-	if err != nil {
-		return fmt.Errorf("listen udp: %w", err)
-	}
-	c.conn6 = conn
-	go c.readLoop6()
-	return nil
+	c.conn6Once.Do(func() {
+		conn, err := net.ListenUDP("udp6", &net.UDPAddr{Port: 547})
+		if err != nil {
+			c.conn6Err = fmt.Errorf("listen udp6:547: %w", err)
+			return
+		}
+		c.conn6 = conn
+		go c.readLoop6()
+	})
+	return c.conn6Err
 }
 
 func (c *Client) Forward4(pkt []byte, xid uint32, servers []*Server, timeout time.Duration, deadTime time.Duration, deadThreshold int) ([]byte, error) {
@@ -117,14 +121,8 @@ func (c *Client) Forward4(pkt []byte, xid uint32, servers []*Server, timeout tim
 		return nil, err
 	}
 
-	srv := c.pickServer(servers, deadTime)
-	if srv == nil {
-		return nil, ErrAllDead
-	}
-
 	replyCh := c.replyPool.Get().(chan []byte)
 	defer func() {
-		// drain before returning to pool
 		select {
 		case <-replyCh:
 		default:
@@ -142,40 +140,41 @@ func (c *Client) Forward4(pkt []byte, xid uint32, servers []*Server, timeout tim
 		c.mu4.Unlock()
 	}()
 
-	srv.requests.Add(1)
-	c.requests4.Add(1)
+	for _, srv := range servers {
+		if srv.IsDead(deadTime) {
+			continue
+		}
 
-	if _, err := c.conn4.WriteToUDP(pkt, srv.Addr); err != nil {
-		srv.RecordFailure(deadThreshold)
-		c.timeouts4.Add(1)
-		return nil, fmt.Errorf("write to %s: %w", srv.Addr, err)
+		srv.requests.Add(1)
+		c.requests4.Add(1)
+
+		if _, err := c.conn4.WriteToUDP(pkt, srv.Addr); err != nil {
+			srv.RecordFailure(deadThreshold)
+			continue
+		}
+
+		timer := time.NewTimer(timeout)
+		select {
+		case reply := <-replyCh:
+			timer.Stop()
+			srv.RecordSuccess()
+			c.replies4.Add(1)
+			return reply, nil
+		case <-timer.C:
+			srv.RecordFailure(deadThreshold)
+			c.timeouts4.Add(1)
+		case <-c.closed:
+			timer.Stop()
+			return nil, ErrClientClose
+		}
 	}
 
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-
-	select {
-	case reply := <-replyCh:
-		srv.RecordSuccess()
-		c.replies4.Add(1)
-		return reply, nil
-	case <-timer.C:
-		srv.RecordFailure(deadThreshold)
-		c.timeouts4.Add(1)
-		return nil, ErrTimeout
-	case <-c.closed:
-		return nil, ErrClientClose
-	}
+	return nil, ErrAllDead
 }
 
 func (c *Client) Forward6(pkt []byte, txnID [3]byte, servers []*Server, timeout time.Duration, deadTime time.Duration, deadThreshold int) ([]byte, error) {
 	if err := c.ensureConn6(); err != nil {
 		return nil, err
-	}
-
-	srv := c.pickServer(servers, deadTime)
-	if srv == nil {
-		return nil, ErrAllDead
 	}
 
 	replyCh := c.replyPool.Get().(chan []byte)
@@ -197,30 +196,55 @@ func (c *Client) Forward6(pkt []byte, txnID [3]byte, servers []*Server, timeout 
 		c.mu6.Unlock()
 	}()
 
-	srv.requests.Add(1)
-	c.requests6.Add(1)
+	for _, srv := range servers {
+		if srv.IsDead(deadTime) {
+			continue
+		}
 
-	if _, err := c.conn6.WriteToUDP(pkt, srv.Addr); err != nil {
-		srv.RecordFailure(deadThreshold)
-		c.timeouts6.Add(1)
-		return nil, fmt.Errorf("write to %s: %w", srv.Addr, err)
+		srv.requests.Add(1)
+		c.requests6.Add(1)
+
+		if _, err := c.conn6.WriteToUDP(pkt, srv.Addr); err != nil {
+			srv.RecordFailure(deadThreshold)
+			continue
+		}
+
+		timer := time.NewTimer(timeout)
+		select {
+		case reply := <-replyCh:
+			timer.Stop()
+			srv.RecordSuccess()
+			c.replies6.Add(1)
+			return reply, nil
+		case <-timer.C:
+			srv.RecordFailure(deadThreshold)
+			c.timeouts6.Add(1)
+		case <-c.closed:
+			timer.Stop()
+			return nil, ErrClientClose
+		}
 	}
 
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
+	return nil, ErrAllDead
+}
 
-	select {
-	case reply := <-replyCh:
-		srv.RecordSuccess()
-		c.replies6.Add(1)
-		return reply, nil
-	case <-timer.C:
-		srv.RecordFailure(deadThreshold)
-		c.timeouts6.Add(1)
-		return nil, ErrTimeout
-	case <-c.closed:
-		return nil, ErrClientClose
+func (c *Client) SendOnly4(pkt []byte, servers []*Server, deadTime time.Duration, deadThreshold int) error {
+	if err := c.ensureConn4(); err != nil {
+		return err
 	}
+	for _, srv := range servers {
+		if srv.IsDead(deadTime) {
+			continue
+		}
+		srv.requests.Add(1)
+		c.requests4.Add(1)
+		if _, err := c.conn4.WriteToUDP(pkt, srv.Addr); err != nil {
+			srv.RecordFailure(deadThreshold)
+			continue
+		}
+		return nil
+	}
+	return ErrAllDead
 }
 
 func (c *Client) Close() error {
@@ -323,18 +347,6 @@ func (c *Client) readLoop6() {
 	}
 }
 
-func (c *Client) pickServer(servers []*Server, deadTime time.Duration) *Server {
-	if len(servers) == 0 {
-		return nil
-	}
-	for _, s := range servers {
-		if !s.IsDead(deadTime) {
-			return s
-		}
-	}
-	return nil
-}
-
 func (c *Client) GetStats() ClientStats {
 	return ClientStats{
 		Requests4: c.requests4.Load(),
@@ -383,6 +395,12 @@ func ResolveServers(cfgServers []ip.DHCPRelayServer) ([]*Server, error) {
 	}
 
 	client := GetClient()
+
+	key := serverCacheKey(cfgServers)
+	if cached, ok := client.resolvedCache.Load(key); ok {
+		return cached.([]*Server), nil
+	}
+
 	servers := make([]*Server, 0, len(cfgServers))
 	for _, cs := range cfgServers {
 		addr, err := net.ResolveUDPAddr("udp", cs.Address)
@@ -396,5 +414,22 @@ func ResolveServers(cfgServers []ip.DHCPRelayServer) ([]*Server, error) {
 		return servers[i].Priority > servers[j].Priority
 	})
 
+	client.resolvedCache.Store(key, servers)
 	return servers, nil
+}
+
+func serverCacheKey(cfgServers []ip.DHCPRelayServer) string {
+	if len(cfgServers) == 1 {
+		return cfgServers[0].Address
+	}
+	size := 0
+	for i := range cfgServers {
+		size += len(cfgServers[i].Address) + 1
+	}
+	b := make([]byte, 0, size)
+	for i := range cfgServers {
+		b = append(b, cfgServers[i].Address...)
+		b = append(b, ',')
+	}
+	return string(b)
 }
