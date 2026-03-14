@@ -5,6 +5,8 @@
 package radius
 
 import (
+	"crypto/hmac"
+	"crypto/md5"
 	"fmt"
 	"net"
 	"sync"
@@ -83,6 +85,12 @@ func (rc *radiusConn) exchange(packet *radius.Packet) (*radius.Packet, error) {
 		return nil, fmt.Errorf("encode: %w", err)
 	}
 
+	if offset := findAttr80(raw); offset >= 0 {
+		h := hmac.New(md5.New, rc.secret)
+		h.Write(raw)
+		copy(raw[offset:offset+16], h.Sum(nil))
+	}
+
 	ch := make(chan *radius.Packet, 1)
 	req := &pendingRequest{ch: ch, secret: rc.secret}
 
@@ -146,6 +154,25 @@ func (rc *radiusConn) readLoop() {
 			}
 		}
 	}
+}
+
+func findAttr80(raw []byte) int {
+	if len(raw) < 20 {
+		return -1
+	}
+	i := 20
+	for i+2 <= len(raw) {
+		attrType := raw[i]
+		attrLen := int(raw[i+1])
+		if attrLen < 2 || i+attrLen > len(raw) {
+			break
+		}
+		if attrType == 80 && attrLen == 18 {
+			return i + 2
+		}
+		i += attrLen
+	}
+	return -1
 }
 
 func (rc *radiusConn) isDead(deadTime time.Duration) bool {

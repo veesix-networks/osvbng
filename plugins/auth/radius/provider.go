@@ -219,6 +219,8 @@ func (p *Provider) Authenticate(ctx context.Context, req *auth.AuthRequest) (*au
 		p.encodeCHAP(packet, req.Attributes, chapResp)
 	}
 
+	packet.Add(80, make(radius.Attribute, 16))
+
 	resp, rc, err := p.sendAuthWithFailover(packet, req.Attributes)
 	if err != nil {
 		return nil, err
