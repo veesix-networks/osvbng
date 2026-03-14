@@ -31,4 +31,5 @@ type Packet struct {
 	Interface string
 	PeerAddr  net.IP
 	Profile   *ip.IPv6Profile
+	LocalMAC  net.HardwareAddr
 }

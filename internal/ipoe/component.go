@@ -586,6 +586,7 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 			SwIfIndex: sess.EncapIfIndex,
 			Interface: c.resolveAccessInterfaceName(sess.EncapIfIndex),
 			Profile:   v4Profile,
+			LocalMAC:  c.getLocalMAC(sess.SRGName, sess.EncapIfIndex),
 		}
 		provider := c.getDHCP4Provider(v4Profile)
 		if provider == nil {
@@ -746,6 +747,7 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 			SwIfIndex: sess.EncapIfIndex,
 			Interface: c.resolveAccessInterfaceName(sess.EncapIfIndex),
 			Profile:   v4Profile,
+			LocalMAC:  c.getLocalMAC(sess.SRGName, sess.EncapIfIndex),
 		}
 
 		provider := c.getDHCP4Provider(v4Profile)
@@ -1417,6 +1419,7 @@ func (c *Component) handleAAAResponse(event events.Event) {
 	v4Profile := c.resolveIPv4Profile(allocCtx)
 	v6Profile := c.resolveIPv6Profile(allocCtx)
 	accessIfName := c.resolveAccessInterfaceName(encapIfIndex)
+	localMAC := c.getLocalMAC(srgName, encapIfIndex)
 
 	if pendingDiscover != nil {
 		c.logger.Info("Forwarding pending DHCP DISCOVER", "session_id", sessID)
@@ -1435,6 +1438,7 @@ func (c *Component) handleAAAResponse(event events.Event) {
 			SwIfIndex: encapIfIndex,
 			Interface: accessIfName,
 			Profile:   v4Profile,
+			LocalMAC:  localMAC,
 		}
 
 		provider := c.getDHCP4Provider(v4Profile)
@@ -1473,6 +1477,7 @@ func (c *Component) handleAAAResponse(event events.Event) {
 			SwIfIndex: encapIfIndex,
 			Interface: accessIfName,
 			Profile:   v4Profile,
+			LocalMAC:  localMAC,
 		}
 
 		provider := c.getDHCP4Provider(v4Profile)
@@ -1515,6 +1520,7 @@ func (c *Component) handleAAAResponse(event events.Event) {
 			Interface: accessIfName,
 			PeerAddr:  sess.ClientLinkLocal,
 			Profile:   v6Profile,
+			LocalMAC:  localMAC,
 		}
 
 		response, err := v6Provider.HandlePacket(c.Ctx, pkt)
@@ -1549,6 +1555,7 @@ func (c *Component) handleAAAResponse(event events.Event) {
 			Interface: accessIfName,
 			PeerAddr:  sess.ClientLinkLocal,
 			Profile:   v6Profile,
+			LocalMAC:  localMAC,
 		}
 
 		response, err := v6Provider.HandlePacket(c.Ctx, pkt)
@@ -2155,6 +2162,7 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
 					Interface: c.resolveAccessInterfaceName(sess.EncapIfIndex),
 					PeerAddr:  sess.ClientLinkLocal,
 					Profile:   v6Prof,
+					LocalMAC:  c.getLocalMAC(sess.SRGName, sess.EncapIfIndex),
 				}
 				response, err := v6Prov.HandlePacket(c.Ctx, dhcpPkt)
 				if err != nil {
@@ -2274,6 +2282,7 @@ func (c *Component) forwardDHCPv6ToProvider(sess *SessionState, pkt *dataplane.P
 		Interface: c.resolveAccessInterfaceName(sess.EncapIfIndex),
 		PeerAddr:  sess.ClientLinkLocal,
 		Profile:   v6Profile,
+		LocalMAC:  c.getLocalMAC(sess.SRGName, sess.EncapIfIndex),
 	}
 
 	provider := c.getDHCP6Provider(v6Profile)

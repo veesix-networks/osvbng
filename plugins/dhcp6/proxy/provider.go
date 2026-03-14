@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/config"
@@ -26,29 +27,46 @@ func init() {
 }
 
 type Provider struct {
-	client    *relay.Client
-	bindings  *Bindings
-	proxyDUID []byte
-	logger    *slog.Logger
+	client   *relay.Client
+	bindings *Bindings
+	duidMu   sync.RWMutex
+	duidMap  map[string][]byte
+	logger   *slog.Logger
 }
 
 func New(cfg *config.Config) (dhcp6.DHCPProvider, error) {
 	return &Provider{
-		client:    relay.GetClient(),
-		bindings:  NewBindings(),
-		proxyDUID: generateProxyDUID(),
-		logger:    logger.Get(logger.IPoERelay),
+		client:   relay.GetClient(),
+		bindings: NewBindings(),
+		duidMap:  make(map[string][]byte),
+		logger:   logger.Get(logger.IPoERelay),
 	}, nil
 }
 
 var dhcpv6Epoch = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 
-func generateProxyDUID() []byte {
+func (p *Provider) getDUID(mac net.HardwareAddr) []byte {
+	if len(mac) < 6 {
+		return nil
+	}
+	key := string(mac[:6])
+
+	p.duidMu.RLock()
+	if duid, ok := p.duidMap[key]; ok {
+		p.duidMu.RUnlock()
+		return duid
+	}
+	p.duidMu.RUnlock()
+
 	duid := make([]byte, 14)
 	binary.BigEndian.PutUint16(duid[0:2], 1)
 	binary.BigEndian.PutUint16(duid[2:4], 1)
 	binary.BigEndian.PutUint32(duid[4:8], uint32(time.Since(dhcpv6Epoch).Seconds()))
-	copy(duid[8:14], []byte{0x00, 0x16, 0x3e, 0xbb, 0xcc, 0xdd})
+	copy(duid[8:14], mac[:6])
+
+	p.duidMu.Lock()
+	p.duidMap[key] = duid
+	p.duidMu.Unlock()
 	return duid
 }
 
@@ -183,7 +201,7 @@ func (p *Provider) handleForwardAndRewrite(pkt *dhcp6.Packet, opts *ip.IPv6DHCPv
 	}
 
 	// Rewrite: replace server DUID with proxy DUID, shorten lifetimes
-	inner = relay.ReplaceServerDUID(inner, p.proxyDUID)
+	inner = relay.ReplaceServerDUID(inner, p.getDUID(pkt.LocalMAC))
 	inner = relay.RewriteV6Lifetimes(inner, prof.GetClientPreferredLifetime(), prof.GetClientValidLifetime())
 
 	return &dhcp6.Packet{
