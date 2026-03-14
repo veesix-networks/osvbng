@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net"
 	"regexp"
+	"sync/atomic"
 	"time"
 
 	internalaaa "github.com/veesix-networks/osvbng/internal/aaa"
@@ -25,10 +26,10 @@ import (
 	"layeh.com/radius"
 )
 
-var globalProvider *Provider
+var globalProvider atomic.Pointer[Provider]
 
 func GetProvider() *Provider {
-	return globalProvider
+	return globalProvider.Load()
 }
 
 type compiledCustomMapping struct {
@@ -178,7 +179,7 @@ func New(cfg *config.Config) (auth.AuthProvider, error) {
 		radiusStats:     stats,
 	}
 
-	globalProvider = p
+	globalProvider.Store(p)
 
 	p.logger.Info("RADIUS auth provider initialized",
 		"servers", len(authConns),
