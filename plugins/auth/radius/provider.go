@@ -38,16 +38,24 @@ type compiledCustomMapping struct {
 	extract    *regexp.Regexp
 }
 
+type compiledRequestMapping struct {
+	internal   string
+	attrType   radius.Type
+	vendorID   uint32
+	vendorType byte
+}
+
 type Provider struct {
 	cfg       *Config
 	globalCfg *config.Config
 	logger    *slog.Logger
 
-	authConns  []*radiusConn
-	acctConns  []*radiusConn
-	tier1Index map[byte]*responseMapping
-	tier2Index map[vendorKey]*vendorMapping
-	tier3      []compiledCustomMapping
+	authConns       []*radiusConn
+	acctConns       []*radiusConn
+	tier1Index      map[byte]*responseMapping
+	tier2Index      map[vendorKey]*vendorMapping
+	tier3           []compiledCustomMapping
+	requestMappings []compiledRequestMapping
 
 	radiusStats *internalaaa.RADIUSStats
 }
@@ -127,16 +135,34 @@ func New(cfg *config.Config) (auth.AuthProvider, error) {
 		tier3 = append(tier3, cm)
 	}
 
+	var reqMappings []compiledRequestMapping
+	for _, m := range pluginCfg.RequestMappings {
+		cm := compiledRequestMapping{
+			internal:   m.Internal,
+			vendorID:   m.VendorID,
+			vendorType: m.VendorType,
+		}
+		if m.RadiusAttr != "" {
+			attrType, ok := resolveAttrName(m.RadiusAttr)
+			if !ok {
+				return nil, fmt.Errorf("request_mappings: unknown radius attribute %q", m.RadiusAttr)
+			}
+			cm.attrType = attrType
+		}
+		reqMappings = append(reqMappings, cm)
+	}
+
 	p := &Provider{
-		cfg:         pluginCfg,
-		globalCfg:   cfg,
-		logger:      logger.Get(Namespace),
-		authConns:   authConns,
-		acctConns:   acctConns,
-		tier1Index:  buildTier1Index(),
-		tier2Index:  buildTier2Index(),
-		tier3:       tier3,
-		radiusStats: stats,
+		cfg:             pluginCfg,
+		globalCfg:       cfg,
+		logger:          logger.Get(Namespace),
+		authConns:       authConns,
+		acctConns:       acctConns,
+		tier1Index:      buildTier1Index(),
+		tier2Index:      buildTier2Index(),
+		tier3:           tier3,
+		requestMappings: reqMappings,
+		radiusStats:     stats,
 	}
 
 	globalProvider = p
@@ -177,12 +203,9 @@ func (p *Provider) Authenticate(ctx context.Context, req *auth.AuthRequest) (*au
 
 	if chapResp, ok := req.Attributes[aaa.AttrCHAPResponse]; ok {
 		p.encodeCHAP(packet, req.Attributes, chapResp)
-	} else {
-		password := req.Attributes[aaa.AttrPassword]
-		p.encodePAP(packet, password)
 	}
 
-	resp, rc, err := p.sendWithFailover(packet, p.authConns)
+	resp, rc, err := p.sendAuthWithFailover(packet, req.Attributes)
 	if err != nil {
 		return nil, err
 	}
@@ -214,12 +237,16 @@ func (p *Provider) Authenticate(ctx context.Context, req *auth.AuthRequest) (*au
 	}, nil
 }
 
-func (p *Provider) sendWithFailover(packet *radius.Packet, conns []*radiusConn) (*radius.Packet, *radiusConn, error) {
+func (p *Provider) sendAuthWithFailover(packet *radius.Packet, attrs map[string]string) (*radius.Packet, *radiusConn, error) {
 	var lastErr error
 
-	for _, rc := range conns {
+	for _, rc := range p.authConns {
 		if rc.isDead(p.cfg.DeadTime) {
 			continue
+		}
+
+		if pw, ok := attrs[aaa.AttrPassword]; ok {
+			packet.Set(2, radius.Attribute(papEncode([]byte(pw), rc.secret, packet.Authenticator[:])))
 		}
 
 		for attempt := 0; attempt < p.cfg.Retries; attempt++ {
@@ -241,6 +268,41 @@ func (p *Provider) sendWithFailover(packet *radius.Packet, conns []*radiusConn) 
 
 		rc.recordFailure(p.cfg.DeadThreshold)
 		p.radiusStats.IncrAuthTimeout(rc.addr)
+	}
+
+	if lastErr != nil {
+		return nil, nil, fmt.Errorf("all RADIUS servers failed: %w", lastErr)
+	}
+	return nil, nil, fmt.Errorf("no RADIUS servers available")
+}
+
+func (p *Provider) sendAcctWithFailover(packet *radius.Packet) (*radius.Packet, *radiusConn, error) {
+	var lastErr error
+
+	for _, rc := range p.acctConns {
+		if rc.isDead(p.cfg.DeadTime) {
+			continue
+		}
+
+		for attempt := 0; attempt < p.cfg.Retries; attempt++ {
+			p.radiusStats.IncrAcctRequest(rc.addr)
+
+			resp, err := rc.exchange(packet)
+			if err != nil {
+				lastErr = err
+				p.logger.Debug("RADIUS accounting request failed",
+					"server", rc.addr,
+					"attempt", attempt+1,
+					"error", err)
+				continue
+			}
+
+			rc.recordSuccess()
+			return resp, rc, nil
+		}
+
+		rc.recordFailure(p.cfg.DeadThreshold)
+		p.radiusStats.IncrAcctTimeout(rc.addr)
 	}
 
 	if lastErr != nil {
@@ -282,13 +344,20 @@ func (p *Provider) addRequestAVPs(packet *radius.Packet, req *auth.AuthRequest) 
 		packet.Add(30, radius.Attribute(circuitID))
 	}
 
+	for i := range p.requestMappings {
+		v, ok := req.Attributes[p.requestMappings[i].internal]
+		if !ok {
+			continue
+		}
+		if p.requestMappings[i].vendorID > 0 {
+			packet.Add(26, encodeVSARequest(p.requestMappings[i].vendorID, p.requestMappings[i].vendorType, []byte(v)))
+		} else {
+			packet.Add(p.requestMappings[i].attrType, radius.Attribute(v))
+		}
+	}
+
 	now := uint32(time.Now().Unix())
 	packet.Add(55, encodeUint32(now))
-}
-
-func (p *Provider) encodePAP(packet *radius.Packet, password string) {
-	encoded := papEncode([]byte(password), p.authConns[0].secret, packet.Authenticator[:])
-	packet.Add(2, radius.Attribute(encoded))
 }
 
 func (p *Provider) encodeCHAP(packet *radius.Packet, attrs map[string]string, chapResp string) {

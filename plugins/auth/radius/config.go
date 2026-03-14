@@ -55,7 +55,9 @@ type CustomMapping struct {
 
 type RequestMapping struct {
 	Internal   string `json:"internal" yaml:"internal"`
-	RadiusAttr string `json:"radius_attr" yaml:"radius_attr"`
+	RadiusAttr string `json:"radius_attr,omitempty" yaml:"radius_attr,omitempty"`
+	VendorID   uint32 `json:"vendor_id,omitempty" yaml:"vendor_id,omitempty"`
+	VendorType byte   `json:"vendor_type,omitempty" yaml:"vendor_type,omitempty"`
 }
 
 func (c *Config) applyDefaults() {
@@ -100,6 +102,14 @@ func (c *Config) validate() error {
 		}
 		if m.RadiusAttr == "" && m.VendorID == 0 {
 			return fmt.Errorf("response_mappings[%d]: radius_attr or vendor_id is required", i)
+		}
+	}
+	for i, m := range c.RequestMappings {
+		if m.Internal == "" {
+			return fmt.Errorf("request_mappings[%d]: internal attribute is required", i)
+		}
+		if m.RadiusAttr == "" && m.VendorID == 0 {
+			return fmt.Errorf("request_mappings[%d]: radius_attr or vendor_id is required", i)
 		}
 	}
 	return nil
