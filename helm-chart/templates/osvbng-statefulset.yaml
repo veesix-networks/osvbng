@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: osvbng
+spec:
+  serviceName: osvbng
+  replicas: 1
+  selector:
+    matchLabels:
+      app: osvbng
+  template:
+    metadata:
+      labels:
+        app: osvbng
+      {{- if .Values.multus.enabled }}
+      annotations:
+        k8s.v1.cni.cncf.io/networks: osvbng-access, osvbng-core
+      {{- end }}
+    spec:
+      containers:
+        - name: osvbng
+          image: {{ .Values.osvbng.image | quote }}
+          imagePullPolicy: {{ .Values.osvbng.pullPolicy }}
+          command: ["/scripts/docker-entrypoint.sh"]
+          resources:
+            requests:
+              memory: {{ .Values.osvbng.resources.memory }}
+              cpu: {{ .Values.osvbng.resources.cpu }}
+              hugepages-2Mi: "512Mi"
+            limits:
+              memory: {{ .Values.osvbng.resources.memory }}
+              cpu: {{ .Values.osvbng.resources.cpu }}
+              hugepages-2Mi: "512Mi"
+          securityContext:
+            privileged: {{ .Values.osvbng.privileged }}
+            capabilities:
+              add:
+                - SYS_ADMIN
+                - NET_ADMIN
+                - IPC_LOCK
+                - SYS_NICE
+                - SYS_RAWIO
+          env:
+          - name: OSVBNG_ACCESS_INTERFACE
+            value: {{ .Values.osvbng.accessInterface | quote }}
+          ports:
+          - name: grpc
+            containerPort: {{ .Values.osvbng.ports.grpc }}
+          - name: prometheus
+            containerPort: {{ .Values.osvbng.ports.prometheus }}
+          - name: http
+            containerPort: {{ .Values.osvbng.ports.http }}
+          volumeMounts:
+          - name: entrypoint-script
+            mountPath: /scripts
+          # Mount FRR configs to staging directory instead of /etc/frr directly
+          - name: frr-config
+            mountPath: /frr-config-templates
+            readOnly: true
+          - name: config-templates
+            mountPath: /config-templates
+          - name: hugepages
+            mountPath: /dev/hugepages
+          - name: config-versions
+            mountPath: /var/lib/osvbng/config-versions
+          {{- if .Values.osvbng.mountSysKernelDebug }}
+          - name: sys-kernel-debug
+            mountPath: /sys/kernel/debug
+            readOnly: true
+          {{- end }}
+          - name: dshm
+            mountPath: /dev/shm
+      volumes:
+      - name: entrypoint-script
+        configMap:
+          name: osvbng-entrypoint
+          defaultMode: 0755
+      - name: frr-config
+        configMap:
+          name: frr-config
+      - name: config-templates
+        projected:
+          sources:
+          - configMap:
+              name: osvbng-dataplane-template
+          - configMap:
+              name: osvbng-config-template
+      - name: config-versions
+        emptyDir: {}
+      {{- if .Values.osvbng.mountSysKernelDebug }}
+      - name: sys-kernel-debug
+        hostPath:
+          path: /sys/kernel/debug
+          type: Directory
+      {{- end }}
+      - name: hugepages
+        emptyDir:
+          medium: HugePages
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: {{ .Values.osvbng.shmSize }}
