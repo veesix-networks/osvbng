@@ -160,6 +160,13 @@ ipv4-profiles:
 
 Relays to an external server but presents osvbng as the DHCP server to the client. The client sees a shorter lease (`client-lease`) while osvbng maintains the full upstream lease.
 
+When a client renews, the proxy answers locally without contacting the upstream server — as long as the upstream server's T1 (half the server lease) has not elapsed. Once T1 is reached, the next renewal is forwarded upstream to refresh the server-side lease. This significantly reduces upstream DHCP traffic while keeping clients on short renewal cycles.
+
+For example, with `client-lease: 900` (15 minutes) and a 7-day upstream lease:
+- Clients renew every ~7.5 minutes (T1 of the 15-minute client lease)
+- The proxy answers these renewals locally
+- After 3.5 days (T1 of the 7-day server lease), the proxy forwards the next renewal upstream
+
 ```yaml
 ipv4-profiles:
   proxy-profile:
@@ -172,7 +179,7 @@ ipv4-profiles:
         - address: "192.168.1.1:67"
           priority: 100
       giaddr: 10.0.0.1
-      client-lease: 300
+      client-lease: 900
       option82:
         circuit-id-format: "{interface}:{svlan}:{cvlan}"
         remote-id-format: "{mac}"
