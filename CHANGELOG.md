@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.5.0](https://github.com/veesix-networks/osvbng/compare/v0.4.0...v0.5.0) (2026-03-14)
+
+
+### Features
+
+* **aaa:** add RADIUS auth provider with server failover and accounting ([#169](https://github.com/veesix-networks/osvbng/issues/169)) ([ad464a3](https://github.com/veesix-networks/osvbng/commit/ad464a37f64e8494ee2de3feaa55750addc3dde7))
+* **dhcp:** add relay and proxy providers with Kea dev environment, smoke tests, and CI integration ([#172](https://github.com/veesix-networks/osvbng/issues/172)) ([5b6b794](https://github.com/veesix-networks/osvbng/commit/5b6b794529c0a7834ae3d4c43e39bc4f4a13c66c))
+
+
+### Bug Fixes
+
+* **aaa:** add Message-Authenticator (attr 80) to Access-Request packets ([#181](https://github.com/veesix-networks/osvbng/issues/181)) ([3f5796e](https://github.com/veesix-networks/osvbng/commit/3f5796e4db8c4c79d28a3ac4791cc72424430c8f))
+* **aaa:** address RADIUS auth/accounting issues from code review ([#174](https://github.com/veesix-networks/osvbng/issues/174)) ([28625ae](https://github.com/veesix-networks/osvbng/commit/28625aeef5d19b7a22376efb2138f7c98aa42545))
+* **aaa:** use atomic pointer for global RADIUS provider reference ([#180](https://github.com/veesix-networks/osvbng/issues/180)) ([612ff45](https://github.com/veesix-networks/osvbng/commit/612ff455b7e6ec4279c89fa954840b9de35bd7a2))
+* **aaa:** wire up RadiusAttr name resolution for response mappings ([#179](https://github.com/veesix-networks/osvbng/issues/179)) ([c84b64e](https://github.com/veesix-networks/osvbng/commit/c84b64e1af4fda0d7152e22da4241b8d2d2b80c3))
+* **dhcp:** address relay and proxy issues ([#175](https://github.com/veesix-networks/osvbng/issues/175)) ([a24133d](https://github.com/veesix-networks/osvbng/commit/a24133d1c29da9f6d7873bbccb4209c1613f41b7))
+* **dhcp:** use compound keys for pending map to prevent XID collisions ([#178](https://github.com/veesix-networks/osvbng/issues/178)) ([82366cf](https://github.com/veesix-networks/osvbng/commit/82366cf3f505ac78926420fb4bb51461e32a2630))
+* **dhcpv6:** add enterprise-number prefix to Remote-ID option per RFC 4649 ([#177](https://github.com/veesix-networks/osvbng/issues/177)) ([b914624](https://github.com/veesix-networks/osvbng/commit/b9146243a05774d1db7e76e7767ca62d5b14972b))
+* **dhcpv6:** use SRG virtual MAC or access interface MAC for proxy DUID ([#176](https://github.com/veesix-networks/osvbng/issues/176)) ([785851f](https://github.com/veesix-networks/osvbng/commit/785851f9ee9553c9042fcc7eb452a6864803e034))
+* **ha:** promote WAITING SRGs to ACTIVE_SOLO when peer is unreachable ([#171](https://github.com/veesix-networks/osvbng/issues/171)) ([06e1f15](https://github.com/veesix-networks/osvbng/commit/06e1f15b258e436ea00c8cc0e9cad44f3cb91bc8))
+
 ## [0.4.0](https://github.com/veesix-networks/osvbng/compare/v0.3.1...v0.4.0) (2026-03-03)
 
 
