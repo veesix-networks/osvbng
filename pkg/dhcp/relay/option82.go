@@ -38,16 +38,25 @@ func FormatOption82Field(format string, p *Option82Params) []byte {
 	return []byte(r.Replace(format))
 }
 
-func BuildOption82(cfg *ip.Option82Config, p *Option82Params, unicast bool) []byte {
+func BuildOption82(cfg *ip.Option82Config, p *Option82Params, unicast bool) ([]byte, error) {
 	circuitID := FormatOption82Field(cfg.GetCircuitIDFormat(), p)
 	remoteID := FormatOption82Field(cfg.GetRemoteIDFormat(), p)
+
+	if len(circuitID) > 255 {
+		return nil, fmt.Errorf("circuit-id exceeds 255 bytes: %d", len(circuitID))
+	}
+	if len(remoteID) > 255 {
+		return nil, fmt.Errorf("remote-id exceeds 255 bytes: %d", len(remoteID))
+	}
 
 	totalLen := 2 + len(circuitID) + 2 + len(remoteID)
 	if cfg.IncludeFlags {
 		totalLen += 3
 	}
+	if totalLen > 255 {
+		return nil, fmt.Errorf("option 82 total length exceeds 255 bytes: %d", totalLen)
+	}
 
-	// option 82: code(1) + len(1) + sub-options
 	buf := make([]byte, 0, 2+totalLen)
 	buf = append(buf, OptRelayAgentInfo, byte(totalLen))
 
@@ -65,7 +74,7 @@ func BuildOption82(cfg *ip.Option82Config, p *Option82Params, unicast bool) []by
 		buf = append(buf, SubOptFlags, 1, flags)
 	}
 
-	return buf
+	return buf, nil
 }
 
 // InsertOption82 inserts or replaces Option 82 in a raw DHCPv4 packet.

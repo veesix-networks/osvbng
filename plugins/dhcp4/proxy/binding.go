@@ -32,14 +32,52 @@ type bindingShard struct {
 
 type Bindings struct {
 	shards [numShards]bindingShard
+	stop   chan struct{}
 }
 
 func NewBindings() *Bindings {
-	b := &Bindings{}
+	b := &Bindings{
+		stop: make(chan struct{}),
+	}
 	for i := range b.shards {
 		b.shards[i].bindings = make(map[string]Binding)
 	}
+	go b.sweepLoop()
 	return b
+}
+
+func (b *Bindings) Close() {
+	close(b.stop)
+}
+
+func (b *Bindings) sweepLoop() {
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			b.sweep()
+		case <-b.stop:
+			return
+		}
+	}
+}
+
+func (b *Bindings) sweep() {
+	now := time.Now().Unix()
+	for i := range b.shards {
+		s := &b.shards[i]
+		s.mu.Lock()
+		for key, binding := range s.bindings {
+			if binding.ServerLease == 0 {
+				continue
+			}
+			if now-binding.ServerBoundAt > int64(binding.ServerLease*2) {
+				delete(s.bindings, key)
+			}
+		}
+		s.mu.Unlock()
+	}
 }
 
 func (b *Bindings) shard(mac string) *bindingShard {

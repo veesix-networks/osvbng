@@ -99,12 +99,15 @@ func (p *Provider) handleForwardAndRewrite(pkt *dhcp4.Packet, opts *ip.IPv4DHCPO
 	relay.IncrementHops(raw)
 
 	if opts.Option82 != nil {
-		opt82Data := relay.BuildOption82(opts.Option82, &relay.Option82Params{
+		opt82Data, err := relay.BuildOption82(opts.Option82, &relay.Option82Params{
 			Interface: pkt.Interface,
 			SVLAN:     pkt.SVLAN,
 			CVLAN:     pkt.CVLAN,
 			MAC:       pkt.MAC,
 		}, false)
+		if err != nil {
+			return nil, fmt.Errorf("build option 82: %w", err)
+		}
 		raw = relay.InsertOption82(raw, opt82Data, opts.Option82.GetPolicy())
 	}
 
@@ -182,24 +185,20 @@ func (p *Provider) handleRelease(pkt *dhcp4.Packet, opts *ip.IPv4DHCPOptions) (*
 	relay.IncrementHops(raw)
 
 	if opts.Option82 != nil {
-		opt82Data := relay.BuildOption82(opts.Option82, &relay.Option82Params{
+		opt82Data, err := relay.BuildOption82(opts.Option82, &relay.Option82Params{
 			Interface: pkt.Interface,
 			SVLAN:     pkt.SVLAN,
 			CVLAN:     pkt.CVLAN,
 			MAC:       pkt.MAC,
 		}, false)
+		if err != nil {
+			return nil, fmt.Errorf("build option 82: %w", err)
+		}
 		raw = relay.InsertOption82(raw, opt82Data, opts.Option82.GetPolicy())
 	}
 
-	xid := uint32(raw[4])<<24 | uint32(raw[5])<<16 | uint32(raw[6])<<8 | uint32(raw[7])
-
 	prof := wrapProfile(opts)
-	_, err = p.client.Forward4(
-		raw, xid, servers,
-		prof.GetServerTimeout(),
-		prof.GetDeadTime(),
-		prof.GetDeadThreshold(),
-	)
+	err = p.client.SendOnly4(raw, servers, prof.GetDeadTime(), prof.GetDeadThreshold())
 	if err != nil {
 		p.logger.Warn("release forward failed", slog.String("mac", pkt.MAC), slog.Any("error", err))
 	}

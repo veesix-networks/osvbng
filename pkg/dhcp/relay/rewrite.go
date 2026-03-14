@@ -25,12 +25,15 @@ func WrapIPUDP(dhcpPayload []byte, srcIP, dstIP net.IP) []byte {
 	ipLen := 20 + udpLen
 	pkt := make([]byte, ipLen)
 
+	src4 := srcIP.To4()
+	dst4 := dstIP.To4()
+
 	pkt[0] = 0x45
 	binary.BigEndian.PutUint16(pkt[2:4], uint16(ipLen))
 	pkt[8] = 64
 	pkt[9] = 0x11
-	copy(pkt[12:16], srcIP.To4())
-	copy(pkt[16:20], dstIP.To4())
+	copy(pkt[12:16], src4)
+	copy(pkt[16:20], dst4)
 
 	var csum uint32
 	for i := 0; i < 20; i += 2 {
@@ -46,7 +49,35 @@ func WrapIPUDP(dhcpPayload []byte, srcIP, dstIP net.IP) []byte {
 	binary.BigEndian.PutUint16(pkt[24:26], uint16(udpLen))
 
 	copy(pkt[28:], dhcpPayload)
+
+	binary.BigEndian.PutUint16(pkt[26:28], udpChecksum(src4, dst4, pkt[20:]))
 	return pkt
+}
+
+func udpChecksum(srcIP, dstIP net.IP, udpPkt []byte) uint16 {
+	var csum uint32
+	csum += uint32(srcIP[0])<<8 | uint32(srcIP[1])
+	csum += uint32(srcIP[2])<<8 | uint32(srcIP[3])
+	csum += uint32(dstIP[0])<<8 | uint32(dstIP[1])
+	csum += uint32(dstIP[2])<<8 | uint32(dstIP[3])
+	csum += 0x11
+	csum += uint32(len(udpPkt))
+
+	for i := 0; i+1 < len(udpPkt); i += 2 {
+		csum += uint32(binary.BigEndian.Uint16(udpPkt[i:]))
+	}
+	if len(udpPkt)%2 == 1 {
+		csum += uint32(udpPkt[len(udpPkt)-1]) << 8
+	}
+
+	for csum > 0xffff {
+		csum = (csum & 0xffff) + (csum >> 16)
+	}
+	res := ^uint16(csum)
+	if res == 0 {
+		return 0xffff
+	}
+	return res
 }
 
 func SetGIAddr(pkt []byte, giaddr net.IP) {

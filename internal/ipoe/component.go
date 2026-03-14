@@ -589,7 +589,11 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 		}
 		provider := c.getDHCP4Provider(v4Profile)
 		if provider == nil {
-			return fmt.Errorf("no DHCPv4 provider for mode %s", v4Profile.GetMode())
+			mode := "local"
+			if v4Profile != nil {
+				mode = v4Profile.GetMode()
+			}
+			return fmt.Errorf("no DHCPv4 provider for mode %s", mode)
 		}
 		response, err := provider.HandlePacket(c.Ctx, pkt)
 		if err != nil {
@@ -746,7 +750,11 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 
 		provider := c.getDHCP4Provider(v4Profile)
 		if provider == nil {
-			return fmt.Errorf("no DHCPv4 provider for mode %s", v4Profile.GetMode())
+			mode := "local"
+			if v4Profile != nil {
+				mode = v4Profile.GetMode()
+			}
+			return fmt.Errorf("no DHCPv4 provider for mode %s", mode)
 		}
 		response, err := provider.HandlePacket(c.Ctx, dhcpPkt)
 		if err != nil {
