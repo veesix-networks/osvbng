@@ -133,7 +133,14 @@ ipv6-profiles:
 
 ### Proxy
 
-Relays to an external server but presents osvbng as the DHCPv6 server to the client. osvbng generates its own DUID, rewrites the Server-ID in replies, and offers shorter lifetimes to clients while maintaining the full upstream lease.
+Relays to an external server but presents osvbng as the DHCPv6 server to the client. osvbng generates its own DUID from the SRG virtual MAC (HA enabled) or access interface MAC (standalone), rewrites the Server-ID in replies, and offers shorter lifetimes to clients while maintaining the full upstream lease.
+
+When a client sends a Renew or Rebind, the proxy answers locally without contacting the upstream server — as long as the upstream server's T1 (half the server preferred lifetime) has not elapsed. Once T1 is reached, the next renewal is forwarded upstream to refresh the server-side lease.
+
+For example, with `client-preferred-lifetime: 900` (15 minutes) and a 7-day upstream preferred lifetime:
+- Clients renew every ~7.5 minutes (T1 of the 15-minute client lifetime)
+- The proxy answers these renewals locally
+- After 3.5 days (T1 of the 7-day server lifetime), the proxy forwards the next renewal upstream
 
 ```yaml
 ipv6-profiles:
@@ -146,8 +153,8 @@ ipv6-profiles:
         - address: "[2001:db8::100]:547"
           priority: 100
       link-address: "2001:db8::1"
-      client-preferred-lifetime: 300
-      client-valid-lifetime: 600
+      client-preferred-lifetime: 900
+      client-valid-lifetime: 1800
       interface-id-format: "{interface}:{svlan}:{cvlan}"
 ```
 
