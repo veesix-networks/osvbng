@@ -41,11 +41,13 @@ func New(cfg *config.Config) (dhcp6.DHCPProvider, error) {
 	}, nil
 }
 
+var dhcpv6Epoch = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+
 func generateProxyDUID() []byte {
 	duid := make([]byte, 14)
-	binary.BigEndian.PutUint16(duid[0:2], 1)    // DUID-LLT
-	binary.BigEndian.PutUint16(duid[2:4], 1)    // hardware type: Ethernet
-	binary.BigEndian.PutUint32(duid[4:8], uint32(time.Now().Unix()))
+	binary.BigEndian.PutUint16(duid[0:2], 1)
+	binary.BigEndian.PutUint16(duid[2:4], 1)
+	binary.BigEndian.PutUint32(duid[4:8], uint32(time.Since(dhcpv6Epoch).Seconds()))
 	copy(duid[8:14], []byte{0x00, 0x16, 0x3e, 0xbb, 0xcc, 0xdd})
 	return duid
 }
