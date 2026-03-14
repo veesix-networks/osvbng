@@ -200,7 +200,6 @@ func (p *Provider) handleForwardAndRewrite(pkt *dhcp6.Packet, opts *ip.IPv6DHCPv
 		})
 	}
 
-	// Rewrite: replace server DUID with proxy DUID, shorten lifetimes
 	inner = relay.ReplaceServerDUID(inner, p.getDUID(pkt.LocalMAC))
 	inner = relay.RewriteV6Lifetimes(inner, prof.GetClientPreferredLifetime(), prof.GetClientValidLifetime())
 
