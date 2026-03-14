@@ -6,6 +6,7 @@ package radius
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"time"
 
@@ -59,6 +60,12 @@ func (p *Provider) sendAccounting(session *auth.Session, statusType uint32) erro
 	packet.Add(46, encodeUint32(uint32(session.SessionDuration)))
 	packet.Add(42, encodeUint32(uint32(session.RxBytes)))
 	packet.Add(43, encodeUint32(uint32(session.TxBytes)))
+	if rxGiga := uint32(session.RxBytes >> 32); rxGiga > 0 {
+		packet.Add(52, encodeUint32(rxGiga))
+	}
+	if txGiga := uint32(session.TxBytes >> 32); txGiga > 0 {
+		packet.Add(53, encodeUint32(txGiga))
+	}
 	packet.Add(47, encodeUint32(uint32(session.RxPackets)))
 	packet.Add(48, encodeUint32(uint32(session.TxPackets)))
 
@@ -68,21 +75,31 @@ func (p *Provider) sendAccounting(session *auth.Session, statusType uint32) erro
 				packet.Add(8, radius.Attribute(ip.To4()))
 			}
 		}
+		if v, ok := session.Attributes[aaa.AttrIPv6WANPrefix]; ok {
+			if encoded := encodeIPv6Prefix(v); encoded != nil {
+				packet.Add(97, encoded)
+			}
+		}
+		if v, ok := session.Attributes[aaa.AttrIPv6Prefix]; ok {
+			if encoded := encodeIPv6Prefix(v); encoded != nil {
+				packet.Add(123, encoded)
+			}
+		}
 	}
 
 	now := uint32(time.Now().Unix())
 	packet.Add(55, encodeUint32(now))
 
-	resp, rc, err := p.sendWithFailover(packet, p.acctConns)
+	resp, rc, err := p.sendAcctWithFailover(packet)
 	if err != nil {
 		return err
 	}
 
-	if resp.Code == radius.CodeAccountingResponse {
-		p.radiusStats.IncrAcctResponse(rc.addr)
-	} else {
-		p.radiusStats.IncrAcctError(rc.addr, nil)
+	if resp.Code != radius.CodeAccountingResponse {
+		p.radiusStats.IncrAcctError(rc.addr, fmt.Errorf("unexpected code %d", resp.Code))
+		return fmt.Errorf("unexpected accounting response code: %d", resp.Code)
 	}
 
+	p.radiusStats.IncrAcctResponse(rc.addr)
 	return nil
 }

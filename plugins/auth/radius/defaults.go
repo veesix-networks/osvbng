@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"strconv"
 
 	"github.com/veesix-networks/osvbng/pkg/aaa"
 	"layeh.com/radius"
@@ -109,4 +110,68 @@ func buildTier2Index() map[vendorKey]*vendorMapping {
 		idx[k] = &tier2Mappings[i]
 	}
 	return idx
+}
+
+func encodeVSARequest(vendorID uint32, vendorType byte, data []byte) radius.Attribute {
+	buf := make([]byte, 4+2+len(data))
+	binary.BigEndian.PutUint32(buf[0:4], vendorID)
+	buf[4] = vendorType
+	buf[5] = byte(2 + len(data))
+	copy(buf[6:], data)
+	return radius.Attribute(buf)
+}
+
+var standardAttrNames = map[string]radius.Type{
+	"User-Name":              1,
+	"User-Password":          2,
+	"CHAP-Password":          3,
+	"NAS-IP-Address":         4,
+	"NAS-Port":               5,
+	"Service-Type":           6,
+	"Framed-Protocol":        7,
+	"Framed-IP-Address":      8,
+	"Framed-IP-Netmask":      9,
+	"Framed-Routing":         10,
+	"Filter-Id":              11,
+	"Framed-MTU":             12,
+	"Reply-Message":          18,
+	"State":                  24,
+	"Class":                  25,
+	"Session-Timeout":        27,
+	"Idle-Timeout":           28,
+	"Called-Station-Id":      30,
+	"Calling-Station-Id":     31,
+	"NAS-Identifier":         32,
+	"Acct-Session-Id":        44,
+	"Acct-Interim-Interval":  85,
+	"NAS-Port-Id":            87,
+	"NAS-Port-Type":          61,
+	"Event-Timestamp":        55,
+	"Connect-Info":           77,
+	"Framed-IPv6-Prefix":     97,
+	"Delegated-IPv6-Prefix":  123,
+	"Framed-IPv6-Address":    168,
+}
+
+func resolveAttrName(name string) (radius.Type, bool) {
+	if t, ok := standardAttrNames[name]; ok {
+		return t, true
+	}
+	v, err := strconv.Atoi(name)
+	if err != nil || v < 1 || v > 255 {
+		return 0, false
+	}
+	return radius.Type(v), true
+}
+
+func encodeIPv6Prefix(cidr string) radius.Attribute {
+	_, ipNet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return nil
+	}
+	ones, _ := ipNet.Mask.Size()
+	buf := make([]byte, 2+16)
+	buf[1] = byte(ones)
+	copy(buf[2:], ipNet.IP.To16())
+	return radius.Attribute(buf)
 }
