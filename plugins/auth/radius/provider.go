@@ -118,8 +118,21 @@ func New(cfg *config.Config) (auth.AuthProvider, error) {
 		acctConns = append(acctConns, acc)
 	}
 
+	tier1 := buildTier1Index()
 	var tier3 []compiledCustomMapping
 	for _, m := range pluginCfg.ResponseMappings {
+		if m.RadiusAttr != "" && m.VendorID == 0 {
+			attrType, ok := resolveAttrName(m.RadiusAttr)
+			if !ok {
+				return nil, fmt.Errorf("response_mappings: unknown radius attribute %q", m.RadiusAttr)
+			}
+			tier1[byte(attrType)] = &responseMapping{
+				attrType: byte(attrType),
+				internal: m.Internal,
+				decode:   decodeString,
+			}
+			continue
+		}
 		cm := compiledCustomMapping{
 			vendorID:   m.VendorID,
 			vendorType: m.VendorType,
@@ -158,7 +171,7 @@ func New(cfg *config.Config) (auth.AuthProvider, error) {
 		logger:          logger.Get(Namespace),
 		authConns:       authConns,
 		acctConns:       acctConns,
-		tier1Index:      buildTier1Index(),
+		tier1Index:      tier1,
 		tier2Index:      buildTier2Index(),
 		tier3:           tier3,
 		requestMappings: reqMappings,
