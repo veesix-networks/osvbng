@@ -34,6 +34,16 @@ type ClientStats struct {
 	Timeouts6 uint64 `json:"timeouts6" prometheus:"name=osvbng_dhcp_relay_timeouts_v6,help=DHCPv6 relay server timeouts,type=counter"`
 }
 
+type v4PendingKey struct {
+	xid uint32
+	mac [6]byte
+}
+
+type v6PendingKey struct {
+	txnID    [3]byte
+	peerAddr [16]byte
+}
+
 type Client struct {
 	conn4     *net.UDPConn
 	conn6     *net.UDPConn
@@ -41,8 +51,8 @@ type Client struct {
 	conn6Once sync.Once
 	conn4Err  error
 	conn6Err  error
-	pending4  map[uint32]chan<- []byte
-	pending6  map[[3]byte]chan<- []byte
+	pending4  map[v4PendingKey]chan<- []byte
+	pending6  map[v6PendingKey]chan<- []byte
 	mu4       sync.Mutex
 	mu6       sync.Mutex
 	replyPool sync.Pool
@@ -75,8 +85,8 @@ func GetClient() *Client {
 
 func newClient() *Client {
 	c := &Client{
-		pending4: make(map[uint32]chan<- []byte),
-		pending6: make(map[[3]byte]chan<- []byte),
+		pending4: make(map[v4PendingKey]chan<- []byte),
+		pending6: make(map[v6PendingKey]chan<- []byte),
 		servers:  make(map[string]*Server),
 		closed:   make(chan struct{}),
 		logger:   logger.Get(logger.IPoERelay),
@@ -121,6 +131,11 @@ func (c *Client) Forward4(pkt []byte, xid uint32, servers []*Server, timeout tim
 		return nil, err
 	}
 
+	key := v4PendingKey{xid: xid}
+	if len(pkt) >= 34 {
+		copy(key.mac[:], pkt[28:34])
+	}
+
 	replyCh := c.replyPool.Get().(chan []byte)
 	defer func() {
 		select {
@@ -131,12 +146,12 @@ func (c *Client) Forward4(pkt []byte, xid uint32, servers []*Server, timeout tim
 	}()
 
 	c.mu4.Lock()
-	c.pending4[xid] = replyCh
+	c.pending4[key] = replyCh
 	c.mu4.Unlock()
 
 	defer func() {
 		c.mu4.Lock()
-		delete(c.pending4, xid)
+		delete(c.pending4, key)
 		c.mu4.Unlock()
 	}()
 
@@ -177,6 +192,11 @@ func (c *Client) Forward6(pkt []byte, txnID [3]byte, servers []*Server, timeout 
 		return nil, err
 	}
 
+	key := v6PendingKey{txnID: txnID}
+	if len(pkt) >= DHCPv6RelayHeaderLen {
+		copy(key.peerAddr[:], pkt[18:34])
+	}
+
 	replyCh := c.replyPool.Get().(chan []byte)
 	defer func() {
 		select {
@@ -187,12 +207,12 @@ func (c *Client) Forward6(pkt []byte, txnID [3]byte, servers []*Server, timeout 
 	}()
 
 	c.mu6.Lock()
-	c.pending6[txnID] = replyCh
+	c.pending6[key] = replyCh
 	c.mu6.Unlock()
 
 	defer func() {
 		c.mu6.Lock()
-		delete(c.pending6, txnID)
+		delete(c.pending6, key)
 		c.mu6.Unlock()
 	}()
 
@@ -271,18 +291,21 @@ func (c *Client) readLoop4() {
 			}
 			continue
 		}
-		if n < 8 {
+		if n < 34 {
 			continue
 		}
 
-		xid := uint32(buf[4])<<24 | uint32(buf[5])<<16 | uint32(buf[6])<<8 | uint32(buf[7])
+		var key v4PendingKey
+		key.xid = uint32(buf[4])<<24 | uint32(buf[5])<<16 | uint32(buf[6])<<8 | uint32(buf[7])
+		copy(key.mac[:], buf[28:34])
+
 		reply := make([]byte, n)
 		copy(reply, buf[:n])
 
 		c.mu4.Lock()
-		ch, ok := c.pending4[xid]
+		ch, ok := c.pending4[key]
 		if ok {
-			delete(c.pending4, xid)
+			delete(c.pending4, key)
 		}
 		c.mu4.Unlock()
 
@@ -307,34 +330,31 @@ func (c *Client) readLoop6() {
 			}
 			continue
 		}
-		if n < 4 {
+		if n < DHCPv6RelayHeaderLen {
 			continue
 		}
 
-		// DHCPv6 Relay-Reply: msg-type(1) + hop-count(1) + link-addr(16) + peer-addr(16) = 34 bytes header
-		// The transaction ID is inside the inner Relay-Message option.
-		// For direct server replies (non-relay): msg-type(1) + txn-id(3)
-		var txnID [3]byte
+		var key v6PendingKey
 
 		msgType := buf[0]
 		if msgType == 13 {
-			// Relay-Reply: extract txn-id from inner message
+			copy(key.peerAddr[:], buf[18:34])
 			inner := extractRelayMessage(buf[:n])
 			if inner == nil || len(inner) < 4 {
 				continue
 			}
-			copy(txnID[:], inner[1:4])
+			copy(key.txnID[:], inner[1:4])
 		} else {
-			copy(txnID[:], buf[1:4])
+			copy(key.txnID[:], buf[1:4])
 		}
 
 		reply := make([]byte, n)
 		copy(reply, buf[:n])
 
 		c.mu6.Lock()
-		ch, ok := c.pending6[txnID]
+		ch, ok := c.pending6[key]
 		if ok {
-			delete(c.pending6, txnID)
+			delete(c.pending6, key)
 		}
 		c.mu6.Unlock()
 
