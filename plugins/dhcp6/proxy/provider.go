@@ -140,6 +140,7 @@ func (p *Provider) handleForwardAndRewrite(pkt *dhcp6.Packet, opts *ip.IPv6DHCPv
 
 	if opts.RemoteIDFormat != "" {
 		params.RemoteID = formatV6Field(opts.RemoteIDFormat, pkt)
+		params.EnterpriseNumber = opts.EnterpriseNumber
 	}
 
 	if opts.SubscriberIDFormat != "" {
