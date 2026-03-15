@@ -16,6 +16,8 @@ const (
 	SubscriberSessionClear Path = "subscriber.session.clear"
 
 	HASwitchover Path = "ha.switchover"
+
+	CGNATTestMapping Path = "cgnat.test-mapping"
 )
 
 func (p Path) String() string {

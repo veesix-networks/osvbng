@@ -70,6 +70,10 @@ func (cd *ConfigManager) ApplyLoadedConfig() error {
 		return fmt.Errorf("failed to process subscriber groups: %w", err)
 	}
 
+	if err := cd.ProcessCGNATPools(sessionID, config); err != nil {
+		return fmt.Errorf("failed to process CGNAT pools: %w", err)
+	}
+
 	if err := cd.Commit(sessionID); err != nil {
 		return fmt.Errorf("failed to commit: %w", err)
 	}

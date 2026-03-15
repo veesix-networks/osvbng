@@ -782,6 +782,30 @@ func (s *SessionState) onVPPSessionCreated(swIfIndex uint32, err error) {
 		"outer_vlan", s.OuterVLAN,
 		"inner_vlan", s.InnerVLAN)
 
+	s.component.checkpointSession(s)
+
+	s.component.publishSessionProgrammed(&models.PPPSession{
+		SessionID:    s.SessionID,
+		State:        models.SessionStateActive,
+		AccessType:   string(models.AccessTypePPPoE),
+		Protocol:     string(models.ProtocolPPPoESession),
+		PPPSessionID: s.PPPoESessionID,
+		MAC:          s.MAC,
+		OuterVLAN:    s.OuterVLAN,
+		InnerVLAN:    s.InnerVLAN,
+		IfIndex:      s.SwIfIndex,
+		VRF:          s.VRF,
+		ServiceGroup: s.ServiceGroup.Name,
+		SRGName:      s.SRGName,
+		IPv4Address:  s.IPv4Address,
+		IPv6Address:  s.IPv6Address,
+		Username:     s.Username,
+		AAASessionID: s.AcctSessionID,
+		IPv4Pool:     s.allocatedPool,
+		IANAPool:     s.allocatedIANAPool,
+		OuterTPID:    s.OuterTPID,
+	})
+
 	if s.component.echoGen != nil {
 		magic := s.lcp.LocalConfig().Magic
 		s.component.echoGen.AddSession(s.PPPoESessionID, magic)

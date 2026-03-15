@@ -24,6 +24,7 @@ jobs:
       sessions: ${{ steps.filter.outputs.sessions }}
       dhcp: ${{ steps.filter.outputs.dhcp }}
       radius: ${{ steps.filter.outputs.radius }}
+      cgnat: ${{ steps.filter.outputs.cgnat }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -66,6 +67,18 @@ jobs:
               - 'pkg/config/aaa/**'
               - 'tests/05-ipoe-radius/**'
               - 'tests/06-pppoe-radius/**'
+            cgnat:
+              - 'internal/cgnat/**'
+              - 'pkg/config/cgnat/**'
+              - 'pkg/southbound/cgnat.go'
+              - 'pkg/southbound/vpp/cgnat.go'
+              - 'pkg/vpp/binapi/osvbng_cgnat/**'
+              - 'pkg/handlers/show/cgnat/**'
+              - 'pkg/handlers/oper/cgnat/**'
+              - 'tests/08-cgnat-ipoe-pba/**'
+              - 'tests/09-cgnat-ipoe-det/**'
+              - 'tests/10-cgnat-pppoe-pba/**'
+              - 'tests/11-cgnat-pppoe-det/**'
 
   build:
     runs-on: ubuntu-latest
@@ -197,3 +210,8 @@ jobs:
     uses: ./.github/workflows/pppoe-radius-tests.yml
     needs: [file-changes, prepare-test-runner]
     if: needs.file-changes.outputs.radius == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
+
+  cgnat-tests:
+    uses: ./.github/workflows/cgnat-tests.yml
+    needs: [file-changes, prepare-test-runner]
+    if: needs.file-changes.outputs.cgnat == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'

@@ -25,6 +25,7 @@ const (
 	Northbound = "nb"
 	SvcGroup   = "svcgroup"
 
+	CGNAT       = "cgnat"
 	WatchdogLog = "watchdog"
 
 	IPoEDHCP4   = "dhcp4"
