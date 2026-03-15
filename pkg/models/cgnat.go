@@ -38,6 +38,6 @@ type CGNATSessionInfo struct {
 }
 
 type CGNATBypassEntry struct {
-	InsideIP    net.IP `json:"inside_ip"`
+	Prefix      string `json:"prefix"`
 	InsideVRFID uint32 `json:"inside_vrf_id"`
 }
