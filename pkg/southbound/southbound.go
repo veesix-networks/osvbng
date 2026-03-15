@@ -16,4 +16,5 @@ type Southbound interface {
 	Statistics
 	Tables
 	System
+	CGNATDataplane
 }
