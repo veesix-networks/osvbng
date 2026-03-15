@@ -130,7 +130,7 @@ func (v *VPP) CGNATPoolAddOutsideAddress(poolID uint32, prefix net.IPNet, isAdd 
 	return nil
 }
 
-func (v *VPP) CGNATSetOutsideFIB(poolID uint32, fibIndex uint32) error {
+func (v *VPP) CGNATSetOutsideVRF(poolID uint32, vrfTableID uint32) error {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
 		return fmt.Errorf("create API channel: %w", err)
@@ -138,16 +138,16 @@ func (v *VPP) CGNATSetOutsideFIB(poolID uint32, fibIndex uint32) error {
 	defer ch.Close()
 
 	req := &osvbng_cgnat.OsvbngCgnatSetOutsideFib{
-		PoolID:   poolID,
-		FibIndex: fibIndex,
+		PoolID: poolID,
+		VrfID:  vrfTableID,
 	}
 
 	reply := &osvbng_cgnat.OsvbngCgnatSetOutsideFibReply{}
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
-		return fmt.Errorf("set outside FIB: %w", err)
+		return fmt.Errorf("set outside VRF: %w", err)
 	}
 	if reply.Retval != 0 {
-		return fmt.Errorf("set outside FIB failed: retval=%d", reply.Retval)
+		return fmt.Errorf("set outside VRF failed: retval=%d", reply.Retval)
 	}
 	return nil
 }

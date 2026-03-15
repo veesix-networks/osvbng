@@ -29,7 +29,7 @@ type CGNATDataplane interface {
 
 	CGNATPoolAddInsidePrefix(poolID uint32, prefix net.IPNet, vrfID uint32, isAdd bool) error
 	CGNATPoolAddOutsideAddress(poolID uint32, prefix net.IPNet, isAdd bool) error
-	CGNATSetOutsideFIB(poolID uint32, fibIndex uint32) error
+	CGNATSetOutsideVRF(poolID uint32, vrfTableID uint32) error
 	CGNATPoolUpdate(poolID uint32, maxSessions uint32, algBitmask uint8, timeouts [4]uint32) error
 
 	CGNATAddDelSubscriberMapping(poolID uint32, swIfIndex uint32,

@@ -30,7 +30,7 @@ const _ = api.GoVppAPIPackageIsVersion2
 const (
 	APIFile    = "osvbng_cgnat"
 	APIVersion = "1.0.0"
-	VersionCrc = 0x9089d3e6
+	VersionCrc = 0x23f6d483
 )
 
 // OsvbngCgnatAddressPooling defines enum 'osvbng_cgnat_address_pooling'.
@@ -958,19 +958,19 @@ func (m *OsvbngCgnatPoolUpdateReply) Unmarshal(b []byte) error {
 	return nil
 }
 
-// Set the outside FIB index for a pool
+// Set the outside VRF for a pool
 //   - pool_id - pool identifier
-//   - fib_index - precomputed VPP FIB index for outside routing
+//   - vrf_id - VRF table ID for outside routing (0 = default)
 //
 // OsvbngCgnatSetOutsideFib defines message 'osvbng_cgnat_set_outside_fib'.
 type OsvbngCgnatSetOutsideFib struct {
-	PoolID   uint32 `binapi:"u32,name=pool_id" json:"pool_id,omitempty"`
-	FibIndex uint32 `binapi:"u32,name=fib_index" json:"fib_index,omitempty"`
+	PoolID uint32 `binapi:"u32,name=pool_id" json:"pool_id,omitempty"`
+	VrfID  uint32 `binapi:"u32,name=vrf_id" json:"vrf_id,omitempty"`
 }
 
 func (m *OsvbngCgnatSetOutsideFib) Reset()               { *m = OsvbngCgnatSetOutsideFib{} }
 func (*OsvbngCgnatSetOutsideFib) GetMessageName() string { return "osvbng_cgnat_set_outside_fib" }
-func (*OsvbngCgnatSetOutsideFib) GetCrcString() string   { return "58343854" }
+func (*OsvbngCgnatSetOutsideFib) GetCrcString() string   { return "9cb97b7c" }
 func (*OsvbngCgnatSetOutsideFib) GetMessageType() api.MessageType {
 	return api.RequestMessage
 }
@@ -980,7 +980,7 @@ func (m *OsvbngCgnatSetOutsideFib) Size() (size int) {
 		return 0
 	}
 	size += 4 // m.PoolID
-	size += 4 // m.FibIndex
+	size += 4 // m.VrfID
 	return size
 }
 func (m *OsvbngCgnatSetOutsideFib) Marshal(b []byte) ([]byte, error) {
@@ -989,13 +989,13 @@ func (m *OsvbngCgnatSetOutsideFib) Marshal(b []byte) ([]byte, error) {
 	}
 	buf := codec.NewBuffer(b)
 	buf.EncodeUint32(m.PoolID)
-	buf.EncodeUint32(m.FibIndex)
+	buf.EncodeUint32(m.VrfID)
 	return buf.Bytes(), nil
 }
 func (m *OsvbngCgnatSetOutsideFib) Unmarshal(b []byte) error {
 	buf := codec.NewBuffer(b)
 	m.PoolID = buf.DecodeUint32()
-	m.FibIndex = buf.DecodeUint32()
+	m.VrfID = buf.DecodeUint32()
 	return nil
 }
 
@@ -1236,7 +1236,7 @@ func file_osvbng_cgnat_binapi_init() {
 	api.RegisterMessage((*OsvbngCgnatPoolAddDelReply)(nil), "osvbng_cgnat_pool_add_del_reply_e8d4e804")
 	api.RegisterMessage((*OsvbngCgnatPoolUpdate)(nil), "osvbng_cgnat_pool_update_311437fa")
 	api.RegisterMessage((*OsvbngCgnatPoolUpdateReply)(nil), "osvbng_cgnat_pool_update_reply_e8d4e804")
-	api.RegisterMessage((*OsvbngCgnatSetOutsideFib)(nil), "osvbng_cgnat_set_outside_fib_58343854")
+	api.RegisterMessage((*OsvbngCgnatSetOutsideFib)(nil), "osvbng_cgnat_set_outside_fib_9cb97b7c")
 	api.RegisterMessage((*OsvbngCgnatSetOutsideFibReply)(nil), "osvbng_cgnat_set_outside_fib_reply_e8d4e804")
 	api.RegisterMessage((*OsvbngCgnatSetOutsideInterface)(nil), "osvbng_cgnat_set_outside_interface_3a42bd17")
 	api.RegisterMessage((*OsvbngCgnatSetOutsideInterfaceReply)(nil), "osvbng_cgnat_set_outside_interface_reply_e8d4e804")

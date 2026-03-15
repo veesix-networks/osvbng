@@ -12,12 +12,15 @@ import (
 	"net"
 
 	"github.com/veesix-networks/osvbng/pkg/component"
+	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/config/cgnat"
 	"github.com/veesix-networks/osvbng/pkg/events"
+	"github.com/veesix-networks/osvbng/pkg/ifmgr"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/opdb"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
 )
 
 const opdbNamespace = "cgnat_mappings"
@@ -30,19 +33,21 @@ type Component struct {
 	dataplane southbound.Southbound
 	opdb      opdb.Store
 	cfgMgr    component.ConfigManager
+	ifMgr     *ifmgr.Manager
+	vrfMgr    *vrfmgr.Manager
 
 	pools     *PoolManager
 	reverse   *ReverseIndex
 	bypass    *BypassManager
 	blacklist *BlacklistManager
 
-	poolIDMap map[string]uint32
+	poolIDMap  map[string]uint32
 	nextPoolID uint32
 
 	lifecycleSub events.Subscription
 }
 
-func NewComponent(deps component.Dependencies) (*Component, error) {
+func NewComponent(deps component.Dependencies, ifMgr *ifmgr.Manager, vrfMgr *vrfmgr.Manager) (*Component, error) {
 	c := &Component{
 		Base:      component.NewBase("cgnat"),
 		logger:    logger.Get(logger.CGNAT),
@@ -50,6 +55,8 @@ func NewComponent(deps component.Dependencies) (*Component, error) {
 		dataplane: deps.Southbound,
 		opdb:      deps.OpDB,
 		cfgMgr:    deps.ConfigManager,
+		ifMgr:     ifMgr,
+		vrfMgr:    vrfMgr,
 		pools:     NewPoolManager(),
 		reverse:   NewReverseIndex(),
 		bypass:    NewBypassManager(),
@@ -76,6 +83,10 @@ func (c *Component) Start(ctx context.Context) error {
 
 	if err := c.configurePools(cfg.CGNAT); err != nil {
 		return fmt.Errorf("configure pools: %w", err)
+	}
+
+	if err := c.setupOutsideInterfaces(cfg); err != nil {
+		c.logger.Warn("Failed to setup outside interfaces", "error", err)
 	}
 
 	if err := c.restoreFromOpDB(); err != nil {
@@ -137,8 +148,10 @@ func (c *Component) configurePools(cfg *cgnat.Config) error {
 				return fmt.Errorf("pool %s inside prefix %s: %w", name, prefix.Prefix, err)
 			}
 			vrfID := uint32(0)
-			if prefix.VRF != "" {
-				_ = vrfID
+			if prefix.VRF != "" && c.vrfMgr != nil {
+				if tableID, _, _, err := c.vrfMgr.ResolveVRF(prefix.VRF); err == nil {
+					vrfID = tableID
+				}
 			}
 			if err := c.dataplane.CGNATPoolAddInsidePrefix(poolID, *ipNet, vrfID, true); err != nil {
 				return fmt.Errorf("inside prefix: %w", err)
@@ -167,6 +180,44 @@ func (c *Component) configurePools(cfg *cgnat.Config) error {
 		}
 
 		c.logger.Info("Pool configured", "name", name, "id", poolID, "mode", poolCfg.GetMode())
+	}
+
+	return nil
+}
+
+func (c *Component) setupOutsideInterfaces(cfg *config.Config) error {
+	coreIfName := cfg.GetCoreInterface()
+	if coreIfName == "" {
+		c.logger.Warn("No core interface configured, CGNAT outside interface not set")
+		return nil
+	}
+
+	swIfIndex, ok := c.ifMgr.GetSwIfIndex(coreIfName)
+	if !ok {
+		return fmt.Errorf("core interface %s not found in dataplane", coreIfName)
+	}
+
+	iface := c.ifMgr.Get(swIfIndex)
+
+	var vrfTableID uint32
+	if iface != nil {
+		vrfTableID = iface.FIBTableID
+	}
+
+	for poolName, poolID := range c.poolIDMap {
+		if err := c.dataplane.CGNATSetOutsideVRF(poolID, vrfTableID); err != nil {
+			return fmt.Errorf("set outside VRF for pool %s: %w", poolName, err)
+		}
+
+		if err := c.dataplane.CGNATSetOutsideInterface(swIfIndex, poolID, true); err != nil {
+			return fmt.Errorf("set outside interface for pool %s: %w", poolName, err)
+		}
+
+		c.logger.Info("Outside interface configured",
+			"pool", poolName,
+			"interface", coreIfName,
+			"sw_if_index", swIfIndex,
+			"vrf_table_id", vrfTableID)
 	}
 
 	return nil

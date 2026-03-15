@@ -332,7 +332,7 @@ func main() {
 
 	var cgnat *cgnatcomp.Component
 	if cfg.CGNAT != nil && len(cfg.CGNAT.Pools) > 0 {
-		cgnat, err = cgnatcomp.NewComponent(coreDeps)
+		cgnat, err = cgnatcomp.NewComponent(coreDeps, ifMgr, vrfMgr)
 		if err != nil {
 			log.Fatalf("Failed to create CGNAT component: %v", err)
 		}
