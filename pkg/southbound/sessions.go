@@ -24,6 +24,8 @@ type Sessions interface {
 	IPoESetSessionIPv6Async(swIfIndex uint32, clientIP net.IP, isAdd bool, callback func(error))
 	IPoESetDelegatedPrefixAsync(swIfIndex uint32, prefix net.IPNet, nextHop net.IP, isAdd bool, callback func(error))
 
+	IPoEEnableInput(ifaceName string) error
+
 	ApplyQoS(swIfIndex uint32, ingress, egress *qos.Policy) error
 	RemoveQoS(swIfIndex uint32) error
 }

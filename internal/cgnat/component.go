@@ -231,7 +231,7 @@ func (c *Component) handleSessionLifecycle(event events.Event) {
 
 	switch data.State {
 	case models.SessionStateActive:
-		if data.AccessType == models.AccessTypePPPoE {
+		if data.AccessType == models.AccessTypePPPoE || data.AccessType == models.AccessTypeIPoE {
 			return
 		}
 		if data.Protocol == models.ProtocolDHCPv6 {

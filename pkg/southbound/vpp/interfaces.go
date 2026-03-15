@@ -255,6 +255,9 @@ func (v *VPP) SetUnnumbered(ifaceName, loopbackName string) error {
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
 		return fmt.Errorf("set unnumbered: %w", err)
 	}
+	if reply.Retval != 0 {
+		return fmt.Errorf("set unnumbered failed: retval=%d", reply.Retval)
+	}
 
 	v.logger.Debug("Set interface unnumbered", "interface", ifaceName, "loopback", loopbackName)
 	return nil
