@@ -42,17 +42,14 @@ Get Container IPv4
 Wait For osvbng Healthy
     [Arguments]    ${node}    ${lab_name}
     ${container} =    Set Variable    clab-${lab_name}-${node}
-    ${ip} =    Get Container IPv4    ${container}
     Wait Until Keyword Succeeds    ${HEALTH_RETRIES} x    ${HEALTH_INTERVAL}
-    ...    Check osvbng API Health    ${ip}
+    ...    Check osvbng Started    ${container}
 
-Check osvbng API Health
-    [Arguments]    ${ip}
+Check osvbng Started
+    [Arguments]    ${container}
     ${rc}    ${output} =    Run And Return Rc And Output
-    ...    curl -sf http://${ip}:${OSVBNG_API_PORT}/api/show/system/version
-    Log    ${output}
-    Should Be Equal As Integers    ${rc}    0
-    Should Not Be Empty    ${output}
+    ...    sudo docker logs ${container} 2>&1 | grep -q "osvbng started successfully"
+    Should Be Equal As Integers    ${rc}    0    osvbng has not fully started yet
 
 Execute VPP Command
     [Arguments]    ${container}    ${command}

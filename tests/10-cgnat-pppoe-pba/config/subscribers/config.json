@@ -16,7 +16,8 @@
         "outer-vlan-min": 200,
         "outer-vlan-max": 200,
         "inner-vlan-min": 2,
-        "inner-vlan-max": 6
+        "inner-vlan-max": 6,
+        "stream-group-id": 1
       }
     ]
   },
@@ -39,9 +40,16 @@
       "enable": true
     }
   },
-  "session-traffic": {
-    "ipv4-pps": 10
-  },
+  "streams": [
+    {
+      "name": "CGNAT-UDP",
+      "stream-group-id": 1,
+      "type": "ipv4",
+      "direction": "both",
+      "pps": 1,
+      "nat": true
+    }
+  ],
   "access-line": {
     "agent-circuit-id": "eth 0/2/{session-global}:200.{session-global}",
     "agent-remote-id": "user{session-global}"

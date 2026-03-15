@@ -62,9 +62,9 @@ Verify CGNAT Mappings Exist
     ${output} =    Get osvbng API Response    ${bng1}    /api/show/cgnat/sessions
     Should Contain    ${output}    203.0.113.
 
-Verify Traffic Flowing
+Verify NAT Traffic Flowing
     Wait Until Keyword Succeeds    6 x    10s
-    ...    Verify Traffic Flowing    ${subscribers}    expected_flows=${session-count}
+    ...    Verify Stream Traffic Flowing    ${subscribers}    expected_flows=${session-count}
 
 Verify BNG Blaster Sessions Established
     Wait Until Keyword Succeeds    6 x    10s
