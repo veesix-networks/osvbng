@@ -30,7 +30,7 @@ const _ = api.GoVppAPIPackageIsVersion2
 const (
 	APIFile    = "osvbng_cgnat"
 	APIVersion = "1.0.0"
-	VersionCrc = 0xb3e22e3b
+	VersionCrc = 0x9089d3e6
 )
 
 // OsvbngCgnatAddressPooling defines enum 'osvbng_cgnat_address_pooling'.
@@ -139,21 +139,21 @@ type OsvbngCgnatTimeouts struct {
 	ICMP           uint32 `binapi:"u32,name=icmp" json:"icmp,omitempty"`
 }
 
-// Add or delete a bypass entry (static IP subscriber)
+// Add or delete a bypass prefix (static IP subscribers skip NAT)
 //   - is_add - add bypass if true, delete if false
-//   - inside_ip - subscriber IP to bypass
+//   - prefix - inside prefix to bypass (e.g. 203.0.113.0/24 or single /32)
 //   - inside_vrf_id - subscriber VRF
 //
 // OsvbngCgnatAddDelBypass defines message 'osvbng_cgnat_add_del_bypass'.
 type OsvbngCgnatAddDelBypass struct {
-	IsAdd       bool                `binapi:"bool,name=is_add" json:"is_add,omitempty"`
-	InsideIP    ip_types.IP4Address `binapi:"ip4_address,name=inside_ip" json:"inside_ip,omitempty"`
-	InsideVrfID uint32              `binapi:"u32,name=inside_vrf_id" json:"inside_vrf_id,omitempty"`
+	IsAdd       bool            `binapi:"bool,name=is_add" json:"is_add,omitempty"`
+	Prefix      ip_types.Prefix `binapi:"prefix,name=prefix" json:"prefix,omitempty"`
+	InsideVrfID uint32          `binapi:"u32,name=inside_vrf_id" json:"inside_vrf_id,omitempty"`
 }
 
 func (m *OsvbngCgnatAddDelBypass) Reset()               { *m = OsvbngCgnatAddDelBypass{} }
 func (*OsvbngCgnatAddDelBypass) GetMessageName() string { return "osvbng_cgnat_add_del_bypass" }
-func (*OsvbngCgnatAddDelBypass) GetCrcString() string   { return "0cb57783" }
+func (*OsvbngCgnatAddDelBypass) GetCrcString() string   { return "a1ab2cd2" }
 func (*OsvbngCgnatAddDelBypass) GetMessageType() api.MessageType {
 	return api.RequestMessage
 }
@@ -162,9 +162,11 @@ func (m *OsvbngCgnatAddDelBypass) Size() (size int) {
 	if m == nil {
 		return 0
 	}
-	size += 1     // m.IsAdd
-	size += 1 * 4 // m.InsideIP
-	size += 4     // m.InsideVrfID
+	size += 1      // m.IsAdd
+	size += 1      // m.Prefix.Address.Af
+	size += 1 * 16 // m.Prefix.Address.Un
+	size += 1      // m.Prefix.Len
+	size += 4      // m.InsideVrfID
 	return size
 }
 func (m *OsvbngCgnatAddDelBypass) Marshal(b []byte) ([]byte, error) {
@@ -173,14 +175,18 @@ func (m *OsvbngCgnatAddDelBypass) Marshal(b []byte) ([]byte, error) {
 	}
 	buf := codec.NewBuffer(b)
 	buf.EncodeBool(m.IsAdd)
-	buf.EncodeBytes(m.InsideIP[:], 4)
+	buf.EncodeUint8(uint8(m.Prefix.Address.Af))
+	buf.EncodeBytes(m.Prefix.Address.Un.XXX_UnionData[:], 16)
+	buf.EncodeUint8(m.Prefix.Len)
 	buf.EncodeUint32(m.InsideVrfID)
 	return buf.Bytes(), nil
 }
 func (m *OsvbngCgnatAddDelBypass) Unmarshal(b []byte) error {
 	buf := codec.NewBuffer(b)
 	m.IsAdd = buf.DecodeBool()
-	copy(m.InsideIP[:], buf.DecodeBytes(4))
+	m.Prefix.Address.Af = ip_types.AddressFamily(buf.DecodeUint8())
+	copy(m.Prefix.Address.Un.XXX_UnionData[:], buf.DecodeBytes(16))
+	m.Prefix.Len = buf.DecodeUint8()
 	m.InsideVrfID = buf.DecodeUint32()
 	return nil
 }
@@ -1214,7 +1220,7 @@ func (m *OsvbngCgnatSubscriberMappingDump) Unmarshal(b []byte) error {
 
 func init() { file_osvbng_cgnat_binapi_init() }
 func file_osvbng_cgnat_binapi_init() {
-	api.RegisterMessage((*OsvbngCgnatAddDelBypass)(nil), "osvbng_cgnat_add_del_bypass_0cb57783")
+	api.RegisterMessage((*OsvbngCgnatAddDelBypass)(nil), "osvbng_cgnat_add_del_bypass_a1ab2cd2")
 	api.RegisterMessage((*OsvbngCgnatAddDelBypassReply)(nil), "osvbng_cgnat_add_del_bypass_reply_e8d4e804")
 	api.RegisterMessage((*OsvbngCgnatAddDelSubscriberMapping)(nil), "osvbng_cgnat_add_del_subscriber_mapping_cd65f0f6")
 	api.RegisterMessage((*OsvbngCgnatAddDelSubscriberMappingReply)(nil), "osvbng_cgnat_add_del_subscriber_mapping_reply_e8d4e804")
