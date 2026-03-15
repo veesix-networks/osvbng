@@ -188,7 +188,7 @@ func (c *Component) configurePools(cfg *cgnat.Config) error {
 func (c *Component) setupOutsideInterfaces(cfg *config.Config) error {
 	coreIfName := cfg.GetCoreInterface()
 	if coreIfName == "" {
-		c.logger.Warn("No core interface configured, CGNAT outside interface not set")
+		c.logger.Warn("No core interface configured, outside VRF not set")
 		return nil
 	}
 
@@ -209,14 +209,9 @@ func (c *Component) setupOutsideInterfaces(cfg *config.Config) error {
 			return fmt.Errorf("set outside VRF for pool %s: %w", poolName, err)
 		}
 
-		if err := c.dataplane.CGNATSetOutsideInterface(swIfIndex, poolID, true); err != nil {
-			return fmt.Errorf("set outside interface for pool %s: %w", poolName, err)
-		}
-
-		c.logger.Info("Outside interface configured",
+		c.logger.Info("Outside VRF configured",
 			"pool", poolName,
 			"interface", coreIfName,
-			"sw_if_index", swIfIndex,
 			"vrf_table_id", vrfTableID)
 	}
 

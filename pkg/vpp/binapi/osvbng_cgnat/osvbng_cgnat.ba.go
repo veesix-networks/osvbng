@@ -9,7 +9,7 @@
 // Contents:
 // -  3 enums
 // -  3 structs
-// - 22 messages
+// - 20 messages
 package osvbng_cgnat
 
 import (
@@ -30,7 +30,7 @@ const _ = api.GoVppAPIPackageIsVersion2
 const (
 	APIFile    = "osvbng_cgnat"
 	APIVersion = "1.0.0"
-	VersionCrc = 0x23f6d483
+	VersionCrc = 0x1945a0fc
 )
 
 // OsvbngCgnatAddressPooling defines enum 'osvbng_cgnat_address_pooling'.
@@ -1034,89 +1034,6 @@ func (m *OsvbngCgnatSetOutsideFibReply) Unmarshal(b []byte) error {
 	return nil
 }
 
-// Enable/disable cgnat-out2in on an outside interface
-//   - is_enable - enable or disable
-//   - sw_if_index - outside interface
-//   - pool_id - pool to associate
-//
-// OsvbngCgnatSetOutsideInterface defines message 'osvbng_cgnat_set_outside_interface'.
-type OsvbngCgnatSetOutsideInterface struct {
-	IsEnable  bool                           `binapi:"bool,name=is_enable" json:"is_enable,omitempty"`
-	SwIfIndex interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
-	PoolID    uint32                         `binapi:"u32,name=pool_id" json:"pool_id,omitempty"`
-}
-
-func (m *OsvbngCgnatSetOutsideInterface) Reset() { *m = OsvbngCgnatSetOutsideInterface{} }
-func (*OsvbngCgnatSetOutsideInterface) GetMessageName() string {
-	return "osvbng_cgnat_set_outside_interface"
-}
-func (*OsvbngCgnatSetOutsideInterface) GetCrcString() string { return "3a42bd17" }
-func (*OsvbngCgnatSetOutsideInterface) GetMessageType() api.MessageType {
-	return api.RequestMessage
-}
-
-func (m *OsvbngCgnatSetOutsideInterface) Size() (size int) {
-	if m == nil {
-		return 0
-	}
-	size += 1 // m.IsEnable
-	size += 4 // m.SwIfIndex
-	size += 4 // m.PoolID
-	return size
-}
-func (m *OsvbngCgnatSetOutsideInterface) Marshal(b []byte) ([]byte, error) {
-	if b == nil {
-		b = make([]byte, m.Size())
-	}
-	buf := codec.NewBuffer(b)
-	buf.EncodeBool(m.IsEnable)
-	buf.EncodeUint32(uint32(m.SwIfIndex))
-	buf.EncodeUint32(m.PoolID)
-	return buf.Bytes(), nil
-}
-func (m *OsvbngCgnatSetOutsideInterface) Unmarshal(b []byte) error {
-	buf := codec.NewBuffer(b)
-	m.IsEnable = buf.DecodeBool()
-	m.SwIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
-	m.PoolID = buf.DecodeUint32()
-	return nil
-}
-
-// OsvbngCgnatSetOutsideInterfaceReply defines message 'osvbng_cgnat_set_outside_interface_reply'.
-type OsvbngCgnatSetOutsideInterfaceReply struct {
-	Retval int32 `binapi:"i32,name=retval" json:"retval,omitempty"`
-}
-
-func (m *OsvbngCgnatSetOutsideInterfaceReply) Reset() { *m = OsvbngCgnatSetOutsideInterfaceReply{} }
-func (*OsvbngCgnatSetOutsideInterfaceReply) GetMessageName() string {
-	return "osvbng_cgnat_set_outside_interface_reply"
-}
-func (*OsvbngCgnatSetOutsideInterfaceReply) GetCrcString() string { return "e8d4e804" }
-func (*OsvbngCgnatSetOutsideInterfaceReply) GetMessageType() api.MessageType {
-	return api.ReplyMessage
-}
-
-func (m *OsvbngCgnatSetOutsideInterfaceReply) Size() (size int) {
-	if m == nil {
-		return 0
-	}
-	size += 4 // m.Retval
-	return size
-}
-func (m *OsvbngCgnatSetOutsideInterfaceReply) Marshal(b []byte) ([]byte, error) {
-	if b == nil {
-		b = make([]byte, m.Size())
-	}
-	buf := codec.NewBuffer(b)
-	buf.EncodeInt32(m.Retval)
-	return buf.Bytes(), nil
-}
-func (m *OsvbngCgnatSetOutsideInterfaceReply) Unmarshal(b []byte) error {
-	buf := codec.NewBuffer(b)
-	m.Retval = buf.DecodeInt32()
-	return nil
-}
-
 // OsvbngCgnatSubscriberMappingDetails defines message 'osvbng_cgnat_subscriber_mapping_details'.
 type OsvbngCgnatSubscriberMappingDetails struct {
 	PoolID         uint32                         `binapi:"u32,name=pool_id" json:"pool_id,omitempty"`
@@ -1238,8 +1155,6 @@ func file_osvbng_cgnat_binapi_init() {
 	api.RegisterMessage((*OsvbngCgnatPoolUpdateReply)(nil), "osvbng_cgnat_pool_update_reply_e8d4e804")
 	api.RegisterMessage((*OsvbngCgnatSetOutsideFib)(nil), "osvbng_cgnat_set_outside_fib_9cb97b7c")
 	api.RegisterMessage((*OsvbngCgnatSetOutsideFibReply)(nil), "osvbng_cgnat_set_outside_fib_reply_e8d4e804")
-	api.RegisterMessage((*OsvbngCgnatSetOutsideInterface)(nil), "osvbng_cgnat_set_outside_interface_3a42bd17")
-	api.RegisterMessage((*OsvbngCgnatSetOutsideInterfaceReply)(nil), "osvbng_cgnat_set_outside_interface_reply_e8d4e804")
 	api.RegisterMessage((*OsvbngCgnatSubscriberMappingDetails)(nil), "osvbng_cgnat_subscriber_mapping_details_a8a5e91c")
 	api.RegisterMessage((*OsvbngCgnatSubscriberMappingDump)(nil), "osvbng_cgnat_subscriber_mapping_dump_f797ec5c")
 }
@@ -1265,8 +1180,6 @@ func AllMessages() []api.Message {
 		(*OsvbngCgnatPoolUpdateReply)(nil),
 		(*OsvbngCgnatSetOutsideFib)(nil),
 		(*OsvbngCgnatSetOutsideFibReply)(nil),
-		(*OsvbngCgnatSetOutsideInterface)(nil),
-		(*OsvbngCgnatSetOutsideInterfaceReply)(nil),
 		(*OsvbngCgnatSubscriberMappingDetails)(nil),
 		(*OsvbngCgnatSubscriberMappingDump)(nil),
 	}

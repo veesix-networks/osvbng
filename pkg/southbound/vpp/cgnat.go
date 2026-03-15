@@ -302,29 +302,6 @@ func (v *VPP) CGNATEnableOnSession(poolID uint32, swIfIndex uint32, isEnable boo
 	return nil
 }
 
-func (v *VPP) CGNATSetOutsideInterface(swIfIndex uint32, poolID uint32, isEnable bool) error {
-	ch, err := v.conn.NewAPIChannel()
-	if err != nil {
-		return fmt.Errorf("create API channel: %w", err)
-	}
-	defer ch.Close()
-
-	req := &osvbng_cgnat.OsvbngCgnatSetOutsideInterface{
-		IsEnable:  isEnable,
-		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
-		PoolID:    poolID,
-	}
-
-	reply := &osvbng_cgnat.OsvbngCgnatSetOutsideInterfaceReply{}
-	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
-		return fmt.Errorf("set outside interface: %w", err)
-	}
-	if reply.Retval != 0 {
-		return fmt.Errorf("set outside interface failed: retval=%d", reply.Retval)
-	}
-	return nil
-}
-
 func (v *VPP) CGNATAddDelBypass(prefix net.IPNet, vrfID uint32, isAdd bool) error {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {

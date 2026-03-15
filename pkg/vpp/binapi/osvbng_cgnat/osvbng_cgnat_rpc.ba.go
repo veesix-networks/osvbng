@@ -22,7 +22,6 @@ type RPCService interface {
 	OsvbngCgnatPoolAddDelOutsideAddress(ctx context.Context, in *OsvbngCgnatPoolAddDelOutsideAddress) (*OsvbngCgnatPoolAddDelOutsideAddressReply, error)
 	OsvbngCgnatPoolUpdate(ctx context.Context, in *OsvbngCgnatPoolUpdate) (*OsvbngCgnatPoolUpdateReply, error)
 	OsvbngCgnatSetOutsideFib(ctx context.Context, in *OsvbngCgnatSetOutsideFib) (*OsvbngCgnatSetOutsideFibReply, error)
-	OsvbngCgnatSetOutsideInterface(ctx context.Context, in *OsvbngCgnatSetOutsideInterface) (*OsvbngCgnatSetOutsideInterfaceReply, error)
 	OsvbngCgnatSubscriberMappingDump(ctx context.Context, in *OsvbngCgnatSubscriberMappingDump) (RPCService_OsvbngCgnatSubscriberMappingDumpClient, error)
 }
 
@@ -108,15 +107,6 @@ func (c *serviceClient) OsvbngCgnatPoolUpdate(ctx context.Context, in *OsvbngCgn
 
 func (c *serviceClient) OsvbngCgnatSetOutsideFib(ctx context.Context, in *OsvbngCgnatSetOutsideFib) (*OsvbngCgnatSetOutsideFibReply, error) {
 	out := new(OsvbngCgnatSetOutsideFibReply)
-	err := c.conn.Invoke(ctx, in, out)
-	if err != nil {
-		return nil, err
-	}
-	return out, api.RetvalToVPPApiError(out.Retval)
-}
-
-func (c *serviceClient) OsvbngCgnatSetOutsideInterface(ctx context.Context, in *OsvbngCgnatSetOutsideInterface) (*OsvbngCgnatSetOutsideInterfaceReply, error) {
-	out := new(OsvbngCgnatSetOutsideInterfaceReply)
 	err := c.conn.Invoke(ctx, in, out)
 	if err != nil {
 		return nil, err

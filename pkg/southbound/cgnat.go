@@ -44,7 +44,6 @@ type CGNATDataplane interface {
 	CGNATAddSubscriberMappingBulk(poolID uint32, mappings []CGNATMapping) error
 
 	CGNATEnableOnSession(poolID uint32, swIfIndex uint32, isEnable bool) error
-	CGNATSetOutsideInterface(swIfIndex uint32, poolID uint32, isEnable bool) error
 
 	CGNATAddDelBypass(prefix net.IPNet, vrfID uint32, isAdd bool) error
 
