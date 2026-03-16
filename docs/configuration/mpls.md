@@ -1,4 +1,4 @@
-# MPLS
+# MPLS <span class="version-badge">v0.2.0</span>
 
 !!! warning "In development"
     MPLS is currently in development. This page documents the planned capabilities.

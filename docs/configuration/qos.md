@@ -1,4 +1,4 @@
-# QoS Policies
+# QoS Policies <span class="version-badge">v0.2.0</span>
 
 QoS policies define per-subscriber rate limiting using VPP's native policer engine. Each policy is a named template that gets instantiated as an independent policer per subscriber at session activation, giving each subscriber its own token bucket state.
 

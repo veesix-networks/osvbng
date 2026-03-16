@@ -1,4 +1,4 @@
-# Service Groups
+# Service Groups <span class="version-badge">v0.2.0</span>
 
 A service group is a reusable template that groups common subscriber service attributes together. Rather than configuring VRF, unnumbered interface, uRPF, ACLs, and QoS individually per subscriber, you define them once in a service group and reference it by name.
 
