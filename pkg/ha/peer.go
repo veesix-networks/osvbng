@@ -206,6 +206,30 @@ func (p *PeerClient) SyncSession(ctx context.Context, req *hapb.SyncSessionReque
 	return client.SyncSession(ctx, req)
 }
 
+func (p *PeerClient) SyncCGNATMapping(ctx context.Context, req *hapb.SyncCGNATMappingRequest) (*hapb.SyncCGNATMappingResponse, error) {
+	p.mu.RLock()
+	client := p.client
+	p.mu.RUnlock()
+
+	if client == nil {
+		return nil, errNotConnected
+	}
+
+	return client.SyncCGNATMapping(ctx, req)
+}
+
+func (p *PeerClient) BulkSyncCGNAT(ctx context.Context, req *hapb.BulkSyncCGNATRequest) (hapb.HAPeerService_BulkSyncCGNATClient, error) {
+	p.mu.RLock()
+	client := p.client
+	p.mu.RUnlock()
+
+	if client == nil {
+		return nil, errNotConnected
+	}
+
+	return client.BulkSyncCGNAT(ctx, req)
+}
+
 func (p *PeerClient) GetState() PeerState {
 	p.mu.RLock()
 	defer p.mu.RUnlock()

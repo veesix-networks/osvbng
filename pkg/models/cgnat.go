@@ -7,6 +7,7 @@ package models
 import "net"
 
 type CGNATMapping struct {
+	SessionID      string `json:"session_id,omitempty"`
 	PoolName       string `json:"pool_name"`
 	PoolID         uint32 `json:"pool_id"`
 	InsideIP       net.IP `json:"inside_ip"`
