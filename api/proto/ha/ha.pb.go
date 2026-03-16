@@ -1001,6 +1001,346 @@ func (x *BulkSyncResponse) GetLastPage() bool {
 	return false
 }
 
+type CGNATMappingCheckpoint struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	SessionId      string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	SrgName        string                 `protobuf:"bytes,2,opt,name=srg_name,json=srgName,proto3" json:"srg_name,omitempty"`
+	PoolName       string                 `protobuf:"bytes,3,opt,name=pool_name,json=poolName,proto3" json:"pool_name,omitempty"`
+	InsideIp       []byte                 `protobuf:"bytes,4,opt,name=inside_ip,json=insideIp,proto3" json:"inside_ip,omitempty"`
+	OutsideIp      []byte                 `protobuf:"bytes,5,opt,name=outside_ip,json=outsideIp,proto3" json:"outside_ip,omitempty"`
+	PortBlockStart uint32                 `protobuf:"varint,6,opt,name=port_block_start,json=portBlockStart,proto3" json:"port_block_start,omitempty"`
+	PortBlockEnd   uint32                 `protobuf:"varint,7,opt,name=port_block_end,json=portBlockEnd,proto3" json:"port_block_end,omitempty"`
+	InsideVrfId    uint32                 `protobuf:"varint,8,opt,name=inside_vrf_id,json=insideVrfId,proto3" json:"inside_vrf_id,omitempty"`
+	SwIfIndex      uint32                 `protobuf:"varint,9,opt,name=sw_if_index,json=swIfIndex,proto3" json:"sw_if_index,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *CGNATMappingCheckpoint) Reset() {
+	*x = CGNATMappingCheckpoint{}
+	mi := &file_api_proto_ha_ha_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CGNATMappingCheckpoint) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CGNATMappingCheckpoint) ProtoMessage() {}
+
+func (x *CGNATMappingCheckpoint) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_ha_ha_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CGNATMappingCheckpoint.ProtoReflect.Descriptor instead.
+func (*CGNATMappingCheckpoint) Descriptor() ([]byte, []int) {
+	return file_api_proto_ha_ha_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *CGNATMappingCheckpoint) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *CGNATMappingCheckpoint) GetSrgName() string {
+	if x != nil {
+		return x.SrgName
+	}
+	return ""
+}
+
+func (x *CGNATMappingCheckpoint) GetPoolName() string {
+	if x != nil {
+		return x.PoolName
+	}
+	return ""
+}
+
+func (x *CGNATMappingCheckpoint) GetInsideIp() []byte {
+	if x != nil {
+		return x.InsideIp
+	}
+	return nil
+}
+
+func (x *CGNATMappingCheckpoint) GetOutsideIp() []byte {
+	if x != nil {
+		return x.OutsideIp
+	}
+	return nil
+}
+
+func (x *CGNATMappingCheckpoint) GetPortBlockStart() uint32 {
+	if x != nil {
+		return x.PortBlockStart
+	}
+	return 0
+}
+
+func (x *CGNATMappingCheckpoint) GetPortBlockEnd() uint32 {
+	if x != nil {
+		return x.PortBlockEnd
+	}
+	return 0
+}
+
+func (x *CGNATMappingCheckpoint) GetInsideVrfId() uint32 {
+	if x != nil {
+		return x.InsideVrfId
+	}
+	return 0
+}
+
+func (x *CGNATMappingCheckpoint) GetSwIfIndex() uint32 {
+	if x != nil {
+		return x.SwIfIndex
+	}
+	return 0
+}
+
+type SyncCGNATMappingRequest struct {
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	SrgName       string                  `protobuf:"bytes,1,opt,name=srg_name,json=srgName,proto3" json:"srg_name,omitempty"`
+	Sequence      uint64                  `protobuf:"varint,2,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	Action        SyncAction              `protobuf:"varint,3,opt,name=action,proto3,enum=osvbng.ha.v1.SyncAction" json:"action,omitempty"`
+	Mapping       *CGNATMappingCheckpoint `protobuf:"bytes,4,opt,name=mapping,proto3" json:"mapping,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncCGNATMappingRequest) Reset() {
+	*x = SyncCGNATMappingRequest{}
+	mi := &file_api_proto_ha_ha_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncCGNATMappingRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncCGNATMappingRequest) ProtoMessage() {}
+
+func (x *SyncCGNATMappingRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_ha_ha_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncCGNATMappingRequest.ProtoReflect.Descriptor instead.
+func (*SyncCGNATMappingRequest) Descriptor() ([]byte, []int) {
+	return file_api_proto_ha_ha_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *SyncCGNATMappingRequest) GetSrgName() string {
+	if x != nil {
+		return x.SrgName
+	}
+	return ""
+}
+
+func (x *SyncCGNATMappingRequest) GetSequence() uint64 {
+	if x != nil {
+		return x.Sequence
+	}
+	return 0
+}
+
+func (x *SyncCGNATMappingRequest) GetAction() SyncAction {
+	if x != nil {
+		return x.Action
+	}
+	return SyncAction_SYNC_ACTION_UNSPECIFIED
+}
+
+func (x *SyncCGNATMappingRequest) GetMapping() *CGNATMappingCheckpoint {
+	if x != nil {
+		return x.Mapping
+	}
+	return nil
+}
+
+type SyncCGNATMappingResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	LastSyncSeq   uint64                 `protobuf:"varint,2,opt,name=last_sync_seq,json=lastSyncSeq,proto3" json:"last_sync_seq,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncCGNATMappingResponse) Reset() {
+	*x = SyncCGNATMappingResponse{}
+	mi := &file_api_proto_ha_ha_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncCGNATMappingResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncCGNATMappingResponse) ProtoMessage() {}
+
+func (x *SyncCGNATMappingResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_ha_ha_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncCGNATMappingResponse.ProtoReflect.Descriptor instead.
+func (*SyncCGNATMappingResponse) Descriptor() ([]byte, []int) {
+	return file_api_proto_ha_ha_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *SyncCGNATMappingResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *SyncCGNATMappingResponse) GetLastSyncSeq() uint64 {
+	if x != nil {
+		return x.LastSyncSeq
+	}
+	return 0
+}
+
+type BulkSyncCGNATRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SrgNames      []string               `protobuf:"bytes,1,rep,name=srg_names,json=srgNames,proto3" json:"srg_names,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BulkSyncCGNATRequest) Reset() {
+	*x = BulkSyncCGNATRequest{}
+	mi := &file_api_proto_ha_ha_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BulkSyncCGNATRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BulkSyncCGNATRequest) ProtoMessage() {}
+
+func (x *BulkSyncCGNATRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_ha_ha_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BulkSyncCGNATRequest.ProtoReflect.Descriptor instead.
+func (*BulkSyncCGNATRequest) Descriptor() ([]byte, []int) {
+	return file_api_proto_ha_ha_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *BulkSyncCGNATRequest) GetSrgNames() []string {
+	if x != nil {
+		return x.SrgNames
+	}
+	return nil
+}
+
+type BulkSyncCGNATResponse struct {
+	state         protoimpl.MessageState    `protogen:"open.v1"`
+	SrgName       string                    `protobuf:"bytes,1,opt,name=srg_name,json=srgName,proto3" json:"srg_name,omitempty"`
+	Mappings      []*CGNATMappingCheckpoint `protobuf:"bytes,2,rep,name=mappings,proto3" json:"mappings,omitempty"`
+	Sequence      uint64                    `protobuf:"varint,3,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	LastPage      bool                      `protobuf:"varint,4,opt,name=last_page,json=lastPage,proto3" json:"last_page,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BulkSyncCGNATResponse) Reset() {
+	*x = BulkSyncCGNATResponse{}
+	mi := &file_api_proto_ha_ha_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BulkSyncCGNATResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BulkSyncCGNATResponse) ProtoMessage() {}
+
+func (x *BulkSyncCGNATResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_ha_ha_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BulkSyncCGNATResponse.ProtoReflect.Descriptor instead.
+func (*BulkSyncCGNATResponse) Descriptor() ([]byte, []int) {
+	return file_api_proto_ha_ha_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *BulkSyncCGNATResponse) GetSrgName() string {
+	if x != nil {
+		return x.SrgName
+	}
+	return ""
+}
+
+func (x *BulkSyncCGNATResponse) GetMappings() []*CGNATMappingCheckpoint {
+	if x != nil {
+		return x.Mappings
+	}
+	return nil
+}
+
+func (x *BulkSyncCGNATResponse) GetSequence() uint64 {
+	if x != nil {
+		return x.Sequence
+	}
+	return 0
+}
+
+func (x *BulkSyncCGNATResponse) GetLastPage() bool {
+	if x != nil {
+		return x.LastPage
+	}
+	return false
+}
+
 var File_api_proto_ha_ha_proto protoreflect.FileDescriptor
 
 const file_api_proto_ha_ha_proto_rawDesc = "" +
@@ -1094,19 +1434,48 @@ const file_api_proto_ha_ha_proto_rawDesc = "" +
 	"\bsrg_name\x18\x01 \x01(\tR\asrgName\x12;\n" +
 	"\bsessions\x18\x02 \x03(\v2\x1f.osvbng.ha.v1.SessionCheckpointR\bsessions\x12\x1a\n" +
 	"\bsequence\x18\x03 \x01(\x04R\bsequence\x12\x1b\n" +
+	"\tlast_page\x18\x04 \x01(\bR\blastPage\"\xbf\x02\n" +
+	"\x16CGNATMappingCheckpoint\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x19\n" +
+	"\bsrg_name\x18\x02 \x01(\tR\asrgName\x12\x1b\n" +
+	"\tpool_name\x18\x03 \x01(\tR\bpoolName\x12\x1b\n" +
+	"\tinside_ip\x18\x04 \x01(\fR\binsideIp\x12\x1d\n" +
+	"\n" +
+	"outside_ip\x18\x05 \x01(\fR\toutsideIp\x12(\n" +
+	"\x10port_block_start\x18\x06 \x01(\rR\x0eportBlockStart\x12$\n" +
+	"\x0eport_block_end\x18\a \x01(\rR\fportBlockEnd\x12\"\n" +
+	"\rinside_vrf_id\x18\b \x01(\rR\vinsideVrfId\x12\x1e\n" +
+	"\vsw_if_index\x18\t \x01(\rR\tswIfIndex\"\xc2\x01\n" +
+	"\x17SyncCGNATMappingRequest\x12\x19\n" +
+	"\bsrg_name\x18\x01 \x01(\tR\asrgName\x12\x1a\n" +
+	"\bsequence\x18\x02 \x01(\x04R\bsequence\x120\n" +
+	"\x06action\x18\x03 \x01(\x0e2\x18.osvbng.ha.v1.SyncActionR\x06action\x12>\n" +
+	"\amapping\x18\x04 \x01(\v2$.osvbng.ha.v1.CGNATMappingCheckpointR\amapping\"X\n" +
+	"\x18SyncCGNATMappingResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\"\n" +
+	"\rlast_sync_seq\x18\x02 \x01(\x04R\vlastSyncSeq\"3\n" +
+	"\x14BulkSyncCGNATRequest\x12\x1b\n" +
+	"\tsrg_names\x18\x01 \x03(\tR\bsrgNames\"\xad\x01\n" +
+	"\x15BulkSyncCGNATResponse\x12\x19\n" +
+	"\bsrg_name\x18\x01 \x01(\tR\asrgName\x12@\n" +
+	"\bmappings\x18\x02 \x03(\v2$.osvbng.ha.v1.CGNATMappingCheckpointR\bmappings\x12\x1a\n" +
+	"\bsequence\x18\x03 \x01(\x04R\bsequence\x12\x1b\n" +
 	"\tlast_page\x18\x04 \x01(\bR\blastPage*q\n" +
 	"\n" +
 	"SyncAction\x12\x1b\n" +
 	"\x17SYNC_ACTION_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12SYNC_ACTION_CREATE\x10\x01\x12\x16\n" +
 	"\x12SYNC_ACTION_UPDATE\x10\x02\x12\x16\n" +
-	"\x12SYNC_ACTION_DELETE\x10\x032\xaa\x03\n" +
+	"\x12SYNC_ACTION_DELETE\x10\x032\xe9\x04\n" +
 	"\rHAPeerService\x12O\n" +
 	"\tHeartbeat\x12\x1e.osvbng.ha.v1.HeartbeatMessage\x1a\x1e.osvbng.ha.v1.HeartbeatMessage(\x010\x01\x12O\n" +
 	"\x0eNotifySRGState\x12\".osvbng.ha.v1.SRGStateNotification\x1a\x19.osvbng.ha.v1.SRGStateAck\x12V\n" +
 	"\x11RequestSwitchover\x12\x1f.osvbng.ha.v1.SwitchoverRequest\x1a .osvbng.ha.v1.SwitchoverResponse\x12R\n" +
 	"\vSyncSession\x12 .osvbng.ha.v1.SyncSessionRequest\x1a!.osvbng.ha.v1.SyncSessionResponse\x12K\n" +
-	"\bBulkSync\x12\x1d.osvbng.ha.v1.BulkSyncRequest\x1a\x1e.osvbng.ha.v1.BulkSyncResponse0\x01B5Z3github.com/veesix-networks/osvbng/api/proto/ha;hapbb\x06proto3"
+	"\bBulkSync\x12\x1d.osvbng.ha.v1.BulkSyncRequest\x1a\x1e.osvbng.ha.v1.BulkSyncResponse0\x01\x12a\n" +
+	"\x10SyncCGNATMapping\x12%.osvbng.ha.v1.SyncCGNATMappingRequest\x1a&.osvbng.ha.v1.SyncCGNATMappingResponse\x12Z\n" +
+	"\rBulkSyncCGNAT\x12\".osvbng.ha.v1.BulkSyncCGNATRequest\x1a#.osvbng.ha.v1.BulkSyncCGNATResponse0\x01B5Z3github.com/veesix-networks/osvbng/api/proto/ha;hapbb\x06proto3"
 
 var (
 	file_api_proto_ha_ha_proto_rawDescOnce sync.Once
@@ -1121,41 +1490,53 @@ func file_api_proto_ha_ha_proto_rawDescGZIP() []byte {
 }
 
 var file_api_proto_ha_ha_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_api_proto_ha_ha_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_api_proto_ha_ha_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_api_proto_ha_ha_proto_goTypes = []any{
-	(SyncAction)(0),              // 0: osvbng.ha.v1.SyncAction
-	(*HeartbeatMessage)(nil),     // 1: osvbng.ha.v1.HeartbeatMessage
-	(*SRGStatus)(nil),            // 2: osvbng.ha.v1.SRGStatus
-	(*SRGStateNotification)(nil), // 3: osvbng.ha.v1.SRGStateNotification
-	(*SRGStateAck)(nil),          // 4: osvbng.ha.v1.SRGStateAck
-	(*SwitchoverRequest)(nil),    // 5: osvbng.ha.v1.SwitchoverRequest
-	(*SwitchoverResponse)(nil),   // 6: osvbng.ha.v1.SwitchoverResponse
-	(*SessionCheckpoint)(nil),    // 7: osvbng.ha.v1.SessionCheckpoint
-	(*SyncSessionRequest)(nil),   // 8: osvbng.ha.v1.SyncSessionRequest
-	(*SyncSessionResponse)(nil),  // 9: osvbng.ha.v1.SyncSessionResponse
-	(*BulkSyncRequest)(nil),      // 10: osvbng.ha.v1.BulkSyncRequest
-	(*BulkSyncResponse)(nil),     // 11: osvbng.ha.v1.BulkSyncResponse
+	(SyncAction)(0),                  // 0: osvbng.ha.v1.SyncAction
+	(*HeartbeatMessage)(nil),         // 1: osvbng.ha.v1.HeartbeatMessage
+	(*SRGStatus)(nil),                // 2: osvbng.ha.v1.SRGStatus
+	(*SRGStateNotification)(nil),     // 3: osvbng.ha.v1.SRGStateNotification
+	(*SRGStateAck)(nil),              // 4: osvbng.ha.v1.SRGStateAck
+	(*SwitchoverRequest)(nil),        // 5: osvbng.ha.v1.SwitchoverRequest
+	(*SwitchoverResponse)(nil),       // 6: osvbng.ha.v1.SwitchoverResponse
+	(*SessionCheckpoint)(nil),        // 7: osvbng.ha.v1.SessionCheckpoint
+	(*SyncSessionRequest)(nil),       // 8: osvbng.ha.v1.SyncSessionRequest
+	(*SyncSessionResponse)(nil),      // 9: osvbng.ha.v1.SyncSessionResponse
+	(*BulkSyncRequest)(nil),          // 10: osvbng.ha.v1.BulkSyncRequest
+	(*BulkSyncResponse)(nil),         // 11: osvbng.ha.v1.BulkSyncResponse
+	(*CGNATMappingCheckpoint)(nil),   // 12: osvbng.ha.v1.CGNATMappingCheckpoint
+	(*SyncCGNATMappingRequest)(nil),  // 13: osvbng.ha.v1.SyncCGNATMappingRequest
+	(*SyncCGNATMappingResponse)(nil), // 14: osvbng.ha.v1.SyncCGNATMappingResponse
+	(*BulkSyncCGNATRequest)(nil),     // 15: osvbng.ha.v1.BulkSyncCGNATRequest
+	(*BulkSyncCGNATResponse)(nil),    // 16: osvbng.ha.v1.BulkSyncCGNATResponse
 }
 var file_api_proto_ha_ha_proto_depIdxs = []int32{
 	2,  // 0: osvbng.ha.v1.HeartbeatMessage.srg_statuses:type_name -> osvbng.ha.v1.SRGStatus
 	0,  // 1: osvbng.ha.v1.SyncSessionRequest.action:type_name -> osvbng.ha.v1.SyncAction
 	7,  // 2: osvbng.ha.v1.SyncSessionRequest.session:type_name -> osvbng.ha.v1.SessionCheckpoint
 	7,  // 3: osvbng.ha.v1.BulkSyncResponse.sessions:type_name -> osvbng.ha.v1.SessionCheckpoint
-	1,  // 4: osvbng.ha.v1.HAPeerService.Heartbeat:input_type -> osvbng.ha.v1.HeartbeatMessage
-	3,  // 5: osvbng.ha.v1.HAPeerService.NotifySRGState:input_type -> osvbng.ha.v1.SRGStateNotification
-	5,  // 6: osvbng.ha.v1.HAPeerService.RequestSwitchover:input_type -> osvbng.ha.v1.SwitchoverRequest
-	8,  // 7: osvbng.ha.v1.HAPeerService.SyncSession:input_type -> osvbng.ha.v1.SyncSessionRequest
-	10, // 8: osvbng.ha.v1.HAPeerService.BulkSync:input_type -> osvbng.ha.v1.BulkSyncRequest
-	1,  // 9: osvbng.ha.v1.HAPeerService.Heartbeat:output_type -> osvbng.ha.v1.HeartbeatMessage
-	4,  // 10: osvbng.ha.v1.HAPeerService.NotifySRGState:output_type -> osvbng.ha.v1.SRGStateAck
-	6,  // 11: osvbng.ha.v1.HAPeerService.RequestSwitchover:output_type -> osvbng.ha.v1.SwitchoverResponse
-	9,  // 12: osvbng.ha.v1.HAPeerService.SyncSession:output_type -> osvbng.ha.v1.SyncSessionResponse
-	11, // 13: osvbng.ha.v1.HAPeerService.BulkSync:output_type -> osvbng.ha.v1.BulkSyncResponse
-	9,  // [9:14] is the sub-list for method output_type
-	4,  // [4:9] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	0,  // 4: osvbng.ha.v1.SyncCGNATMappingRequest.action:type_name -> osvbng.ha.v1.SyncAction
+	12, // 5: osvbng.ha.v1.SyncCGNATMappingRequest.mapping:type_name -> osvbng.ha.v1.CGNATMappingCheckpoint
+	12, // 6: osvbng.ha.v1.BulkSyncCGNATResponse.mappings:type_name -> osvbng.ha.v1.CGNATMappingCheckpoint
+	1,  // 7: osvbng.ha.v1.HAPeerService.Heartbeat:input_type -> osvbng.ha.v1.HeartbeatMessage
+	3,  // 8: osvbng.ha.v1.HAPeerService.NotifySRGState:input_type -> osvbng.ha.v1.SRGStateNotification
+	5,  // 9: osvbng.ha.v1.HAPeerService.RequestSwitchover:input_type -> osvbng.ha.v1.SwitchoverRequest
+	8,  // 10: osvbng.ha.v1.HAPeerService.SyncSession:input_type -> osvbng.ha.v1.SyncSessionRequest
+	10, // 11: osvbng.ha.v1.HAPeerService.BulkSync:input_type -> osvbng.ha.v1.BulkSyncRequest
+	13, // 12: osvbng.ha.v1.HAPeerService.SyncCGNATMapping:input_type -> osvbng.ha.v1.SyncCGNATMappingRequest
+	15, // 13: osvbng.ha.v1.HAPeerService.BulkSyncCGNAT:input_type -> osvbng.ha.v1.BulkSyncCGNATRequest
+	1,  // 14: osvbng.ha.v1.HAPeerService.Heartbeat:output_type -> osvbng.ha.v1.HeartbeatMessage
+	4,  // 15: osvbng.ha.v1.HAPeerService.NotifySRGState:output_type -> osvbng.ha.v1.SRGStateAck
+	6,  // 16: osvbng.ha.v1.HAPeerService.RequestSwitchover:output_type -> osvbng.ha.v1.SwitchoverResponse
+	9,  // 17: osvbng.ha.v1.HAPeerService.SyncSession:output_type -> osvbng.ha.v1.SyncSessionResponse
+	11, // 18: osvbng.ha.v1.HAPeerService.BulkSync:output_type -> osvbng.ha.v1.BulkSyncResponse
+	14, // 19: osvbng.ha.v1.HAPeerService.SyncCGNATMapping:output_type -> osvbng.ha.v1.SyncCGNATMappingResponse
+	16, // 20: osvbng.ha.v1.HAPeerService.BulkSyncCGNAT:output_type -> osvbng.ha.v1.BulkSyncCGNATResponse
+	14, // [14:21] is the sub-list for method output_type
+	7,  // [7:14] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_api_proto_ha_ha_proto_init() }
@@ -1169,7 +1550,7 @@ func file_api_proto_ha_ha_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_ha_ha_proto_rawDesc), len(file_api_proto_ha_ha_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   11,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

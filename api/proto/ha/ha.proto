@@ -14,6 +14,8 @@ service HAPeerService {
   rpc RequestSwitchover(SwitchoverRequest) returns (SwitchoverResponse);
   rpc SyncSession(SyncSessionRequest) returns (SyncSessionResponse);
   rpc BulkSync(BulkSyncRequest) returns (stream BulkSyncResponse);
+  rpc SyncCGNATMapping(SyncCGNATMappingRequest) returns (SyncCGNATMappingResponse);
+  rpc BulkSyncCGNAT(BulkSyncCGNATRequest) returns (stream BulkSyncCGNATResponse);
 }
 
 message HeartbeatMessage {
@@ -126,6 +128,41 @@ message BulkSyncRequest {
 message BulkSyncResponse {
   string srg_name = 1;
   repeated SessionCheckpoint sessions = 2;
+  uint64 sequence = 3;
+  bool last_page = 4;
+}
+
+message CGNATMappingCheckpoint {
+  string session_id = 1;
+  string srg_name = 2;
+  string pool_name = 3;
+  bytes inside_ip = 4;
+  bytes outside_ip = 5;
+  uint32 port_block_start = 6;
+  uint32 port_block_end = 7;
+  uint32 inside_vrf_id = 8;
+  uint32 sw_if_index = 9;
+}
+
+message SyncCGNATMappingRequest {
+  string srg_name = 1;
+  uint64 sequence = 2;
+  SyncAction action = 3;
+  CGNATMappingCheckpoint mapping = 4;
+}
+
+message SyncCGNATMappingResponse {
+  bool success = 1;
+  uint64 last_sync_seq = 2;
+}
+
+message BulkSyncCGNATRequest {
+  repeated string srg_names = 1;
+}
+
+message BulkSyncCGNATResponse {
+  string srg_name = 1;
+  repeated CGNATMappingCheckpoint mappings = 2;
   uint64 sequence = 3;
   bool last_page = 4;
 }

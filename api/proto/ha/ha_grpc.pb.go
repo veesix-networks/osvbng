@@ -28,6 +28,8 @@ const (
 	HAPeerService_RequestSwitchover_FullMethodName = "/osvbng.ha.v1.HAPeerService/RequestSwitchover"
 	HAPeerService_SyncSession_FullMethodName       = "/osvbng.ha.v1.HAPeerService/SyncSession"
 	HAPeerService_BulkSync_FullMethodName          = "/osvbng.ha.v1.HAPeerService/BulkSync"
+	HAPeerService_SyncCGNATMapping_FullMethodName  = "/osvbng.ha.v1.HAPeerService/SyncCGNATMapping"
+	HAPeerService_BulkSyncCGNAT_FullMethodName     = "/osvbng.ha.v1.HAPeerService/BulkSyncCGNAT"
 )
 
 // HAPeerServiceClient is the client API for HAPeerService service.
@@ -39,6 +41,8 @@ type HAPeerServiceClient interface {
 	RequestSwitchover(ctx context.Context, in *SwitchoverRequest, opts ...grpc.CallOption) (*SwitchoverResponse, error)
 	SyncSession(ctx context.Context, in *SyncSessionRequest, opts ...grpc.CallOption) (*SyncSessionResponse, error)
 	BulkSync(ctx context.Context, in *BulkSyncRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[BulkSyncResponse], error)
+	SyncCGNATMapping(ctx context.Context, in *SyncCGNATMappingRequest, opts ...grpc.CallOption) (*SyncCGNATMappingResponse, error)
+	BulkSyncCGNAT(ctx context.Context, in *BulkSyncCGNATRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[BulkSyncCGNATResponse], error)
 }
 
 type hAPeerServiceClient struct {
@@ -111,6 +115,35 @@ func (c *hAPeerServiceClient) BulkSync(ctx context.Context, in *BulkSyncRequest,
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type HAPeerService_BulkSyncClient = grpc.ServerStreamingClient[BulkSyncResponse]
 
+func (c *hAPeerServiceClient) SyncCGNATMapping(ctx context.Context, in *SyncCGNATMappingRequest, opts ...grpc.CallOption) (*SyncCGNATMappingResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SyncCGNATMappingResponse)
+	err := c.cc.Invoke(ctx, HAPeerService_SyncCGNATMapping_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *hAPeerServiceClient) BulkSyncCGNAT(ctx context.Context, in *BulkSyncCGNATRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[BulkSyncCGNATResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &HAPeerService_ServiceDesc.Streams[2], HAPeerService_BulkSyncCGNAT_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[BulkSyncCGNATRequest, BulkSyncCGNATResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HAPeerService_BulkSyncCGNATClient = grpc.ServerStreamingClient[BulkSyncCGNATResponse]
+
 // HAPeerServiceServer is the server API for HAPeerService service.
 // All implementations must embed UnimplementedHAPeerServiceServer
 // for forward compatibility.
@@ -120,6 +153,8 @@ type HAPeerServiceServer interface {
 	RequestSwitchover(context.Context, *SwitchoverRequest) (*SwitchoverResponse, error)
 	SyncSession(context.Context, *SyncSessionRequest) (*SyncSessionResponse, error)
 	BulkSync(*BulkSyncRequest, grpc.ServerStreamingServer[BulkSyncResponse]) error
+	SyncCGNATMapping(context.Context, *SyncCGNATMappingRequest) (*SyncCGNATMappingResponse, error)
+	BulkSyncCGNAT(*BulkSyncCGNATRequest, grpc.ServerStreamingServer[BulkSyncCGNATResponse]) error
 	mustEmbedUnimplementedHAPeerServiceServer()
 }
 
@@ -144,6 +179,12 @@ func (UnimplementedHAPeerServiceServer) SyncSession(context.Context, *SyncSessio
 }
 func (UnimplementedHAPeerServiceServer) BulkSync(*BulkSyncRequest, grpc.ServerStreamingServer[BulkSyncResponse]) error {
 	return status.Error(codes.Unimplemented, "method BulkSync not implemented")
+}
+func (UnimplementedHAPeerServiceServer) SyncCGNATMapping(context.Context, *SyncCGNATMappingRequest) (*SyncCGNATMappingResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SyncCGNATMapping not implemented")
+}
+func (UnimplementedHAPeerServiceServer) BulkSyncCGNAT(*BulkSyncCGNATRequest, grpc.ServerStreamingServer[BulkSyncCGNATResponse]) error {
+	return status.Error(codes.Unimplemented, "method BulkSyncCGNAT not implemented")
 }
 func (UnimplementedHAPeerServiceServer) mustEmbedUnimplementedHAPeerServiceServer() {}
 func (UnimplementedHAPeerServiceServer) testEmbeddedByValue()                       {}
@@ -238,6 +279,35 @@ func _HAPeerService_BulkSync_Handler(srv interface{}, stream grpc.ServerStream) 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type HAPeerService_BulkSyncServer = grpc.ServerStreamingServer[BulkSyncResponse]
 
+func _HAPeerService_SyncCGNATMapping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncCGNATMappingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HAPeerServiceServer).SyncCGNATMapping(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HAPeerService_SyncCGNATMapping_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HAPeerServiceServer).SyncCGNATMapping(ctx, req.(*SyncCGNATMappingRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HAPeerService_BulkSyncCGNAT_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(BulkSyncCGNATRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(HAPeerServiceServer).BulkSyncCGNAT(m, &grpc.GenericServerStream[BulkSyncCGNATRequest, BulkSyncCGNATResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HAPeerService_BulkSyncCGNATServer = grpc.ServerStreamingServer[BulkSyncCGNATResponse]
+
 // HAPeerService_ServiceDesc is the grpc.ServiceDesc for HAPeerService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -257,6 +327,10 @@ var HAPeerService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "SyncSession",
 			Handler:    _HAPeerService_SyncSession_Handler,
 		},
+		{
+			MethodName: "SyncCGNATMapping",
+			Handler:    _HAPeerService_SyncCGNATMapping_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -268,6 +342,11 @@ var HAPeerService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "BulkSync",
 			Handler:       _HAPeerService_BulkSync_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "BulkSyncCGNAT",
+			Handler:       _HAPeerService_BulkSyncCGNAT_Handler,
 			ServerStreams: true,
 		},
 	},
