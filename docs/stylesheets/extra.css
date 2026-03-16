@@ -4,6 +4,18 @@
     --md-primary-fg-color--dark:  #4c9c2d;
   }
 
+/* ── Version badge ──────────────────────────────────────────────── */
+
+.version-badge {
+  float: right;
+  font-size: 0.7em;
+  font-weight: 600;
+  padding: 0.2em 0.6em;
+  border-radius: 4px;
+  background-color: var(--md-primary-fg-color);
+  color: #fff;
+}
+
 /* ── Vertical Packet Diagram ──────────────────────────────────── */
 
 .packet-diagram--vertical {
