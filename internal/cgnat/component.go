@@ -257,6 +257,7 @@ func (c *Component) handleSessionActivate(data *events.SessionLifecycleEvent) {
 	var vrfName string
 	var swIfIndex uint32
 	var serviceGroup string
+	var srgName string
 
 	switch data.AccessType {
 	case models.AccessTypeIPoE:
@@ -268,6 +269,7 @@ func (c *Component) handleSessionActivate(data *events.SessionLifecycleEvent) {
 		vrfName = sess.VRF
 		swIfIndex = sess.IfIndex
 		serviceGroup = sess.ServiceGroup
+		srgName = sess.SRGName
 	case models.AccessTypePPPoE:
 		sess, ok := data.Session.(*models.PPPSession)
 		if !ok {
@@ -277,6 +279,7 @@ func (c *Component) handleSessionActivate(data *events.SessionLifecycleEvent) {
 		vrfName = sess.VRF
 		swIfIndex = sess.IfIndex
 		serviceGroup = sess.ServiceGroup
+		srgName = sess.SRGName
 	default:
 		return
 	}
@@ -297,7 +300,7 @@ func (c *Component) handleSessionActivate(data *events.SessionLifecycleEvent) {
 				return
 			}
 			if sg.CGNAT.Policy != "" {
-				c.handlePBAActivate(sg.CGNAT.Policy, insideIP, vrfName, swIfIndex, data.SessionID)
+				c.handlePBAActivate(sg.CGNAT.Policy, insideIP, vrfName, swIfIndex, data.SessionID, srgName)
 				return
 			}
 		}
@@ -316,17 +319,22 @@ func (c *Component) handleSessionActivate(data *events.SessionLifecycleEvent) {
 	if pool.GetMode() == "deterministic" {
 		c.handleDetActivate(poolName, swIfIndex)
 	} else {
-		c.handlePBAActivate(poolName, insideIP, vrfName, swIfIndex, data.SessionID)
+		c.handlePBAActivate(poolName, insideIP, vrfName, swIfIndex, data.SessionID, srgName)
 	}
 }
 
-func (c *Component) handlePBAActivate(poolName string, insideIP net.IP, vrfName string, swIfIndex uint32, sessionID string) {
+func (c *Component) handlePBAActivate(poolName string, insideIP net.IP, vrfName string, swIfIndex uint32, sessionID string, srgName string) {
+	if synced := c.tryRestoreSyncedMapping(sessionID, swIfIndex, poolName, srgName); synced {
+		return
+	}
+
 	mapping, err := c.pools.AllocateBlock(poolName, insideIP, 0, swIfIndex)
 	if err != nil {
 		c.logger.Error("CGNAT block allocation failed", "pool", poolName, "ip", insideIP, "error", err)
 		return
 	}
 
+	mapping.SessionID = sessionID
 	poolID := c.poolIDMap[poolName]
 
 	c.dataplane.CGNATAddDelSubscriberMappingAsync(poolID, swIfIndex, insideIP,
@@ -346,12 +354,77 @@ func (c *Component) handlePBAActivate(poolName string, insideIP net.IP, vrfName 
 				}
 			}
 
+			c.publishMappingEvent(srgName, mapping, true)
+
 			c.logger.Debug("CGNAT PBA mapping created",
 				"session", sessionID,
 				"inside", insideIP,
 				"outside", fmt.Sprintf("%s:%d-%d", mapping.OutsideIP, mapping.PortBlockStart, mapping.PortBlockEnd),
 				"pool", poolName)
 		})
+}
+
+func (c *Component) tryRestoreSyncedMapping(sessionID string, swIfIndex uint32, poolName string, srgName string) bool {
+	if c.opdb == nil {
+		return false
+	}
+
+	var found []byte
+	c.opdb.Load(context.Background(), opdb.NamespaceHASyncedCGNAT, func(key string, value []byte) error {
+		if key == sessionID {
+			found = make([]byte, len(value))
+			copy(found, value)
+		}
+		return nil
+	})
+
+	if found == nil {
+		return false
+	}
+
+	var mapping models.CGNATMapping
+	if err := json.Unmarshal(found, &mapping); err != nil {
+		return false
+	}
+
+	mapping.SwIfIndex = swIfIndex
+	mapping.SessionID = sessionID
+
+	if err := c.pools.RestoreMapping(&mapping); err != nil {
+		c.logger.Warn("Failed to restore synced CGNAT mapping", "session", sessionID, "error", err)
+		return false
+	}
+
+	poolID := c.poolIDMap[poolName]
+
+	c.dataplane.CGNATAddDelSubscriberMappingAsync(poolID, swIfIndex, mapping.InsideIP,
+		0, mapping.OutsideIP, mapping.PortBlockStart, mapping.PortBlockEnd,
+		true, true, func(err error) {
+			if err != nil {
+				c.logger.Error("restore synced mapping failed", "session", sessionID, "error", err)
+				c.pools.ReleaseBlocks(poolName, mapping.InsideIP, 0)
+				return
+			}
+
+			c.reverse.Add(&mapping)
+
+			if c.opdb != nil {
+				if data, err := json.Marshal(&mapping); err == nil {
+					c.opdb.Put(context.Background(), opdbNamespace, sessionID, data)
+				}
+				c.opdb.Delete(context.Background(), opdb.NamespaceHASyncedCGNAT, sessionID)
+			}
+
+			c.publishMappingEvent(srgName, &mapping, true)
+
+			c.logger.Info("CGNAT mapping restored from HA sync",
+				"session", sessionID,
+				"inside", mapping.InsideIP,
+				"outside_ip", mapping.OutsideIP,
+				"ports", fmt.Sprintf("%d-%d", mapping.PortBlockStart, mapping.PortBlockEnd))
+		})
+
+	return true
 }
 
 func (c *Component) handleDetActivate(poolName string, swIfIndex uint32) {
@@ -378,6 +451,7 @@ func (c *Component) handleSessionRelease(data *events.SessionLifecycleEvent) {
 	var insideIP net.IP
 	var swIfIndex uint32
 	var serviceGroup string
+	var srgName string
 
 	switch data.AccessType {
 	case models.AccessTypeIPoE:
@@ -388,6 +462,7 @@ func (c *Component) handleSessionRelease(data *events.SessionLifecycleEvent) {
 		insideIP = sess.IPv4Address
 		swIfIndex = sess.IfIndex
 		serviceGroup = sess.ServiceGroup
+		srgName = sess.SRGName
 	case models.AccessTypePPPoE:
 		sess, ok := data.Session.(*models.PPPSession)
 		if !ok {
@@ -396,6 +471,7 @@ func (c *Component) handleSessionRelease(data *events.SessionLifecycleEvent) {
 		insideIP = sess.IPv4Address
 		swIfIndex = sess.IfIndex
 		serviceGroup = sess.ServiceGroup
+		srgName = sess.SRGName
 	default:
 		return
 	}
@@ -425,15 +501,18 @@ func (c *Component) handleSessionRelease(data *events.SessionLifecycleEvent) {
 	poolName := mappings[0].PoolName
 	poolID := c.poolIDMap[poolName]
 
-	for _, m := range mappings {
+	for i := range mappings {
+		mapping := &mappings[i]
 		c.dataplane.CGNATAddDelSubscriberMappingAsync(poolID, swIfIndex, insideIP,
-			0, m.OutsideIP, m.PortBlockStart, m.PortBlockEnd,
+			0, mapping.OutsideIP, mapping.PortBlockStart, mapping.PortBlockEnd,
 			false, false, func(err error) {
 				if err != nil {
 					c.logger.Error("remove mapping failed", "error", err)
+					return
 				}
+				c.publishMappingEvent(srgName, mapping, false)
 			})
-		c.reverse.Remove(m.OutsideIP, m.PortBlockStart)
+		c.reverse.Remove(mapping.OutsideIP, mapping.PortBlockStart)
 	}
 
 	c.pools.ReleaseBlocks(poolName, insideIP, 0)
@@ -476,6 +555,18 @@ func (c *Component) restoreFromOpDB() error {
 		c.logger.Info("Restored CGNAT mappings from OpDB", "count", restored)
 	}
 	return nil
+}
+
+func (c *Component) publishMappingEvent(srgName string, mapping *models.CGNATMapping, isAdd bool) {
+	c.eventBus.Publish(events.TopicCGNATMapping, events.Event{
+		Source: c.Name(),
+		Data: &events.CGNATMappingEvent{
+			SRGName:   srgName,
+			SessionID: mapping.SessionID,
+			Mapping:   mapping,
+			IsAdd:     isAdd,
+		},
+	})
 }
 
 func (c *Component) GetRunningConfig() (*cgnat.Config, error) {

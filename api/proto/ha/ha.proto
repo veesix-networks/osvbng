@@ -141,7 +141,6 @@ message CGNATMappingCheckpoint {
   uint32 port_block_start = 6;
   uint32 port_block_end = 7;
   uint32 inside_vrf_id = 8;
-  uint32 sw_if_index = 9;
 }
 
 message SyncCGNATMappingRequest {

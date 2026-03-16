@@ -1011,7 +1011,6 @@ type CGNATMappingCheckpoint struct {
 	PortBlockStart uint32                 `protobuf:"varint,6,opt,name=port_block_start,json=portBlockStart,proto3" json:"port_block_start,omitempty"`
 	PortBlockEnd   uint32                 `protobuf:"varint,7,opt,name=port_block_end,json=portBlockEnd,proto3" json:"port_block_end,omitempty"`
 	InsideVrfId    uint32                 `protobuf:"varint,8,opt,name=inside_vrf_id,json=insideVrfId,proto3" json:"inside_vrf_id,omitempty"`
-	SwIfIndex      uint32                 `protobuf:"varint,9,opt,name=sw_if_index,json=swIfIndex,proto3" json:"sw_if_index,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1098,13 +1097,6 @@ func (x *CGNATMappingCheckpoint) GetPortBlockEnd() uint32 {
 func (x *CGNATMappingCheckpoint) GetInsideVrfId() uint32 {
 	if x != nil {
 		return x.InsideVrfId
-	}
-	return 0
-}
-
-func (x *CGNATMappingCheckpoint) GetSwIfIndex() uint32 {
-	if x != nil {
-		return x.SwIfIndex
 	}
 	return 0
 }
@@ -1434,7 +1426,7 @@ const file_api_proto_ha_ha_proto_rawDesc = "" +
 	"\bsrg_name\x18\x01 \x01(\tR\asrgName\x12;\n" +
 	"\bsessions\x18\x02 \x03(\v2\x1f.osvbng.ha.v1.SessionCheckpointR\bsessions\x12\x1a\n" +
 	"\bsequence\x18\x03 \x01(\x04R\bsequence\x12\x1b\n" +
-	"\tlast_page\x18\x04 \x01(\bR\blastPage\"\xbf\x02\n" +
+	"\tlast_page\x18\x04 \x01(\bR\blastPage\"\x9f\x02\n" +
 	"\x16CGNATMappingCheckpoint\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x19\n" +
@@ -1445,8 +1437,7 @@ const file_api_proto_ha_ha_proto_rawDesc = "" +
 	"outside_ip\x18\x05 \x01(\fR\toutsideIp\x12(\n" +
 	"\x10port_block_start\x18\x06 \x01(\rR\x0eportBlockStart\x12$\n" +
 	"\x0eport_block_end\x18\a \x01(\rR\fportBlockEnd\x12\"\n" +
-	"\rinside_vrf_id\x18\b \x01(\rR\vinsideVrfId\x12\x1e\n" +
-	"\vsw_if_index\x18\t \x01(\rR\tswIfIndex\"\xc2\x01\n" +
+	"\rinside_vrf_id\x18\b \x01(\rR\vinsideVrfId\"\xc2\x01\n" +
 	"\x17SyncCGNATMappingRequest\x12\x19\n" +
 	"\bsrg_name\x18\x01 \x01(\tR\asrgName\x12\x1a\n" +
 	"\bsequence\x18\x02 \x01(\x04R\bsequence\x120\n" +

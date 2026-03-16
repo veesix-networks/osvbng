@@ -13,10 +13,9 @@ import (
 	"time"
 
 	hapb "github.com/veesix-networks/osvbng/api/proto/ha"
+	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/models"
 )
-
-type CGNATSyncCallback func(srgName string, mapping *models.CGNATMapping, isAdd bool)
 
 type CGNATSyncSender struct {
 	peer     *PeerClient
@@ -60,7 +59,17 @@ func (s *CGNATSyncSender) SetActive(srgName string, active bool) {
 	}
 }
 
-func (s *CGNATSyncSender) Send(srgName string, mapping *models.CGNATMapping, isAdd bool) {
+func (s *CGNATSyncSender) HandleEvent(ev events.Event) {
+	data, ok := ev.Data.(*events.CGNATMappingEvent)
+	if !ok {
+		return
+	}
+
+	srgName := data.SRGName
+	if srgName == "" {
+		return
+	}
+
 	s.mu.RLock()
 	flag, hasFlag := s.active[srgName]
 	seqCounter, hasSeq := s.seqNums[srgName]
@@ -71,7 +80,7 @@ func (s *CGNATSyncSender) Send(srgName string, mapping *models.CGNATMapping, isA
 	}
 
 	var action hapb.SyncAction
-	if isAdd {
+	if data.IsAdd {
 		action = hapb.SyncAction_SYNC_ACTION_CREATE
 		s.creates.Add(1)
 	} else {
@@ -85,7 +94,7 @@ func (s *CGNATSyncSender) Send(srgName string, mapping *models.CGNATMapping, isA
 		SrgName:  srgName,
 		Sequence: seq,
 		Action:   action,
-		Mapping:  mappingToCheckpoint(srgName, mapping),
+		Mapping:  mappingToCheckpoint(srgName, data.Mapping),
 	}
 
 	select {
@@ -147,7 +156,6 @@ func mappingToCheckpoint(srgName string, m *models.CGNATMapping) *hapb.CGNATMapp
 		PortBlockStart: uint32(m.PortBlockStart),
 		PortBlockEnd:   uint32(m.PortBlockEnd),
 		InsideVrfId:    m.InsideVRFID,
-		SwIfIndex:      m.SwIfIndex,
 	}
 	if m.InsideIP != nil {
 		cp.InsideIp = m.InsideIP.To4()
@@ -167,6 +175,5 @@ func checkpointToMapping(cp *hapb.CGNATMappingCheckpoint) *models.CGNATMapping {
 		PortBlockStart: uint16(cp.PortBlockStart),
 		PortBlockEnd:   uint16(cp.PortBlockEnd),
 		InsideVRFID:    cp.InsideVrfId,
-		SwIfIndex:      cp.SwIfIndex,
 	}
 }

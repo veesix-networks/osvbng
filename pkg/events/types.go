@@ -45,3 +45,10 @@ type InterfaceStateEvent struct {
 	LinkUp    bool
 	Deleted   bool
 }
+
+type CGNATMappingEvent struct {
+	SRGName   string
+	SessionID string
+	Mapping   *models.CGNATMapping
+	IsAdd     bool
+}

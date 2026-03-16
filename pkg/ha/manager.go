@@ -206,6 +206,7 @@ func (m *Manager) Start(ctx context.Context) error {
 		m.Go(func() { m.syncSender.Run(m.Ctx) })
 
 		m.cgnatSyncSender = NewCGNATSyncSender(m.peer, m.cfg.GetSyncBacklogSize(), srgNames, m.logger)
+		m.eventBus.Subscribe(events.TopicCGNATMapping, m.cgnatSyncSender.HandleEvent)
 		m.Go(func() { m.cgnatSyncSender.Run(m.Ctx) })
 
 		hb := NewHeartbeatLoop(m, m.logger,
@@ -596,13 +597,6 @@ func (m *Manager) resolveInterfaces(srgName string) []uint32 {
 		indices = append(indices, idx)
 	}
 	return indices
-}
-
-func (m *Manager) GetCGNATSyncCallback() CGNATSyncCallback {
-	if m.cgnatSyncSender == nil {
-		return nil
-	}
-	return m.cgnatSyncSender.Send
 }
 
 func (m *Manager) GetSRGDataplane() southbound.SRGDataplane {
