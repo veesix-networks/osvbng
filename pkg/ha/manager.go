@@ -58,10 +58,11 @@ type Manager struct {
 	garpCollector   GARPCollector
 	ifWatchCallback func(uint32)
 
-	syncSender   *SyncSender
-	syncReceiver *SyncReceiver
-	registry     *allocator.Registry
-	opdbStore    opdb.Store
+	syncSender      *SyncSender
+	cgnatSyncSender *CGNATSyncSender
+	syncReceiver    *SyncReceiver
+	registry        *allocator.Registry
+	opdbStore       opdb.Store
 
 	peerSyncSeqs   map[string]uint64
 	bulkSyncCounts map[string]*atomic.Uint64
@@ -203,6 +204,9 @@ func (m *Manager) Start(ctx context.Context) error {
 		m.syncSender = NewSyncSender(m.peer, m.cfg.GetSyncBacklogSize(), srgNames, m.logger)
 		m.eventBus.Subscribe(events.TopicSessionLifecycle, m.syncSender.HandleEvent)
 		m.Go(func() { m.syncSender.Run(m.Ctx) })
+
+		m.cgnatSyncSender = NewCGNATSyncSender(m.peer, m.cfg.GetSyncBacklogSize(), srgNames, m.logger)
+		m.Go(func() { m.cgnatSyncSender.Run(m.Ctx) })
 
 		hb := NewHeartbeatLoop(m, m.logger,
 			m.cfg.GetHeartbeatInterval(),
@@ -516,6 +520,14 @@ func (m *Manager) driveSync(t *StateTransition) {
 		}
 	}
 
+	if m.cgnatSyncSender != nil {
+		if isActive && !wasActive {
+			m.cgnatSyncSender.SetActive(t.SRGName, true)
+		} else if !isActive && wasActive {
+			m.cgnatSyncSender.SetActive(t.SRGName, false)
+		}
+	}
+
 	if m.registry != nil && (t.NewState == SRGStateActive || t.NewState == SRGStateStandby) && t.OldState == SRGStateReady {
 		sm, ok := m.getSRG(t.SRGName)
 		if ok {
@@ -584,6 +596,13 @@ func (m *Manager) resolveInterfaces(srgName string) []uint32 {
 		indices = append(indices, idx)
 	}
 	return indices
+}
+
+func (m *Manager) GetCGNATSyncCallback() CGNATSyncCallback {
+	if m.cgnatSyncSender == nil {
+		return nil
+	}
+	return m.cgnatSyncSender.Send
 }
 
 func (m *Manager) GetSRGDataplane() southbound.SRGDataplane {
