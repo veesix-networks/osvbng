@@ -128,6 +128,28 @@ func addPoolBlackholeRoute(cfg *config.Config, network string) {
 	}
 }
 
+func (cm *ConfigManager) ProcessCGNATPools(sessionID conf.SessionID, cfg *config.Config) error {
+	if cfg.CGNAT == nil || len(cfg.CGNAT.Pools) == 0 {
+		return nil
+	}
+
+	for _, pool := range cfg.CGNAT.Pools {
+		for _, addr := range pool.OutsideAddresses {
+			if _, _, err := net.ParseCIDR(addr); err != nil {
+				continue
+			}
+
+			addPoolBlackholeRoute(cfg, addr)
+
+			if err := cm.addBGPNetwork(sessionID, addr, ""); err != nil {
+				return fmt.Errorf("CGNAT outside address %s: %w", addr, err)
+			}
+		}
+	}
+
+	return nil
+}
+
 func (cm *ConfigManager) enableBGPRedistribute(sessionID conf.SessionID, proto, vrf string) error {
 	var path string
 	var err error

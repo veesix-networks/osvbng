@@ -17,6 +17,7 @@ import (
 
 	"github.com/veesix-networks/osvbng/internal/aaa"
 	"github.com/veesix-networks/osvbng/internal/arp"
+	cgnatcomp "github.com/veesix-networks/osvbng/internal/cgnat"
 	"github.com/veesix-networks/osvbng/internal/dataplane"
 	"github.com/veesix-networks/osvbng/internal/gateway"
 	"github.com/veesix-networks/osvbng/internal/ipoe"
@@ -329,6 +330,15 @@ func main() {
 		log.Fatalf("Failed to create pppoe component: %v", err)
 	}
 
+	var cgnat *cgnatcomp.Component
+	if cfg.CGNAT != nil && len(cfg.CGNAT.Pools) > 0 {
+		cgnat, err = cgnatcomp.NewComponent(coreDeps, ifMgr, vrfMgr)
+		if err != nil {
+			log.Fatalf("Failed to create CGNAT component: %v", err)
+		}
+		mainLog.Info("CGNAT component created", "pools", len(cfg.CGNAT.Pools))
+	}
+
 	if haMgr != nil {
 		haMgr.RegisterSessionIterator(ipoeComp)
 		haMgr.RegisterSessionIterator(pppoeComp)
@@ -436,6 +446,9 @@ func main() {
 	orch.Register(subscriberComp)
 	orch.Register(arpComp)
 	orch.Register(pppoeComp)
+	if cgnat != nil {
+		orch.Register(cgnat)
+	}
 	orch.Register(monitorComp)
 	orch.Register(gatewayComp)
 	if wd != nil {
@@ -482,6 +495,7 @@ func main() {
 		PluginComponents: pluginComponentsMap,
 		DHCPv4Providers:  dhcp4Providers,
 		DHCPv6Providers:  dhcp6Providers,
+		CGNAT:            cgnat,
 	})
 
 	operRegistry.AutoRegisterAll(&deps.OperDeps{
@@ -489,6 +503,7 @@ func main() {
 		EventBus:         eventBus,
 		HAManager:        haMgr,
 		PluginComponents: pluginComponentsMap,
+		CGNAT:            cgnat,
 	})
 
 	if apiComp, ok := pluginComponentsMap["northbound.api"]; ok {

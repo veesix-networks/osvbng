@@ -398,6 +398,35 @@ func (v *VPP) IPoESetSessionIPv6Async(swIfIndex uint32, clientIP net.IP, isAdd b
 }
 
 
+func (v *VPP) IPoEEnableInput(ifaceName string) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	idx, err := v.GetInterfaceIndex(ifaceName)
+	if err != nil {
+		return fmt.Errorf("get interface index: %w", err)
+	}
+
+	req := &osvbng_ipoe.OsvbngIpoeEnableDisable{
+		SwIfIndex: interface_types.InterfaceIndex(idx),
+		Enable:    true,
+	}
+
+	reply := &osvbng_ipoe.OsvbngIpoeEnableDisableReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("enable ipoe input: %w", err)
+	}
+
+	if reply.Retval != 0 {
+		return fmt.Errorf("enable ipoe input failed: retval=%d", reply.Retval)
+	}
+
+	return nil
+}
+
 func (v *VPP) IPoESetDelegatedPrefixAsync(swIfIndex uint32, prefix net.IPNet, nextHop net.IP, isAdd bool, callback func(error)) {
 	prefixLen, _ := prefix.Mask.Size()
 	ip6 := prefix.IP.To16()

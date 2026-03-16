@@ -637,6 +637,19 @@ func (c *Component) publishSessionLifecycle(payload models.SubscriberSession) er
 	return nil
 }
 
+func (c *Component) publishSessionProgrammed(payload models.SubscriberSession) {
+	c.eventBus.Publish(events.TopicSessionProgrammed, events.Event{
+		Source: c.Name(),
+		Data: &events.SessionLifecycleEvent{
+			AccessType: payload.GetAccessType(),
+			Protocol:   payload.GetProtocol(),
+			SessionID:  payload.GetSessionID(),
+			State:      payload.GetState(),
+			Session:    payload,
+		},
+	})
+}
+
 func (c *Component) checkpointSession(sess *SessionState) {
 	if c.opdb == nil {
 		return

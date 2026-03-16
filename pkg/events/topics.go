@@ -5,7 +5,8 @@
 package events
 
 const (
-	TopicSessionLifecycle  = "osvbng:events:session:lifecycle"
+	TopicSessionLifecycle   = "osvbng:events:session:lifecycle"
+	TopicSessionProgrammed  = "osvbng:events:session:programmed"
 	TopicAAARequest        = "osvbng:events:aaa:request"
 	TopicAAAResponse       = "osvbng:events:aaa:response"
 	TopicAAAResponseIPoE   = "osvbng:events:aaa:response:ipoe"

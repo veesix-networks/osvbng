@@ -71,6 +71,11 @@ const (
 
 	DHCPRelay Path = "dhcp.relay"
 	DHCPProxy Path = "dhcp.proxy"
+
+	CGNATSessions   Path = "cgnat.sessions"
+	CGNATPools      Path = "cgnat.pools"
+	CGNATStatistics Path = "cgnat.statistics"
+	CGNATLookup     Path = "cgnat.lookup"
 )
 
 func (p Path) String() string {

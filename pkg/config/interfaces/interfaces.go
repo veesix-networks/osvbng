@@ -14,6 +14,7 @@ type InterfaceConfig struct {
 	LCP     bool        `json:"lcp,omitempty" yaml:"lcp,omitempty"`
 	VRF     string      `json:"vrf,omitempty" yaml:"vrf,omitempty"`
 	BNGMode string      `json:"bng_mode,omitempty" yaml:"bng_mode,omitempty"`
+	CGNAT   string      `json:"cgnat,omitempty" yaml:"cgnat,omitempty"`
 
 	Subinterfaces map[string]*SubinterfaceConfig `json:"subinterfaces,omitempty" yaml:"subinterfaces,omitempty"`
 	IPv6          *IPv6Config                    `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`

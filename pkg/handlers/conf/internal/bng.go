@@ -54,6 +54,9 @@ func (h *BNGHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error
 
 	switch cfg.Mode {
 	case interfaces.BNGModeIPoE:
+		if err := h.southbound.IPoEEnableInput(subIfName); err != nil {
+			return fmt.Errorf("enable ipoe input: %w", err)
+		}
 		if err := h.southbound.EnableDHCPv4Punt(subIfName); err != nil {
 			return fmt.Errorf("enable dhcpv4 punt: %w", err)
 		}

@@ -6,6 +6,7 @@ package deps
 
 import (
 	aaacomp "github.com/veesix-networks/osvbng/internal/aaa"
+	cgnatcomp "github.com/veesix-networks/osvbng/internal/cgnat"
 	routingcomp "github.com/veesix-networks/osvbng/internal/routing"
 	"github.com/veesix-networks/osvbng/internal/subscriber"
 	"github.com/veesix-networks/osvbng/internal/watchdog"
@@ -38,6 +39,7 @@ type ShowDeps struct {
 	PluginComponents map[string]component.Component
 	DHCPv4Providers  map[string]dhcp4.DHCPProvider
 	DHCPv6Providers  map[string]dhcp6.DHCPProvider
+	CGNAT            *cgnatcomp.Component
 }
 
 type OperDeps struct {
@@ -45,6 +47,7 @@ type OperDeps struct {
 	EventBus         events.Bus
 	HAManager        *ha.Manager
 	PluginComponents map[string]component.Component
+	CGNAT            *cgnatcomp.Component
 }
 
 type ConfDeps struct {

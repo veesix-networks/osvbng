@@ -1,16 +1,22 @@
 package servicegroup
 
 type Config struct {
-	VRF         string     `json:"vrf,omitempty" yaml:"vrf,omitempty"`
-	Unnumbered  string     `json:"unnumbered,omitempty" yaml:"unnumbered,omitempty"`
-	URPF        string     `json:"urpf,omitempty" yaml:"urpf,omitempty"`
-	ACL         *ACLConfig `json:"acl,omitempty" yaml:"acl,omitempty"`
-	QoS         *QoSConfig `json:"qos,omitempty" yaml:"qos,omitempty"`
-	Pool        string     `json:"pool,omitempty" yaml:"pool,omitempty"`
-	IANAPool    string     `json:"iana-pool,omitempty" yaml:"iana-pool,omitempty"`
-	PDPool      string     `json:"pd-pool,omitempty" yaml:"pd-pool,omitempty"`
-	IPv4Profile string     `json:"ipv4-profile,omitempty" yaml:"ipv4-profile,omitempty"`
-	IPv6Profile string     `json:"ipv6-profile,omitempty" yaml:"ipv6-profile,omitempty"`
+	VRF         string           `json:"vrf,omitempty" yaml:"vrf,omitempty"`
+	Unnumbered  string           `json:"unnumbered,omitempty" yaml:"unnumbered,omitempty"`
+	URPF        string           `json:"urpf,omitempty" yaml:"urpf,omitempty"`
+	ACL         *ACLConfig       `json:"acl,omitempty" yaml:"acl,omitempty"`
+	QoS         *QoSConfig       `json:"qos,omitempty" yaml:"qos,omitempty"`
+	Pool        string           `json:"pool,omitempty" yaml:"pool,omitempty"`
+	IANAPool    string           `json:"iana-pool,omitempty" yaml:"iana-pool,omitempty"`
+	PDPool      string           `json:"pd-pool,omitempty" yaml:"pd-pool,omitempty"`
+	IPv4Profile string           `json:"ipv4-profile,omitempty" yaml:"ipv4-profile,omitempty"`
+	IPv6Profile string           `json:"ipv6-profile,omitempty" yaml:"ipv6-profile,omitempty"`
+	CGNAT       *CGNATConfig     `json:"cgnat,omitempty" yaml:"cgnat,omitempty"`
+}
+
+type CGNATConfig struct {
+	Policy string `json:"policy,omitempty" yaml:"policy,omitempty"`
+	Bypass bool   `json:"bypass,omitempty" yaml:"bypass,omitempty"`
 }
 
 type ACLConfig struct {

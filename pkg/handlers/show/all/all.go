@@ -5,6 +5,7 @@
 package all
 
 import (
+	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/cgnat"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/dhcp"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/ha"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/ip"

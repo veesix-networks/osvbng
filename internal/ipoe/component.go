@@ -1142,6 +1142,7 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 					return
 				}
 				c.logger.WithGroup(logger.IPoEDHCP4).Info("Bound IPv4 to IPoE session", "session_id", sessID, "sw_if_index", ipoeSwIfIndex, "ipv4", ipv4.String())
+				c.publishSessionProgrammed(sess, ipoeSwIfIndex)
 			})
 		} else {
 			c.sessionMu.Lock()
@@ -1350,8 +1351,11 @@ func (c *Component) handleAAAResponse(event events.Event) {
 				sess.PendingIPv4Binding = nil
 				sess.PendingIPv6Binding = nil
 				sess.PendingPDBinding = nil
+				unnumberedLoopback := c.resolveUnnumberedLoopback(sess)
 				c.sessionMu.Unlock()
 				c.logger.Info("Created IPoE session in VPP", "session_id", sessID, "sw_if_index", swIfIndex)
+
+				c.setupSessionUnnumbered(sessID, swIfIndex, unnumberedLoopback)
 
 				if pendingIPv4 != nil {
 					c.vpp.IPoESetSessionIPv4Async(swIfIndex, pendingIPv4, true, func(err error) {
@@ -1364,6 +1368,7 @@ func (c *Component) handleAAAResponse(event events.Event) {
 							return
 						}
 						c.logger.Info("Bound pending IPv4 to IPoE session", "session_id", sessID, "ipv4", pendingIPv4.String())
+						c.publishSessionProgrammed(sess, swIfIndex)
 					})
 				}
 				if pendingIPv6 != nil {
@@ -2838,6 +2843,72 @@ func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbo
 	return nil
 }
 
+func (c *Component) resolveUnnumberedLoopback(sess *SessionState) string {
+	if sess.ServiceGroup.Unnumbered != "" {
+		return sess.ServiceGroup.Unnumbered
+	}
+
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg.SubscriberGroups == nil {
+		return ""
+	}
+
+	if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(sess.OuterVLAN); group != nil {
+		return group.FindGatewayForSVLAN(sess.OuterVLAN)
+	}
+
+	return ""
+}
+
+func (c *Component) setupSessionUnnumbered(sessID string, swIfIndex uint32, loopback string) {
+	if loopback == "" {
+		return
+	}
+
+	ifName := fmt.Sprintf("ipoe_session%d", swIfIndex)
+	iface := c.ifMgr.Get(swIfIndex)
+	if iface != nil {
+		ifName = iface.Name
+	}
+
+	if err := c.vpp.SetUnnumbered(ifName, loopback); err != nil {
+		c.logger.Error("Failed to set unnumbered on IPoE session", "session_id", sessID, "interface", ifName, "loopback", loopback, "error", err)
+	}
+}
+
+func (c *Component) publishSessionProgrammed(sess *SessionState, swIfIndex uint32) {
+	c.sessionMu.RLock()
+	ipoeSess := &models.IPoESession{
+		SessionID:    sess.SessionID,
+		State:        models.SessionStateActive,
+		AccessType:   string(models.AccessTypeIPoE),
+		Protocol:     string(models.ProtocolDHCPv4),
+		MAC:          sess.MAC,
+		OuterVLAN:    sess.OuterVLAN,
+		InnerVLAN:    sess.InnerVLAN,
+		VLANCount:    c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
+		IfIndex:      swIfIndex,
+		VRF:          sess.VRF,
+		ServiceGroup: sess.ServiceGroup.Name,
+		SRGName:      sess.SRGName,
+		IPv4Address:  sess.IPv4,
+		Username:     sess.Username,
+		AAASessionID: sess.AcctSessionID,
+	}
+	c.sessionMu.RUnlock()
+
+	c.eventBus.Publish(events.TopicSessionProgrammed, events.Event{
+		Source: c.Name(),
+		Data: &events.SessionLifecycleEvent{
+			AccessType: ipoeSess.GetAccessType(),
+			Protocol:   ipoeSess.GetProtocol(),
+			SessionID:  ipoeSess.GetSessionID(),
+			State:      ipoeSess.GetState(),
+			Session:    ipoeSess,
+		},
+	})
+}
+
 func (c *Component) publishSessionLifecycle(payload models.SubscriberSession) error {
 	c.eventBus.Publish(events.TopicSessionLifecycle, events.Event{
 		Source: c.Name(),
@@ -2932,6 +3003,7 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 					c.logger.Info("Recreated IPoE session in VPP", "session_id", sess.SessionID, "sw_if_index", swIfIndex)
 					sess.IPoESwIfIndex = swIfIndex
 					sess.IPoESessionCreated = true
+					c.setupSessionUnnumbered(sess.SessionID, swIfIndex, c.resolveUnnumberedLoopback(&sess))
 				}
 			} else {
 				sess.IPoESwIfIndex = 0

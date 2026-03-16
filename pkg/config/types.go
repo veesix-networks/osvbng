@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/veesix-networks/osvbng/pkg/config/aaa"
+	"github.com/veesix-networks/osvbng/pkg/config/cgnat"
 	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
 	"github.com/veesix-networks/osvbng/pkg/config/ip"
 	"github.com/veesix-networks/osvbng/pkg/config/protocols"
@@ -34,6 +35,7 @@ type Config struct {
 	ServiceGroups    map[string]*servicegroup.Config           `json:"service-groups,omitempty" yaml:"service-groups,omitempty"`
 	VRFS             map[string]*ip.VRFSConfig               `json:"vrfs,omitempty" yaml:"vrfs,omitempty"`
 	Watchdog         system.WatchdogConfig                  `json:"watchdog,omitempty" yaml:"watchdog,omitempty"`
+	CGNAT            *cgnat.Config                          `json:"cgnat,omitempty" yaml:"cgnat,omitempty"`
 	HA               HAConfig                               `json:"ha,omitempty" yaml:"ha,omitempty"`
 	System           *SystemConfig                          `json:"system,omitempty" yaml:"system,omitempty"`
 	Plugins          map[string]interface{}                 `json:"plugins,omitempty" yaml:"plugins,omitempty"`
