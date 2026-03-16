@@ -7,6 +7,7 @@ package ha
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"sync"
@@ -529,6 +530,12 @@ func (m *Manager) driveSync(t *StateTransition) {
 		}
 	}
 
+	isStandby := t.NewState == SRGStateStandby
+	wasStandby := t.OldState == SRGStateStandby
+	if isStandby && !wasStandby && m.peer != nil && m.syncReceiver != nil {
+		go m.requestCGNATBulkSync(t.SRGName)
+	}
+
 	if m.registry != nil && (t.NewState == SRGStateActive || t.NewState == SRGStateStandby) && t.OldState == SRGStateReady {
 		sm, ok := m.getSRG(t.SRGName)
 		if ok {
@@ -539,6 +546,45 @@ func (m *Manager) driveSync(t *StateTransition) {
 			m.registry.SetAllocDirection(ascending)
 			m.logger.Info("Allocator direction set", "srg", t.SRGName, "ascending", ascending)
 		}
+	}
+}
+
+func (m *Manager) requestCGNATBulkSync(srgName string) {
+	ctx, cancel := context.WithTimeout(m.Ctx, 30*time.Second)
+	defer cancel()
+
+	stream, err := m.peer.BulkSyncCGNAT(ctx, &hapb.BulkSyncCGNATRequest{
+		SrgNames: []string{srgName},
+	})
+	if err != nil {
+		m.logger.Warn("CGNAT bulk sync request failed", "srg", srgName, "error", err)
+		return
+	}
+
+	var total int
+	for {
+		resp, err := stream.Recv()
+		if err != nil {
+			if err != io.EOF {
+				m.logger.Warn("CGNAT bulk sync stream error", "srg", srgName, "error", err)
+			}
+			break
+		}
+
+		if err := m.syncReceiver.HandleBulkSyncCGNATPage(ctx, resp); err != nil {
+			m.logger.Error("CGNAT bulk sync page failed", "srg", srgName, "error", err)
+			break
+		}
+
+		total += len(resp.Mappings)
+
+		if resp.LastPage {
+			break
+		}
+	}
+
+	if total > 0 {
+		m.logger.Info("CGNAT bulk sync completed", "srg", srgName, "mappings", total)
 	}
 }
 
