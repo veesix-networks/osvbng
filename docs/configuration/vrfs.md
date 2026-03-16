@@ -1,4 +1,4 @@
-# VRFs
+# VRFs <span class="version-badge">v0.2.0</span>
 
 VRFs provide isolated routing tables for traffic separation, for example placing subscriber traffic in a CGNAT VRF while keeping other subscriber traffic in the default VRF (or individual business VRFs).
 

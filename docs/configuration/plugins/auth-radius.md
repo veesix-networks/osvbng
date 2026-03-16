@@ -1,4 +1,4 @@
-# subscriber.auth.radius
+# subscriber.auth.radius <span class="version-badge">v0.5.0</span>
 
 Authentication and accounting client for RADIUS servers. Sends Access-Request packets, translates Access-Accept AVPs into internal subscriber attributes, and handles accounting (Start/Interim-Update/Stop).
 

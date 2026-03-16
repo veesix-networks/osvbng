@@ -1,4 +1,4 @@
-# Subscriber Provisioning
+# Subscriber Provisioning <span class="version-badge">v0.2.0</span>
 
 osvbng uses a provisioning-first architecture: AAA is the source of truth for every subscriber session. DHCP and IPCP are protocol adapters that deliver addresses determined by the provisioning pipeline.
 

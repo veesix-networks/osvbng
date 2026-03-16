@@ -1,4 +1,4 @@
-# Protocols
+# Protocols <span class="version-badge">v0.2.0</span>
 
 Routing protocol configuration.
 

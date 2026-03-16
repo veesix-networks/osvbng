@@ -8,12 +8,13 @@
 
 .version-badge {
   float: right;
-  font-size: 0.7em;
-  font-weight: 600;
-  padding: 0.2em 0.6em;
-  border-radius: 4px;
-  background-color: var(--md-primary-fg-color);
-  color: #fff;
+  font-size: 0.65em;
+  font-weight: 500;
+  padding: 0.15em 0.5em;
+  border-radius: 3px;
+  border: 1px solid var(--md-primary-fg-color);
+  color: var(--md-primary-fg-color);
+  opacity: 0.8;
 }
 
 /* ── Vertical Packet Diagram ──────────────────────────────────── */

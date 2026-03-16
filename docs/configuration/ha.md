@@ -1,4 +1,4 @@
-# High Availability
+# High Availability <span class="version-badge">v0.4.0</span>
 
 Active/standby HA configuration using Subscriber Redundancy Groups. See [architecture](../architecture/HA.md) for design details and failover behavior.
 
