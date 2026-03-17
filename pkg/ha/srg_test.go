@@ -237,6 +237,45 @@ func TestStandbyAlone_PeerLostAgain_NoOp(t *testing.T) {
 	}
 }
 
+func TestTrackerPromote_StandbyAlone_ToActiveSolo(t *testing.T) {
+	sm := newTestSM("srg1", 50, false, "node-a")
+	sm.Start()
+	sm.PeerDiscovered(200, "node-b", SRGStateWaiting)
+	sm.Elect("node-b")
+	sm.PeerLost()
+
+	if sm.State() != SRGStateStandbyAlone {
+		t.Fatalf("expected STANDBY_ALONE, got %s", sm.State())
+	}
+
+	tr := sm.TrackerPromote()
+	if tr == nil {
+		t.Fatal("expected transition")
+	}
+	if tr.NewState != SRGStateActiveSolo {
+		t.Fatalf("expected ACTIVE_SOLO, got %s", tr.NewState)
+	}
+	if !sm.IsActive() {
+		t.Fatal("expected IsActive after tracker promote")
+	}
+}
+
+func TestTrackerPromote_NotStandbyAlone_NoOp(t *testing.T) {
+	sm := newTestSM("srg1", 200, false, "node-a")
+	sm.Start()
+	sm.PeerDiscovered(50, "node-b", SRGStateWaiting)
+	sm.Elect("node-b")
+
+	if sm.State() != SRGStateActive {
+		t.Fatalf("expected ACTIVE, got %s", sm.State())
+	}
+
+	tr := sm.TrackerPromote()
+	if tr != nil {
+		t.Fatal("expected no transition from ACTIVE")
+	}
+}
+
 func TestSRGStateMachine_PeerLostWaitingToActiveSolo(t *testing.T) {
 	sm := newTestSM("srg1", 100, false, "node-a")
 	sm.Start()
