@@ -56,6 +56,54 @@ jobs:
           path: test-results/
           retention-days: 14
 
+  cgnat-ha-ipoe-pba:
+    name: CGNAT HA IPoE PBA
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: osvbng-image
+          path: /tmp
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-runner-image
+          path: /tmp
+
+      - name: Install QEMU and tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils sshpass
+          sudo chmod 666 /dev/kvm || true
+
+      - name: Run CGNAT HA IPoE PBA tests
+        run: |
+          scripts/qemu/test-runner/scripts/vm-run-tests.sh \
+            /tmp/test-runner.qcow2 \
+            /tmp/osvbng-local.tar \
+            12-cgnat-ha-ipoe-pba \
+            ./test-results
+
+      - name: Test report
+        if: ${{ !cancelled() }}
+        uses: joonvena/robotframework-reporter-action@v2.5
+        with:
+          gh_access_token: ${{ secrets.GITHUB_TOKEN }}
+          report_path: test-results/out
+          only_summary: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cgnat-ha-ipoe-pba-test-results
+          path: test-results/
+          retention-days: 14
+
   cgnat-pppoe-pba:
     name: CGNAT PPPoE PBA
     runs-on: ubuntu-latest
@@ -101,6 +149,54 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cgnat-pppoe-pba-test-results
+          path: test-results/
+          retention-days: 14
+
+  cgnat-ha-pppoe-pba:
+    name: CGNAT HA PPPoE PBA
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: osvbng-image
+          path: /tmp
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-runner-image
+          path: /tmp
+
+      - name: Install QEMU and tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils sshpass
+          sudo chmod 666 /dev/kvm || true
+
+      - name: Run CGNAT HA PPPoE PBA tests
+        run: |
+          scripts/qemu/test-runner/scripts/vm-run-tests.sh \
+            /tmp/test-runner.qcow2 \
+            /tmp/osvbng-local.tar \
+            13-cgnat-ha-pppoe-pba \
+            ./test-results
+
+      - name: Test report
+        if: ${{ !cancelled() }}
+        uses: joonvena/robotframework-reporter-action@v2.5
+        with:
+          gh_access_token: ${{ secrets.GITHUB_TOKEN }}
+          report_path: test-results/out
+          only_summary: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cgnat-ha-pppoe-pba-test-results
           path: test-results/
           retention-days: 14
 
