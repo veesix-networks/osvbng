@@ -174,6 +174,7 @@ type PPPSession struct {
 	IPv4Pool  string
 	IANAPool  string
 	OuterTPID uint16
+	LCPMagic  uint32
 }
 
 func (s *PPPSession) GetSessionID() string      { return s.SessionID }

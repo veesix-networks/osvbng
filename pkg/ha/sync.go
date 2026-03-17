@@ -233,6 +233,7 @@ func sessionToCheckpoint(sess models.SubscriberSession) *hapb.SessionCheckpoint 
 		cp.Ipv4Pool = s.IPv4Pool
 		cp.IanaPool = s.IANAPool
 		cp.OuterTpid = uint32(s.OuterTPID)
+		cp.LcpMagic = s.LCPMagic
 		if !s.ActivatedAt.IsZero() {
 			cp.BoundAtNs = s.ActivatedAt.UnixNano()
 		}

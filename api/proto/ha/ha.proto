@@ -106,6 +106,7 @@ message SessionCheckpoint {
   string pd_pool = 34;
 
   uint32 outer_tpid = 35;
+  uint32 lcp_magic = 36;
 }
 
 message SyncSessionRequest {

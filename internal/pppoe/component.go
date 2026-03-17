@@ -990,6 +990,7 @@ func (c *Component) restoreFromHASync(srgName string) {
 			SRGName:        srgName,
 			BoundAt:        boundAt,
 			LastSeen:       now,
+			LCPMagic:       cp.LcpMagic,
 			component:      c,
 		}
 
@@ -1002,6 +1003,9 @@ func (c *Component) restoreFromHASync(srgName string) {
 		}
 
 		sess.initPPP()
+		if sess.LCPMagic != 0 {
+			sess.lcp.SetMagic(sess.LCPMagic)
+		}
 
 		lookupKey := c.sessionKey(mac, outerVLAN, innerVLAN)
 
@@ -1090,6 +1094,7 @@ func (c *Component) ForEachSession(fn func(models.SubscriberSession) bool) {
 			IPv4Pool:     sess.allocatedPool,
 			IANAPool:     sess.allocatedIANAPool,
 			OuterTPID:    sess.OuterTPID,
+			LCPMagic:     sess.LCPMagic,
 		}
 		if sess.IPv6Prefix != nil {
 			snapshot.IPv6Prefix = sess.IPv6Prefix.String()
