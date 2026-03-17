@@ -21,10 +21,11 @@ jobs:
         if: ${{ steps.release.outputs.pr }}
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          PR_NUM: ${{ steps.release.outputs.pr }}
+          REPO: ${{ github.repository }}
         run: |
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
-          PR_NUM="${{ steps.release.outputs.pr }}"
-          PR_URL="https://github.com/${{ github.repository }}/pull/${PR_NUM}"
+          PR_URL="https://github.com/${REPO}/pull/${PR_NUM}"
 
           PAYLOAD=$(jq -n \
             --arg content "**${COMMIT_MSG}**" \
