@@ -206,6 +206,7 @@ func sessionToCheckpoint(sess models.SubscriberSession) *hapb.SessionCheckpoint 
 		cp.IanaPool = s.IANAPool
 		cp.PdPool = s.PDPool
 		cp.OuterTpid = uint32(s.OuterTPID)
+		cp.AaaAttributes = s.Attributes
 		if !s.ActivatedAt.IsZero() {
 			cp.BoundAtNs = s.ActivatedAt.UnixNano()
 		}
@@ -234,6 +235,7 @@ func sessionToCheckpoint(sess models.SubscriberSession) *hapb.SessionCheckpoint 
 		cp.IanaPool = s.IANAPool
 		cp.OuterTpid = uint32(s.OuterTPID)
 		cp.LcpMagic = s.LCPMagic
+		cp.AaaAttributes = s.Attributes
 		if !s.ActivatedAt.IsZero() {
 			cp.BoundAtNs = s.ActivatedAt.UnixNano()
 		}

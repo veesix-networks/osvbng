@@ -107,6 +107,7 @@ message SessionCheckpoint {
 
   uint32 outer_tpid = 35;
   uint32 lcp_magic = 36;
+  map<string, string> aaa_attributes = 37;
 }
 
 message SyncSessionRequest {

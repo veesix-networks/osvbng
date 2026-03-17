@@ -999,7 +999,15 @@ func (c *Component) restoreFromHASync(srgName string) {
 		}
 
 		if cp.ServiceGroup != "" {
-			sess.ServiceGroup = c.svcGroupResolver.Resolve(cp.ServiceGroup, cp.ServiceGroup, nil)
+			var aaaAttrs map[string]interface{}
+			if len(cp.AaaAttributes) > 0 {
+				aaaAttrs = make(map[string]interface{}, len(cp.AaaAttributes))
+				for k, v := range cp.AaaAttributes {
+					aaaAttrs[k] = v
+				}
+				sess.Attributes = cp.AaaAttributes
+			}
+			sess.ServiceGroup = c.svcGroupResolver.Resolve(cp.ServiceGroup, cp.ServiceGroup, aaaAttrs)
 		}
 
 		sess.initPPP()
@@ -1095,6 +1103,7 @@ func (c *Component) ForEachSession(fn func(models.SubscriberSession) bool) {
 			IANAPool:     sess.allocatedIANAPool,
 			OuterTPID:    sess.OuterTPID,
 			LCPMagic:     sess.LCPMagic,
+			Attributes:   sess.Attributes,
 		}
 		if sess.IPv6Prefix != nil {
 			snapshot.IPv6Prefix = sess.IPv6Prefix.String()

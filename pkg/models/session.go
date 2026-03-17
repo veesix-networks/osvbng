@@ -62,10 +62,11 @@ type IPoESession struct {
 
 	ActivatedAt time.Time
 
-	IPv4Pool  string
-	IANAPool  string
-	PDPool    string
-	OuterTPID uint16
+	IPv4Pool   string
+	IANAPool   string
+	PDPool     string
+	OuterTPID  uint16
+	Attributes map[string]string
 }
 
 func (s *IPoESession) GetSessionID() string      { return s.SessionID }
@@ -171,10 +172,11 @@ type PPPSession struct {
 
 	ActivatedAt time.Time
 
-	IPv4Pool  string
-	IANAPool  string
-	OuterTPID uint16
-	LCPMagic  uint32
+	IPv4Pool   string
+	IANAPool   string
+	OuterTPID  uint16
+	LCPMagic   uint32
+	Attributes map[string]string
 }
 
 func (s *PPPSession) GetSessionID() string      { return s.SessionID }

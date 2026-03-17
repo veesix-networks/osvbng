@@ -483,6 +483,7 @@ type SessionCheckpoint struct {
 	PdPool          string                 `protobuf:"bytes,34,opt,name=pd_pool,json=pdPool,proto3" json:"pd_pool,omitempty"`
 	OuterTpid       uint32                 `protobuf:"varint,35,opt,name=outer_tpid,json=outerTpid,proto3" json:"outer_tpid,omitempty"`
 	LcpMagic        uint32                 `protobuf:"varint,36,opt,name=lcp_magic,json=lcpMagic,proto3" json:"lcp_magic,omitempty"`
+	AaaAttributes   map[string]string      `protobuf:"bytes,37,rep,name=aaa_attributes,json=aaaAttributes,proto3" json:"aaa_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -767,6 +768,13 @@ func (x *SessionCheckpoint) GetLcpMagic() uint32 {
 		return x.LcpMagic
 	}
 	return 0
+}
+
+func (x *SessionCheckpoint) GetAaaAttributes() map[string]string {
+	if x != nil {
+		return x.AaaAttributes
+	}
+	return nil
 }
 
 type SyncSessionRequest struct {
@@ -1372,7 +1380,8 @@ const file_api_proto_ha_ha_proto_rawDesc = "" +
 	"\bgraceful\x18\x02 \x01(\bR\bgraceful\"H\n" +
 	"\x12SwitchoverResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\xa1\t\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\xbe\n" +
+	"\n" +
 	"\x11SessionCheckpoint\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x19\n" +
@@ -1419,7 +1428,11 @@ const file_api_proto_ha_ha_proto_rawDesc = "" +
 	"\apd_pool\x18\" \x01(\tR\x06pdPool\x12\x1d\n" +
 	"\n" +
 	"outer_tpid\x18# \x01(\rR\touterTpid\x12\x1b\n" +
-	"\tlcp_magic\x18$ \x01(\rR\blcpMagic\"\xb8\x01\n" +
+	"\tlcp_magic\x18$ \x01(\rR\blcpMagic\x12Y\n" +
+	"\x0eaaa_attributes\x18% \x03(\v22.osvbng.ha.v1.SessionCheckpoint.AaaAttributesEntryR\raaaAttributes\x1a@\n" +
+	"\x12AaaAttributesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb8\x01\n" +
 	"\x12SyncSessionRequest\x12\x19\n" +
 	"\bsrg_name\x18\x01 \x01(\tR\asrgName\x12\x1a\n" +
 	"\bsequence\x18\x02 \x01(\x04R\bsequence\x120\n" +
@@ -1490,7 +1503,7 @@ func file_api_proto_ha_ha_proto_rawDescGZIP() []byte {
 }
 
 var file_api_proto_ha_ha_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_api_proto_ha_ha_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_api_proto_ha_ha_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_api_proto_ha_ha_proto_goTypes = []any{
 	(SyncAction)(0),                  // 0: osvbng.ha.v1.SyncAction
 	(*HeartbeatMessage)(nil),         // 1: osvbng.ha.v1.HeartbeatMessage
@@ -1509,34 +1522,36 @@ var file_api_proto_ha_ha_proto_goTypes = []any{
 	(*SyncCGNATMappingResponse)(nil), // 14: osvbng.ha.v1.SyncCGNATMappingResponse
 	(*BulkSyncCGNATRequest)(nil),     // 15: osvbng.ha.v1.BulkSyncCGNATRequest
 	(*BulkSyncCGNATResponse)(nil),    // 16: osvbng.ha.v1.BulkSyncCGNATResponse
+	nil,                              // 17: osvbng.ha.v1.SessionCheckpoint.AaaAttributesEntry
 }
 var file_api_proto_ha_ha_proto_depIdxs = []int32{
 	2,  // 0: osvbng.ha.v1.HeartbeatMessage.srg_statuses:type_name -> osvbng.ha.v1.SRGStatus
-	0,  // 1: osvbng.ha.v1.SyncSessionRequest.action:type_name -> osvbng.ha.v1.SyncAction
-	7,  // 2: osvbng.ha.v1.SyncSessionRequest.session:type_name -> osvbng.ha.v1.SessionCheckpoint
-	7,  // 3: osvbng.ha.v1.BulkSyncResponse.sessions:type_name -> osvbng.ha.v1.SessionCheckpoint
-	0,  // 4: osvbng.ha.v1.SyncCGNATMappingRequest.action:type_name -> osvbng.ha.v1.SyncAction
-	12, // 5: osvbng.ha.v1.SyncCGNATMappingRequest.mapping:type_name -> osvbng.ha.v1.CGNATMappingCheckpoint
-	12, // 6: osvbng.ha.v1.BulkSyncCGNATResponse.mappings:type_name -> osvbng.ha.v1.CGNATMappingCheckpoint
-	1,  // 7: osvbng.ha.v1.HAPeerService.Heartbeat:input_type -> osvbng.ha.v1.HeartbeatMessage
-	3,  // 8: osvbng.ha.v1.HAPeerService.NotifySRGState:input_type -> osvbng.ha.v1.SRGStateNotification
-	5,  // 9: osvbng.ha.v1.HAPeerService.RequestSwitchover:input_type -> osvbng.ha.v1.SwitchoverRequest
-	8,  // 10: osvbng.ha.v1.HAPeerService.SyncSession:input_type -> osvbng.ha.v1.SyncSessionRequest
-	10, // 11: osvbng.ha.v1.HAPeerService.BulkSync:input_type -> osvbng.ha.v1.BulkSyncRequest
-	13, // 12: osvbng.ha.v1.HAPeerService.SyncCGNATMapping:input_type -> osvbng.ha.v1.SyncCGNATMappingRequest
-	15, // 13: osvbng.ha.v1.HAPeerService.BulkSyncCGNAT:input_type -> osvbng.ha.v1.BulkSyncCGNATRequest
-	1,  // 14: osvbng.ha.v1.HAPeerService.Heartbeat:output_type -> osvbng.ha.v1.HeartbeatMessage
-	4,  // 15: osvbng.ha.v1.HAPeerService.NotifySRGState:output_type -> osvbng.ha.v1.SRGStateAck
-	6,  // 16: osvbng.ha.v1.HAPeerService.RequestSwitchover:output_type -> osvbng.ha.v1.SwitchoverResponse
-	9,  // 17: osvbng.ha.v1.HAPeerService.SyncSession:output_type -> osvbng.ha.v1.SyncSessionResponse
-	11, // 18: osvbng.ha.v1.HAPeerService.BulkSync:output_type -> osvbng.ha.v1.BulkSyncResponse
-	14, // 19: osvbng.ha.v1.HAPeerService.SyncCGNATMapping:output_type -> osvbng.ha.v1.SyncCGNATMappingResponse
-	16, // 20: osvbng.ha.v1.HAPeerService.BulkSyncCGNAT:output_type -> osvbng.ha.v1.BulkSyncCGNATResponse
-	14, // [14:21] is the sub-list for method output_type
-	7,  // [7:14] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	17, // 1: osvbng.ha.v1.SessionCheckpoint.aaa_attributes:type_name -> osvbng.ha.v1.SessionCheckpoint.AaaAttributesEntry
+	0,  // 2: osvbng.ha.v1.SyncSessionRequest.action:type_name -> osvbng.ha.v1.SyncAction
+	7,  // 3: osvbng.ha.v1.SyncSessionRequest.session:type_name -> osvbng.ha.v1.SessionCheckpoint
+	7,  // 4: osvbng.ha.v1.BulkSyncResponse.sessions:type_name -> osvbng.ha.v1.SessionCheckpoint
+	0,  // 5: osvbng.ha.v1.SyncCGNATMappingRequest.action:type_name -> osvbng.ha.v1.SyncAction
+	12, // 6: osvbng.ha.v1.SyncCGNATMappingRequest.mapping:type_name -> osvbng.ha.v1.CGNATMappingCheckpoint
+	12, // 7: osvbng.ha.v1.BulkSyncCGNATResponse.mappings:type_name -> osvbng.ha.v1.CGNATMappingCheckpoint
+	1,  // 8: osvbng.ha.v1.HAPeerService.Heartbeat:input_type -> osvbng.ha.v1.HeartbeatMessage
+	3,  // 9: osvbng.ha.v1.HAPeerService.NotifySRGState:input_type -> osvbng.ha.v1.SRGStateNotification
+	5,  // 10: osvbng.ha.v1.HAPeerService.RequestSwitchover:input_type -> osvbng.ha.v1.SwitchoverRequest
+	8,  // 11: osvbng.ha.v1.HAPeerService.SyncSession:input_type -> osvbng.ha.v1.SyncSessionRequest
+	10, // 12: osvbng.ha.v1.HAPeerService.BulkSync:input_type -> osvbng.ha.v1.BulkSyncRequest
+	13, // 13: osvbng.ha.v1.HAPeerService.SyncCGNATMapping:input_type -> osvbng.ha.v1.SyncCGNATMappingRequest
+	15, // 14: osvbng.ha.v1.HAPeerService.BulkSyncCGNAT:input_type -> osvbng.ha.v1.BulkSyncCGNATRequest
+	1,  // 15: osvbng.ha.v1.HAPeerService.Heartbeat:output_type -> osvbng.ha.v1.HeartbeatMessage
+	4,  // 16: osvbng.ha.v1.HAPeerService.NotifySRGState:output_type -> osvbng.ha.v1.SRGStateAck
+	6,  // 17: osvbng.ha.v1.HAPeerService.RequestSwitchover:output_type -> osvbng.ha.v1.SwitchoverResponse
+	9,  // 18: osvbng.ha.v1.HAPeerService.SyncSession:output_type -> osvbng.ha.v1.SyncSessionResponse
+	11, // 19: osvbng.ha.v1.HAPeerService.BulkSync:output_type -> osvbng.ha.v1.BulkSyncResponse
+	14, // 20: osvbng.ha.v1.HAPeerService.SyncCGNATMapping:output_type -> osvbng.ha.v1.SyncCGNATMappingResponse
+	16, // 21: osvbng.ha.v1.HAPeerService.BulkSyncCGNAT:output_type -> osvbng.ha.v1.BulkSyncCGNATResponse
+	15, // [15:22] is the sub-list for method output_type
+	8,  // [8:15] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_api_proto_ha_ha_proto_init() }
@@ -1550,7 +1565,7 @@ func file_api_proto_ha_ha_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_ha_ha_proto_rawDesc), len(file_api_proto_ha_ha_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   16,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
