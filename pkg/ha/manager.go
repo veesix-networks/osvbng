@@ -809,6 +809,15 @@ func (m *Manager) handleInterfaceEvent(ev events.Event) {
 			"sw_if_index", ifEv.SwIfIndex,
 			"down_count", downCount,
 			"effective_priority", sm.Priority())
+
+		if sm.State() == SRGStateStandbyAlone {
+			m.logger.Warn("Tracked interface down while STANDBY_ALONE, promoting to ACTIVE_SOLO",
+				"srg", srgName,
+				"interface", ifEv.Name)
+			if t := sm.TrackerPromote(); t != nil {
+				m.publishTransition(t)
+			}
+		}
 	} else {
 		m.logger.Info("Interface up, SRG priority restored",
 			"srg", srgName,

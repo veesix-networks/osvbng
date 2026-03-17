@@ -222,6 +222,16 @@ func (sm *SRGStateMachine) Switchover(force bool) *StateTransition {
 	}
 }
 
+func (sm *SRGStateMachine) TrackerPromote() *StateTransition {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	if sm.state == SRGStateStandbyAlone {
+		return sm.transitionTo(SRGStateActiveSolo)
+	}
+	return nil
+}
+
 func (sm *SRGStateMachine) AdjustPriority(delta int32) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
