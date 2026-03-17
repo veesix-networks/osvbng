@@ -41,8 +41,9 @@ type Component struct {
 	bypass    *BypassManager
 	blacklist *BlacklistManager
 
-	poolIDMap  map[string]uint32
-	nextPoolID uint32
+	poolIDMap      map[string]uint32
+	sessionPoolMap map[string]string
+	nextPoolID     uint32
 
 	lifecycleSub   events.Subscription
 	programmedSub  events.Subscription
@@ -61,8 +62,9 @@ func NewComponent(deps component.Dependencies, ifMgr *ifmgr.Manager, vrfMgr *vrf
 		pools:     NewPoolManager(),
 		reverse:   NewReverseIndex(),
 		bypass:    NewBypassManager(),
-		blacklist: NewBlacklistManager(),
-		poolIDMap: make(map[string]uint32),
+		blacklist:      NewBlacklistManager(),
+		poolIDMap:      make(map[string]uint32),
+		sessionPoolMap: make(map[string]string),
 	}
 
 	return c, nil
@@ -347,6 +349,7 @@ func (c *Component) handlePBAActivate(poolName string, insideIP net.IP, vrfName 
 			}
 
 			c.reverse.Add(mapping)
+			c.sessionPoolMap[sessionID] = poolName
 
 			if c.opdb != nil {
 				if data, err := json.Marshal(mapping); err == nil {
@@ -448,6 +451,11 @@ func (c *Component) handleBypass(insideIP net.IP, vrfName string) {
 }
 
 func (c *Component) handleSessionRelease(data *events.SessionLifecycleEvent) {
+	c.logger.Debug("CGNAT handleSessionRelease called",
+		"session", data.SessionID,
+		"access_type", data.AccessType,
+		"protocol", data.Protocol)
+
 	var insideIP net.IP
 	var swIfIndex uint32
 	var serviceGroup string
@@ -490,15 +498,29 @@ func (c *Component) handleSessionRelease(data *events.SessionLifecycleEvent) {
 		}
 	}
 
-	mappings := c.pools.GetMappings("", insideIP, 0)
-	if len(mappings) == 0 {
+	poolName, ok := c.sessionPoolMap[data.SessionID]
+	if !ok {
+		c.logger.Debug("CGNAT release: no pool mapping for session",
+			"session", data.SessionID,
+			"inside_ip", insideIP,
+			"map_size", len(c.sessionPoolMap))
 		if err := c.dataplane.CGNATEnableOnSession(0, swIfIndex, false); err != nil {
 			c.logger.Debug("Disable CGNAT on session", "sw_if", swIfIndex, "error", err)
 		}
 		return
 	}
 
-	poolName := mappings[0].PoolName
+	mappings := c.pools.GetMappings(poolName, insideIP, 0)
+	c.logger.Debug("CGNAT release: found mappings",
+		"session", data.SessionID,
+		"pool", poolName,
+		"inside_ip", insideIP,
+		"mapping_count", len(mappings))
+	if len(mappings) == 0 {
+		delete(c.sessionPoolMap, data.SessionID)
+		return
+	}
+
 	poolID := c.poolIDMap[poolName]
 
 	for i := range mappings {
@@ -516,6 +538,7 @@ func (c *Component) handleSessionRelease(data *events.SessionLifecycleEvent) {
 	}
 
 	c.pools.ReleaseBlocks(poolName, insideIP, 0)
+	delete(c.sessionPoolMap, data.SessionID)
 
 	if c.opdb != nil {
 		c.opdb.Delete(context.Background(), opdbNamespace, data.SessionID)
