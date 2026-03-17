@@ -17,15 +17,12 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: actions/checkout@v4
-        if: ${{ steps.release.outputs.pr }}
-
       - name: Notify Discord of changelog update
         if: ${{ steps.release.outputs.pr }}
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
-          COMMIT_MSG=$(git log -1 --pretty=format:'%s')
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
           PR_NUM="${{ steps.release.outputs.pr }}"
           PR_URL="https://github.com/${{ github.repository }}/pull/${PR_NUM}"
 
@@ -48,17 +45,13 @@ jobs:
         if: ${{ steps.release.outputs.release_created }}
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          RELEASE_VERSION: ${{ steps.release.outputs.tag_name }}
+          RELEASE_BODY: ${{ steps.release.outputs.body }}
         run: |
-          VERSION="${{ steps.release.outputs.tag_name }}"
-          BODY=$(cat <<'BODY_EOF'
-          ${{ steps.release.outputs.body }}
-          BODY_EOF
-          )
-
           PAYLOAD=$(jq -n \
-            --arg content "# osvbng ${VERSION} released!" \
-            --arg title "Changelog — ${VERSION}" \
-            --arg description "${BODY}" \
+            --arg content "# osvbng ${RELEASE_VERSION} released!" \
+            --arg title "Changelog - ${RELEASE_VERSION}" \
+            --arg description "${RELEASE_BODY}" \
             '{
               content: $content,
               embeds: [{
