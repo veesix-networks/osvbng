@@ -1,0 +1,63 @@
+{
+  "interfaces": {
+    "network": [
+      {
+        "interface": "eth3",
+        "address": "10.100.0.2/24",
+        "gateway": "10.100.0.1"
+      }
+    ],
+    "access": [
+      {
+        "interface": "eth1",
+        "network-interface": "eth3",
+        "type": "pppoe",
+        "vlan-mode": "1:1",
+        "outer-vlan-min": 200,
+        "outer-vlan-max": 200,
+        "inner-vlan-min": 2,
+        "inner-vlan-max": 6,
+        "stream-group-id": 1
+      }
+    ]
+  },
+  "pppoe": {
+    "reconnect": false,
+    "discovery-timeout": 5,
+    "discovery-retry": 10,
+    "host-uniq": true
+  },
+  "ppp": {
+    "lcp": {
+      "conf-request-timeout": 5,
+      "conf-request-retry": 10,
+      "keepalive-retry": 5
+    },
+    "ipcp": {
+      "enable": true
+    },
+    "ip6cp": {
+      "enable": true
+    }
+  },
+  "streams": [
+    {
+      "name": "CGNAT-UDP",
+      "stream-group-id": 1,
+      "type": "ipv4",
+      "direction": "both",
+      "pps": 1,
+      "nat": true
+    }
+  ],
+  "access-line": {
+    "agent-circuit-id": "eth 0/2/{session-global}:200.{session-global}",
+    "agent-remote-id": "user{session-global}"
+  },
+  "sessions": {
+    "count": 5,
+    "max-outstanding": 5,
+    "start-rate": 5,
+    "stop-rate": 5
+  }
+}

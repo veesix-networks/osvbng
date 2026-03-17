@@ -1,0 +1,183 @@
+# Copyright 2026 Veesix Networks Ltd
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+cgnat:
+  pools:
+    residential:
+      mode: pba
+      inside-prefixes:
+        - prefix: 100.64.0.0/16
+      outside-addresses:
+        - 203.0.113.0/28
+      block-size: 512
+      max-blocks-per-subscriber: 2
+      max-sessions-per-subscriber: 2000
+      address-pooling: paired
+      filtering: endpoint-independent
+      timeouts:
+        tcp-established: 7200
+        tcp-transitory: 240
+        udp: 300
+        icmp: 60
+
+subscriber-groups:
+    groups:
+        pppoe:
+            access-type: pppoe
+            ipv4-profile: default
+            ipv6-profile: default-v6
+            vlans:
+                - svlan: "200-210"
+                  cvlan: any
+                  interface: loop100
+            aaa-policy: pppoe-policy
+            cgnat:
+              policy: residential
+
+ipv4-profiles:
+    default:
+        gateway: 100.64.0.1
+        dns:
+            - 8.8.8.8
+            - 8.8.4.4
+        pools:
+            - name: cgnat-pool
+              network: 100.64.0.0/16
+              priority: 1
+        dhcp:
+            lease-time: 3600
+
+ipv6-profiles:
+    default-v6:
+        iana-pools:
+            - name: wan-link-pool
+              network: 2001:db8:0:1::/64
+              range_start: 2001:db8:0:1::1000
+              range_end: 2001:db8:0:1::ffff
+              gateway: 2001:db8:0:1::1
+              preferred_time: 3600
+              valid_time: 7200
+        pd-pools:
+            - name: subscriber-pd-pool
+              network: 2001:db8:100::/40
+              prefix_length: 56
+              preferred_time: 3600
+              valid_time: 7200
+        dns:
+            - 2001:4860:4860::8888
+            - 2001:4860:4860::8844
+
+dhcp:
+    provider: local
+
+dhcpv6:
+    provider: local
+    dns_servers:
+        - 2001:4860:4860::8888
+        - 2001:4860:4860::8844
+    ra:
+        router_lifetime: 1800
+        max_interval: 600
+        min_interval: 200
+
+interfaces:
+    loop0:
+        description: Control Plane Loopback
+        enabled: true
+        address:
+            ipv4:
+                - 10.254.0.1/32
+        lcp: true
+    eth1:
+        description: Access Interface
+        enabled: true
+        bng_mode: access
+    eth2:
+        description: Core Link
+        enabled: true
+        bng_mode: core
+        lcp: true
+        address:
+            ipv4:
+                - 10.0.0.1/30
+    loop100:
+        description: Subscriber Gateway Loopback
+        enabled: true
+        address:
+            ipv4:
+                - 100.64.0.1/32
+            ipv6:
+                - 2001:db8:0:1::1/128
+        lcp: true
+
+protocols:
+    bgp:
+        asn: 65000
+        router-id: 10.254.0.1
+        neighbors:
+            10.254.0.2:
+                remote-as: 65000
+                peer: loop0
+        ipv4-unicast:
+            redistribute:
+                connected: true
+    ospf:
+        enabled: true
+        router-id: 10.254.0.1
+        log-adjacency-changes: true
+        areas:
+            "0.0.0.0":
+                interfaces:
+                    eth2:
+                        network: point-to-point
+                    loop0:
+                        passive: true
+
+aaa:
+    auth_provider: local
+    nas_identifier: osvbng
+    policy:
+        - name: pppoe-policy
+          type: ppp
+          format: $agent-remote-id$
+          max_concurrent_sessions: 1
+
+plugins:
+    northbound.api:
+        enabled: true
+        listen_address: :8080
+    subscriber.auth.local:
+        allow_all: true
+        database_path: /tmp/osvbng.db
+
+logging:
+    format: text
+    level: info
+    components:
+        cgnat: debug
+        ha: debug
+
+dataplane:
+    lcp-netns: dataplane
+
+ha:
+    enabled: true
+    node_id: bng-1
+    peer:
+        address: clab-osvbng-cgnat-ha-pppoe-pba-bng2:50051
+    heartbeat:
+        interval: 1s
+        timeout: 5s
+    srgs:
+        default:
+            virtual_mac: "02:00:5e:00:01:01"
+            priority: 100
+            subscriber_groups:
+                - pppoe
+            interfaces:
+                - eth1
+            track_priority_decrement: 60
+            networks:
+                - prefix: 100.64.0.0/16
+                - prefix: 203.0.113.0/28

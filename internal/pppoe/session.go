@@ -904,7 +904,11 @@ func (s *SessionState) sendPPPPacket(proto uint16, code, id uint8, data []byte) 
 	var srcMAC string
 	var parentSwIfIndex uint32
 	if s.component.srgMgr != nil {
-		if vmac := s.component.srgMgr.GetVirtualMAC(s.SRGName); vmac != nil {
+		srgName := s.SRGName
+		if srgName == "" {
+			srgName = s.component.resolveSRGName(s.OuterVLAN)
+		}
+		if vmac := s.component.srgMgr.GetVirtualMAC(srgName); vmac != nil {
 			srcMAC = vmac.String()
 		}
 	}
