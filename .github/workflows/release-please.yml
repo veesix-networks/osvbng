@@ -1,9 +1,9 @@
 name: Release Please
 
-on:
+on:                                                                                                                                                                                                 
   push:
-    branches: [main]
-
+    branches: [main]                                                                                                                                                                                
+                
 permissions:
   contents: write
   pull-requests: write
@@ -13,5 +13,56 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@v4
+        id: release                                                                                                                                                                                 
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}                                                                                                                                                        
+                
+      - name: Notify Discord of changelog update
+        if: ${{ steps.release.outputs.pr }}
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}                                                                                                                                   
+        run: |                                                                                                                                                                                      
+          COMMIT_MSG=$(git log -1 --pretty=format:'%s')                                                                                                                                             
+          PR_NUM="${{ steps.release.outputs.pr }}"                                                                                                                                                  
+          PR_URL="https://github.com/${{ github.repository }}/pull/${PR_NUM}"                                                                                                                       
+                                                                                                                                                                                                    
+          PAYLOAD=$(jq -n \                                                                                                                                                                         
+            --arg content "**${COMMIT_MSG}**" \                                                                                                                                                     
+            --arg title "Release PR #${PR_NUM} updated" \                                                                                                                                           
+            --arg url "$PR_URL" \                                                                                                                                                                   
+            '{                                                                                                                                                                                      
+              embeds: [{                                                                                                                                                                            
+                title: $title,                                                                                                                                                                      
+                url: $url,
+                description: $content,
+                color: 5025616
+              }]
+            }')
+
+          curl -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK_URL"                                                                                                             
+
+      - name: Announce release to Discord                                                                                                                                                           
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |                                                                                                                                                                                      
+          VERSION="${{ steps.release.outputs.tag_name }}"
+          BODY=$(cat <<'BODY_EOF'                                                                                                                                                                   
+          ${{ steps.release.outputs.body }}
+          BODY_EOF                                                                                                                                                                                  
+          )                                                                                                                                                                                         
+  
+          PAYLOAD=$(jq -n \                                                                                                                                                                         
+            --arg content "# osvbng ${VERSION} released!" \
+            --arg title "Changelog — ${VERSION}" \                                                                                                                                                  
+            --arg description "${BODY}" \                                                                                                                                                           
+            '{                                                                                                                                                                                      
+              content: $content,                                                                                                                                                                    
+              embeds: [{                                                                                                                                                                            
+                title: $title,                                                                                                                                                                      
+                description: ($description | if length > 4096 then .[0:4093] + "..." else . end),                                                                                                   
+                color: 5025616                                                                                                                                                                      
+              }]                                                                                                                                                                                    
+            }') 
+
+          curl -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK_URL"
