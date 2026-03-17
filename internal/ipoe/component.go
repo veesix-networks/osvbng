@@ -110,6 +110,7 @@ type SessionState struct {
 	PendingDHCPv6Request []byte
 
 	Username     string
+	Attributes   map[string]string
 	OuterTPID    uint16
 	VRF          string
 	ServiceGroup svcgroup.ServiceGroup
@@ -1131,6 +1132,9 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 	svlan := sess.OuterVLAN
 	cvlan := sess.InnerVLAN
 	ipoeSwIfIndex := sess.IPoESwIfIndex
+	snapshotIPv6 := sess.IPv6Address
+	snapshotIPv6LeaseTime := sess.IPv6LeaseTime
+	snapshotIPv6Prefix := sess.IPv6Prefix
 	c.sessionMu.Unlock()
 
 	c.logger.WithGroup(logger.IPoEDHCP4).Info("Session bound", "session_id", sess.SessionID, "ipv4", sess.IPv4.String())
@@ -1190,8 +1194,8 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 		SRGName:       sess.SRGName,
 		IPv4Address:   sess.IPv4,
 		LeaseTime:     sess.LeaseTime,
-		IPv6Address:   sess.IPv6Address,
-		IPv6LeaseTime: sess.IPv6LeaseTime,
+		IPv6Address:   snapshotIPv6,
+		IPv6LeaseTime: snapshotIPv6LeaseTime,
 		DUID:          sess.DHCPv6DUID,
 		Username:      sess.Username,
 		AAASessionID:  sess.AcctSessionID,
@@ -1203,8 +1207,8 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 		ipoeSess.IANAPool = sess.AllocCtx.AllocatedIANAPool
 		ipoeSess.PDPool = sess.AllocCtx.AllocatedPDPool
 	}
-	if sess.IPv6Prefix != nil {
-		ipoeSess.IPv6Prefix = sess.IPv6Prefix.String()
+	if snapshotIPv6Prefix != nil {
+		ipoeSess.IPv6Prefix = snapshotIPv6Prefix.String()
 	}
 
 	return c.publishSessionLifecycle(ipoeSess)
@@ -1287,7 +1291,13 @@ func (c *Component) handleAAAResponse(event events.Event) {
 		srgName = c.srgMgr.GetSRGForGroup(subscriberGroup)
 	}
 
+	storedAttrs := make(map[string]string, len(data.Response.Attributes))
+	for k, v := range data.Response.Attributes {
+		storedAttrs[k] = fmt.Sprintf("%v", v)
+	}
+
 	c.sessionMu.Lock()
+	sess.Attributes = storedAttrs
 	sess.ServiceGroup = resolved
 	sess.SRGName = srgName
 	c.sessionMu.Unlock()
@@ -2375,6 +2385,9 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, dhcp *layers.DHCPv6) e
 	sess.IPv6BoundAt = time.Now()
 	sess.IPv6Bound = true
 	ipoeSwIfIndex := sess.IPoESwIfIndex
+	v4AlreadyBound := sess.State == "bound" && sess.IPv4 != nil
+	snapshotIPv4 := sess.IPv4
+	snapshotLeaseTime := sess.LeaseTime
 	c.sessionMu.Unlock()
 
 	c.logger.Info("DHCPv6 session bound", "session_id", sess.SessionID, "ipv6", ianaAddr, "prefix", pdPrefix)
@@ -2429,6 +2442,11 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, dhcp *layers.DHCPv6) e
 		prefixStr = pdPrefix.String()
 	}
 
+	sessionMode := c.getSessionMode(sess.OuterVLAN)
+	if sessionMode == subscriber.SessionModeUnified && !v4AlreadyBound {
+		return nil
+	}
+
 	ipoeSess := &models.IPoESession{
 		SessionID:     sess.SessionID,
 		State:         models.SessionStateActive,
@@ -2442,8 +2460,8 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, dhcp *layers.DHCPv6) e
 		VRF:           sess.VRF,
 		ServiceGroup:  sess.ServiceGroup.Name,
 		SRGName:       sess.SRGName,
-		IPv4Address:   sess.IPv4,
-		LeaseTime:     sess.LeaseTime,
+		IPv4Address:   snapshotIPv4,
+		LeaseTime:     snapshotLeaseTime,
 		IPv6Address:   ianaAddr,
 		IPv6Prefix:    prefixStr,
 		IPv6LeaseTime: sess.IPv6LeaseTime,
@@ -3343,8 +3361,16 @@ func (c *Component) restoreFromHASync(srgName string) {
 			DHCPv6DUID:         cp.Dhcpv6Duid,
 		}
 
-		if cp.SubscriberGroup != "" {
-			sess.ServiceGroup = c.svcGroupResolver.Resolve(cp.ServiceGroup, cp.ServiceGroup, nil)
+		if cp.ServiceGroup != "" {
+			var aaaAttrs map[string]interface{}
+			if len(cp.AaaAttributes) > 0 {
+				aaaAttrs = make(map[string]interface{}, len(cp.AaaAttributes))
+				for k, v := range cp.AaaAttributes {
+					aaaAttrs[k] = v
+				}
+				sess.Attributes = cp.AaaAttributes
+			}
+			sess.ServiceGroup = c.svcGroupResolver.Resolve(cp.ServiceGroup, cp.ServiceGroup, aaaAttrs)
 		}
 
 		unnumberedLoopback := c.resolveUnnumberedLoopback(sess)
@@ -3434,6 +3460,7 @@ func (c *Component) ForEachSession(fn func(models.SubscriberSession) bool) {
 			AAASessionID:  sess.AcctSessionID,
 			ActivatedAt:   sess.BoundAt,
 			OuterTPID:     sess.OuterTPID,
+			Attributes:    sess.Attributes,
 			RelayInfo:     map[uint8][]byte{},
 		}
 		if sess.AllocCtx != nil {

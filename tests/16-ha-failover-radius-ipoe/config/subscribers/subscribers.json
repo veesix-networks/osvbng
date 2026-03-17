@@ -1,0 +1,42 @@
+{
+  "interfaces": {
+    "network": [
+      {
+        "interface": "eth3",
+        "address": "10.100.0.2/24",
+        "gateway": "10.100.0.1"
+      }
+    ],
+    "access": [
+      {
+        "interface": "eth1",
+        "network-interface": "eth3",
+        "type": "ipoe",
+        "vlan-mode": "1:1",
+        "outer-vlan-min": 100,
+        "outer-vlan-max": 100,
+        "inner-vlan-min": 2,
+        "inner-vlan-max": 6,
+        "stream-group-id": 1
+      }
+    ]
+  },
+  "streams": [
+    {
+      "name": "UDP-Test",
+      "stream-group-id": 1,
+      "type": "ipv4",
+      "direction": "both",
+      "pps": 1
+    }
+  ],
+  "dhcp": {
+    "enable": true
+  },
+  "sessions": {
+    "count": 5,
+    "max-outstanding": 5,
+    "start-rate": 5,
+    "stop-rate": 5
+  }
+}

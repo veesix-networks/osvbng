@@ -27,9 +27,23 @@ Deploy Topology
 
 Destroy Topology
     [Arguments]    ${topology_file}
+    Capture Container Logs    ${topology_file}
     ${rc}    ${output} =    Run And Return Rc And Output
     ...    ${CLAB_BIN} destroy -t ${topology_file} --cleanup
     Log    ${output}
+
+Capture Container Logs
+    [Arguments]    ${topology_file}
+    ${rc}    ${containers} =    Run And Return Rc And Output
+    ...    ${CLAB_BIN} inspect -t ${topology_file} --format json 2>/dev/null | python3 -c "import sys,json; cs=json.load(sys.stdin).get('containers',[]); print(' '.join(c['name'] for c in cs))" 2>/dev/null || true
+    IF    '${containers}' != ''
+        @{container_list} =    Split String    ${containers}
+        FOR    ${container}    IN    @{container_list}
+            ${rc}    ${logs} =    Run And Return Rc And Output
+            ...    sudo docker logs ${container} 2>&1 | tail -200
+            Log    Container logs for ${container}:\n${logs}    console=no
+        END
+    END
 
 Get Container IPv4
     [Arguments]    ${container}
