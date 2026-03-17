@@ -998,6 +998,8 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 		VRF:          sess.VRF,
 		SRGName:      sess.SRGName,
 		Username:     sess.Username,
+		IPv4Address:  ipv4,
+		IfIndex:      ipoeSwIfIndex,
 	})
 }
 
