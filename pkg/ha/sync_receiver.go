@@ -190,6 +190,61 @@ func (r *SyncReceiver) reserveAddresses(cp *hapb.SessionCheckpoint) {
 	}
 }
 
+func (r *SyncReceiver) HandleSyncCGNATMapping(ctx context.Context, req *hapb.SyncCGNATMappingRequest) (*hapb.SyncCGNATMappingResponse, error) {
+	r.mu.Lock()
+	r.lastSeq[req.SrgName+"_cgnat"] = req.Sequence
+	r.lastRecvNs[req.SrgName+"_cgnat"] = time.Now().UnixNano()
+	lastSeq := req.Sequence
+	r.mu.Unlock()
+
+	switch req.Action {
+	case hapb.SyncAction_SYNC_ACTION_CREATE, hapb.SyncAction_SYNC_ACTION_UPDATE:
+		if err := r.storeCGNATCheckpoint(ctx, req.Mapping); err != nil {
+			return &hapb.SyncCGNATMappingResponse{Success: false, LastSyncSeq: lastSeq}, err
+		}
+	case hapb.SyncAction_SYNC_ACTION_DELETE:
+		if err := r.deleteCGNATCheckpoint(ctx, req.Mapping); err != nil {
+			return &hapb.SyncCGNATMappingResponse{Success: false, LastSyncSeq: lastSeq}, err
+		}
+	}
+
+	return &hapb.SyncCGNATMappingResponse{Success: true, LastSyncSeq: lastSeq}, nil
+}
+
+func (r *SyncReceiver) HandleBulkSyncCGNATPage(ctx context.Context, resp *hapb.BulkSyncCGNATResponse) error {
+	for _, cp := range resp.Mappings {
+		if err := r.storeCGNATCheckpoint(ctx, cp); err != nil {
+			return err
+		}
+	}
+
+	if resp.Sequence > 0 {
+		r.mu.Lock()
+		r.lastSeq[resp.SrgName+"_cgnat"] = resp.Sequence
+		r.mu.Unlock()
+	}
+
+	return nil
+}
+
+func (r *SyncReceiver) storeCGNATCheckpoint(ctx context.Context, cp *hapb.CGNATMappingCheckpoint) error {
+	data, err := proto.Marshal(cp)
+	if err != nil {
+		return fmt.Errorf("marshal cgnat checkpoint: %w", err)
+	}
+	return r.opdb.Put(ctx, opdb.NamespaceHASyncedCGNAT, cp.SessionId, data)
+}
+
+func (r *SyncReceiver) deleteCGNATCheckpoint(ctx context.Context, cp *hapb.CGNATMappingCheckpoint) error {
+	return r.opdb.Delete(ctx, opdb.NamespaceHASyncedCGNAT, cp.SessionId)
+}
+
+func (r *SyncReceiver) GetCGNATLastSeq(srgName string) uint64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.lastSeq[srgName+"_cgnat"]
+}
+
 func (r *SyncReceiver) releaseAddresses(cp *hapb.SessionCheckpoint) {
 	if r.registry == nil {
 		return

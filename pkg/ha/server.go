@@ -6,6 +6,7 @@ package ha
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"time"
@@ -156,6 +157,62 @@ func (s *HAPeerServer) BulkSync(req *hapb.BulkSyncRequest, stream hapb.HAPeerSer
 	}
 
 	return nil
+}
+
+func (s *HAPeerServer) SyncCGNATMapping(ctx context.Context, req *hapb.SyncCGNATMappingRequest) (*hapb.SyncCGNATMappingResponse, error) {
+	if s.manager.syncReceiver == nil {
+		return &hapb.SyncCGNATMappingResponse{Success: false}, nil
+	}
+	return s.manager.syncReceiver.HandleSyncCGNATMapping(ctx, req)
+}
+
+func (s *HAPeerServer) BulkSyncCGNAT(req *hapb.BulkSyncCGNATRequest, stream hapb.HAPeerService_BulkSyncCGNATServer) error {
+	if s.manager.opdbStore == nil {
+		return nil
+	}
+
+	s.logger.Info("CGNAT bulk sync requested", "srgs", req.SrgNames)
+
+	var snapshotSeq uint64
+	if s.manager.cgnatSyncSender != nil {
+		for _, name := range req.SrgNames {
+			if seq := s.manager.cgnatSyncSender.GetSeq(name); seq > snapshotSeq {
+				snapshotSeq = seq
+			}
+		}
+	}
+
+	pageSize := s.manager.cfg.GetSyncPageSize()
+	var page []*hapb.CGNATMappingCheckpoint
+
+	err := s.manager.opdbStore.Load(stream.Context(), "cgnat_mappings", func(key string, value []byte) error {
+		var m models.CGNATMapping
+		if err := json.Unmarshal(value, &m); err != nil {
+			return nil
+		}
+
+		page = append(page, mappingToCheckpoint("", &m))
+
+		if len(page) >= pageSize {
+			if err := stream.Send(&hapb.BulkSyncCGNATResponse{
+				Mappings: page,
+				Sequence: snapshotSeq,
+			}); err != nil {
+				return err
+			}
+			page = nil
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	return stream.Send(&hapb.BulkSyncCGNATResponse{
+		Mappings: page,
+		Sequence: snapshotSeq,
+		LastPage: true,
+	})
 }
 
 func (s *HAPeerServer) bulkSyncFromIterators(srgName string, pageSize int, stream hapb.HAPeerService_BulkSyncServer) error {

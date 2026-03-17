@@ -233,12 +233,13 @@ func (pm *PoolManager) GetMappings(poolName string, insideIP net.IP, insideVRF u
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 
+	key := makeSubscriberKey(insideVRF, insideIP)
+
 	ps, ok := pm.pools[poolName]
 	if !ok {
 		return nil
 	}
 
-	key := makeSubscriberKey(insideVRF, insideIP)
 	sub, ok := ps.Subscribers[key]
 	if !ok {
 		return nil

@@ -26,4 +26,5 @@ const (
 	NamespacePPPoESessions     = "pppoe_sessions"
 	NamespaceHASyncedIPoE      = "ha_synced_ipoe"
 	NamespaceHASyncedPPPoE     = "ha_synced_pppoe"
+	NamespaceHASyncedCGNAT     = "ha_synced_cgnat"
 )

@@ -133,6 +133,8 @@ func (cm *ConfigManager) ProcessCGNATPools(sessionID conf.SessionID, cfg *config
 		return nil
 	}
 
+	haEnabled := cfg.HA.Enabled
+
 	for _, pool := range cfg.CGNAT.Pools {
 		for _, addr := range pool.OutsideAddresses {
 			if _, _, err := net.ParseCIDR(addr); err != nil {
@@ -141,8 +143,14 @@ func (cm *ConfigManager) ProcessCGNATPools(sessionID conf.SessionID, cfg *config
 
 			addPoolBlackholeRoute(cfg, addr)
 
-			if err := cm.addBGPNetwork(sessionID, addr, ""); err != nil {
-				return fmt.Errorf("CGNAT outside address %s: %w", addr, err)
+			// SRG handles the BGP advertisement if HA is enabled
+			// Otherwise it'll cause active/active BGP ECMP issues upstream
+			// We currently do not support active/active, if we wanted to advertise subscriber
+			// reachability as /32s at some point, then we need to change this logic...
+			if !haEnabled {
+				if err := cm.addBGPNetwork(sessionID, addr, ""); err != nil {
+					return fmt.Errorf("CGNAT outside address %s: %w", addr, err)
+				}
 			}
 		}
 	}
