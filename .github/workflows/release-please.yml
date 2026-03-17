@@ -25,19 +25,12 @@ jobs:
           PR_NUM: ${{ steps.release.outputs.pr }}
           REPO: ${{ github.repository }}
         run: |
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
-          PR_NUM="${{ steps.release.outputs.pr }}"
-          PR_URL="https://github.com/${{ github.repository }}/pull/${PR_NUM}"
-
           PAYLOAD=$(jq -n \
-            --arg content "**${COMMIT_MSG}**" \
-            --arg title "Release PR #${PR_NUM} updated" \
-            --arg url "$PR_URL" \
             '{
               embeds: [{
-                title: $title,
-                url: $url,
-                description: $content,
+                title: ("Release PR #" + env.PR_NUM + " updated"),
+                url: ("https://github.com/" + env.REPO + "/pull/" + env.PR_NUM),
+                description: ("**" + env.COMMIT_MSG + "**"),
                 color: 5025616
               }]
             }')
@@ -52,14 +45,11 @@ jobs:
           RELEASE_BODY: ${{ steps.release.outputs.body }}
         run: |
           PAYLOAD=$(jq -n \
-            --arg content "# osvbng ${RELEASE_VERSION} released!" \
-            --arg title "Changelog - ${RELEASE_VERSION}" \
-            --arg description "${RELEASE_BODY}" \
             '{
-              content: $content,
+              content: ("# osvbng " + env.RELEASE_VERSION + " released!"),
               embeds: [{
-                title: $title,
-                description: ($description | if length > 4096 then .[0:4093] + "..." else . end),
+                title: ("Changelog - " + env.RELEASE_VERSION),
+                description: (env.RELEASE_BODY | if length > 4096 then .[0:4093] + "..." else . end),
                 color: 5025616
               }]
             }')
