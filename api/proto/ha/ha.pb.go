@@ -482,6 +482,7 @@ type SessionCheckpoint struct {
 	IanaPool        string                 `protobuf:"bytes,33,opt,name=iana_pool,json=ianaPool,proto3" json:"iana_pool,omitempty"`
 	PdPool          string                 `protobuf:"bytes,34,opt,name=pd_pool,json=pdPool,proto3" json:"pd_pool,omitempty"`
 	OuterTpid       uint32                 `protobuf:"varint,35,opt,name=outer_tpid,json=outerTpid,proto3" json:"outer_tpid,omitempty"`
+	LcpMagic        uint32                 `protobuf:"varint,36,opt,name=lcp_magic,json=lcpMagic,proto3" json:"lcp_magic,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -757,6 +758,13 @@ func (x *SessionCheckpoint) GetPdPool() string {
 func (x *SessionCheckpoint) GetOuterTpid() uint32 {
 	if x != nil {
 		return x.OuterTpid
+	}
+	return 0
+}
+
+func (x *SessionCheckpoint) GetLcpMagic() uint32 {
+	if x != nil {
+		return x.LcpMagic
 	}
 	return 0
 }
@@ -1364,7 +1372,7 @@ const file_api_proto_ha_ha_proto_rawDesc = "" +
 	"\bgraceful\x18\x02 \x01(\bR\bgraceful\"H\n" +
 	"\x12SwitchoverResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\x84\t\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\xa1\t\n" +
 	"\x11SessionCheckpoint\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x19\n" +
@@ -1410,7 +1418,8 @@ const file_api_proto_ha_ha_proto_rawDesc = "" +
 	"\tiana_pool\x18! \x01(\tR\bianaPool\x12\x17\n" +
 	"\apd_pool\x18\" \x01(\tR\x06pdPool\x12\x1d\n" +
 	"\n" +
-	"outer_tpid\x18# \x01(\rR\touterTpid\"\xb8\x01\n" +
+	"outer_tpid\x18# \x01(\rR\touterTpid\x12\x1b\n" +
+	"\tlcp_magic\x18$ \x01(\rR\blcpMagic\"\xb8\x01\n" +
 	"\x12SyncSessionRequest\x12\x19\n" +
 	"\bsrg_name\x18\x01 \x01(\tR\asrgName\x12\x1a\n" +
 	"\bsequence\x18\x02 \x01(\x04R\bsequence\x120\n" +
