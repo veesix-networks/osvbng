@@ -18,6 +18,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/uuid"
+	hapb "github.com/veesix-networks/osvbng/api/proto/ha"
 	"github.com/veesix-networks/osvbng/pkg/aaa"
 	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/cache"
@@ -39,6 +40,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
+	"google.golang.org/protobuf/proto"
 )
 
 type Component struct {
@@ -66,7 +68,8 @@ type Component struct {
 	dhcp6Chan  <-chan *dataplane.ParsedPacket
 	ipv6NDChan <-chan *dataplane.ParsedPacket
 
-	aaaRespSub events.Subscription
+	aaaRespSub  events.Subscription
+	haStateSub  events.Subscription
 }
 
 type SessionState struct {
@@ -341,6 +344,7 @@ func (c *Component) Start(ctx context.Context) error {
 	}
 
 	c.aaaRespSub = c.eventBus.Subscribe(events.TopicAAAResponseIPoE, c.handleAAAResponse)
+	c.haStateSub = c.eventBus.Subscribe(events.TopicHAStateChange, c.handleHAStateChange)
 
 	c.Go(c.cleanupSessions)
 	c.Go(c.consumeDHCPPackets)
@@ -354,6 +358,7 @@ func (c *Component) Stop(ctx context.Context) error {
 	c.logger.Info("Stopping IPoE component")
 
 	c.aaaRespSub.Unsubscribe()
+	c.haStateSub.Unsubscribe()
 
 	c.StopContext()
 
@@ -3171,6 +3176,230 @@ func (c *Component) RecoverSessions(ctx context.Context) error {
 
 	c.logger.Info("IPoE session recovery complete", "recovered", recovered)
 	return nil
+}
+
+func (c *Component) handleHAStateChange(event events.Event) {
+	data, ok := event.Data.(events.HAStateChangeEvent)
+	if !ok {
+		return
+	}
+
+	wasActive := data.OldState == string(ha.SRGStateActive) || data.OldState == string(ha.SRGStateActiveSolo)
+	isActive := data.NewState == string(ha.SRGStateActive) || data.NewState == string(ha.SRGStateActiveSolo)
+
+	if isActive && !wasActive {
+		c.logger.Info("SRG promoted to active, restoring synced IPoE sessions", "srg", data.SRGName)
+		go c.restoreFromHASync(data.SRGName)
+	}
+}
+
+func (c *Component) restoreFromHASync(srgName string) {
+	if c.opdb == nil || c.vpp == nil {
+		return
+	}
+
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil {
+		c.logger.Error("Failed to get running config for HA restore", "error", err)
+		return
+	}
+
+	srgCfg, ok := cfg.HA.SRGs[srgName]
+	if !ok || len(srgCfg.Interfaces) == 0 {
+		c.logger.Error("SRG config not found or no interfaces", "srg", srgName)
+		return
+	}
+
+	// At some point when we want to support multi-interfaces on the same
+	// srg, we can't hardcode the ifIndex to 0, I'm not sure the best action here
+	// so its a problem in the future, SRGs right now are mostly tied to S-VLAN
+	// therefore its probably a very specific scenario someone wants this feature...
+	encapIfIndex, ok := c.ifMgr.GetSwIfIndex(srgCfg.Interfaces[0])
+	if !ok {
+		c.logger.Error("Failed to resolve SRG access interface",
+			"srg", srgName,
+			"interface", srgCfg.Interfaces[0])
+		return
+	}
+
+	type checkpoint struct {
+		key  string
+		data []byte
+	}
+	var checkpoints []checkpoint
+
+	c.opdb.Load(c.Ctx, opdb.NamespaceHASyncedIPoE, func(key string, value []byte) error {
+		cp := make([]byte, len(value))
+		copy(cp, value)
+		checkpoints = append(checkpoints, checkpoint{key: key, data: cp})
+		return nil
+	})
+
+	if len(checkpoints) == 0 {
+		c.logger.Info("No synced IPoE sessions to restore", "srg", srgName)
+		return
+	}
+
+	c.logger.Info("Restoring synced IPoE sessions", "srg", srgName, "count", len(checkpoints))
+
+	var restored, failed int
+	now := time.Now()
+
+	for _, entry := range checkpoints {
+		var cp hapb.SessionCheckpoint
+		if err := proto.Unmarshal(entry.data, &cp); err != nil {
+			c.logger.Warn("Failed to unmarshal synced IPoE checkpoint", "key", entry.key, "error", err)
+			failed++
+			continue
+		}
+
+		if cp.SrgName != srgName {
+			continue
+		}
+
+		mac := net.HardwareAddr(cp.Mac)
+		outerVLAN := uint16(cp.OuterVlan)
+		innerVLAN := uint16(cp.InnerVlan)
+
+		var decapVrfID uint32
+		if cp.Vrf != "" && c.vrfMgr != nil {
+			tableID, _, _, err := c.vrfMgr.ResolveVRF(cp.Vrf)
+			if err != nil {
+				c.logger.Error("Failed to resolve VRF for HA restore",
+					"session_id", cp.SessionId, "vrf", cp.Vrf, "error", err)
+				failed++
+				continue
+			}
+			decapVrfID = tableID
+		}
+
+		localMAC := c.getLocalMAC(srgName, encapIfIndex)
+		if localMAC == nil {
+			c.logger.Error("No local MAC available for HA restore", "session_id", cp.SessionId)
+			failed++
+			continue
+		}
+
+		swIfIndex, err := c.vpp.AddIPoESession(mac, localMAC, encapIfIndex, outerVLAN, innerVLAN, decapVrfID)
+		if err != nil {
+			c.logger.Error("Failed to create IPoE session from HA sync",
+				"session_id", cp.SessionId, "error", err)
+			failed++
+			continue
+		}
+
+		var ipv4 net.IP
+		if len(cp.Ipv4Address) > 0 {
+			ipv4 = net.IP(cp.Ipv4Address)
+		}
+
+		var ipv6 net.IP
+		if len(cp.Ipv6Address) > 0 {
+			ipv6 = net.IP(cp.Ipv6Address)
+		}
+
+		var ipv6Prefix *net.IPNet
+		if len(cp.Ipv6Prefix) > 0 && cp.Ipv6PrefixLen > 0 {
+			ipv6Prefix = &net.IPNet{
+				IP:   net.IP(cp.Ipv6Prefix),
+				Mask: net.CIDRMask(int(cp.Ipv6PrefixLen), 128),
+			}
+		}
+
+		var boundAt time.Time
+		if cp.BoundAtNs > 0 {
+			boundAt = time.Unix(0, cp.BoundAtNs)
+		} else {
+			boundAt = now
+		}
+
+		sess := &SessionState{
+			SessionID:          cp.SessionId,
+			AcctSessionID:      cp.AaaSessionId,
+			MAC:                mac,
+			OuterVLAN:          outerVLAN,
+			InnerVLAN:          innerVLAN,
+			OuterTPID:          uint16(cp.OuterTpid),
+			EncapIfIndex:       encapIfIndex,
+			IPoESwIfIndex:      swIfIndex,
+			IPoESessionCreated: true,
+			State:              "bound",
+			IPv4:               ipv4,
+			IPv6Address:        ipv6,
+			IPv6Prefix:         ipv6Prefix,
+			IPv6Bound:          ipv6 != nil || ipv6Prefix != nil,
+			LeaseTime:          cp.Ipv4LeaseTime,
+			IPv6LeaseTime:      cp.Ipv6LeaseTime,
+			BoundAt:            boundAt,
+			IPv6BoundAt:        boundAt,
+			AAAApproved:        true,
+			Username:           cp.Username,
+			VRF:                cp.Vrf,
+			SRGName:            srgName,
+			CircuitID:          cp.CircuitId,
+			RemoteID:           cp.RemoteId,
+			ClientID:           cp.ClientId,
+			Hostname:           cp.Hostname,
+			DHCPv6DUID:         cp.Dhcpv6Duid,
+		}
+
+		if cp.SubscriberGroup != "" {
+			sess.ServiceGroup = c.svcGroupResolver.Resolve(cp.ServiceGroup, cp.ServiceGroup, nil)
+		}
+
+		unnumberedLoopback := c.resolveUnnumberedLoopback(sess)
+		c.setupSessionUnnumbered(cp.SessionId, swIfIndex, unnumberedLoopback)
+
+		if ipv4 != nil {
+			if err := c.vpp.IPoESetSessionIPv4(swIfIndex, ipv4, true); err != nil {
+				c.logger.Error("Failed to bind IPv4 during HA restore",
+					"session_id", cp.SessionId, "error", err)
+			}
+		}
+
+		if ipv6 != nil {
+			if err := c.vpp.IPoESetSessionIPv6(swIfIndex, ipv6, true); err != nil {
+				c.logger.Error("Failed to bind IPv6 during HA restore",
+					"session_id", cp.SessionId, "error", err)
+			}
+		}
+
+		if ipv6Prefix != nil {
+			nextHop := ipv6
+			if nextHop == nil {
+				nextHop = net.ParseIP("::")
+			}
+			if err := c.vpp.IPoESetDelegatedPrefix(swIfIndex, *ipv6Prefix, nextHop, true); err != nil {
+				c.logger.Error("Failed to bind delegated prefix during HA restore",
+					"session_id", cp.SessionId, "error", err)
+			}
+		}
+
+		lookupKey := c.makeSessionKeyV4(mac, outerVLAN, innerVLAN)
+
+		c.sessionMu.Lock()
+		c.sessions[lookupKey] = sess
+		c.sessionIndex[cp.SessionId] = sess
+		c.sessionMu.Unlock()
+
+		c.restoreSessionToCache(c.Ctx, sess, now)
+		c.checkpointSession(sess)
+		c.publishSessionProgrammed(sess, swIfIndex)
+
+		c.opdb.Delete(c.Ctx, opdb.NamespaceHASyncedIPoE, cp.SessionId)
+
+		restored++
+		c.logger.Info("Restored IPoE session from HA sync",
+			"session_id", cp.SessionId,
+			"mac", mac,
+			"ipv4", ipv4,
+			"sw_if_index", swIfIndex)
+	}
+
+	c.logger.Info("HA IPoE session restore complete",
+		"srg", srgName,
+		"restored", restored,
+		"failed", failed)
 }
 
 func (c *Component) ForEachSession(fn func(models.SubscriberSession) bool) {

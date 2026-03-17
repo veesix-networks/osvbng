@@ -16,6 +16,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/uuid"
+	hapb "github.com/veesix-networks/osvbng/api/proto/ha"
 	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
@@ -32,6 +33,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -65,8 +67,9 @@ type Component struct {
 
 	registry *allocator.Registry
 
-	aaaRespSub events.Subscription
-	pppoeChan  <-chan *dataplane.ParsedPacket
+	aaaRespSub  events.Subscription
+	haStateSub  events.Subscription
+	pppoeChan   <-chan *dataplane.ParsedPacket
 
 	nextSessionID uint16
 	sidMu         sync.Mutex
@@ -214,6 +217,7 @@ func (c *Component) Start(ctx context.Context) error {
 	}
 
 	c.aaaRespSub = c.eventBus.Subscribe(events.TopicAAAResponsePPPoE, c.handleAAAResponse)
+	c.haStateSub = c.eventBus.Subscribe(events.TopicHAStateChange, c.handleHAStateChange)
 
 	c.echoGen.Start()
 	c.Go(c.consumePPPoEPackets)
@@ -224,6 +228,7 @@ func (c *Component) Start(ctx context.Context) error {
 func (c *Component) Stop(ctx context.Context) error {
 	c.logger.Info("Stopping PPPoE component")
 	c.aaaRespSub.Unsubscribe()
+	c.haStateSub.Unsubscribe()
 	c.echoGen.Stop()
 	c.StopContext()
 	return nil
@@ -825,6 +830,234 @@ func (c *Component) RecoverSessions(ctx context.Context) error {
 
 	c.logger.Info("PPPoE session recovery complete", "recovered", recovered)
 	return nil
+}
+
+func (c *Component) handleHAStateChange(event events.Event) {
+	data, ok := event.Data.(events.HAStateChangeEvent)
+	if !ok {
+		return
+	}
+
+	wasActive := data.OldState == string(ha.SRGStateActive) || data.OldState == string(ha.SRGStateActiveSolo)
+	isActive := data.NewState == string(ha.SRGStateActive) || data.NewState == string(ha.SRGStateActiveSolo)
+
+	if isActive && !wasActive {
+		c.logger.Info("SRG promoted to active, restoring synced PPPoE sessions", "srg", data.SRGName)
+		go c.restoreFromHASync(data.SRGName)
+	}
+}
+
+func (c *Component) restoreFromHASync(srgName string) {
+	if c.opdb == nil || c.vpp == nil {
+		return
+	}
+
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil {
+		c.logger.Error("Failed to get running config for HA restore", "error", err)
+		return
+	}
+
+	srgCfg, ok := cfg.HA.SRGs[srgName]
+	if !ok || len(srgCfg.Interfaces) == 0 {
+		c.logger.Error("SRG config not found or no interfaces", "srg", srgName)
+		return
+	}
+
+	encapIfIndex, ok := c.ifMgr.GetSwIfIndex(srgCfg.Interfaces[0])
+	if !ok {
+		c.logger.Error("Failed to resolve SRG access interface",
+			"srg", srgName,
+			"interface", srgCfg.Interfaces[0])
+		return
+	}
+
+	type checkpoint struct {
+		key  string
+		data []byte
+	}
+	var checkpoints []checkpoint
+
+	c.opdb.Load(c.Ctx, opdb.NamespaceHASyncedPPPoE, func(key string, value []byte) error {
+		cp := make([]byte, len(value))
+		copy(cp, value)
+		checkpoints = append(checkpoints, checkpoint{key: key, data: cp})
+		return nil
+	})
+
+	if len(checkpoints) == 0 {
+		c.logger.Info("No synced PPPoE sessions to restore", "srg", srgName)
+		return
+	}
+
+	c.logger.Info("Restoring synced PPPoE sessions", "srg", srgName, "count", len(checkpoints))
+
+	var restored, failed int
+	now := time.Now()
+
+	for _, entry := range checkpoints {
+		var cp hapb.SessionCheckpoint
+		if err := proto.Unmarshal(entry.data, &cp); err != nil {
+			c.logger.Warn("Failed to unmarshal synced PPPoE checkpoint", "key", entry.key, "error", err)
+			failed++
+			continue
+		}
+
+		if cp.SrgName != srgName {
+			continue
+		}
+
+		mac := net.HardwareAddr(cp.Mac)
+		outerVLAN := uint16(cp.OuterVlan)
+		innerVLAN := uint16(cp.InnerVlan)
+		pppoeSessionID := uint16(cp.PppoeSessionId)
+
+		var ipv4 net.IP
+		if len(cp.Ipv4Address) > 0 {
+			ipv4 = net.IP(cp.Ipv4Address)
+		}
+
+		var decapVrfID uint32
+		if cp.Vrf != "" && c.vrfMgr != nil {
+			tableID, _, _, err := c.vrfMgr.ResolveVRF(cp.Vrf)
+			if err != nil {
+				c.logger.Error("Failed to resolve VRF for HA restore",
+					"session_id", cp.SessionId, "vrf", cp.Vrf, "error", err)
+				failed++
+				continue
+			}
+			decapVrfID = tableID
+		}
+
+		var localMAC net.HardwareAddr
+		if c.srgMgr != nil {
+			localMAC = c.srgMgr.GetVirtualMAC(srgName)
+		}
+		if localMAC == nil && c.ifMgr != nil {
+			if iface := c.ifMgr.Get(encapIfIndex); iface != nil && len(iface.MAC) >= 6 {
+				localMAC = net.HardwareAddr(iface.MAC[:6])
+			}
+		}
+		if localMAC == nil {
+			c.logger.Error("No local MAC available for HA restore", "session_id", cp.SessionId)
+			failed++
+			continue
+		}
+
+		swIfIndex, err := c.vpp.AddPPPoESession(pppoeSessionID, ipv4, mac, localMAC, encapIfIndex, outerVLAN, innerVLAN, decapVrfID)
+		if err != nil {
+			c.logger.Error("Failed to create PPPoE session from HA sync",
+				"session_id", cp.SessionId, "error", err)
+			failed++
+			continue
+		}
+
+		var ipv6 net.IP
+		if len(cp.Ipv6Address) > 0 {
+			ipv6 = net.IP(cp.Ipv6Address)
+		}
+
+		var ipv6Prefix *net.IPNet
+		if len(cp.Ipv6Prefix) > 0 && cp.Ipv6PrefixLen > 0 {
+			ipv6Prefix = &net.IPNet{
+				IP:   net.IP(cp.Ipv6Prefix),
+				Mask: net.CIDRMask(int(cp.Ipv6PrefixLen), 128),
+			}
+		}
+
+		var boundAt time.Time
+		if cp.BoundAtNs > 0 {
+			boundAt = time.Unix(0, cp.BoundAtNs)
+		} else {
+			boundAt = now
+		}
+
+		sess := &SessionState{
+			SessionID:      cp.SessionId,
+			AcctSessionID:  cp.AaaSessionId,
+			PPPoESessionID: pppoeSessionID,
+			MAC:            mac,
+			OuterVLAN:      outerVLAN,
+			InnerVLAN:      innerVLAN,
+			OuterTPID:      uint16(cp.OuterTpid),
+			EncapIfIndex:   encapIfIndex,
+			SwIfIndex:      swIfIndex,
+			Phase:          ppp.PhaseOpen,
+			IPv4Address:    ipv4,
+			IPv6Address:    ipv6,
+			Username:       cp.Username,
+			VRF:            cp.Vrf,
+			SRGName:        srgName,
+			BoundAt:        boundAt,
+			LastSeen:       now,
+			component:      c,
+		}
+
+		if ipv6Prefix != nil {
+			sess.IPv6Prefix = ipv6Prefix
+		}
+
+		if cp.ServiceGroup != "" {
+			sess.ServiceGroup = c.svcGroupResolver.Resolve(cp.ServiceGroup, cp.ServiceGroup, nil)
+		}
+
+		sess.initPPP()
+
+		lookupKey := c.sessionKey(mac, outerVLAN, innerVLAN)
+
+		c.sessionMu.Lock()
+		c.sessions[lookupKey] = sess
+		c.sidIndex[pppoeSessionID] = sess
+		if pppoeSessionID >= c.nextSessionID {
+			c.nextSessionID = pppoeSessionID + 1
+		}
+		c.sessionMu.Unlock()
+
+		c.restoreSessionToCache(c.Ctx, sess, now)
+		c.checkpointSession(sess)
+
+		if c.echoGen != nil {
+			c.echoGen.AddSession(pppoeSessionID, sess.LCPMagic)
+		}
+
+		c.publishSessionProgrammed(&models.PPPSession{
+			SessionID:    sess.SessionID,
+			State:        models.SessionStateActive,
+			AccessType:   string(models.AccessTypePPPoE),
+			Protocol:     string(models.ProtocolPPPoESession),
+			PPPSessionID: pppoeSessionID,
+			MAC:          mac,
+			OuterVLAN:    outerVLAN,
+			InnerVLAN:    innerVLAN,
+			IfIndex:      swIfIndex,
+			VRF:          cp.Vrf,
+			ServiceGroup: cp.ServiceGroup,
+			SRGName:      srgName,
+			IPv4Address:  ipv4,
+			IPv6Address:  ipv6,
+			Username:     cp.Username,
+			AAASessionID: cp.AaaSessionId,
+			IPv4Pool:     cp.Ipv4Pool,
+			IANAPool:     cp.IanaPool,
+			OuterTPID:    uint16(cp.OuterTpid),
+			ActivatedAt:  boundAt,
+		})
+
+		c.opdb.Delete(c.Ctx, opdb.NamespaceHASyncedPPPoE, cp.SessionId)
+
+		restored++
+		c.logger.Info("Restored PPPoE session from HA sync",
+			"session_id", cp.SessionId,
+			"pppoe_sid", pppoeSessionID,
+			"mac", mac,
+			"ipv4", ipv4,
+			"sw_if_index", swIfIndex)
+	}
+
+	c.logger.Info("HA PPPoE session restore complete",
+		"srg", srgName,
+		"restored", restored,
+		"failed", failed)
 }
 
 func (c *Component) ForEachSession(fn func(models.SubscriberSession) bool) {
