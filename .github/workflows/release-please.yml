@@ -22,15 +22,22 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           COMMIT_MSG: ${{ github.event.head_commit.message }}
-          PR_NUM: ${{ steps.release.outputs.pr }}
+          PR_JSON: ${{ steps.release.outputs.pr }}
           REPO: ${{ github.repository }}
         run: |
+          PR_NUM=$(echo "$PR_JSON" | jq -r '.number')
+          PR_TITLE=$(echo "$PR_JSON" | jq -r '.title')
+
           PAYLOAD=$(jq -n \
+            --arg pr_num "$PR_NUM" \
+            --arg pr_title "$PR_TITLE" \
+            --arg commit_msg "$COMMIT_MSG" \
+            --arg repo "$REPO" \
             '{
               embeds: [{
-                title: ("Release PR #" + env.PR_NUM + " updated"),
-                url: ("https://github.com/" + env.REPO + "/pull/" + env.PR_NUM),
-                description: ("**" + env.COMMIT_MSG + "**"),
+                title: ("Release PR #" + $pr_num + " updated"),
+                url: ("https://github.com/" + $repo + "/pull/" + $pr_num),
+                description: ("**" + $commit_msg + "**\n\n" + $pr_title),
                 color: 5025616
               }]
             }')
