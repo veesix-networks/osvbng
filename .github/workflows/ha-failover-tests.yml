@@ -1,0 +1,201 @@
+# Copyright 2026 Veesix Networks Ltd
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: ha-failover-tests
+
+on:
+  workflow_call:
+
+jobs:
+  ha-failover-ipoe:
+    name: HA Failover IPoE
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: osvbng-image
+          path: /tmp
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-runner-image
+          path: /tmp
+
+      - name: Install QEMU and tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils sshpass
+          sudo chmod 666 /dev/kvm || true
+
+      - name: Run HA Failover IPoE tests
+        run: |
+          scripts/qemu/test-runner/scripts/vm-run-tests.sh \
+            /tmp/test-runner.qcow2 \
+            /tmp/osvbng-local.tar \
+            14-ha-failover-ipoe \
+            ./test-results
+
+      - name: Test report
+        if: ${{ !cancelled() }}
+        uses: joonvena/robotframework-reporter-action@v2.5
+        with:
+          gh_access_token: ${{ secrets.GITHUB_TOKEN }}
+          report_path: test-results/out
+          only_summary: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ha-failover-ipoe-test-results
+          path: test-results/
+          retention-days: 14
+
+  ha-failover-pppoe:
+    name: HA Failover PPPoE
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: osvbng-image
+          path: /tmp
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-runner-image
+          path: /tmp
+
+      - name: Install QEMU and tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils sshpass
+          sudo chmod 666 /dev/kvm || true
+
+      - name: Run HA Failover PPPoE tests
+        run: |
+          scripts/qemu/test-runner/scripts/vm-run-tests.sh \
+            /tmp/test-runner.qcow2 \
+            /tmp/osvbng-local.tar \
+            15-ha-failover-pppoe \
+            ./test-results
+
+      - name: Test report
+        if: ${{ !cancelled() }}
+        uses: joonvena/robotframework-reporter-action@v2.5
+        with:
+          gh_access_token: ${{ secrets.GITHUB_TOKEN }}
+          report_path: test-results/out
+          only_summary: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ha-failover-pppoe-test-results
+          path: test-results/
+          retention-days: 14
+
+  ha-failover-radius-ipoe:
+    name: HA Failover RADIUS IPoE
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: osvbng-image
+          path: /tmp
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-runner-image
+          path: /tmp
+
+      - name: Install QEMU and tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils sshpass
+          sudo chmod 666 /dev/kvm || true
+
+      - name: Run HA Failover RADIUS IPoE tests
+        run: |
+          scripts/qemu/test-runner/scripts/vm-run-tests.sh \
+            /tmp/test-runner.qcow2 \
+            /tmp/osvbng-local.tar \
+            16-ha-failover-radius-ipoe \
+            ./test-results
+
+      - name: Test report
+        if: ${{ !cancelled() }}
+        uses: joonvena/robotframework-reporter-action@v2.5
+        with:
+          gh_access_token: ${{ secrets.GITHUB_TOKEN }}
+          report_path: test-results/out
+          only_summary: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ha-failover-radius-ipoe-test-results
+          path: test-results/
+          retention-days: 14
+
+  ha-tracker-promotion-ipoe:
+    name: HA Tracker Promotion IPoE
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: osvbng-image
+          path: /tmp
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-runner-image
+          path: /tmp
+
+      - name: Install QEMU and tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils sshpass
+          sudo chmod 666 /dev/kvm || true
+
+      - name: Run HA Tracker Promotion IPoE tests
+        run: |
+          scripts/qemu/test-runner/scripts/vm-run-tests.sh \
+            /tmp/test-runner.qcow2 \
+            /tmp/osvbng-local.tar \
+            17-ha-tracker-promotion-ipoe \
+            ./test-results
+
+      - name: Test report
+        if: ${{ !cancelled() }}
+        uses: joonvena/robotframework-reporter-action@v2.5
+        with:
+          gh_access_token: ${{ secrets.GITHUB_TOKEN }}
+          report_path: test-results/out
+          only_summary: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ha-tracker-promotion-ipoe-test-results
+          path: test-results/
+          retention-days: 14
