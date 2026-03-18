@@ -840,9 +840,10 @@ func (c *Component) handleHAStateChange(event events.Event) {
 
 	wasActive := data.OldState == string(ha.SRGStateActive) || data.OldState == string(ha.SRGStateActiveSolo)
 	isActive := data.NewState == string(ha.SRGStateActive) || data.NewState == string(ha.SRGStateActiveSolo)
+	wasStandbyAlone := data.OldState == string(ha.SRGStateStandbyAlone)
 
-	if isActive && !wasActive {
-		c.logger.Info("SRG promoted to active, restoring synced PPPoE sessions", "srg", data.SRGName)
+	if isActive && !wasActive && wasStandbyAlone {
+		c.logger.Info("SRG promoted from standby alone, restoring synced PPPoE sessions", "srg", data.SRGName)
 		go c.restoreFromHASync(data.SRGName)
 	}
 }
