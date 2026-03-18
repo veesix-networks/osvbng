@@ -45,6 +45,10 @@ jobs:
               - 'pkg/ha/**'
               - 'api/proto/ha/**'
               - 'tests/02-smoke-ha/**'
+              - 'tests/14-ha-failover-ipoe/**'
+              - 'tests/15-ha-failover-pppoe/**'
+              - 'tests/16-ha-failover-radius-ipoe/**'
+              - 'tests/17-ha-tracker-promotion-ipoe/**'
             sessions:
               - 'internal/ipoe/**'
               - 'internal/pppoe/**'
@@ -215,3 +219,8 @@ jobs:
     uses: ./.github/workflows/cgnat-tests.yml
     needs: [file-changes, prepare-test-runner]
     if: needs.file-changes.outputs.cgnat == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
+
+  ha-failover-tests:
+    uses: ./.github/workflows/ha-failover-tests.yml
+    needs: [file-changes, prepare-test-runner]
+    if: needs.file-changes.outputs.ha == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
