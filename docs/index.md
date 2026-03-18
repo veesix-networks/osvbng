@@ -3,9 +3,16 @@
   <img src="https://raw.githubusercontent.com/veesix-networks/osvbng/main/docs/img/logo.png" alt="Logo" style="max-width: 50%; height: auto;">
 </p>
 
+<p align="center">
+  <a href="https://github.com/veesix-networks/osvbng/releases"><img src="https://img.shields.io/github/v/release/veesix-networks/osvbng?include_prereleases&style=for-the-badge" alt="GitHub release"></a>
+  <a href="https://dsc.gg/osvbng"><img src="https://img.shields.io/discord/1483536004337107017?label=Discord&logo=discord&logoColor=white&color=5865F2&style=for-the-badge" alt="Discord"></a>
+  <a href="https://github.com/veesix-networks/osvbng/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue.svg?style=for-the-badge" alt="GPL-3.0 License"></a>
+  <a href="https://docs.osvbng.v6n.io/"><img src="https://img.shields.io/badge/Docs-docs.osvbng.v6n.io-green?style=for-the-badge" alt="Documentation"></a>
+</p>
+
 <a href="https://github.com/veesix-networks/osvbng" target="_blank">osvbng</a> (Open Source Virtual Broadband Network Gateway) is a high-performance, scalable, open source BNG for ISPs. Built to scale up to multi-hundred gigabit throughput on standard x86 COTS hardware.
 
-**[Documentation](https://docs.osvbng.v6n.io/)**
+**[Documentation](https://docs.osvbng.v6n.io/)** | **[Discord Community](https://dsc.gg/osvbng)**
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/veesix-networks/osvbng/main/docs/img/components.svg" alt="Logo" style="max-width: 50%; height: auto;">
