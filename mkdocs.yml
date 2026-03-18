@@ -36,6 +36,7 @@ nav:
     - Intro: index.md
     - Supported NICs: getting-started/supported-nics.md
     - API: getting-started/api.md
+    - Testing & QA: qa/testing-methodology.md
   - Configuration:
     - Overview: configuration/index.md
     - Logging: configuration/logging.md
@@ -77,6 +78,8 @@ nav:
       - Reference Deployment Methods: architecture/REFERENCE_DEPLOYMENT_METHODS.md
       - High Availability: architecture/HA.md
       - DHCP Relay & Proxy: architecture/DHCP_RELAY_PROXY.md
+  - Quality Assurance:
+    - Testing & Methodology: qa/testing-methodology.md
   - Contributing:
     - Getting Started: contributing/please_read_first.md
     - Commit Messages: contributing/commit-messages.md
@@ -84,6 +87,8 @@ nav:
   - Roadmap:
     - Overview: roadmap/overview.md
     - Year 2026: roadmap/2026.md
+  - Support:
+    - Overview: support.md
   - Author: https://github.com/veesix-networks
 hooks:
   - docs/hooks/packet_diagram.py
