@@ -424,6 +424,21 @@ func (m *Manager) handlePeerLost() {
 				"srg", sm.Name,
 				"old_state", string(transition.OldState),
 				"new_state", string(transition.NewState))
+
+			if transition.NewState == SRGStateStandbyAlone {
+				m.mu.RLock()
+				downCount := m.ifDownCount[sm.Name]
+				m.mu.RUnlock()
+
+				if downCount > 0 {
+					m.logger.Warn("Tracked interfaces already down, promoting from STANDBY_ALONE",
+						"srg", sm.Name,
+						"down_count", downCount)
+					if t := sm.TrackerPromote(); t != nil {
+						m.publishTransition(t)
+					}
+				}
+			}
 		}
 	}
 }
