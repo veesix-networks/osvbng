@@ -144,6 +144,13 @@ func (c *Component) handlePacket(pkt *dataplane.ParsedPacket) error {
 	}
 
 	sess := c.lookupSubscriberSession(pkt)
+	if sess != nil && sess.IPv4Address != nil && sess.IPv4Address.Equal(dstIP) {
+		c.logger.Debug("Ignoring ARP for client's own assigned IP",
+			"dst_ip", dstIP.String(),
+			"session_id", sess.SessionID)
+		return nil
+	}
+
 	if sess != nil {
 		if sess.VRF != "" {
 			if !c.isOwnedIPInVRF(dstIP, sess.VRF) {
