@@ -62,4 +62,4 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
 "${SCRIPT_DIR}/vm-copy.sh" to "${REPO_ROOT}/tests" "/root/tests" "${SSH_PORT}"
 
 echo "==> Running ${TEST_SUITE} tests..."
-"${SCRIPT_DIR}/vm-exec.sh" "cd /root/tests && mkdir -p out && robot --consolecolors on -r none -l ./out/${TEST_SUITE}-log --output ./out/output.xml ./${TEST_SUITE}/" "${SSH_PORT}"
+"${SCRIPT_DIR}/vm-exec.sh" "cd /root/tests && mkdir -p out && robot --consolecolors on -r none -l ./out/${TEST_SUITE}-log --output ./out/output.xml ${ROBOT_EXTRA_ARGS:-} ./${TEST_SUITE}/" "${SSH_PORT}"
