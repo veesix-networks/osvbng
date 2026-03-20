@@ -64,7 +64,7 @@ fmt:
 	golangci-lint run --fix
 
 robot-test:
-	./tests/rf-run.sh ./tests/$(suite)
+	./tests/rf-run.sh ./tests/$(suite) $(ROBOT_ARGS)
 
 clean-branches:
 	git fetch --prune origin
