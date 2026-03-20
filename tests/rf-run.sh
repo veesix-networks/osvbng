@@ -16,6 +16,8 @@ if [ -z "$1" ]; then
 fi
 
 SUITE_PATH="$1"
+shift
+EXTRA_ARGS=("$@")
 
 mkdir -p "${OUT_DIR}"
 
@@ -50,4 +52,5 @@ robot \
     -r none \
     -l "${OUT_DIR}/${LOG_NAME}-log" \
     --output "${OUT_DIR}/${LOG_NAME}-out.xml" \
+    "${EXTRA_ARGS[@]}" \
     "${SUITE_PATH}"

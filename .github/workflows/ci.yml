@@ -224,3 +224,8 @@ jobs:
     uses: ./.github/workflows/ha-failover-tests.yml
     needs: [file-changes, prepare-test-runner]
     if: needs.file-changes.outputs.ha == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
+
+  ipoe-linux-client-tests:
+    uses: ./.github/workflows/ipoe-linux-client-tests.yml
+    needs: [file-changes, prepare-test-runner]
+    if: needs.file-changes.outputs.sessions == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
