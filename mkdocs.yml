@@ -78,6 +78,7 @@ nav:
       - Reference Deployment Methods: architecture/REFERENCE_DEPLOYMENT_METHODS.md
       - High Availability: architecture/HA.md
       - DHCP Relay & Proxy: architecture/DHCP_RELAY_PROXY.md
+      - QoS: architecture/QOS.md
   - Quality Assurance:
     - Testing & Methodology: qa/testing-methodology.md
   - Contributing:

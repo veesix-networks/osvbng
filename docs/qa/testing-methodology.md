@@ -41,8 +41,10 @@ Each test deploys a complete network: BNG nodes, core routers, subscriber simula
 | 14 | HA Failover IPoE | Hard kill active BNG, verify seamless session restore (IPoE + CGNAT) |
 | 15 | HA Failover PPPoE | Hard kill active BNG, verify seamless session restore (PPPoE + CGNAT) |
 | 16 | HA Failover RADIUS | RADIUS-assigned pool attribute preserved across failover |
+| 17 | HA Tracker Promotion IPoE | Tracker-driven automatic promotion from STANDBY_ALONE to ACTIVE_SOLO on access interface failure |
+| 18 | IPoE Linux Client | Real Linux subscriber with QinQ VLANs, DHCP, ping, and iperf3 throughput |
 
-620+ total tests across 16 integration suites.
+740+ total tests across 18 integration suites.
 
 ### What Gets Verified
 
@@ -107,7 +109,7 @@ The CSIT results are directly representative of what osvbng achieves for forward
 
 We test osvbng's subscriber-facing forwarding on physical hardware using [Cisco TRex](https://trex-tgn.cisco.com/) as the traffic generator. TRex NICs connect directly to the osvbng server, one on the access side and one on the core side. TRex emulates subscriber sessions and generates bidirectional traffic flows through the BNG with DPDK-accelerated forwarding.
 
-We currently run these tests manually before each release using TRex across three packet sizes plus IMIX:
+We plan to run these tests on every minor and major release, and at some point introduce them for patch releases. Tests use TRex across three packet sizes plus IMIX:
 
 | Packet Size | Purpose |
 |-------------|---------|
@@ -141,7 +143,7 @@ This is not done yet. Today the performance testing is manual and results are ca
 |------|-------------|------------|
 | Build | Binary and Docker image build successfully | Yes (CI) |
 | Unit tests | All unit tests pass | Yes (CI) |
-| Integration tests | All 16 suites pass | Yes (CI) |
+| Integration tests | All 18 suites pass | Yes (CI) |
 | HA failover | Sessions survive hard BNG failure | Yes (CI) |
 | Changelog | Auto-generated via conventional commits | Yes (release-please) |
 | Docker image | Published to Docker Hub | Yes (CI) |
