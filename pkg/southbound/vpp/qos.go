@@ -14,6 +14,7 @@ import (
 
 	"github.com/veesix-networks/osvbng/pkg/config/qos"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/interface_types"
+	cake "github.com/veesix-networks/osvbng/pkg/vpp/binapi/osvbng_qos_sched"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/policer"
 )
 
@@ -185,5 +186,75 @@ func (v *VPP) RemoveQoS(swIfIndex uint32) error {
 	}
 
 	v.logger.Debug("Removed QoS policers", "sw_if_index", swIfIndex)
+	return nil
+}
+
+func (v *VPP) ApplyScheduler(swIfIndex uint32, rateKbps uint32, cfg *qos.SchedulerConfig) error {
+	if cfg == nil || rateKbps == 0 {
+		return nil
+	}
+
+	v.schedulerMu.Lock()
+	if v.schedulerIfs[swIfIndex] {
+		v.schedulerMu.Unlock()
+		return nil
+	}
+	v.schedulerMu.Unlock()
+
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	rateBytesPerSec := uint64(rateKbps) * 1000 / 8
+
+	req := &cake.OsvbngCakeSchedEnableDisable{
+		SwIfIndex:       interface_types.InterfaceIndex(swIfIndex),
+		IsEnable:        true,
+		RateBytesPerSec: rateBytesPerSec,
+		TinMode:         cake.OsvbngCakeTinMode(cfg.TinModeEnum()),
+	}
+	reply := &cake.OsvbngCakeSchedEnableDisableReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("cake scheduler enable: %w", err)
+	}
+	if reply.Retval != 0 {
+		return fmt.Errorf("cake scheduler enable failed: retval=%d", reply.Retval)
+	}
+
+	v.schedulerMu.Lock()
+	v.schedulerIfs[swIfIndex] = true
+	v.schedulerMu.Unlock()
+
+	v.logger.Debug("Applied CAKE scheduler", "sw_if_index", swIfIndex, "rate_kbps", rateKbps, "tin_mode", cfg.TinMode)
+	return nil
+}
+
+func (v *VPP) RemoveScheduler(swIfIndex uint32) error {
+	v.schedulerMu.Lock()
+	if !v.schedulerIfs[swIfIndex] {
+		v.schedulerMu.Unlock()
+		return nil
+	}
+	delete(v.schedulerIfs, swIfIndex)
+	v.schedulerMu.Unlock()
+
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	req := &cake.OsvbngCakeSchedEnableDisable{
+		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+		IsEnable:  false,
+	}
+	reply := &cake.OsvbngCakeSchedEnableDisableReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		v.logger.Warn("Failed to disable CAKE scheduler", "sw_if_index", swIfIndex, "error", err)
+	}
+
+	v.logger.Debug("Removed CAKE scheduler", "sw_if_index", swIfIndex)
 	return nil
 }

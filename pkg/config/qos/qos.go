@@ -37,14 +37,32 @@ type ActionConfig struct {
 	DSCP   uint8  `yaml:"dscp,omitempty"`
 }
 
+type SchedulerConfig struct {
+	TinMode string `json:"tin-mode,omitempty" yaml:"tin-mode,omitempty"`
+}
+
+func (s *SchedulerConfig) TinModeEnum() uint8 {
+	switch s.TinMode {
+	case "diffserv3":
+		return 1
+	case "diffserv4":
+		return 2
+	case "diffserv8":
+		return 3
+	default:
+		return 0
+	}
+}
+
 type Policy struct {
-	CIR     uint32       `yaml:"cir"`
-	EIR     uint32       `yaml:"eir,omitempty"`
-	CBS     uint64       `yaml:"cbs,omitempty"`
-	EBS     uint64       `yaml:"ebs,omitempty"`
-	Conform ActionConfig `yaml:"conform"`
-	Exceed  ActionConfig `yaml:"exceed"`
-	Violate ActionConfig `yaml:"violate"`
+	CIR       uint32           `yaml:"cir"`
+	EIR       uint32           `yaml:"eir,omitempty"`
+	CBS       uint64           `yaml:"cbs,omitempty"`
+	EBS       uint64           `yaml:"ebs,omitempty"`
+	Conform   ActionConfig     `yaml:"conform"`
+	Exceed    ActionConfig     `yaml:"exceed"`
+	Violate   ActionConfig     `yaml:"violate"`
+	Scheduler *SchedulerConfig `json:"scheduler,omitempty" yaml:"scheduler,omitempty"`
 }
 
 func (p *Policy) Defaults() {

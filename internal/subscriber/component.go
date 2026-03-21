@@ -405,14 +405,39 @@ func (c *Component) activateSession(sess models.SubscriberSession) error {
 		return nil
 	}
 
-	if err := c.vpp.ApplyQoS(swIfIndex, ingress, egress); err != nil {
-		c.logger.Warn("Failed to apply QoS", "error", err, "sw_if_index", swIfIndex, "service_group", sgName)
+	if egress != nil && egress.Scheduler != nil {
+		downloadRate := egress.CIR
+		if sg.QoS.DownloadRate > 0 {
+			downloadRate = uint32(sg.QoS.DownloadRate)
+		}
+
+		if downloadRate > 0 {
+			if err := c.vpp.ApplyScheduler(swIfIndex, downloadRate, egress.Scheduler); err != nil {
+				c.logger.Warn("Failed to apply scheduler", "error", err, "sw_if_index", swIfIndex)
+			} else {
+				c.logger.Debug("Applied CAKE scheduler",
+					"sw_if_index", swIfIndex,
+					"service_group", sgName,
+					"rate_kbps", downloadRate,
+					"tin_mode", egress.Scheduler.TinMode)
+			}
+		}
+
+		if ingress != nil {
+			if err := c.vpp.ApplyQoS(swIfIndex, ingress, nil); err != nil {
+				c.logger.Warn("Failed to apply ingress policer", "error", err, "sw_if_index", swIfIndex)
+			}
+		}
 	} else {
-		c.logger.Debug("Applied QoS",
-			"sw_if_index", swIfIndex,
-			"service_group", sgName,
-			"ingress_policy", sg.QoS.IngressPolicy,
-			"egress_policy", sg.QoS.EgressPolicy)
+		if err := c.vpp.ApplyQoS(swIfIndex, ingress, egress); err != nil {
+			c.logger.Warn("Failed to apply QoS", "error", err, "sw_if_index", swIfIndex, "service_group", sgName)
+		} else {
+			c.logger.Debug("Applied QoS",
+				"sw_if_index", swIfIndex,
+				"service_group", sgName,
+				"ingress_policy", sg.QoS.IngressPolicy,
+				"egress_policy", sg.QoS.EgressPolicy)
+		}
 	}
 
 	return nil
@@ -422,6 +447,10 @@ func (c *Component) releaseSession(sess models.SubscriberSession) error {
 	swIfIndex := sess.GetIfIndex()
 	if swIfIndex == 0 {
 		return nil
+	}
+
+	if err := c.vpp.RemoveScheduler(swIfIndex); err != nil {
+		c.logger.Warn("Failed to remove scheduler", "error", err, "sw_if_index", swIfIndex)
 	}
 
 	if err := c.vpp.RemoveQoS(swIfIndex); err != nil {

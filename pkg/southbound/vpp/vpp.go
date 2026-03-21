@@ -28,8 +28,10 @@ type VPP struct {
 	statsClient    *StatsClient
 	vrfResolver    func(string) (uint32, bool, bool, error)
 	lcpNs          *netlink.Handle
-	policerNames map[uint32][2]string
-	policerMu    sync.Mutex
+	policerNames   map[uint32][2]string
+	policerMu      sync.Mutex
+	schedulerIfs   map[uint32]bool
+	schedulerMu    sync.Mutex
 }
 
 type VPPConfig struct {
@@ -75,6 +77,7 @@ func NewVPP(cfg VPPConfig) (*VPP, error) {
 		asyncWorker:    asyncWorker,
 		statsClient:    statsClient,
 		policerNames: make(map[uint32][2]string),
+		schedulerIfs: make(map[uint32]bool),
 	}
 
 	if err := v.LoadInterfaces(); err != nil {

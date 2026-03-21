@@ -28,4 +28,7 @@ type Sessions interface {
 
 	ApplyQoS(swIfIndex uint32, ingress, egress *qos.Policy) error
 	RemoveQoS(swIfIndex uint32) error
+
+	ApplyScheduler(swIfIndex uint32, rateKbps uint32, cfg *qos.SchedulerConfig) error
+	RemoveScheduler(swIfIndex uint32) error
 }
