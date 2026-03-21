@@ -18,6 +18,8 @@ const (
 	HASwitchover Path = "ha.switchover"
 
 	CGNATTestMapping Path = "cgnat.test-mapping"
+
+	QoSSchedulerSet Path = "qos.scheduler.set"
 )
 
 func (p Path) String() string {

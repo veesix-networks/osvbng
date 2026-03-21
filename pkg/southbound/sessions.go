@@ -28,4 +28,26 @@ type Sessions interface {
 
 	ApplyQoS(swIfIndex uint32, ingress, egress *qos.Policy) error
 	RemoveQoS(swIfIndex uint32) error
+
+	ApplyScheduler(swIfIndex uint32, rateKbps uint32, cfg *qos.SchedulerConfig) error
+	RemoveScheduler(swIfIndex uint32) error
+	DumpSchedulers() ([]SchedulerState, error)
+}
+
+type SchedulerTinState struct {
+	Packets     uint64 `json:"packets"`
+	Drops       uint64 `json:"drops"`
+	ECNMarks    uint64 `json:"ecn_marks"`
+	SparseFlows uint32 `json:"sparse_flows"`
+	BulkFlows   uint32 `json:"bulk_flows"`
+}
+
+type SchedulerState struct {
+	SwIfIndex   uint32              `json:"sw_if_index"`
+	RateKbps    uint64              `json:"rate_kbps"`
+	TinMode     string              `json:"tin_mode"`
+	TinCount    uint8               `json:"tin_count"`
+	BufferUsage uint32              `json:"buffer_usage"`
+	BufferLimit uint32              `json:"buffer_limit"`
+	Tins        []SchedulerTinState `json:"tins,omitempty"`
 }

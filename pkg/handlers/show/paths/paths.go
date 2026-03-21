@@ -76,6 +76,8 @@ const (
 	CGNATPools      Path = "cgnat.pools"
 	CGNATStatistics Path = "cgnat.statistics"
 	CGNATLookup     Path = "cgnat.lookup"
+
+	QoSScheduler Path = "qos.scheduler"
 )
 
 func (p Path) String() string {

@@ -500,6 +500,7 @@ func main() {
 
 	operRegistry.AutoRegisterAll(&deps.OperDeps{
 		Subscriber:       subscriberComp,
+		Southbound:       vpp,
 		EventBus:         eventBus,
 		HAManager:        haMgr,
 		PluginComponents: pluginComponentsMap,
