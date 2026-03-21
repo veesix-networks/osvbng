@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.6.0](https://github.com/veesix-networks/osvbng/compare/v0.5.0...v0.6.0) (2026-03-21)
+
+
+### Features
+
+* **cgnat:** add Carrier-Grade NAT with PBA mode for IPoE and PPPoE subscribers ([#183](https://github.com/veesix-networks/osvbng/issues/183)) ([c96cee1](https://github.com/veesix-networks/osvbng/commit/c96cee1fb449dd98188a41baf399e4725a5b0e3a))
+* **cgnat:** add CGNAT HA mapping sync with incremental and bulk sync ([#188](https://github.com/veesix-networks/osvbng/issues/188)) ([95088e4](https://github.com/veesix-networks/osvbng/commit/95088e496284216dad406c6ad81b6fb30c7df26e))
+* **ha:** add tracker-driven promotion from STANDBY_ALONE ([#196](https://github.com/veesix-networks/osvbng/issues/196)) ([7a8222c](https://github.com/veesix-networks/osvbng/commit/7a8222c26e2436bfab3783bc147f029e7be02f5f))
+* **ha:** restore synced sessions on HA promotion with failover tests ([#190](https://github.com/veesix-networks/osvbng/issues/190)) ([3bc1dac](https://github.com/veesix-networks/osvbng/commit/3bc1dac5debaa3b0ab5f8894a1eb50361068d2fa))
+* **ha:** sync AAA attributes across HA failover with RADIUS validation ([#192](https://github.com/veesix-networks/osvbng/issues/192)) ([504c88b](https://github.com/veesix-networks/osvbng/commit/504c88b4dfbd07f011fa5f3ed4361a99fd9db597))
+* **qos:** integrate CAKE scheduler plugin into subscriber lifecycle ([#206](https://github.com/veesix-networks/osvbng/issues/206)) ([dd387a5](https://github.com/veesix-networks/osvbng/commit/dd387a55bf80e1ac9ffbb625cb8be3464b7f7d5e))
+
+
+### Bug Fixes
+
+* **arp:** ignore DAD probe for client's own assigned IP ([#205](https://github.com/veesix-networks/osvbng/issues/205)) ([678f6a0](https://github.com/veesix-networks/osvbng/commit/678f6a00d50ccb5170394b423bf15c5497c8242a))
+* **ci:** add checkout step for Discord changelog notification ([#193](https://github.com/veesix-networks/osvbng/issues/193)) ([ab600b5](https://github.com/veesix-networks/osvbng/commit/ab600b5b89f44fd32c81ba990e398eb316e3dd07))
+* **ci:** extract PR number from release-please JSON output ([#199](https://github.com/veesix-networks/osvbng/issues/199)) ([e4a1d95](https://github.com/veesix-networks/osvbng/commit/e4a1d9545cd5e8e23d5424afbf7cc5cff7ba631b))
+* **ci:** pass all github expressions as env vars to avoid shell parsing errors ([#195](https://github.com/veesix-networks/osvbng/issues/195)) ([1f7f7b4](https://github.com/veesix-networks/osvbng/commit/1f7f7b4631a466a19dc9915ff951ace21c6fe869))
+* **ci:** prevent shell parsing failures in Discord webhook notifications ([#197](https://github.com/veesix-networks/osvbng/issues/197)) ([c388837](https://github.com/veesix-networks/osvbng/commit/c388837aa76674e31b5c78440e5e97b727964021))
+* **ci:** use github context instead of git log for Discord notifications ([#194](https://github.com/veesix-networks/osvbng/issues/194)) ([3f03898](https://github.com/veesix-networks/osvbng/commit/3f03898c1f4580682c39d77189eec23554e78bc7))
+* **ha:** handle reverse event ordering for tracker promotion ([#198](https://github.com/veesix-networks/osvbng/issues/198)) ([a6071bd](https://github.com/veesix-networks/osvbng/commit/a6071bdac531c3725bd5f73d199429b9170e0694))
+* **ha:** only restore synced sessions when promoted from STANDBY_ALONE ([#201](https://github.com/veesix-networks/osvbng/issues/201)) ([2189aee](https://github.com/veesix-networks/osvbng/commit/2189aee5e4afb8770a9726a269f93506776d8f92))
+
 ## [0.5.0](https://github.com/veesix-networks/osvbng/compare/v0.4.0...v0.5.0) (2026-03-14)
 
 
