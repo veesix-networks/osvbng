@@ -44,6 +44,7 @@ type ShowDeps struct {
 
 type OperDeps struct {
 	Subscriber       *subscriber.Component
+	Southbound       southbound.Southbound
 	EventBus         events.Bus
 	HAManager        *ha.Manager
 	PluginComponents map[string]component.Component

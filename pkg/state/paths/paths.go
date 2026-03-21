@@ -43,6 +43,8 @@ const (
 
 	CGNATPools      Path = "cgnat.pools"
 	CGNATStatistics Path = "cgnat.statistics"
+
+	QoSScheduler Path = "qos.scheduler"
 )
 
 func (p Path) String() string {

@@ -13,6 +13,7 @@ import (
 	"fmt"
 
 	"github.com/veesix-networks/osvbng/pkg/config/qos"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/interface_types"
 	cake "github.com/veesix-networks/osvbng/pkg/vpp/binapi/osvbng_qos_sched"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/policer"
@@ -257,4 +258,53 @@ func (v *VPP) RemoveScheduler(swIfIndex uint32) error {
 
 	v.logger.Debug("Removed CAKE scheduler", "sw_if_index", swIfIndex)
 	return nil
+}
+
+func (v *VPP) DumpSchedulers() ([]southbound.SchedulerState, error) {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return nil, fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	req := &cake.OsvbngCakeSchedDump{
+		SwIfIndex: ^interface_types.InterfaceIndex(0),
+	}
+
+	var result []southbound.SchedulerState
+
+	multi := ch.SendMultiRequest(req)
+	for {
+		d := &cake.OsvbngCakeSchedDetails{}
+		stop, err := multi.ReceiveReply(d)
+		if stop {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("dump schedulers: %w", err)
+		}
+
+		s := southbound.SchedulerState{
+			SwIfIndex:   uint32(d.SwIfIndex),
+			RateKbps:    d.RateBytesPerSec * 8 / 1000,
+			TinMode:     d.TinMode.String(),
+			TinCount:    d.TinCnt,
+			BufferUsage: d.BufferUsage,
+			BufferLimit: d.BufferLimit,
+		}
+
+		for i := uint8(0); i < d.TinCnt && i < 8; i++ {
+			s.Tins = append(s.Tins, southbound.SchedulerTinState{
+				Packets:     d.TinPackets[i],
+				Drops:       d.TinDrops[i],
+				ECNMarks:    d.TinEcnMarks[i],
+				SparseFlows: d.TinSparseFlows[i],
+				BulkFlows:   d.TinBulkFlows[i],
+			})
+		}
+
+		result = append(result, s)
+	}
+
+	return result, nil
 }
