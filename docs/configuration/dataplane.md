@@ -4,8 +4,26 @@ Dataplane and DPDK configuration.
 
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
+| `rx_mode` | string | Interface RX mode: `polling`, `interrupt`, or `adaptive` | `polling` |
 | `dpdk` | [DPDK](#dpdk-configuration) | DPDK-specific configuration | |
 | `statseg` | [StatsSegment](#stats-segment) | Stats segment configuration | |
+
+## RX Mode
+
+Controls how VPP polls AF_PACKET host interfaces for incoming packets.
+
+- **`interrupt`** (default): Workers sleep until the kernel signals a packet arrival. Near-zero CPU when idle.
+- **`polling`**: Each worker thread busy-polls its assigned interfaces, pinning its core at 100% CPU even when idle. This is by design in VPP to maximise time spent packet processing and minimise latency.
+- **`adaptive`**: VPP dynamically switches between polling and interrupt based on traffic load.
+
+LCP tap interfaces are always set to interrupt mode regardless of this setting. These interfaces exist to pass control plane packets (BGP, OSPF, ARP, ND, etc.) into the kernel for FRR and do not benefit from polling.
+
+This setting does not affect DPDK interfaces, which manage their own RX mode independently.
+
+```yaml
+dataplane:
+  rx_mode: polling
+```
 
 ## Stats Segment
 

@@ -14,6 +14,7 @@ type DataplaneConfig struct {
 	DPAPISocket     string              `json:"dp_api_socket,omitempty" yaml:"dp_api_socket,omitempty"`
 	PuntSocketPath  string              `json:"punt_socket_path,omitempty" yaml:"punt_socket_path,omitempty"`
 	MemifSocketPath string              `json:"memif_socket_path,omitempty" yaml:"memif_socket_path,omitempty"`
+	RxMode          string              `json:"rx_mode,omitempty" yaml:"rx_mode,omitempty"`
 	DPDK            *DPDKConfig         `json:"dpdk,omitempty" yaml:"dpdk,omitempty"`
 	StatsSegment    *StatsSegmentConfig `json:"statseg,omitempty" yaml:"statseg,omitempty"`
 }
