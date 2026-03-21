@@ -20,7 +20,7 @@ osvbngd config > /etc/osvbng/osvbng.yaml
 - [DHCPv6](dhcpv6.md) - DHCPv6 provider configuration
 - [AAA](aaa.md) - Authentication and policies
 - [CGNAT](cgnat.md) - Carrier-Grade NAT with PBA and Deterministic modes
-- [QoS Policies](qos.md) - Per-subscriber rate limiting with VPP policers
+- [QoS Policies](qos.md) - Per-subscriber rate limiting (policer) and traffic shaping (CAKE scheduler)
 - [Service Groups](service-groups.md) - Named per-subscriber attribute bundles (VRF, ACL, QoS)
 - [Subscriber Provisioning](provisioning.md) - AAA attribute resolution, override priority, and scenarios
 - [VRFs](vrfs.md) - Virtual Routing and Forwarding instances
