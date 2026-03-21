@@ -7,6 +7,7 @@ package all
 import (
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/oper/cgnat"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/oper/ha"
+	_ "github.com/veesix-networks/osvbng/pkg/handlers/oper/qos"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/oper/subscriber"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/oper/system"
 )

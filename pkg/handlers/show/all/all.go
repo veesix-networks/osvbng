@@ -18,6 +18,7 @@ import (
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/protocols/mpls"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/protocols/ospf"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/protocols/ospf6"
+	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/qos"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/servicegroups"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/subscriber"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/system"
