@@ -16,21 +16,21 @@
     "enable": true,
     "retry": 25
   },
-  "dhcpv6": {                                                                                                                                                         
+  "dhcpv6": {
     "enable": true,
     "ia-na": true,
     "ia-pd": true,
     "rapid-commit": false,
     "access-line": true,
-    "ldra": true                                                                                                                                          
-  }, 
+    "ldra": true
+  },
   "ipoe": {
     "ipv6": true
   },
   "sessions": {
     "count": 1000,
-    "max-outstanding": 400,
-    "start-rate": 200,
+    "max-outstanding": 1000,
+    "start-rate": 500,
     "stop-rate": 800
   },
   "access-line": {
