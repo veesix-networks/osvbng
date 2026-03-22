@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.6.1](https://github.com/veesix-networks/osvbng/compare/v0.6.0...v0.6.1) (2026-03-22)
+
+
+### Bug Fixes
+
+* **ci:** trigger discord webhook on release-please PR creation ([#212](https://github.com/veesix-networks/osvbng/issues/212)) ([81299b3](https://github.com/veesix-networks/osvbng/commit/81299b37649682ea6b5b4a18ea887b3f5ed2640d))
+* **dataplane:** default AF_PACKET interfaces to interrupt rx-mode ([#209](https://github.com/veesix-networks/osvbng/issues/209)) ([47617ec](https://github.com/veesix-networks/osvbng/commit/47617ece50aa18e63a77aa2a70ea3e7edc7bbc5d))
+* **dataplane:** use poll instead of busy-read on punt eventfd ([#211](https://github.com/veesix-networks/osvbng/issues/211)) ([55be33a](https://github.com/veesix-networks/osvbng/commit/55be33aa5daec67996c88672eb4d431d39b4c1ab))
+
 ## [0.6.0](https://github.com/veesix-networks/osvbng/compare/v0.5.0...v0.6.0) (2026-03-21)
 
 
