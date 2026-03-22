@@ -274,6 +274,38 @@ func (v *VPP) SetUnnumbered(ifaceName, loopbackName string) error {
 	return nil
 }
 
+func (v *VPP) SetUnnumberedAsync(swIfIndex uint32, loopbackName string, callback func(error)) {
+	loopback := v.ifMgr.GetByName(loopbackName)
+	if loopback == nil {
+		callback(fmt.Errorf("loopback %s not found in ifMgr cache", loopbackName))
+		return
+	}
+
+	req := &vppinterfaces.SwInterfaceSetUnnumbered{
+		SwIfIndex:           interface_types.InterfaceIndex(loopback.SwIfIndex),
+		UnnumberedSwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+		IsAdd:               true,
+	}
+
+	v.asyncWorker.SendAsync(req, func(reply api.Message, err error) {
+		if err != nil {
+			callback(err)
+			return
+		}
+		r, ok := reply.(*vppinterfaces.SwInterfaceSetUnnumberedReply)
+		if !ok {
+			callback(fmt.Errorf("unexpected reply type: %T", reply))
+			return
+		}
+		if r.Retval != 0 {
+			callback(fmt.Errorf("set unnumbered failed: retval=%d", r.Retval))
+			return
+		}
+		v.logger.Debug("Set interface unnumbered (async)", "sw_if_index", swIfIndex, "loopback", loopbackName)
+		callback(nil)
+	})
+}
+
 func (v *VPP) getInterfaceAddresses(swIfIndex interface_types.InterfaceIndex) (map[string]bool, error) {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {

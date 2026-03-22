@@ -192,6 +192,36 @@ aaa:
           format: $mac-address$
           max_concurrent_sessions: 1
 
+system:
+    cppm:
+        dataplane:
+            policer:
+                dhcpv4:
+                    rate: 1000
+                    burst: 500
+                dhcpv6:
+                    rate: 1000
+                    burst: 500
+                arp:
+                    rate: 1000
+                    burst: 500
+                ipv6-nd:
+                    rate: 500
+                    burst: 200
+        controlplane:
+            policer:
+                dhcpv4:
+                    rate: 1000
+                    burst: 500
+                dhcpv6:
+                    rate: 1000
+                    burst: 500
+                arp:
+                    rate: 1000
+                    burst: 500
+                ipv6-nd:
+                    rate: 500
+                    burst: 200
 ha:
     enabled: true
     node_id: bng-2

@@ -275,7 +275,7 @@ protocols:
             ipv4:
                 transport-address: 10.254.0.1
 aaa:
-    auth_provider: radius
+    auth_provider: local
     nas_identifier: osvbng
     policy:
         - name: default-policy
@@ -334,17 +334,29 @@ system:
                 dhcpv4:
                     rate: 1000
                     burst: 500
+                dhcpv6:
+                    rate: 1000
+                    burst: 500
                 arp:
                     rate: 1000
                     burst: 500
+                ipv6-nd:
+                    rate: 500
+                    burst: 200
         controlplane:
             policer:
                 dhcpv4:
                     rate: 1000
                     burst: 500
+                dhcpv6:
+                    rate: 1000
+                    burst: 500
                 arp:
                     rate: 1000
                     burst: 500
+                ipv6-nd:
+                    rate: 500
+                    burst: 200
 ha:
     enabled: false
     node_id: bng-1

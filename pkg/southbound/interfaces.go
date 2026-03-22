@@ -13,6 +13,7 @@ type Interfaces interface {
 	SetInterfacePromiscuous(ifaceName string, on bool) error
 
 	SetUnnumbered(ifaceName, loopbackName string) error
+	SetUnnumberedAsync(swIfIndex uint32, loopbackName string, callback func(error))
 
 	DumpInterfaces() ([]InterfaceInfo, error)
 	DumpUnnumbered() ([]UnnumberedInfo, error)
