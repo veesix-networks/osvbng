@@ -18,24 +18,32 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Notify Discord of changelog update
-        if: ${{ steps.release.outputs.pr }}
+        if: ${{ steps.release.outputs.prs_created == 'true' || steps.release.outputs.pr }}
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           COMMIT_MSG: ${{ github.event.head_commit.message }}
           PR_JSON: ${{ steps.release.outputs.pr }}
+          PRS_CREATED: ${{ steps.release.outputs.prs_created }}
           REPO: ${{ github.repository }}
         run: |
           PR_NUM=$(echo "$PR_JSON" | jq -r '.number')
           PR_TITLE=$(echo "$PR_JSON" | jq -r '.title')
+
+          if [ "$PRS_CREATED" = "true" ]; then
+            ACTION="created"
+          else
+            ACTION="updated"
+          fi
 
           PAYLOAD=$(jq -n \
             --arg pr_num "$PR_NUM" \
             --arg pr_title "$PR_TITLE" \
             --arg commit_msg "$COMMIT_MSG" \
             --arg repo "$REPO" \
+            --arg action "$ACTION" \
             '{
               embeds: [{
-                title: ("Release PR #" + $pr_num + " updated"),
+                title: ("Release PR #" + $pr_num + " " + $action),
                 url: ("https://github.com/" + $repo + "/pull/" + $pr_num),
                 description: ("**" + $commit_msg + "**\n\n" + $pr_title),
                 color: 5025616
