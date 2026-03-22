@@ -127,10 +127,10 @@ func (w *AsyncWorker) reconnect() error {
 	for elem := w.pending.Front(); elem != nil; elem = w.pending.Front() {
 		w.pending.Remove(elem)
 		req := elem.Value.(*AsyncRequest)
-		if req.Callback != nil {
-			req.Callback(nil, ErrVPPUnavailable)
-		}
 		<-w.inflight
+		if req.Callback != nil {
+			go req.Callback(nil, ErrVPPUnavailable)
+		}
 	}
 	w.pendingMu.Unlock()
 
@@ -183,7 +183,7 @@ func (w *AsyncWorker) sendLoop() {
 			if w.circuitOpen.Load() {
 				w.rejected.Add(1)
 				if req.Callback != nil {
-					req.Callback(nil, ErrVPPUnavailable)
+					go req.Callback(nil, ErrVPPUnavailable)
 				}
 				continue
 			}
@@ -216,7 +216,7 @@ func (w *AsyncWorker) sendLoop() {
 				}
 
 				if req.Callback != nil {
-					req.Callback(nil, fmt.Errorf("send failed: %w", err))
+					go req.Callback(nil, fmt.Errorf("send failed: %w", err))
 				}
 				continue
 			}
@@ -272,7 +272,7 @@ func (w *AsyncWorker) recvLoop() {
 
 				req := elem.Value.(*AsyncRequest)
 				if req.Callback != nil {
-					req.Callback(reply, nil)
+					go req.Callback(reply, nil)
 				}
 			} else {
 				w.pendingMu.Unlock()
