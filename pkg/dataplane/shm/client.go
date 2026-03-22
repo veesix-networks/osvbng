@@ -224,9 +224,19 @@ func (c *Client) EgressFd() *os.File {
 }
 
 func (c *Client) WaitPunt() error {
-	var buf [8]byte
-	_, err := syscall.Read(c.puntEventfd, buf[:])
-	return err
+	fds := []unix.PollFd{{Fd: int32(c.puntEventfd), Events: unix.POLLIN}}
+	n, err := unix.Poll(fds, 50)
+	if err != nil {
+		if err == unix.EINTR {
+			return nil
+		}
+		return err
+	}
+	if n > 0 {
+		var buf [8]byte
+		syscall.Read(c.puntEventfd, buf[:])
+	}
+	return nil
 }
 
 func (c *Client) SignalEgress() error {
