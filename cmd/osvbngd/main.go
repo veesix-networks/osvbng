@@ -141,6 +141,7 @@ func main() {
 		Connection: vppConn,
 		IfMgr:      ifMgr,
 		UseDPDK:    cfg.Dataplane.DPDK != nil && len(cfg.Dataplane.DPDK.Devices) > 0,
+		RxMode:     cfg.Dataplane.RxMode,
 	})
 	if err != nil {
 		log.Fatalf("Failed to create VPP southbound: %v", err)

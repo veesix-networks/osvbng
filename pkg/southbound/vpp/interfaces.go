@@ -20,6 +20,17 @@ import (
 	"go.fd.io/govpp/api"
 )
 
+func (v *VPP) resolveRxMode() interface_types.RxMode {
+	switch v.rxMode {
+	case "polling":
+		return interface_types.RX_MODE_API_POLLING
+	case "adaptive":
+		return interface_types.RX_MODE_API_ADAPTIVE
+	default:
+		return interface_types.RX_MODE_API_INTERRUPT
+	}
+}
+
 func (v *VPP) CreateSVLAN(parentIface string, vlan uint16, ipv4 []string, ipv6 []string) error {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
@@ -1040,11 +1051,11 @@ func (v *VPP) createVPPHostInterface(linuxIface string) (string, error) {
 
 	rxModeReq := &vppinterfaces.SwInterfaceSetRxMode{
 		SwIfIndex: afReply.SwIfIndex,
-		Mode:      interface_types.RX_MODE_API_POLLING,
+		Mode:      v.resolveRxMode(),
 	}
 	rxModeReply := &vppinterfaces.SwInterfaceSetRxModeReply{}
 	if err := ch.SendRequest(rxModeReq).ReceiveReply(rxModeReply); err != nil {
-		v.logger.Warn("Failed to set RX mode to polling", "interface", vppIfName, "error", err)
+		v.logger.Warn("Failed to set RX mode", "interface", vppIfName, "mode", v.rxMode, "error", err)
 	}
 
 	v.logger.Info("Created VPP host-interface", "linux_iface", linuxIface, "vpp_iface", vppIfName, "sw_if_index", afReply.SwIfIndex)
@@ -1119,14 +1130,14 @@ func (v *VPP) createLCPPair(vppIface, linuxIface string, hostType lcp.LcpItfHost
 			"vpp_iface", vppIface, "linux_iface", linuxIface)
 	}
 
-	req := &lcp.LcpItfPairAddDel{
+	req := &lcp.LcpItfPairAddDelV2{
 		IsAdd:      true,
 		SwIfIndex:  swIfIndex,
 		HostIfName: linuxIface,
 		HostIfType: hostType,
 	}
 
-	reply := &lcp.LcpItfPairAddDelReply{}
+	reply := &lcp.LcpItfPairAddDelV2Reply{}
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
 		if reply.Retval == -81 {
 			v.logger.Info("LCP pair already exists", "vpp_iface", vppIface, "linux_iface", linuxIface)
@@ -1137,6 +1148,17 @@ func (v *VPP) createLCPPair(vppIface, linuxIface string, hostType lcp.LcpItfHost
 
 	if reply.Retval != 0 {
 		return fmt.Errorf("create LCP pair failed: retval=%d", reply.Retval)
+	}
+
+	if reply.HostSwIfIndex != 0 {
+		rxReq := &vppinterfaces.SwInterfaceSetRxMode{
+			SwIfIndex: reply.HostSwIfIndex,
+			Mode:      interface_types.RX_MODE_API_INTERRUPT,
+		}
+		rxReply := &vppinterfaces.SwInterfaceSetRxModeReply{}
+		if err := ch.SendRequest(rxReq).ReceiveReply(rxReply); err != nil {
+			v.logger.Warn("Failed to set LCP tap RX mode to interrupt", "interface", linuxIface, "error", err)
+		}
 	}
 
 	v.logger.Info("Created LCP pair", "vpp_iface", vppIface, "linux_iface", linuxIface, "host_type", hostType)

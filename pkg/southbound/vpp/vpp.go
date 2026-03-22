@@ -24,6 +24,7 @@ type VPP struct {
 	fibChan        api.Channel
 	fibMux         sync.Mutex
 	useDPDK        bool
+	rxMode         string
 	asyncWorker    *AsyncWorker
 	statsClient    *StatsClient
 	vrfResolver    func(string) (uint32, bool, bool, error)
@@ -38,6 +39,7 @@ type VPPConfig struct {
 	Connection      *core.Connection
 	IfMgr           *ifmgr.Manager
 	UseDPDK         bool
+	RxMode          string
 	StatsSocketPath string
 }
 
@@ -74,6 +76,7 @@ func NewVPP(cfg VPPConfig) (*VPP, error) {
 		logger:         logger.Get(logger.Southbound),
 		fibChan:        fibChan,
 		useDPDK:        cfg.UseDPDK,
+		rxMode:         cfg.RxMode,
 		asyncWorker:    asyncWorker,
 		statsClient:    statsClient,
 		policerNames: make(map[uint32][2]string),
