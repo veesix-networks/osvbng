@@ -58,11 +58,10 @@ type Component struct {
 	opdb             opdb.Store
 	dhcp4Providers   map[string]dhcp4.DHCPProvider
 	dhcp6Providers   map[string]dhcp6.DHCPProvider
-	sessions         map[string]*SessionState
-	xidIndex         map[uint32]*SessionState
-	xid6Index        map[[3]byte]*SessionState
-	sessionIndex     map[string]*SessionState
-	sessionMu        sync.RWMutex
+	sessions     sync.Map
+	xidIndex     sync.Map
+	xid6Index    sync.Map
+	sessionIndex sync.Map
 
 	dhcpChan   <-chan *dataplane.ParsedPacket
 	dhcp6Chan  <-chan *dataplane.ParsedPacket
@@ -73,6 +72,7 @@ type Component struct {
 }
 
 type SessionState struct {
+	mu                  sync.Mutex
 	SessionID           string
 	AcctSessionID       string
 	MAC                 net.HardwareAddr
@@ -324,10 +324,6 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 		opdb:             deps.OpDB,
 		dhcp4Providers:   dhcp4Providers,
 		dhcp6Providers:   dhcp6Providers,
-		sessions:         make(map[string]*SessionState),
-		xidIndex:         make(map[uint32]*SessionState),
-		xid6Index:        make(map[[3]byte]*SessionState),
-		sessionIndex:     make(map[string]*SessionState),
 		dhcpChan:         deps.DHCPChan,
 		dhcp6Chan:        deps.DHCPv6Chan,
 		ipv6NDChan:       deps.IPv6NDChan,
@@ -513,9 +509,10 @@ func (c *Component) unwrapDHCPv6Relay(pkt *dataplane.ParsedPacket) (*layers.DHCP
 func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 	lookupKey := c.makeSessionKeyV4(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN)
 
-	c.sessionMu.RLock()
-	sess := c.sessions[lookupKey]
-	c.sessionMu.RUnlock()
+	var sess *SessionState
+	if val, ok := c.sessions.Load(lookupKey); ok {
+		sess = val.(*SessionState)
+	}
 
 	if sess == nil {
 		if err := c.checkSessionLimit(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN); err != nil {
@@ -534,15 +531,12 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 			State:         "discovering",
 		}
 
-		c.sessionMu.Lock()
-		if existing := c.sessions[lookupKey]; existing != nil {
-			sess = existing
+		if actual, loaded := c.sessions.LoadOrStore(lookupKey, newSess); loaded {
+			sess = actual.(*SessionState)
 		} else {
 			sess = newSess
-			c.sessions[lookupKey] = sess
-			c.sessionIndex[sessID] = sess
+			c.sessionIndex.Store(sessID, sess)
 		}
-		c.sessionMu.Unlock()
 	}
 
 	hostname := string(getDHCPOption(pkt.DHCPv4.Options, layers.DHCPOptHostname))
@@ -558,7 +552,7 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 		return fmt.Errorf("serialize DHCP: %w", err)
 	}
 
-	c.sessionMu.Lock()
+	sess.mu.Lock()
 	sess.XID = pkt.DHCPv4.Xid
 	sess.Hostname = hostname
 	sess.ClientID = clientID
@@ -567,11 +561,11 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 	sess.LastSeen = time.Now()
 	sess.EncapIfIndex = pkt.SwIfIndex
 	sess.PendingDHCPDiscover = buf.Bytes()
-	c.xidIndex[pkt.DHCPv4.Xid] = sess
 	alreadyApproved := sess.AAAApproved
 	ipoeCreated := sess.IPoESessionCreated
 	v6AaaPending := sess.PendingDHCPv6Solicit != nil || sess.PendingDHCPv6Request != nil
-	c.sessionMu.Unlock()
+	sess.mu.Unlock()
+	c.xidIndex.Store(pkt.DHCPv4.Xid, sess)
 
 	c.logger.WithGroup(logger.IPoEDHCP4).Info("Session discovering", "session_id", sess.SessionID, "circuit_id", string(circuitID), "remote_id", string(remoteID))
 
@@ -692,11 +686,13 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 	lookupKey := c.makeSessionKeyV4(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN)
 
-	c.sessionMu.Lock()
-	sess := c.sessions[lookupKey]
+	var sess *SessionState
+	if val, ok := c.sessions.Load(lookupKey); ok {
+		sess = val.(*SessionState)
+	}
 	if sess == nil {
 		sessID := session.GenerateID()
-		sess = &SessionState{
+		newSess := &SessionState{
 			SessionID:     sessID,
 			AcctSessionID: session.ToAcctSessionID(sessID),
 			MAC:           pkt.MAC,
@@ -705,10 +701,16 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 			EncapIfIndex:  pkt.SwIfIndex,
 			State:         "requesting",
 		}
-		c.sessions[lookupKey] = sess
-		c.sessionIndex[sessID] = sess
+		if actual, loaded := c.sessions.LoadOrStore(lookupKey, newSess); loaded {
+			sess = actual.(*SessionState)
+		} else {
+			sess = newSess
+			c.sessionIndex.Store(sessID, sess)
+		}
 	} else {
+		sess.mu.Lock()
 		sess.State = "requesting"
+		sess.mu.Unlock()
 	}
 	buf := gopacket.NewSerializeBuffer()
 	opts := gopacket.SerializeOptions{
@@ -719,12 +721,13 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 		return fmt.Errorf("serialize DHCP: %w", err)
 	}
 
+	sess.mu.Lock()
 	sess.XID = pkt.DHCPv4.Xid
 	sess.LastSeen = time.Now()
 	sess.PendingDHCPRequest = buf.Bytes()
-	c.xidIndex[pkt.DHCPv4.Xid] = sess
 	alreadyApproved := sess.AAAApproved
-	c.sessionMu.Unlock()
+	sess.mu.Unlock()
+	c.xidIndex.Store(pkt.DHCPv4.Xid, sess)
 
 	if alreadyApproved {
 		c.logger.WithGroup(logger.IPoEDHCP4).Info("Session already AAA approved, processing REQUEST with DHCP provider", "session_id", sess.SessionID)
@@ -872,17 +875,17 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 	lookupKey := c.makeSessionKeyV4(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN)
 
-	c.sessionMu.Lock()
-	sess := c.sessions[lookupKey]
-	if sess == nil {
-		c.sessionMu.Unlock()
+	val, ok := c.sessions.Load(lookupKey)
+	if !ok {
 		c.logger.Info("Received DHCPRELEASE for unknown session", "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
 		return nil
 	}
+	sess := val.(*SessionState)
 
+	sess.mu.Lock()
 	ciaddr := pkt.DHCPv4.ClientIP
 	if sess.IPv4 != nil && !sess.IPv4.Equal(ciaddr) {
-		c.sessionMu.Unlock()
+		sess.mu.Unlock()
 		c.logger.Warn("DHCPRELEASE anti-spoof: ciaddr mismatch",
 			"session_id", sess.SessionID,
 			"expected", sess.IPv4,
@@ -906,7 +909,8 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 
 	sess.IPv4 = nil
 	sess.State = "released"
-	delete(c.xidIndex, xid)
+	sess.mu.Unlock()
+	c.xidIndex.Delete(xid)
 
 	sessionMode := c.getSessionMode(pkt.OuterVLAN)
 	deleteSession := true
@@ -915,14 +919,16 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 	}
 
 	if deleteSession {
+		sess.mu.Lock()
 		sess.IPv6Bound = false
 		sess.IPv6Address = nil
 		sess.IPv6Prefix = nil
-		delete(c.xid6Index, sess.DHCPv6XID)
-		delete(c.sessionIndex, sessID)
-		delete(c.sessions, lookupKey)
+		dhcpv6XID := sess.DHCPv6XID
+		sess.mu.Unlock()
+		c.xid6Index.Delete(dhcpv6XID)
+		c.sessionIndex.Delete(sessID)
+		c.sessions.Delete(lookupKey)
 	}
-	c.sessionMu.Unlock()
 
 	c.logger.Info("IPv4 released by client", "session_id", sessID, "delete_session", deleteSession)
 
@@ -1010,15 +1016,13 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 }
 
 func (c *Component) handleServerResponse(pkt *dataplane.ParsedPacket) error {
-	c.sessionMu.RLock()
-	sess := c.xidIndex[pkt.DHCPv4.Xid]
-	c.sessionMu.RUnlock()
-
-	if sess == nil {
+	val, ok := c.xidIndex.Load(pkt.DHCPv4.Xid)
+	if !ok {
 		msgType := getDHCPMessageType(pkt.DHCPv4.Options)
 		c.logger.Info("Received DHCP response but no session found", "message_type", msgType.String(), "xid", fmt.Sprintf("0x%x", pkt.DHCPv4.Xid))
 		return nil
 	}
+	sess := val.(*SessionState)
 
 	msgType := getDHCPMessageType(pkt.DHCPv4.Options)
 	c.logger.Debug("Forwarding DHCP to client", "message_type", msgType.String(), "mac", sess.MAC.String(), "session_id", sess.SessionID, "xid", fmt.Sprintf("0x%x", pkt.DHCPv4.Xid))
@@ -1122,7 +1126,7 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 		leaseTime = binary.BigEndian.Uint32(leaseOpt)
 	}
 
-	c.sessionMu.Lock()
+	sess.mu.Lock()
 	alreadyBound := sess.State == "bound"
 	sess.State = "bound"
 	sess.IPv4 = pkt.DHCPv4.YourClientIP
@@ -1135,7 +1139,7 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 	snapshotIPv6 := sess.IPv6Address
 	snapshotIPv6LeaseTime := sess.IPv6LeaseTime
 	snapshotIPv6Prefix := sess.IPv6Prefix
-	c.sessionMu.Unlock()
+	sess.mu.Unlock()
 
 	c.logger.WithGroup(logger.IPoEDHCP4).Info("Session bound", "session_id", sess.SessionID, "ipv4", sess.IPv4.String())
 
@@ -1156,9 +1160,9 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 				c.publishSessionProgrammed(sess, ipoeSwIfIndex)
 			})
 		} else {
-			c.sessionMu.Lock()
+			sess.mu.Lock()
 			sess.PendingIPv4Binding = ipv4
-			c.sessionMu.Unlock()
+			sess.mu.Unlock()
 			c.logger.WithGroup(logger.IPoEDHCP4).Debug("IPoE session not ready, queued IPv4 binding", "session_id", sessID, "ipv4", ipv4.String())
 		}
 	}
@@ -1224,14 +1228,14 @@ func (c *Component) handleAAAResponse(event events.Event) {
 	sessID := data.SessionID
 	allowed := data.Response.Allowed
 
-	c.sessionMu.Lock()
-	sess := c.sessionIndex[sessID]
-	if sess == nil {
-		c.sessionMu.Unlock()
+	val, ok := c.sessionIndex.Load(sessID)
+	if !ok {
 		c.logger.Error("Session not found for AAA response", "session_id", sessID)
 		return
 	}
+	sess := val.(*SessionState)
 
+	sess.mu.Lock()
 	sess.AAAApproved = allowed
 	pendingDiscover := sess.PendingDHCPDiscover
 	pendingRequest := sess.PendingDHCPRequest
@@ -1242,18 +1246,16 @@ func (c *Component) handleAAAResponse(event events.Event) {
 	cvlan := sess.InnerVLAN
 	encapIfIndex := sess.EncapIfIndex
 	ipoeCreated := sess.IPoESessionCreated
-	c.sessionMu.Unlock()
+	sess.mu.Unlock()
 
 	if !allowed {
 		c.logger.Info("Session AAA rejected, cleaning up session", "session_id", sessID)
-		c.sessionMu.Lock()
-		delete(c.sessionIndex, sessID)
-		delete(c.xidIndex, sess.XID)
+		c.sessionIndex.Delete(sessID)
+		c.xidIndex.Delete(sess.XID)
 		lookupV4 := c.makeSessionKeyV4(mac, svlan, cvlan)
 		lookupV6 := c.makeSessionKeyV6(mac, svlan, cvlan)
-		delete(c.sessions, lookupV4)
-		delete(c.sessions, lookupV6)
-		c.sessionMu.Unlock()
+		c.sessions.Delete(lookupV4)
+		c.sessions.Delete(lookupV6)
 		return
 	}
 
@@ -1296,11 +1298,11 @@ func (c *Component) handleAAAResponse(event events.Event) {
 		storedAttrs[k] = fmt.Sprintf("%v", v)
 	}
 
-	c.sessionMu.Lock()
+	sess.mu.Lock()
 	sess.Attributes = storedAttrs
 	sess.ServiceGroup = resolved
 	sess.SRGName = srgName
-	c.sessionMu.Unlock()
+	sess.mu.Unlock()
 
 	vrfName := resolved.VRF
 	var decapVrfID uint32
@@ -1313,9 +1315,9 @@ func (c *Component) handleAAAResponse(event events.Event) {
 			}
 			decapVrfID = tableID
 		}
-		c.sessionMu.Lock()
+		sess.mu.Lock()
 		sess.VRF = vrfName
-		c.sessionMu.Unlock()
+		sess.mu.Unlock()
 	}
 
 	allocCtx := c.buildAllocContext(sess, data.Response.Attributes)
@@ -1326,17 +1328,17 @@ func (c *Component) handleAAAResponse(event events.Event) {
 		"iana_pool_override", allocCtx.IANAPoolOverride,
 		"pd_pool_override", allocCtx.PDPoolOverride,
 	)
-	c.sessionMu.Lock()
+	sess.mu.Lock()
 	sess.AllocCtx = allocCtx
-	c.sessionMu.Unlock()
+	sess.mu.Unlock()
 
 	if !ipoeCreated && c.vpp != nil {
-		c.sessionMu.Lock()
+		sess.mu.Lock()
 		if sess.IPoESessionCreated {
-			c.sessionMu.Unlock()
+			sess.mu.Unlock()
 			c.logger.Debug("IPoE session already created by another handler", "session_id", sessID)
 		} else {
-			c.sessionMu.Unlock()
+			sess.mu.Unlock()
 
 			localMAC := c.getLocalMAC(srgName, encapIfIndex)
 			if localMAC == nil {
@@ -1345,14 +1347,14 @@ func (c *Component) handleAAAResponse(event events.Event) {
 			}
 
 			c.vpp.AddIPoESessionAsync(mac, localMAC, encapIfIndex, svlan, cvlan, decapVrfID, func(swIfIndex uint32, err error) {
-				c.sessionMu.Lock()
+				sess.mu.Lock()
 				if sess.IPoESessionCreated {
-					c.sessionMu.Unlock()
+					sess.mu.Unlock()
 					c.logger.Debug("IPoE session already created by concurrent handler", "session_id", sessID)
 					return
 				}
 				if err != nil {
-					c.sessionMu.Unlock()
+					sess.mu.Unlock()
 					if errors.Is(err, southbound.ErrUnavailable) {
 						c.logger.Debug("VPP unavailable, cannot create IPoE session", "session_id", sessID)
 					} else {
@@ -1379,7 +1381,7 @@ func (c *Component) handleAAAResponse(event events.Event) {
 				sess.PendingDHCPDiscover = nil
 				sess.PendingDHCPRequest = nil
 				unnumberedLoopback := c.resolveUnnumberedLoopback(sess)
-				c.sessionMu.Unlock()
+				sess.mu.Unlock()
 				c.logger.Info("Created IPoE session in VPP", "session_id", sessID, "sw_if_index", swIfIndex)
 
 				c.setupSessionUnnumbered(sessID, swIfIndex, unnumberedLoopback)
@@ -1434,7 +1436,7 @@ func (c *Component) handleAAAResponse(event events.Event) {
 		}
 	}
 
-	c.sessionMu.Lock()
+	sess.mu.Lock()
 	if pendingDiscover == nil {
 		pendingDiscover = sess.PendingDHCPDiscover
 		sess.PendingDHCPDiscover = nil
@@ -1448,7 +1450,7 @@ func (c *Component) handleAAAResponse(event events.Event) {
 	dhcpv6DUID := sess.DHCPv6DUID
 	sess.PendingDHCPv6Solicit = nil
 	sess.PendingDHCPv6Request = nil
-	c.sessionMu.Unlock()
+	sess.mu.Unlock()
 
 	v4Profile := c.resolveIPv4Profile(allocCtx)
 	v6Profile := c.resolveIPv6Profile(allocCtx)
@@ -1556,12 +1558,13 @@ func (c *Component) sendDHCPResponse(sessID string, svlan, cvlan uint16, encapIf
 	var outerTPID uint16
 	var srgName string
 
-	c.sessionMu.RLock()
-	if sess := c.sessionIndex[sessID]; sess != nil {
+	if val, ok := c.sessionIndex.Load(sessID); ok {
+		sess := val.(*SessionState)
+		sess.mu.Lock()
 		outerTPID = c.getSessionOuterTPID(sess)
 		srgName = sess.SRGName
+		sess.mu.Unlock()
 	}
-	c.sessionMu.RUnlock()
 	if outerTPID == 0 {
 		outerTPID = c.resolveOuterTPID(svlan)
 	}
@@ -1614,27 +1617,31 @@ func (c *Component) cleanupSessions() {
 		case <-c.Ctx.Done():
 			return
 		case <-ticker.C:
-			c.sessionMu.Lock()
 			now := time.Now()
 			var toDelete []struct {
 				key  string
 				sess *SessionState
 			}
-			for sessionID, session := range c.sessions {
-				if now.Sub(session.LastSeen) > 30*time.Minute {
+			c.sessions.Range(func(k, v any) bool {
+				key := k.(string)
+				session := v.(*SessionState)
+				session.mu.Lock()
+				lastSeen := session.LastSeen
+				session.mu.Unlock()
+				if now.Sub(lastSeen) > 30*time.Minute {
 					toDelete = append(toDelete, struct {
 						key  string
 						sess *SessionState
-					}{sessionID, session})
+					}{key, session})
 				}
-			}
+				return true
+			})
 			for _, item := range toDelete {
 				c.logger.Info("Cleaning up stale session", "session_id", item.sess.SessionID)
-				delete(c.xidIndex, item.sess.XID)
-				delete(c.sessionIndex, item.sess.SessionID)
-				delete(c.sessions, item.key)
+				c.xidIndex.Delete(item.sess.XID)
+				c.sessionIndex.Delete(item.sess.SessionID)
+				c.sessions.Delete(item.key)
 			}
-			c.sessionMu.Unlock()
 
 			for _, item := range toDelete {
 				sess := item.sess
@@ -1819,9 +1826,10 @@ func (c *Component) processDHCPv6Message(pkt *dataplane.ParsedPacket, relayInter
 func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, relayInterfaceID, relayRemoteID []byte) error {
 	lookupKey := c.makeSessionKeyV6(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN)
 
-	c.sessionMu.RLock()
-	sess := c.sessions[lookupKey]
-	c.sessionMu.RUnlock()
+	var sess *SessionState
+	if val, ok := c.sessions.Load(lookupKey); ok {
+		sess = val.(*SessionState)
+	}
 
 	if sess == nil {
 		sessID := session.GenerateID()
@@ -1835,15 +1843,12 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, relayInterf
 			State:         "soliciting",
 		}
 
-		c.sessionMu.Lock()
-		if existing := c.sessions[lookupKey]; existing != nil {
-			sess = existing
+		if actual, loaded := c.sessions.LoadOrStore(lookupKey, newSess); loaded {
+			sess = actual.(*SessionState)
 		} else {
 			sess = newSess
-			c.sessions[lookupKey] = sess
-			c.sessionIndex[sessID] = sess
+			c.sessionIndex.Store(sessID, sess)
 		}
-		c.sessionMu.Unlock()
 	}
 
 	clientDUID := c.extractDHCPv6ClientDUID(pkt.DHCPv6)
@@ -1857,7 +1862,7 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, relayInterf
 	var xid [3]byte
 	copy(xid[:], pkt.DHCPv6.TransactionID[:])
 
-	c.sessionMu.Lock()
+	sess.mu.Lock()
 	sess.DHCPv6XID = xid
 	sess.DHCPv6DUID = clientDUID
 	sess.LastSeen = time.Now()
@@ -1865,13 +1870,13 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, relayInterf
 	if pkt.IPv6 != nil {
 		sess.ClientLinkLocal = pkt.IPv6.SrcIP
 	}
-	c.xid6Index[xid] = sess
 	alreadyApproved := sess.AAAApproved
 	ipoeCreated := sess.IPoESessionCreated
 	circuitID := sess.CircuitID
 	remoteID := sess.RemoteID
 	v4AaaPending := sess.PendingDHCPDiscover != nil || sess.PendingDHCPRequest != nil
-	c.sessionMu.Unlock()
+	sess.mu.Unlock()
+	c.xid6Index.Store(xid, sess)
 
 	if len(circuitID) == 0 && len(relayInterfaceID) > 0 {
 		circuitID = relayInterfaceID
@@ -1965,32 +1970,31 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, relayInterf
 func (c *Component) handleDHCPv6Request(pkt *dataplane.ParsedPacket) error {
 	lookupKey := c.makeSessionKeyV6(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN)
 
-	c.sessionMu.Lock()
-	sess := c.sessions[lookupKey]
-	if sess == nil {
-		c.sessionMu.Unlock()
+	val, ok := c.sessions.Load(lookupKey)
+	if !ok {
 		return fmt.Errorf("no session for DHCPv6 REQUEST")
 	}
+	sess := val.(*SessionState)
 
 	buf := gopacket.NewSerializeBuffer()
 	opts := gopacket.SerializeOptions{FixLengths: true}
 	if err := pkt.DHCPv6.SerializeTo(buf, opts); err != nil {
-		c.sessionMu.Unlock()
 		return fmt.Errorf("serialize DHCPv6: %w", err)
 	}
 
 	var xid [3]byte
 	copy(xid[:], pkt.DHCPv6.TransactionID[:])
+	sess.mu.Lock()
 	sess.DHCPv6XID = xid
 	sess.LastSeen = time.Now()
 	sess.PendingDHCPv6Request = buf.Bytes()
 	if pkt.IPv6 != nil && sess.ClientLinkLocal == nil {
 		sess.ClientLinkLocal = pkt.IPv6.SrcIP
 	}
-	c.xid6Index[xid] = sess
 	alreadyApproved := sess.AAAApproved
 	ipoeCreated := sess.IPoESessionCreated
-	c.sessionMu.Unlock()
+	sess.mu.Unlock()
+	c.xid6Index.Store(xid, sess)
 
 	if alreadyApproved && ipoeCreated {
 		return c.forwardDHCPv6ToProvider(sess, pkt, buf.Bytes())
@@ -2004,14 +2008,14 @@ func (c *Component) handleDHCPv6Request(pkt *dataplane.ParsedPacket) error {
 func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
 	lookupKey := c.makeSessionKeyV6(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN)
 
-	c.sessionMu.Lock()
-	sess := c.sessions[lookupKey]
-	if sess == nil {
-		c.sessionMu.Unlock()
+	val, ok := c.sessions.Load(lookupKey)
+	if !ok {
 		c.logger.Info("Received DHCPv6 Release for unknown session", "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
 		return nil
 	}
+	sess := val.(*SessionState)
 
+	sess.mu.Lock()
 	sessID := sess.SessionID
 	ipv6Address := sess.IPv6Address
 	ipv6Prefix := sess.IPv6Prefix
@@ -2025,7 +2029,6 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
 	duid := sess.DHCPv6DUID
 
 	sess.IPv6Bound = false
-	delete(c.xid6Index, xid6)
 
 	sessionMode := c.getSessionMode(pkt.OuterVLAN)
 	deleteSession := true
@@ -2037,10 +2040,13 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
 	sess.IPv6Prefix = nil
 	if deleteSession {
 		sess.IPv4 = nil
-		delete(c.sessionIndex, sessID)
-		delete(c.sessions, lookupKey)
 	}
-	c.sessionMu.Unlock()
+	sess.mu.Unlock()
+	c.xid6Index.Delete(xid6)
+	if deleteSession {
+		c.sessionIndex.Delete(sessID)
+		c.sessions.Delete(lookupKey)
+	}
 
 	c.logger.Info("IPv6 released by client", "session_id", sessID, "delete_session", deleteSession)
 
@@ -2537,7 +2543,7 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, dhcp *layers.DHCPv6) e
 		}
 	}
 
-	c.sessionMu.Lock()
+	sess.mu.Lock()
 	sess.IPv6Address = ianaAddr
 	sess.IPv6Prefix = pdPrefix
 	sess.IPv6LeaseTime = validTime
@@ -2547,7 +2553,7 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, dhcp *layers.DHCPv6) e
 	v4AlreadyBound := sess.State == "bound" && sess.IPv4 != nil
 	snapshotIPv4 := sess.IPv4
 	snapshotLeaseTime := sess.LeaseTime
-	c.sessionMu.Unlock()
+	sess.mu.Unlock()
 
 	c.logger.Info("DHCPv6 session bound", "session_id", sess.SessionID, "ipv6", ianaAddr, "prefix", pdPrefix)
 
@@ -2586,10 +2592,10 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, dhcp *layers.DHCPv6) e
 				})
 			}
 		} else {
-			c.sessionMu.Lock()
+			sess.mu.Lock()
 			sess.PendingIPv6Binding = ianaAddr
 			sess.PendingPDBinding = pdPrefix
-			c.sessionMu.Unlock()
+			sess.mu.Unlock()
 			c.logger.Debug("IPoE session not ready, queued IPv6 bindings", "session_id", sessID)
 		}
 	}
@@ -3057,7 +3063,7 @@ func (c *Component) setupSessionUnnumbered(sessID string, swIfIndex uint32, loop
 }
 
 func (c *Component) publishSessionProgrammed(sess *SessionState, swIfIndex uint32) {
-	c.sessionMu.RLock()
+	sess.mu.Lock()
 	ipoeSess := &models.IPoESession{
 		SessionID:    sess.SessionID,
 		State:        models.SessionStateActive,
@@ -3075,7 +3081,7 @@ func (c *Component) publishSessionProgrammed(sess *SessionState, swIfIndex uint3
 		Username:     sess.Username,
 		AAASessionID: sess.AcctSessionID,
 	}
-	c.sessionMu.RUnlock()
+	sess.mu.Unlock()
 
 	c.eventBus.Publish(events.TopicSessionProgrammed, events.Event{
 		Source: c.Name(),
@@ -3108,8 +3114,10 @@ func (c *Component) checkpointSession(sess *SessionState) {
 		return
 	}
 
+	sess.mu.Lock()
 	sessID := sess.SessionID
 	data, err := json.Marshal(sess)
+	sess.mu.Unlock()
 	if err != nil {
 		c.logger.Warn("Failed to marshal session for checkpoint", "session_id", sessID, "error", err)
 		return
@@ -3217,15 +3225,14 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 
 		lookupKey := c.makeSessionKeyV4(sess.MAC, sess.OuterVLAN, sess.InnerVLAN)
 
-		c.sessionMu.Lock()
-		c.sessions[lookupKey] = &sess
-		c.sessionIndex[sess.SessionID] = &sess
+		sessPtr := &sess
+		c.sessions.Store(lookupKey, sessPtr)
+		c.sessionIndex.Store(sess.SessionID, sessPtr)
 
 		if sess.State == "bound" && sess.MAC != nil {
 			counterKey := fmt.Sprintf("osvbng:session_count:%s:%d:%d", sess.MAC.String(), sess.OuterVLAN, sess.InnerVLAN)
 			sessionCounts[counterKey]++
 		}
-		c.sessionMu.Unlock()
 
 		if sess.State == "bound" {
 			c.restoreSessionToCache(ctx, &sess, now)
@@ -3330,10 +3337,17 @@ func (c *Component) restoreSessionToCache(ctx context.Context, sess *SessionStat
 	}
 }
 
+func (c *Component) sessionCount() int {
+	n := 0
+	c.sessions.Range(func(_, _ any) bool {
+		n++
+		return true
+	})
+	return n
+}
+
 func (c *Component) RecoverSessions(ctx context.Context) error {
-	c.sessionMu.RLock()
-	total := len(c.sessions)
-	c.sessionMu.RUnlock()
+	total := c.sessionCount()
 
 	if total == 0 {
 		c.logger.Info("No IPoE sessions to recover")
@@ -3346,9 +3360,7 @@ func (c *Component) RecoverSessions(ctx context.Context) error {
 		return fmt.Errorf("recover ipoe sessions: %w", err)
 	}
 
-	c.sessionMu.RLock()
-	recovered := len(c.sessions)
-	c.sessionMu.RUnlock()
+	recovered := c.sessionCount()
 
 	c.logger.Info("IPoE session recovery complete", "recovered", recovered)
 	return nil
@@ -3562,10 +3574,8 @@ func (c *Component) restoreFromHASync(srgName string) {
 
 		lookupKey := c.makeSessionKeyV4(mac, outerVLAN, innerVLAN)
 
-		c.sessionMu.Lock()
-		c.sessions[lookupKey] = sess
-		c.sessionIndex[cp.SessionId] = sess
-		c.sessionMu.Unlock()
+		c.sessions.Store(lookupKey, sess)
+		c.sessionIndex.Store(cp.SessionId, sess)
 
 		c.restoreSessionToCache(c.Ctx, sess, now)
 		c.checkpointSession(sess)
@@ -3588,12 +3598,12 @@ func (c *Component) restoreFromHASync(srgName string) {
 }
 
 func (c *Component) ForEachSession(fn func(models.SubscriberSession) bool) {
-	c.sessionMu.RLock()
-	defer c.sessionMu.RUnlock()
-
-	for _, sess := range c.sessions {
+	c.sessions.Range(func(_, v any) bool {
+		sess := v.(*SessionState)
+		sess.mu.Lock()
 		if sess.State != "bound" {
-			continue
+			sess.mu.Unlock()
+			return true
 		}
 
 		snapshot := &models.IPoESession{
@@ -3636,9 +3646,8 @@ func (c *Component) ForEachSession(fn func(models.SubscriberSession) bool) {
 		if len(sess.RemoteID) > 0 {
 			snapshot.RelayInfo[2] = sess.RemoteID
 		}
+		sess.mu.Unlock()
 
-		if !fn(snapshot) {
-			return
-		}
-	}
+		return fn(snapshot)
+	})
 }
