@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -61,6 +62,12 @@ import (
 )
 
 func main() {
+	if os.Getenv("OSVBNG_PROFILE") != "" {
+		runtime.SetBlockProfileRate(1000)
+		runtime.SetMutexProfileFraction(10)
+		log.Println("Profiling enabled: block rate=1000, mutex fraction=10")
+	}
+
 	configPath := flag.String("config", "configs/config.yaml", "Path to configuration file")
 	showVersion := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()

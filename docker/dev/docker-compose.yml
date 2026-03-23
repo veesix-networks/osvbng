@@ -30,6 +30,7 @@ services:
     environment:
       - OSVBNG_NUM_INTERFACES=3
       - OSVBNG_LOG_LEVEL=info
+      - OSVBNG_PROFILE=1
     network_mode: none
     volumes:
       - /sys/kernel/debug:/sys/kernel/debug:ro

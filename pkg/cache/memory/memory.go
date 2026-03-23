@@ -15,15 +15,13 @@ type item struct {
 }
 
 type Cache struct {
-	items map[string]*item
-	mu    sync.RWMutex
+	items sync.Map
 	stop  chan struct{}
 }
 
 func New() cache.Cache {
 	c := &Cache{
-		items: make(map[string]*item),
-		stop:  make(chan struct{}),
+		stop: make(chan struct{}),
 	}
 
 	go c.cleanup()
@@ -32,78 +30,70 @@ func New() cache.Cache {
 }
 
 func (c *Cache) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	var expiration time.Time
 	if ttl > 0 {
 		expiration = time.Now().Add(ttl)
 	}
 
-	c.items[key] = &item{
+	c.items.Store(key, &item{
 		value:      value,
 		expiration: expiration,
-	}
+	})
 
 	return nil
 }
 
 func (c *Cache) Get(ctx context.Context, key string) ([]byte, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	item, exists := c.items[key]
+	v, exists := c.items.Load(key)
 	if !exists {
 		return nil, fmt.Errorf("key not found: %s", key)
 	}
 
-	if !item.expiration.IsZero() && time.Now().After(item.expiration) {
+	itm := v.(*item)
+	if !itm.expiration.IsZero() && time.Now().After(itm.expiration) {
 		return nil, fmt.Errorf("key expired: %s", key)
 	}
 
-	return item.value, nil
+	return itm.value, nil
 }
 
 func (c *Cache) GetAll(ctx context.Context, pattern string) (map[string][]byte, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	result := make(map[string][]byte)
 	now := time.Now()
 
-	for key, item := range c.items {
+	c.items.Range(func(k, v any) bool {
+		key := k.(string)
+		itm := v.(*item)
+
 		if !matchPattern(pattern, key) {
-			continue
+			return true
 		}
 
-		if !item.expiration.IsZero() && now.After(item.expiration) {
-			continue
+		if !itm.expiration.IsZero() && now.After(itm.expiration) {
+			return true
 		}
 
-		result[key] = item.value
-	}
+		result[key] = itm.value
+		return true
+	})
 
 	return result, nil
 }
 
 func (c *Cache) Delete(ctx context.Context, key string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	delete(c.items, key)
+	c.items.Delete(key)
 	return nil
 }
 
 func (c *Cache) Scan(ctx context.Context, cursor uint64, pattern string, count int64) ([]string, uint64, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	keys := make([]string, 0)
-	for key := range c.items {
+	c.items.Range(func(k, _ any) bool {
+		key := k.(string)
 		if matchPattern(pattern, key) {
 			keys = append(keys, key)
 		}
-	}
+		return true
+	})
 
 	return keys, 0, nil
 }
@@ -138,45 +128,53 @@ func matchPattern(pattern, key string) bool {
 }
 
 func (c *Cache) Incr(ctx context.Context, key string) (int64, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	for {
+		v, loaded := c.items.Load(key)
+		if !loaded {
+			newItem := &item{value: []byte("1")}
+			if _, existed := c.items.LoadOrStore(key, newItem); !existed {
+				return 1, nil
+			}
+			continue
+		}
 
-	itm, exists := c.items[key]
-	if !exists {
-		val := int64(1)
-		c.items[key] = &item{value: []byte(fmt.Sprintf("%d", val))}
-		return val, nil
+		itm := v.(*item)
+		val, err := parseInt64(itm.value)
+		if err != nil {
+			return 0, fmt.Errorf("value is not an integer")
+		}
+
+		val++
+		newItem := &item{value: []byte(fmt.Sprintf("%d", val)), expiration: itm.expiration}
+		if c.items.CompareAndSwap(key, v, newItem) {
+			return val, nil
+		}
 	}
-
-	val, err := parseInt64(itm.value)
-	if err != nil {
-		return 0, fmt.Errorf("value is not an integer")
-	}
-
-	val++
-	itm.value = []byte(fmt.Sprintf("%d", val))
-	return val, nil
 }
 
 func (c *Cache) Decr(ctx context.Context, key string) (int64, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	for {
+		v, loaded := c.items.Load(key)
+		if !loaded {
+			newItem := &item{value: []byte("-1")}
+			if _, existed := c.items.LoadOrStore(key, newItem); !existed {
+				return -1, nil
+			}
+			continue
+		}
 
-	itm, exists := c.items[key]
-	if !exists {
-		val := int64(-1)
-		c.items[key] = &item{value: []byte(fmt.Sprintf("%d", val))}
-		return val, nil
+		itm := v.(*item)
+		val, err := parseInt64(itm.value)
+		if err != nil {
+			return 0, fmt.Errorf("value is not an integer")
+		}
+
+		val--
+		newItem := &item{value: []byte(fmt.Sprintf("%d", val)), expiration: itm.expiration}
+		if c.items.CompareAndSwap(key, v, newItem) {
+			return val, nil
+		}
 	}
-
-	val, err := parseInt64(itm.value)
-	if err != nil {
-		return 0, fmt.Errorf("value is not an integer")
-	}
-
-	val--
-	itm.value = []byte(fmt.Sprintf("%d", val))
-	return val, nil
 }
 
 func parseInt64(b []byte) (int64, error) {
@@ -186,20 +184,19 @@ func parseInt64(b []byte) (int64, error) {
 }
 
 func (c *Cache) Expire(ctx context.Context, key string, ttl time.Duration) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	item, exists := c.items[key]
+	v, exists := c.items.Load(key)
 	if !exists {
 		return fmt.Errorf("key not found: %s", key)
 	}
 
+	itm := v.(*item)
+	var expiration time.Time
 	if ttl > 0 {
-		item.expiration = time.Now().Add(ttl)
-	} else {
-		item.expiration = time.Time{}
+		expiration = time.Now().Add(ttl)
 	}
 
+	newItem := &item{value: itm.value, expiration: expiration}
+	c.items.Store(key, newItem)
 	return nil
 }
 
@@ -223,13 +220,12 @@ func (c *Cache) cleanup() {
 }
 
 func (c *Cache) removeExpired() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	now := time.Now()
-	for key, item := range c.items {
-		if !item.expiration.IsZero() && now.After(item.expiration) {
-			delete(c.items, key)
+	c.items.Range(func(k, v any) bool {
+		itm := v.(*item)
+		if !itm.expiration.IsZero() && now.After(itm.expiration) {
+			c.items.Delete(k)
 		}
-	}
+		return true
+	})
 }
