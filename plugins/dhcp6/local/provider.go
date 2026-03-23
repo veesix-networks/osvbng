@@ -229,15 +229,15 @@ func (p *Provider) HandlePacket(ctx context.Context, pkt *dhcp6.Packet) (*dhcp6.
 }
 
 func (p *Provider) handleSolicit(pkt *dhcp6.Packet, dhcp *layers.DHCPv6) (*dhcp6.Packet, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
 	clientDUID := p.extractClientDUID(dhcp)
 	if clientDUID == nil {
 		return nil, fmt.Errorf("no client DUID")
 	}
 
 	duidKey := string(clientDUID)
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
 	if pkt.Resolved != nil {
 		return p.handleSolicitResolved(pkt, dhcp, clientDUID, duidKey)
@@ -307,9 +307,6 @@ func (p *Provider) handleSolicit(pkt *dhcp6.Packet, dhcp *layers.DHCPv6) (*dhcp6
 }
 
 func (p *Provider) handleRequest(pkt *dhcp6.Packet, dhcp *layers.DHCPv6) (*dhcp6.Packet, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
 	clientDUID := p.extractClientDUID(dhcp)
 	if clientDUID == nil {
 		return nil, fmt.Errorf("no client DUID")
@@ -318,8 +315,13 @@ func (p *Provider) handleRequest(pkt *dhcp6.Packet, dhcp *layers.DHCPv6) (*dhcp6
 	duidKey := string(clientDUID)
 
 	if pkt.Resolved != nil {
+		p.mu.Lock()
+		defer p.mu.Unlock()
 		return p.handleRequestResolved(pkt, dhcp, clientDUID, duidKey)
 	}
+
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 
 	var ianaAddr net.IP
 	var ianaIAID uint32

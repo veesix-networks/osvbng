@@ -107,8 +107,7 @@ func (a *PoolAllocator) Reserve(ip net.IP, sessionID string) error {
 	if _, exists := a.leases[addr]; !exists {
 		for i, freeAddr := range a.free {
 			if freeAddr == addr {
-				a.free[i] = a.free[len(a.free)-1]
-				a.free = a.free[:len(a.free)-1]
+				a.free = append(a.free[:i], a.free[i+1:]...)
 				break
 			}
 		}

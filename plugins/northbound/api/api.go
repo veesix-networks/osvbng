@@ -7,6 +7,8 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/http/pprof"
+	"os"
 	"sync"
 	"time"
 
@@ -135,6 +137,15 @@ func (c *Component) startServer() {
 		mux.Handle("GET /api/docs/", http.StripPrefix("/api/docs/", http.FileServer(http.FS(swaggerFS))))
 	}
 	mux.HandleFunc("GET /api/docs", c.handleDocsRedirect)
+
+	if os.Getenv("OSVBNG_PROFILE") != "" {
+		mux.HandleFunc("GET /debug/pprof/", pprof.Index)
+		mux.HandleFunc("GET /debug/pprof/cmdline", pprof.Cmdline)
+		mux.HandleFunc("GET /debug/pprof/profile", pprof.Profile)
+		mux.HandleFunc("GET /debug/pprof/symbol", pprof.Symbol)
+		mux.HandleFunc("GET /debug/pprof/trace", pprof.Trace)
+		c.logger.Info("pprof debug endpoints enabled")
+	}
 
 	if c.watchdog != nil {
 		mux.HandleFunc("GET /healthz", watchdog.HealthzHandler(c.watchdog))

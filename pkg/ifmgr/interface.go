@@ -1,6 +1,9 @@
 package ifmgr
 
-import "net"
+import (
+	"net"
+	"sync"
+)
 
 type IfType uint32
 
@@ -12,6 +15,7 @@ const (
 )
 
 type Interface struct {
+	mu              sync.Mutex
 	SwIfIndex       uint32
 	SupSwIfIndex    uint32
 	Name            string
