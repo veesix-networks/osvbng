@@ -13,6 +13,7 @@ type PrefixAllocator struct {
 	prefixLength int
 	count        uint64
 	leases       map[uint64]string
+	free         []uint64
 	ascending    bool
 	mu           sync.Mutex
 }
@@ -22,51 +23,71 @@ func NewPrefixAllocator(network netip.Prefix, prefixLength int) *PrefixAllocator
 	if delegBits < 0 || delegBits > 63 {
 		return nil
 	}
-	return &PrefixAllocator{
+	count := uint64(1) << uint(delegBits)
+	a := &PrefixAllocator{
 		base:         network.Masked().Addr(),
 		networkBits:  network.Bits(),
 		prefixLength: prefixLength,
-		count:        1 << uint(delegBits),
+		count:        count,
 		leases:       make(map[uint64]string),
 		ascending:    true,
 	}
+	a.buildFreeList()
+	return a
 }
 
-func (a *PrefixAllocator) SetDirection(ascending bool) {
-	a.mu.Lock()
-	a.ascending = ascending
-	a.mu.Unlock()
-}
-
-func (a *PrefixAllocator) Allocate(sessionID string) (*net.IPNet, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
+func (a *PrefixAllocator) buildFreeList() {
+	a.free = make([]uint64, 0, a.count)
 	if a.ascending {
-		for i := uint64(0); i < a.count; i++ {
-			if _, used := a.leases[i]; !used {
-				a.leases[i] = sessionID
-				return a.indexToIPNet(i), nil
-			}
-		}
-	} else {
 		for i := a.count - 1; ; i-- {
 			if _, used := a.leases[i]; !used {
-				a.leases[i] = sessionID
-				return a.indexToIPNet(i), nil
+				a.free = append(a.free, i)
 			}
 			if i == 0 {
 				break
 			}
 		}
+	} else {
+		for i := uint64(0); i < a.count; i++ {
+			if _, used := a.leases[i]; !used {
+				a.free = append(a.free, i)
+			}
+		}
 	}
-	return nil, ErrPoolExhausted
+}
+
+func (a *PrefixAllocator) SetDirection(ascending bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.ascending == ascending {
+		return
+	}
+	a.ascending = ascending
+	a.buildFreeList()
+}
+
+func (a *PrefixAllocator) Allocate(sessionID string) (*net.IPNet, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if len(a.free) == 0 {
+		return nil, ErrPoolExhausted
+	}
+
+	idx := a.free[len(a.free)-1]
+	a.free = a.free[:len(a.free)-1]
+	a.leases[idx] = sessionID
+	return a.indexToIPNet(idx), nil
 }
 
 func (a *PrefixAllocator) Release(prefix *net.IPNet) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if idx, ok := a.prefixToIndex(prefix); ok {
-		delete(a.leases, idx)
+		if _, exists := a.leases[idx]; exists {
+			delete(a.leases, idx)
+			a.free = append(a.free, idx)
+		}
 	}
 }
 
@@ -79,6 +100,14 @@ func (a *PrefixAllocator) Reserve(prefix *net.IPNet, sessionID string) error {
 	}
 	if existing, exists := a.leases[idx]; exists && existing != sessionID {
 		return ErrAlreadyReserved
+	}
+	if _, exists := a.leases[idx]; !exists {
+		for i, freeIdx := range a.free {
+			if freeIdx == idx {
+				a.free = append(a.free[:i], a.free[i+1:]...)
+				break
+			}
+		}
 	}
 	a.leases[idx] = sessionID
 	return nil
