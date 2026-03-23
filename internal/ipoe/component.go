@@ -3108,15 +3108,18 @@ func (c *Component) checkpointSession(sess *SessionState) {
 		return
 	}
 
+	sessID := sess.SessionID
 	data, err := json.Marshal(sess)
 	if err != nil {
-		c.logger.Warn("Failed to marshal session for checkpoint", "session_id", sess.SessionID, "error", err)
+		c.logger.Warn("Failed to marshal session for checkpoint", "session_id", sessID, "error", err)
 		return
 	}
 
-	if err := c.opdb.Put(c.Ctx, opdb.NamespaceIPoESessions, sess.SessionID, data); err != nil {
-		c.logger.Warn("Failed to checkpoint session", "session_id", sess.SessionID, "error", err)
-	}
+	go func() {
+		if err := c.opdb.Put(c.Ctx, opdb.NamespaceIPoESessions, sessID, data); err != nil {
+			c.logger.Warn("Failed to checkpoint session", "session_id", sessID, "error", err)
+		}
+	}()
 }
 
 func (c *Component) deleteSessionCheckpoint(sessionID string) {
