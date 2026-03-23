@@ -8,8 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/gopacket"
-	"github.com/google/gopacket/layers"
 	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/dhcp"
@@ -126,42 +124,34 @@ func (p *Provider) findPoolForIP(ip net.IP) *IPPool {
 }
 
 func (p *Provider) HandlePacket(ctx context.Context, pkt *dhcp4.Packet) (*dhcp4.Packet, error) {
-	dhcp := &layers.DHCPv4{}
-	if err := dhcp.DecodeFromBytes(pkt.Raw, gopacket.NilDecodeFeedback); err != nil {
+	msg, err := dhcp4.ParseMessage(pkt.Raw)
+	if err != nil {
 		return nil, fmt.Errorf("failed to decode DHCP layer: %w", err)
 	}
 
-	msgType := layers.DHCPMsgTypeUnspecified
-	for _, opt := range dhcp.Options {
-		if opt.Type == layers.DHCPOptMessageType && len(opt.Data) == 1 {
-			msgType = layers.DHCPMsgType(opt.Data[0])
-			break
-		}
-	}
-
-	switch msgType {
-	case layers.DHCPMsgTypeDiscover:
-		return p.handleDiscover(pkt, dhcp)
-	case layers.DHCPMsgTypeRequest:
-		return p.handleRequest(pkt, dhcp)
-	case layers.DHCPMsgTypeRelease:
-		return p.handleRelease(pkt, dhcp)
+	switch msg.Options.MessageType {
+	case dhcp4.MsgTypeDiscover:
+		return p.handleDiscover(pkt, msg)
+	case dhcp4.MsgTypeRequest:
+		return p.handleRequest(pkt, msg)
+	case dhcp4.MsgTypeRelease:
+		return p.handleRelease(pkt, msg)
 	default:
-		return nil, fmt.Errorf("unsupported DHCP message type: %v", msgType)
+		return nil, fmt.Errorf("unsupported DHCP message type: %v", msg.Options.MessageType)
 	}
 }
 
-func (p *Provider) handleDiscover(pkt *dhcp4.Packet, dhcpPkt *layers.DHCPv4) (*dhcp4.Packet, error) {
+func (p *Provider) handleDiscover(pkt *dhcp4.Packet, msg *dhcp4.Message) (*dhcp4.Packet, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	mac := dhcpPkt.ClientHWAddr.String()
+	mac := msg.ClientHWAddr.String()
 
 	if pkt.Resolved != nil {
 		if err := p.reserveIP(pkt.Resolved.YourIP, mac, pkt.SessionID, pkt.Resolved.PoolName, pkt.Resolved.LeaseTime); err != nil {
 			return nil, fmt.Errorf("reserve IP: %w", err)
 		}
-		response := p.buildResponseFromResolved(dhcpPkt, pkt.Resolved, layers.DHCPMsgTypeOffer)
+		response := p.buildResponseFromResolved(msg, pkt.Resolved, dhcp4.MsgTypeOffer)
 		return &dhcp4.Packet{
 			SessionID: pkt.SessionID,
 			MAC:       pkt.MAC,
@@ -177,7 +167,7 @@ func (p *Provider) handleDiscover(pkt *dhcp4.Packet, dhcpPkt *layers.DHCPv4) (*d
 	}
 
 	pool := p.findPoolForIP(existingLease.IP)
-	response := p.buildOffer(dhcpPkt, existingLease.IP, pool)
+	response := p.buildOffer(msg, existingLease.IP, pool)
 	return &dhcp4.Packet{
 		SessionID: pkt.SessionID,
 		MAC:       pkt.MAC,
@@ -187,17 +177,17 @@ func (p *Provider) handleDiscover(pkt *dhcp4.Packet, dhcpPkt *layers.DHCPv4) (*d
 	}, nil
 }
 
-func (p *Provider) handleRequest(pkt *dhcp4.Packet, dhcpPkt *layers.DHCPv4) (*dhcp4.Packet, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	mac := dhcpPkt.ClientHWAddr.String()
+func (p *Provider) handleRequest(pkt *dhcp4.Packet, msg *dhcp4.Message) (*dhcp4.Packet, error) {
+	mac := msg.ClientHWAddr.String()
 
 	if pkt.Resolved != nil {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+
 		if err := p.reserveIP(pkt.Resolved.YourIP, mac, pkt.SessionID, pkt.Resolved.PoolName, pkt.Resolved.LeaseTime); err != nil {
 			return nil, fmt.Errorf("reserve IP: %w", err)
 		}
-		response := p.buildResponseFromResolved(dhcpPkt, pkt.Resolved, layers.DHCPMsgTypeAck)
+		response := p.buildResponseFromResolved(msg, pkt.Resolved, dhcp4.MsgTypeAck)
 		return &dhcp4.Packet{
 			SessionID: pkt.SessionID,
 			MAC:       pkt.MAC,
@@ -207,16 +197,12 @@ func (p *Provider) handleRequest(pkt *dhcp4.Packet, dhcpPkt *layers.DHCPv4) (*dh
 		}, nil
 	}
 
-	var requestedIP net.IP
-	for _, opt := range dhcpPkt.Options {
-		if opt.Type == layers.DHCPOptRequestIP && len(opt.Data) == 4 {
-			requestedIP = net.IP(opt.Data)
-			break
-		}
-	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 
+	requestedIP := msg.Options.RequestedIP
 	if requestedIP == nil {
-		requestedIP = dhcpPkt.ClientIP
+		requestedIP = msg.ClientIP
 	}
 
 	lease, exists := p.leases[mac]
@@ -229,7 +215,7 @@ func (p *Provider) handleRequest(pkt *dhcp4.Packet, dhcpPkt *layers.DHCPv4) (*dh
 		lease.ExpireTime = time.Now().Add(time.Duration(pool.LeaseTime) * time.Second)
 	}
 
-	response := p.buildAck(dhcpPkt, requestedIP, pool)
+	response := p.buildAck(msg, requestedIP, pool)
 	return &dhcp4.Packet{
 		SessionID: pkt.SessionID,
 		MAC:       pkt.MAC,
@@ -239,11 +225,11 @@ func (p *Provider) handleRequest(pkt *dhcp4.Packet, dhcpPkt *layers.DHCPv4) (*dh
 	}, nil
 }
 
-func (p *Provider) handleRelease(pkt *dhcp4.Packet, dhcp *layers.DHCPv4) (*dhcp4.Packet, error) {
+func (p *Provider) handleRelease(pkt *dhcp4.Packet, msg *dhcp4.Message) (*dhcp4.Packet, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	mac := dhcp.ClientHWAddr.String()
+	mac := msg.ClientHWAddr.String()
 	if lease, exists := p.leases[mac]; exists {
 		if lease.PoolName != "" {
 			allocator.GetGlobalRegistry().Release(lease.PoolName, lease.IP)
@@ -299,165 +285,108 @@ func (p *Provider) reserveIP(reserveIP net.IP, mac, sessionID, poolName string, 
 	return nil
 }
 
-func (p *Provider) buildOffer(req *layers.DHCPv4, offerIP net.IP, pool *IPPool) []byte {
-	return p.buildResponse(req, offerIP, pool, layers.DHCPMsgTypeOffer)
+func (p *Provider) buildOffer(req *dhcp4.Message, offerIP net.IP, pool *IPPool) []byte {
+	return p.buildResponse(req, offerIP, pool, dhcp4.MsgTypeOffer)
 }
 
-func (p *Provider) buildAck(req *layers.DHCPv4, ackIP net.IP, pool *IPPool) []byte {
-	return p.buildResponse(req, ackIP, pool, layers.DHCPMsgTypeAck)
+func (p *Provider) buildAck(req *dhcp4.Message, ackIP net.IP, pool *IPPool) []byte {
+	return p.buildResponse(req, ackIP, pool, dhcp4.MsgTypeAck)
 }
 
-func (p *Provider) buildResponse(req *layers.DHCPv4, ip net.IP, pool *IPPool, msgType layers.DHCPMsgType) []byte {
-	options := []layers.DHCPOption{
-		{
-			Type:   layers.DHCPOptMessageType,
-			Data:   []byte{byte(msgType)},
-			Length: 1,
-		},
-		{
-			Type:   layers.DHCPOptServerID,
-			Data:   pool.Gateway.To4(),
-			Length: 4,
-		},
-		{
-			Type:   layers.DHCPOptLeaseTime,
-			Data:   make([]byte, 4),
-			Length: 4,
-		},
-		{
-			Type:   layers.DHCPOptSubnetMask,
-			Data:   pool.Network.Mask,
-			Length: 4,
-		},
-		{
-			Type:   layers.DHCPOptRouter,
-			Data:   pool.Gateway.To4(),
-			Length: 4,
-		},
-	}
-
-	binary.BigEndian.PutUint32(options[2].Data, pool.LeaseTime)
-
-	if len(pool.DNSServers) > 0 {
-		dnsData := make([]byte, 0)
-		for _, dns := range pool.DNSServers {
-			dnsData = append(dnsData, dns.To4()...)
+func (p *Provider) buildResponse(req *dhcp4.Message, ip net.IP, pool *IPPool, msgType dhcp4.MessageType) []byte {
+	dhcpPayload := buildDHCPv4Reply(req, ip, pool.Gateway, msgType, func(opts *optionWriter) {
+		opts.addByte(dhcp4.OptServerID, pool.Gateway.To4())
+		leaseData := make([]byte, 4)
+		binary.BigEndian.PutUint32(leaseData, pool.LeaseTime)
+		opts.addByte(dhcp4.OptLeaseTime, leaseData)
+		opts.addByte(dhcp4.OptSubnetMask, []byte(pool.Network.Mask))
+		opts.addByte(dhcp4.OptRouter, pool.Gateway.To4())
+		if len(pool.DNSServers) > 0 {
+			dnsData := make([]byte, 0, len(pool.DNSServers)*4)
+			for _, dns := range pool.DNSServers {
+				dnsData = append(dnsData, dns.To4()...)
+			}
+			opts.addByte(dhcp4.OptDNS, dnsData)
 		}
-		options = append(options, layers.DHCPOption{
-			Type:   layers.DHCPOptDNS,
-			Data:   dnsData,
-			Length: uint8(len(dnsData)),
-		})
-	}
+	})
 
-	dhcpReply := &layers.DHCPv4{
-		Operation:    layers.DHCPOpReply,
-		HardwareType: layers.LinkTypeEthernet,
-		HardwareLen:  6,
-		Xid:          req.Xid,
-		ClientIP:     req.ClientIP,
-		YourClientIP: ip,
-		NextServerIP: pool.Gateway,
-		ClientHWAddr: req.ClientHWAddr,
-		Options:      options,
-	}
-
-	buf := gopacket.NewSerializeBuffer()
-	opts := gopacket.SerializeOptions{
-		FixLengths:       true,
-		ComputeChecksums: true,
-	}
-
-	ipv4 := &layers.IPv4{
-		Version:  4,
-		TTL:      64,
-		Protocol: layers.IPProtocolUDP,
-		SrcIP:    pool.Gateway,
-		DstIP:    net.IPv4bcast,
-	}
-
-	udp := &layers.UDP{
-		SrcPort: 67,
-		DstPort: 68,
-	}
-	udp.SetNetworkLayerForChecksum(ipv4)
-
-	gopacket.SerializeLayers(buf, opts, ipv4, udp, dhcpReply)
-	return buf.Bytes()
+	srcIP := pool.Gateway
+	return dhcp.BuildIPv4UDPFrame(srcIP, net.IPv4bcast, 67, 68, dhcpPayload)
 }
 
-func (p *Provider) buildResponseFromResolved(req *layers.DHCPv4, resolved *dhcp.ResolvedDHCPv4, msgType layers.DHCPMsgType) []byte {
-	leaseData := make([]byte, 4)
-	binary.BigEndian.PutUint32(leaseData, uint32(resolved.LeaseTime.Seconds()))
-
-	options := []layers.DHCPOption{
-		{Type: layers.DHCPOptMessageType, Data: []byte{byte(msgType)}, Length: 1},
-		{Type: layers.DHCPOptLeaseTime, Data: leaseData, Length: 4},
-		{Type: layers.DHCPOptSubnetMask, Data: resolved.Netmask, Length: uint8(len(resolved.Netmask))},
-	}
-
-	if resolved.ServerID != nil {
-		options = append(options, layers.DHCPOption{
-			Type: layers.DHCPOptServerID, Data: resolved.ServerID.To4(), Length: 4,
-		})
-	}
-
-	if resolved.Router != nil {
-		options = append(options, layers.DHCPOption{
-			Type: layers.DHCPOptRouter, Data: resolved.Router.To4(), Length: 4,
-		})
-	}
-
-	if len(resolved.DNS) > 0 {
-		dnsData := make([]byte, 0, len(resolved.DNS)*4)
-		for _, dns := range resolved.DNS {
-			dnsData = append(dnsData, dns.To4()...)
-		}
-		options = append(options, layers.DHCPOption{
-			Type: layers.DHCPOptDNS, Data: dnsData, Length: uint8(len(dnsData)),
-		})
-	}
-
-	if len(resolved.ClasslessRoutes) > 0 {
-		routeData := encodeClasslessRoutes(resolved.ClasslessRoutes)
-		options = append(options, layers.DHCPOption{
-			Type: 121, Data: routeData, Length: uint8(len(routeData)),
-		})
-	}
-
+func (p *Provider) buildResponseFromResolved(req *dhcp4.Message, resolved *dhcp.ResolvedDHCPv4, msgType dhcp4.MessageType) []byte {
 	srcIP := resolved.Router
 	if resolved.ServerID != nil {
 		srcIP = resolved.ServerID
 	}
 
-	dhcpReply := &layers.DHCPv4{
-		Operation:    layers.DHCPOpReply,
-		HardwareType: layers.LinkTypeEthernet,
-		HardwareLen:  6,
-		Xid:          req.Xid,
-		ClientIP:     req.ClientIP,
-		YourClientIP: resolved.YourIP,
-		NextServerIP: srcIP,
-		ClientHWAddr: req.ClientHWAddr,
-		Options:      options,
+	dhcpPayload := buildDHCPv4Reply(req, resolved.YourIP, srcIP, msgType, func(opts *optionWriter) {
+		leaseData := make([]byte, 4)
+		binary.BigEndian.PutUint32(leaseData, uint32(resolved.LeaseTime.Seconds()))
+		opts.addByte(dhcp4.OptLeaseTime, leaseData)
+		opts.addByte(dhcp4.OptSubnetMask, []byte(resolved.Netmask))
+		if resolved.ServerID != nil {
+			opts.addByte(dhcp4.OptServerID, resolved.ServerID.To4())
+		}
+		if resolved.Router != nil {
+			opts.addByte(dhcp4.OptRouter, resolved.Router.To4())
+		}
+		if len(resolved.DNS) > 0 {
+			dnsData := make([]byte, 0, len(resolved.DNS)*4)
+			for _, dns := range resolved.DNS {
+				dnsData = append(dnsData, dns.To4()...)
+			}
+			opts.addByte(dhcp4.OptDNS, dnsData)
+		}
+		if len(resolved.ClasslessRoutes) > 0 {
+			routeData := encodeClasslessRoutes(resolved.ClasslessRoutes)
+			opts.addByte(121, routeData)
+		}
+	})
+
+	return dhcp.BuildIPv4UDPFrame(srcIP, net.IPv4bcast, 67, 68, dhcpPayload)
+}
+
+type optionWriter struct {
+	buf []byte
+}
+
+func (w *optionWriter) addByte(optType uint8, data []byte) {
+	w.buf = append(w.buf, optType, uint8(len(data)))
+	w.buf = append(w.buf, data...)
+}
+
+func buildDHCPv4Reply(req *dhcp4.Message, yourIP net.IP, serverIP net.IP, msgType dhcp4.MessageType, writeOptions func(*optionWriter)) []byte {
+	buf := make([]byte, dhcp4.DHCPv4HeaderLen+4)
+
+	buf[0] = 2
+	buf[1] = 1
+	buf[2] = 6
+	buf[3] = 0
+	binary.BigEndian.PutUint32(buf[4:8], req.XID)
+
+	if req.ClientIP != nil {
+		copy(buf[12:16], req.ClientIP.To4())
+	}
+	if yourIP != nil {
+		copy(buf[16:20], yourIP.To4())
+	}
+	if serverIP != nil {
+		copy(buf[20:24], serverIP.To4())
+	}
+	if len(req.ClientHWAddr) > 0 {
+		copy(buf[28:28+len(req.ClientHWAddr)], req.ClientHWAddr)
 	}
 
-	buf := gopacket.NewSerializeBuffer()
-	opts := gopacket.SerializeOptions{FixLengths: true, ComputeChecksums: true}
+	binary.BigEndian.PutUint32(buf[236:240], 0x63825363)
 
-	ipv4 := &layers.IPv4{
-		Version:  4,
-		TTL:      64,
-		Protocol: layers.IPProtocolUDP,
-		SrcIP:    srcIP,
-		DstIP:    net.IPv4bcast,
-	}
+	opts := &optionWriter{}
+	opts.addByte(dhcp4.OptMessageType, []byte{byte(msgType)})
+	writeOptions(opts)
+	opts.buf = append(opts.buf, dhcp4.OptEnd)
 
-	udp := &layers.UDP{SrcPort: 67, DstPort: 68}
-	udp.SetNetworkLayerForChecksum(ipv4)
-
-	gopacket.SerializeLayers(buf, opts, ipv4, udp, dhcpReply)
-	return buf.Bytes()
+	buf = append(buf, opts.buf...)
+	return buf
 }
 
 func encodeClasslessRoutes(routes []dhcp.ClasslessRoute) []byte {
