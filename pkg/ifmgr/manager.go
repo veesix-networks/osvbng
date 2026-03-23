@@ -6,115 +6,94 @@ import (
 )
 
 type Manager struct {
-	mu            sync.RWMutex
-	bySwIfIndex   map[uint32]*Interface
-	byName        map[string]*Interface
+	bySwIfIndex sync.Map
+	byName      sync.Map
 }
 
 func New() *Manager {
-	return &Manager{
-		bySwIfIndex: make(map[uint32]*Interface),
-		byName:      make(map[string]*Interface),
-	}
+	return &Manager{}
 }
 
 func (m *Manager) Add(iface *Interface) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.bySwIfIndex[iface.SwIfIndex] = iface
+	m.bySwIfIndex.Store(iface.SwIfIndex, iface)
 	if iface.Name != "" {
-		m.byName[iface.Name] = iface
+		m.byName.Store(iface.Name, iface)
 	}
 }
 
 func (m *Manager) Rename(oldName, newName string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if iface, ok := m.byName[oldName]; ok {
-		delete(m.byName, oldName)
+	if v, ok := m.byName.LoadAndDelete(oldName); ok {
+		iface := v.(*Interface)
 		iface.Name = newName
-		m.byName[newName] = iface
+		m.byName.Store(newName, iface)
 	}
 }
 
 func (m *Manager) Remove(swIfIndex uint32) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if iface, ok := m.bySwIfIndex[swIfIndex]; ok {
-		delete(m.bySwIfIndex, swIfIndex)
+	if v, ok := m.bySwIfIndex.LoadAndDelete(swIfIndex); ok {
+		iface := v.(*Interface)
 		if iface.Name != "" {
-			delete(m.byName, iface.Name)
+			m.byName.Delete(iface.Name)
 		}
 	}
 }
 
 func (m *Manager) Get(swIfIndex uint32) *Interface {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	return m.bySwIfIndex[swIfIndex]
+	if v, ok := m.bySwIfIndex.Load(swIfIndex); ok {
+		return v.(*Interface)
+	}
+	return nil
 }
 
 func (m *Manager) GetByName(name string) *Interface {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	if iface, ok := m.byName[name]; ok {
-		return iface
+	if v, ok := m.byName.Load(name); ok {
+		return v.(*Interface)
 	}
-	return m.byName["host-"+name]
+	if v, ok := m.byName.Load("host-" + name); ok {
+		return v.(*Interface)
+	}
+	return nil
 }
 
 func (m *Manager) GetSupSwIfIndex(swIfIndex uint32) (uint32, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	if iface, ok := m.bySwIfIndex[swIfIndex]; ok {
-		return iface.SupSwIfIndex, true
+	if v, ok := m.bySwIfIndex.Load(swIfIndex); ok {
+		return v.(*Interface).SupSwIfIndex, true
 	}
 	return 0, false
 }
 
 func (m *Manager) GetSwIfIndex(name string) (uint32, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	if iface, ok := m.byName[name]; ok {
-		return iface.SwIfIndex, true
+	if v, ok := m.byName.Load(name); ok {
+		return v.(*Interface).SwIfIndex, true
 	}
-	if iface, ok := m.byName["host-"+name]; ok {
-		return iface.SwIfIndex, true
+	if v, ok := m.byName.Load("host-" + name); ok {
+		return v.(*Interface).SwIfIndex, true
 	}
 	return 0, false
 }
 
 func (m *Manager) List() []*Interface {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	result := make([]*Interface, 0, len(m.bySwIfIndex))
-	for _, iface := range m.bySwIfIndex {
-		result = append(result, iface)
-	}
+	var result []*Interface
+	m.bySwIfIndex.Range(func(_, v any) bool {
+		result = append(result, v.(*Interface))
+		return true
+	})
 	return result
 }
 
 func (m *Manager) Clear() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.bySwIfIndex = make(map[uint32]*Interface)
-	m.byName = make(map[string]*Interface)
+	m.bySwIfIndex.Range(func(k, _ any) bool {
+		m.bySwIfIndex.Delete(k)
+		return true
+	})
+	m.byName.Range(func(k, _ any) bool {
+		m.byName.Delete(k)
+		return true
+	})
 }
 
 func (m *Manager) AddIPv4Address(swIfIndex uint32, ip net.IP) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	iface, ok := m.bySwIfIndex[swIfIndex]
+	v, ok := m.bySwIfIndex.Load(swIfIndex)
 	if !ok {
 		return
 	}
@@ -124,19 +103,20 @@ func (m *Manager) AddIPv4Address(swIfIndex uint32, ip net.IP) {
 		return
 	}
 
+	iface := v.(*Interface)
+	iface.mu.Lock()
 	for _, existing := range iface.IPv4Addresses {
 		if existing.Equal(v4) {
+			iface.mu.Unlock()
 			return
 		}
 	}
 	iface.IPv4Addresses = append(iface.IPv4Addresses, v4)
+	iface.mu.Unlock()
 }
 
 func (m *Manager) RemoveIPv4Address(swIfIndex uint32, ip net.IP) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	iface, ok := m.bySwIfIndex[swIfIndex]
+	v, ok := m.bySwIfIndex.Load(swIfIndex)
 	if !ok {
 		return
 	}
@@ -146,19 +126,20 @@ func (m *Manager) RemoveIPv4Address(swIfIndex uint32, ip net.IP) {
 		return
 	}
 
+	iface := v.(*Interface)
+	iface.mu.Lock()
 	for i, existing := range iface.IPv4Addresses {
 		if existing.Equal(v4) {
 			iface.IPv4Addresses = append(iface.IPv4Addresses[:i], iface.IPv4Addresses[i+1:]...)
+			iface.mu.Unlock()
 			return
 		}
 	}
+	iface.mu.Unlock()
 }
 
 func (m *Manager) AddIPv6Address(swIfIndex uint32, ip net.IP) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	iface, ok := m.bySwIfIndex[swIfIndex]
+	v, ok := m.bySwIfIndex.Load(swIfIndex)
 	if !ok {
 		return
 	}
@@ -168,19 +149,20 @@ func (m *Manager) AddIPv6Address(swIfIndex uint32, ip net.IP) {
 		return
 	}
 
+	iface := v.(*Interface)
+	iface.mu.Lock()
 	for _, existing := range iface.IPv6Addresses {
 		if existing.Equal(v6) {
+			iface.mu.Unlock()
 			return
 		}
 	}
 	iface.IPv6Addresses = append(iface.IPv6Addresses, v6)
+	iface.mu.Unlock()
 }
 
 func (m *Manager) RemoveIPv6Address(swIfIndex uint32, ip net.IP) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	iface, ok := m.bySwIfIndex[swIfIndex]
+	v, ok := m.bySwIfIndex.Load(swIfIndex)
 	if !ok {
 		return
 	}
@@ -190,60 +172,69 @@ func (m *Manager) RemoveIPv6Address(swIfIndex uint32, ip net.IP) {
 		return
 	}
 
+	iface := v.(*Interface)
+	iface.mu.Lock()
 	for i, existing := range iface.IPv6Addresses {
 		if existing.Equal(v6) {
 			iface.IPv6Addresses = append(iface.IPv6Addresses[:i], iface.IPv6Addresses[i+1:]...)
+			iface.mu.Unlock()
 			return
 		}
 	}
+	iface.mu.Unlock()
 }
 
 func (m *Manager) SetFIBTableID(swIfIndex uint32, tableID uint32) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if iface, ok := m.bySwIfIndex[swIfIndex]; ok {
-		iface.FIBTableID = tableID
+	if v, ok := m.bySwIfIndex.Load(swIfIndex); ok {
+		v.(*Interface).FIBTableID = tableID
 	}
 }
 
 func (m *Manager) HasIPv4(ip net.IP) bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	v4 := ip.To4()
 	if v4 == nil {
 		return false
 	}
 
-	for _, iface := range m.bySwIfIndex {
+	found := false
+	m.bySwIfIndex.Range(func(_, v any) bool {
+		iface := v.(*Interface)
+		iface.mu.Lock()
 		for _, addr := range iface.IPv4Addresses {
 			if addr.Equal(v4) {
-				return true
+				found = true
+				iface.mu.Unlock()
+				return false
 			}
 		}
-	}
-	return false
+		iface.mu.Unlock()
+		return true
+	})
+	return found
 }
 
 func (m *Manager) HasIPv4InFIB(ip net.IP, tableID uint32) bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	v4 := ip.To4()
 	if v4 == nil {
 		return false
 	}
 
-	for _, iface := range m.bySwIfIndex {
+	found := false
+	m.bySwIfIndex.Range(func(_, v any) bool {
+		iface := v.(*Interface)
 		if iface.FIBTableID != tableID {
-			continue
+			return true
 		}
+		iface.mu.Lock()
 		for _, addr := range iface.IPv4Addresses {
 			if addr.Equal(v4) {
-				return true
+				found = true
+				iface.mu.Unlock()
+				return false
 			}
 		}
-	}
-	return false
+		iface.mu.Unlock()
+		return true
+	})
+	return found
 }
