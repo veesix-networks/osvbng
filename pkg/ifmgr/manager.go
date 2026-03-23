@@ -2,12 +2,20 @@ package ifmgr
 
 import (
 	"net"
+	"net/netip"
 	"sync"
 )
+
+type ipIndex struct {
+	SwIfIndex  uint32
+	FIBTableID uint32
+}
 
 type Manager struct {
 	bySwIfIndex sync.Map
 	byName      sync.Map
+	byIPv4      sync.Map
+	byIPv6      sync.Map
 }
 
 func New() *Manager {
@@ -34,6 +42,16 @@ func (m *Manager) Remove(swIfIndex uint32) {
 		iface := v.(*Interface)
 		if iface.Name != "" {
 			m.byName.Delete(iface.Name)
+		}
+		for _, ip := range iface.IPv4Addresses {
+			if addr, ok := netip.AddrFromSlice(ip.To4()); ok {
+				m.byIPv4.Delete(addr)
+			}
+		}
+		for _, ip := range iface.IPv6Addresses {
+			if addr, ok := netip.AddrFromSlice(ip); ok {
+				m.byIPv6.Delete(addr.Unmap())
+			}
 		}
 	}
 }
@@ -90,6 +108,14 @@ func (m *Manager) Clear() {
 		m.byName.Delete(k)
 		return true
 	})
+	m.byIPv4.Range(func(k, _ any) bool {
+		m.byIPv4.Delete(k)
+		return true
+	})
+	m.byIPv6.Range(func(k, _ any) bool {
+		m.byIPv6.Delete(k)
+		return true
+	})
 }
 
 func (m *Manager) AddIPv4Address(swIfIndex uint32, ip net.IP) {
@@ -113,6 +139,10 @@ func (m *Manager) AddIPv4Address(swIfIndex uint32, ip net.IP) {
 	}
 	iface.IPv4Addresses = append(iface.IPv4Addresses, v4)
 	iface.mu.Unlock()
+
+	if addr, ok := netip.AddrFromSlice(v4); ok {
+		m.byIPv4.Store(addr, &ipIndex{SwIfIndex: swIfIndex, FIBTableID: iface.FIBTableID})
+	}
 }
 
 func (m *Manager) RemoveIPv4Address(swIfIndex uint32, ip net.IP) {
@@ -132,6 +162,9 @@ func (m *Manager) RemoveIPv4Address(swIfIndex uint32, ip net.IP) {
 		if existing.Equal(v4) {
 			iface.IPv4Addresses = append(iface.IPv4Addresses[:i], iface.IPv4Addresses[i+1:]...)
 			iface.mu.Unlock()
+			if addr, ok := netip.AddrFromSlice(v4); ok {
+				m.byIPv4.Delete(addr)
+			}
 			return
 		}
 	}
@@ -159,6 +192,10 @@ func (m *Manager) AddIPv6Address(swIfIndex uint32, ip net.IP) {
 	}
 	iface.IPv6Addresses = append(iface.IPv6Addresses, v6)
 	iface.mu.Unlock()
+
+	if addr, ok := netip.AddrFromSlice(v6); ok {
+		m.byIPv6.Store(addr.Unmap(), &ipIndex{SwIfIndex: swIfIndex, FIBTableID: iface.FIBTableID})
+	}
 }
 
 func (m *Manager) RemoveIPv6Address(swIfIndex uint32, ip net.IP) {
@@ -178,6 +215,9 @@ func (m *Manager) RemoveIPv6Address(swIfIndex uint32, ip net.IP) {
 		if existing.Equal(v6) {
 			iface.IPv6Addresses = append(iface.IPv6Addresses[:i], iface.IPv6Addresses[i+1:]...)
 			iface.mu.Unlock()
+			if addr, ok := netip.AddrFromSlice(v6); ok {
+				m.byIPv6.Delete(addr.Unmap())
+			}
 			return
 		}
 	}
@@ -195,21 +235,11 @@ func (m *Manager) HasIPv4(ip net.IP) bool {
 	if v4 == nil {
 		return false
 	}
-
-	found := false
-	m.bySwIfIndex.Range(func(_, v any) bool {
-		iface := v.(*Interface)
-		iface.mu.Lock()
-		for _, addr := range iface.IPv4Addresses {
-			if addr.Equal(v4) {
-				found = true
-				iface.mu.Unlock()
-				return false
-			}
-		}
-		iface.mu.Unlock()
-		return true
-	})
+	addr, ok := netip.AddrFromSlice(v4)
+	if !ok {
+		return false
+	}
+	_, found := m.byIPv4.Load(addr)
 	return found
 }
 
@@ -218,23 +248,13 @@ func (m *Manager) HasIPv4InFIB(ip net.IP, tableID uint32) bool {
 	if v4 == nil {
 		return false
 	}
-
-	found := false
-	m.bySwIfIndex.Range(func(_, v any) bool {
-		iface := v.(*Interface)
-		if iface.FIBTableID != tableID {
-			return true
-		}
-		iface.mu.Lock()
-		for _, addr := range iface.IPv4Addresses {
-			if addr.Equal(v4) {
-				found = true
-				iface.mu.Unlock()
-				return false
-			}
-		}
-		iface.mu.Unlock()
-		return true
-	})
-	return found
+	addr, ok := netip.AddrFromSlice(v4)
+	if !ok {
+		return false
+	}
+	v, found := m.byIPv4.Load(addr)
+	if !found {
+		return false
+	}
+	return v.(*ipIndex).FIBTableID == tableID
 }
