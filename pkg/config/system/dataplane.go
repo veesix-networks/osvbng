@@ -15,6 +15,10 @@ type DataplaneConfig struct {
 	PuntSocketPath  string              `json:"punt_socket_path,omitempty" yaml:"punt_socket_path,omitempty"`
 	MemifSocketPath string              `json:"memif_socket_path,omitempty" yaml:"memif_socket_path,omitempty"`
 	RxMode          string              `json:"rx_mode,omitempty" yaml:"rx_mode,omitempty"`
+	MainCore        *int                `json:"main_core,omitempty" yaml:"main-core,omitempty"`
+	Workers         string              `json:"workers,omitempty" yaml:"workers,omitempty"`
+	SkipConfGen     bool                `json:"skip_conf_gen,omitempty" yaml:"skip-conf-gen,omitempty"`
+	LCPNetNs        string              `json:"lcp_netns,omitempty" yaml:"lcp-netns,omitempty"`
 	DPDK            *DPDKConfig         `json:"dpdk,omitempty" yaml:"dpdk,omitempty"`
 	StatsSegment    *StatsSegmentConfig `json:"statseg,omitempty" yaml:"statseg,omitempty"`
 }
