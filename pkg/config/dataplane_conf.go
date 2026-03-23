@@ -32,7 +32,14 @@ type DataplaneTemplateData struct {
 func NewDataplaneTemplateDataWithDefaults(cfg *Config, totalCores int) *DataplaneTemplateData {
 	mainCore := 0
 	workerCores := ""
-	if totalCores > 1 {
+
+	if cfg.Dataplane.MainCore != nil {
+		mainCore = *cfg.Dataplane.MainCore
+	}
+
+	if cfg.Dataplane.Workers != "" {
+		workerCores = cfg.Dataplane.Workers
+	} else if totalCores > 1 {
 		workerCores = fmt.Sprintf("1-%d", totalCores-1)
 	}
 
@@ -68,8 +75,15 @@ func NewDataplaneTemplateDataWithDefaults(cfg *Config, totalCores int) *Dataplan
 		UseDPDK:      useDPDK,
 		DPDK:         dpdk,
 		StatsSegment: statseg,
-		LCPNetNs:     LCPNetNs,
+		LCPNetNs:     lcpNetNs(cfg),
 	}
+}
+
+func lcpNetNs(cfg *Config) string {
+	if cfg.Dataplane.LCPNetNs != "" {
+		return cfg.Dataplane.LCPNetNs
+	}
+	return LCPNetNs
 }
 
 func NewDataplaneConf() *DataplaneConf {
