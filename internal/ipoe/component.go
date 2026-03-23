@@ -466,44 +466,22 @@ func parseOption82(data []byte) (circuitID, remoteID []byte) {
 	return
 }
 
-func parseDHCPv6RelayOptions(dhcp *layers.DHCPv6) (interfaceID, remoteID []byte) {
-	for _, opt := range dhcp.Options {
-		switch opt.Code {
-		case 18:
-			interfaceID = opt.Data
-		case 37:
-			if len(opt.Data) >= 4 {
-				remoteID = opt.Data[4:]
-			}
-		}
+func (c *Component) unwrapDHCPv6Relay(rawDHCPv6 []byte) (*dhcp6.Message, *dhcp6.RelayInfo) {
+	msg, info := dhcp6.UnwrapRelay(rawDHCPv6)
+	if info != nil {
+		c.logger.Info("DHCPv6 relay message",
+			"hop_count", info.HopCount,
+			"link_addr", info.LinkAddr,
+			"peer_addr", info.PeerAddr,
+			"interface_id", string(info.InterfaceID),
+			"remote_id", string(info.RemoteID))
 	}
-	return
-}
-
-func (c *Component) unwrapDHCPv6Relay(pkt *dataplane.ParsedPacket) (*layers.DHCPv6, []byte, []byte) {
-	relay := pkt.DHCPv6
-	interfaceID, remoteID := parseDHCPv6RelayOptions(relay)
-
-	c.logger.Info("DHCPv6 relay message",
-		"hop_count", relay.HopCount,
-		"link_addr", relay.LinkAddr,
-		"peer_addr", relay.PeerAddr,
-		"interface_id", string(interfaceID),
-		"remote_id", string(remoteID))
-
-	for _, opt := range relay.Options {
-		if opt.Code == 9 {
-			innerPkt := gopacket.NewPacket(opt.Data, layers.LayerTypeDHCPv6, gopacket.Default)
-			if layer := innerPkt.Layer(layers.LayerTypeDHCPv6); layer != nil {
-				inner := layer.(*layers.DHCPv6)
-				c.logger.Info("Unwrapped inner DHCPv6 message",
-					"inner_type", inner.MsgType.String(),
-					"xid", fmt.Sprintf("0x%x", inner.TransactionID))
-				return inner, interfaceID, remoteID
-			}
-		}
+	if msg != nil {
+		c.logger.Info("Unwrapped inner DHCPv6 message",
+			"inner_type", msg.MsgType,
+			"xid", fmt.Sprintf("0x%x", msg.TransactionID))
 	}
-	return nil, interfaceID, remoteID
+	return msg, info
 }
 
 func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
@@ -1793,37 +1771,48 @@ func (c *Component) processDHCPv6Packet(pkt *dataplane.ParsedPacket) error {
 		}
 	}
 
+	rawDHCPv6 := append(pkt.DHCPv6.LayerContents(), pkt.DHCPv6.LayerPayload()...)
+
 	c.logger.Info("Received DHCPv6 packet",
 		"message_type", pkt.DHCPv6.MsgType.String(),
 		"mac", pkt.MAC.String(),
 		"xid", fmt.Sprintf("0x%x", pkt.DHCPv6.TransactionID))
 
 	if pkt.DHCPv6.MsgType == layers.DHCPv6MsgTypeRelayForward {
-		inner, interfaceID, remoteID := c.unwrapDHCPv6Relay(pkt)
+		inner, info := c.unwrapDHCPv6Relay(rawDHCPv6)
 		if inner == nil {
 			return fmt.Errorf("failed to unwrap relay message")
 		}
-		pkt.DHCPv6 = inner
-		return c.processDHCPv6Message(pkt, interfaceID, remoteID)
+		var interfaceID, remoteID []byte
+		if info != nil {
+			interfaceID = info.InterfaceID
+			remoteID = info.RemoteID
+		}
+		return c.processDHCPv6Message(pkt, inner, interfaceID, remoteID)
 	}
 
-	return c.processDHCPv6Message(pkt, nil, nil)
+	msg, err := dhcp6.ParseMessage(rawDHCPv6)
+	if err != nil {
+		return fmt.Errorf("parse DHCPv6: %w", err)
+	}
+
+	return c.processDHCPv6Message(pkt, msg, nil, nil)
 }
 
-func (c *Component) processDHCPv6Message(pkt *dataplane.ParsedPacket, relayInterfaceID, relayRemoteID []byte) error {
-	switch pkt.DHCPv6.MsgType {
-	case layers.DHCPv6MsgTypeSolicit:
-		return c.handleDHCPv6Solicit(pkt, relayInterfaceID, relayRemoteID)
-	case layers.DHCPv6MsgTypeRequest, layers.DHCPv6MsgTypeRenew, layers.DHCPv6MsgTypeRebind:
-		return c.handleDHCPv6Request(pkt)
-	case layers.DHCPv6MsgTypeRelease, layers.DHCPv6MsgTypeDecline:
-		return c.handleDHCPv6Release(pkt)
+func (c *Component) processDHCPv6Message(pkt *dataplane.ParsedPacket, msg *dhcp6.Message, relayInterfaceID, relayRemoteID []byte) error {
+	switch msg.MsgType {
+	case dhcp6.MsgTypeSolicit:
+		return c.handleDHCPv6Solicit(pkt, msg, relayInterfaceID, relayRemoteID)
+	case dhcp6.MsgTypeRequest, dhcp6.MsgTypeRenew, dhcp6.MsgTypeRebind:
+		return c.handleDHCPv6Request(pkt, msg)
+	case dhcp6.MsgTypeRelease, dhcp6.MsgTypeDecline:
+		return c.handleDHCPv6Release(pkt, msg)
 	}
 
 	return nil
 }
 
-func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, relayInterfaceID, relayRemoteID []byte) error {
+func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.Message, relayInterfaceID, relayRemoteID []byte) error {
 	lookupKey := c.makeSessionKeyV6(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN)
 
 	var sess *SessionState
@@ -1851,22 +1840,11 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, relayInterf
 		}
 	}
 
-	clientDUID := c.extractDHCPv6ClientDUID(pkt.DHCPv6)
-
-	buf := gopacket.NewSerializeBuffer()
-	opts := gopacket.SerializeOptions{FixLengths: true}
-	if err := pkt.DHCPv6.SerializeTo(buf, opts); err != nil {
-		return fmt.Errorf("serialize DHCPv6: %w", err)
-	}
-
-	var xid [3]byte
-	copy(xid[:], pkt.DHCPv6.TransactionID[:])
-
 	sess.mu.Lock()
-	sess.DHCPv6XID = xid
-	sess.DHCPv6DUID = clientDUID
+	sess.DHCPv6XID = msg.TransactionID
+	sess.DHCPv6DUID = msg.Options.ClientID
 	sess.LastSeen = time.Now()
-	sess.PendingDHCPv6Solicit = buf.Bytes()
+	sess.PendingDHCPv6Solicit = msg.Raw
 	if pkt.IPv6 != nil {
 		sess.ClientLinkLocal = pkt.IPv6.SrcIP
 	}
@@ -1876,7 +1854,7 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, relayInterf
 	remoteID := sess.RemoteID
 	v4AaaPending := sess.PendingDHCPDiscover != nil || sess.PendingDHCPRequest != nil
 	sess.mu.Unlock()
-	c.xid6Index.Store(xid, sess)
+	c.xid6Index.Store(msg.TransactionID, sess)
 
 	if len(circuitID) == 0 && len(relayInterfaceID) > 0 {
 		circuitID = relayInterfaceID
@@ -1888,7 +1866,7 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, relayInterf
 	}
 
 	if alreadyApproved && ipoeCreated {
-		return c.forwardDHCPv6ToProvider(sess, pkt, buf.Bytes())
+		return c.forwardDHCPv6ToProvider(sess, pkt, msg.Raw)
 	}
 
 	if alreadyApproved && !ipoeCreated {
@@ -1967,7 +1945,7 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, relayInterf
 	return nil
 }
 
-func (c *Component) handleDHCPv6Request(pkt *dataplane.ParsedPacket) error {
+func (c *Component) handleDHCPv6Request(pkt *dataplane.ParsedPacket, msg *dhcp6.Message) error {
 	lookupKey := c.makeSessionKeyV6(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN)
 
 	val, ok := c.sessions.Load(lookupKey)
@@ -1976,28 +1954,20 @@ func (c *Component) handleDHCPv6Request(pkt *dataplane.ParsedPacket) error {
 	}
 	sess := val.(*SessionState)
 
-	buf := gopacket.NewSerializeBuffer()
-	opts := gopacket.SerializeOptions{FixLengths: true}
-	if err := pkt.DHCPv6.SerializeTo(buf, opts); err != nil {
-		return fmt.Errorf("serialize DHCPv6: %w", err)
-	}
-
-	var xid [3]byte
-	copy(xid[:], pkt.DHCPv6.TransactionID[:])
 	sess.mu.Lock()
-	sess.DHCPv6XID = xid
+	sess.DHCPv6XID = msg.TransactionID
 	sess.LastSeen = time.Now()
-	sess.PendingDHCPv6Request = buf.Bytes()
+	sess.PendingDHCPv6Request = msg.Raw
 	if pkt.IPv6 != nil && sess.ClientLinkLocal == nil {
 		sess.ClientLinkLocal = pkt.IPv6.SrcIP
 	}
 	alreadyApproved := sess.AAAApproved
 	ipoeCreated := sess.IPoESessionCreated
 	sess.mu.Unlock()
-	c.xid6Index.Store(xid, sess)
+	c.xid6Index.Store(msg.TransactionID, sess)
 
 	if alreadyApproved && ipoeCreated {
-		return c.forwardDHCPv6ToProvider(sess, pkt, buf.Bytes())
+		return c.forwardDHCPv6ToProvider(sess, pkt, msg.Raw)
 	}
 
 	c.logger.Info("DHCPv6 REQUEST received, session awaiting AAA", "session_id", sess.SessionID)
@@ -2005,7 +1975,7 @@ func (c *Component) handleDHCPv6Request(pkt *dataplane.ParsedPacket) error {
 	return nil
 }
 
-func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
+func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket, msg *dhcp6.Message) error {
 	lookupKey := c.makeSessionKeyV6(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN)
 
 	val, ok := c.sessions.Load(lookupKey)
@@ -2054,29 +2024,25 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket) error {
 		v6Prof := c.resolveIPv6Profile(sess.AllocCtx)
 		v6Prov := c.getDHCP6Provider(v6Prof)
 		if v6Prov != nil {
-			buf := gopacket.NewSerializeBuffer()
-			opts := gopacket.SerializeOptions{FixLengths: true}
-			if err := pkt.DHCPv6.SerializeTo(buf, opts); err == nil {
-				dhcpPkt := &dhcp6.Packet{
-					SessionID: sessID,
-					MAC:       mac.String(),
-					SVLAN:     pkt.OuterVLAN,
-					CVLAN:     pkt.InnerVLAN,
-					DUID:      duid,
-					Raw:       buf.Bytes(),
-					SwIfIndex: sess.EncapIfIndex,
-					Interface: c.resolveAccessInterfaceName(sess.EncapIfIndex),
-					PeerAddr:  sess.ClientLinkLocal,
-					Profile:   v6Prof,
-					LocalMAC:  c.getLocalMAC(sess.SRGName, sess.EncapIfIndex),
-				}
-				response, err := v6Prov.HandlePacket(c.Ctx, dhcpPkt)
-				if err != nil {
-					c.logger.Warn("DHCPv6 provider failed on Release", "session_id", sessID, "error", err)
-				} else if response != nil && len(response.Raw) > 0 {
-					if err := c.sendDHCPv6Response(sess, response.Raw); err != nil {
-						c.logger.Debug("Failed to send DHCPv6 Release Reply", "session_id", sessID, "error", err)
-					}
+			dhcpPkt := &dhcp6.Packet{
+				SessionID: sessID,
+				MAC:       mac.String(),
+				SVLAN:     pkt.OuterVLAN,
+				CVLAN:     pkt.InnerVLAN,
+				DUID:      duid,
+				Raw:       msg.Raw,
+				SwIfIndex: sess.EncapIfIndex,
+				Interface: c.resolveAccessInterfaceName(sess.EncapIfIndex),
+				PeerAddr:  sess.ClientLinkLocal,
+				Profile:   v6Prof,
+				LocalMAC:  c.getLocalMAC(sess.SRGName, sess.EncapIfIndex),
+			}
+			response, err := v6Prov.HandlePacket(c.Ctx, dhcpPkt)
+			if err != nil {
+				c.logger.Warn("DHCPv6 provider failed on Release", "session_id", sessID, "error", err)
+			} else if response != nil && len(response.Raw) > 0 {
+				if err := c.sendDHCPv6Response(sess, response.Raw); err != nil {
+					c.logger.Debug("Failed to send DHCPv6 Release Reply", "session_id", sessID, "error", err)
 				}
 			}
 		}
@@ -2298,12 +2264,9 @@ func (c *Component) forwardPendingDHCPv6(sess *SessionState, sessID string, mac 
 			if err := c.sendDHCPv6Response(sess, response.Raw); err != nil {
 				c.logger.Error("Failed to send DHCPv6 REPLY", "session_id", sessID, "error", err)
 			}
-			dhcpResp := gopacket.NewPacket(response.Raw, layers.LayerTypeDHCPv6, gopacket.Default)
-			if layer := dhcpResp.Layer(layers.LayerTypeDHCPv6); layer != nil {
-				d := layer.(*layers.DHCPv6)
-				if d.MsgType == layers.DHCPv6MsgTypeReply {
-					c.handleDHCPv6Reply(sess, d)
-				}
+			respMsg, parseErr := dhcp6.ParseMessage(response.Raw)
+			if parseErr == nil && respMsg.MsgType == dhcp6.MsgTypeReply {
+				c.handleDHCPv6Reply(sess, respMsg)
 			}
 		}
 	}
@@ -2440,12 +2403,9 @@ func (c *Component) forwardLatePendingPackets(sess *SessionState, sessID string,
 			if err := c.sendDHCPv6Response(sess, response.Raw); err != nil {
 				c.logger.Error("Failed to send DHCPv6 REPLY", "session_id", sessID, "error", err)
 			}
-			dhcpResp := gopacket.NewPacket(response.Raw, layers.LayerTypeDHCPv6, gopacket.Default)
-			if layer := dhcpResp.Layer(layers.LayerTypeDHCPv6); layer != nil {
-				d := layer.(*layers.DHCPv6)
-				if d.MsgType == layers.DHCPv6MsgTypeReply {
-					c.handleDHCPv6Reply(sess, d)
-				}
+			respMsg, parseErr := dhcp6.ParseMessage(response.Raw)
+			if parseErr == nil && respMsg.MsgType == dhcp6.MsgTypeReply {
+				c.handleDHCPv6Reply(sess, respMsg)
 			}
 		}
 	}
@@ -2489,57 +2449,28 @@ func (c *Component) forwardDHCPv6ToProvider(sess *SessionState, pkt *dataplane.P
 		return err
 	}
 
-	dhcpResp := gopacket.NewPacket(response.Raw, layers.LayerTypeDHCPv6, gopacket.Default)
-	if layer := dhcpResp.Layer(layers.LayerTypeDHCPv6); layer != nil {
-		dhcp := layer.(*layers.DHCPv6)
-		if dhcp.MsgType == layers.DHCPv6MsgTypeReply {
-			return c.handleDHCPv6Reply(sess, dhcp)
-		}
+	respMsg, err := dhcp6.ParseMessage(response.Raw)
+	if err == nil && respMsg.MsgType == dhcp6.MsgTypeReply {
+		return c.handleDHCPv6Reply(sess, respMsg)
 	}
 
 	return nil
 }
 
-func (c *Component) handleDHCPv6Reply(sess *SessionState, dhcp *layers.DHCPv6) error {
+func (c *Component) handleDHCPv6Reply(sess *SessionState, msg *dhcp6.Message) error {
 	var ianaAddr net.IP
 	var pdPrefix *net.IPNet
 	var validTime uint32
 
-	for _, opt := range dhcp.Options {
-		if opt.Code == layers.DHCPv6OptIANA && len(opt.Data) >= 12 {
-			iaData := opt.Data[12:]
-			for len(iaData) >= 4 {
-				subCode := binary.BigEndian.Uint16(iaData[0:2])
-				subLen := binary.BigEndian.Uint16(iaData[2:4])
-				if len(iaData) < int(4+subLen) {
-					break
-				}
-				if subCode == 5 && subLen >= 24 {
-					ianaAddr = net.IP(iaData[4:20])
-					validTime = binary.BigEndian.Uint32(iaData[24:28])
-				}
-				iaData = iaData[4+subLen:]
-			}
-		}
+	if msg.Options.IANA != nil && msg.Options.IANA.Address != nil {
+		ianaAddr = msg.Options.IANA.Address
+		validTime = msg.Options.IANA.ValidTime
+	}
 
-		if opt.Code == layers.DHCPv6OptIAPD && len(opt.Data) >= 12 {
-			pdData := opt.Data[12:]
-			for len(pdData) >= 4 {
-				subCode := binary.BigEndian.Uint16(pdData[0:2])
-				subLen := binary.BigEndian.Uint16(pdData[2:4])
-				if len(pdData) < int(4+subLen) {
-					break
-				}
-				if subCode == 26 && subLen >= 25 {
-					prefixLen := pdData[12]
-					prefixIP := net.IP(pdData[13:29])
-					pdPrefix = &net.IPNet{
-						IP:   prefixIP,
-						Mask: net.CIDRMask(int(prefixLen), 128),
-					}
-				}
-				pdData = pdData[4+subLen:]
-			}
+	if msg.Options.IAPD != nil && msg.Options.IAPD.Prefix != nil {
+		pdPrefix = &net.IPNet{
+			IP:   msg.Options.IAPD.Prefix,
+			Mask: net.CIDRMask(int(msg.Options.IAPD.PrefixLen), 128),
 		}
 	}
 
@@ -2676,28 +2607,9 @@ func (c *Component) sendDHCPv6Response(sess *SessionState, rawDHCPv6 []byte) err
 		return fmt.Errorf("no client link-local address for session %s", sess.SessionID)
 	}
 
-	udpLayer := &layers.UDP{
-		SrcPort: 547,
-		DstPort: 546,
-	}
-	ipv6Layer := &layers.IPv6{
-		Version:    6,
-		HopLimit:   64,
-		NextHeader: layers.IPProtocolUDP,
-		SrcIP:      srcIP,
-		DstIP:      dstIP,
-	}
-	udpLayer.SetNetworkLayerForChecksum(ipv6Layer)
-
-	buf := gopacket.NewSerializeBuffer()
-	opts := gopacket.SerializeOptions{
-		ComputeChecksums: true,
-		FixLengths:       true,
-	}
-
-	payload := gopacket.Payload(rawDHCPv6)
-	if err := gopacket.SerializeLayers(buf, opts, ipv6Layer, udpLayer, payload); err != nil {
-		return fmt.Errorf("serialize IPv6/UDP/DHCPv6: %w", err)
+	frame := dhcp.BuildIPv6UDPFrame(srcIP, dstIP, 547, 546, rawDHCPv6)
+	if frame == nil {
+		return fmt.Errorf("failed to build IPv6/UDP frame")
 	}
 
 	egressPayload := &models.EgressPacketPayload{
@@ -2707,7 +2619,7 @@ func (c *Component) sendDHCPv6Response(sess *SessionState, rawDHCPv6 []byte) err
 		InnerVLAN: sess.InnerVLAN,
 		OuterTPID: c.getSessionOuterTPID(sess),
 		SwIfIndex: parentSwIfIndex,
-		RawData:   buf.Bytes(),
+		RawData:   frame,
 	}
 
 	c.logger.Debug("Sending DHCPv6 response", "session_id", sess.SessionID, "size", len(rawDHCPv6), "dst_ip", dstIP)
@@ -2722,14 +2634,6 @@ func (c *Component) sendDHCPv6Response(sess *SessionState, rawDHCPv6 []byte) err
 	return nil
 }
 
-func (c *Component) extractDHCPv6ClientDUID(dhcp *layers.DHCPv6) []byte {
-	for _, opt := range dhcp.Options {
-		if opt.Code == layers.DHCPv6OptClientID {
-			return opt.Data
-		}
-	}
-	return nil
-}
 
 func (c *Component) getLoopbackIPv6(svlan uint16) net.IP {
 	cfg, err := c.cfgMgr.GetRunning()
