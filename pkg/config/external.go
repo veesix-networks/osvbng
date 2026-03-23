@@ -108,14 +108,14 @@ func GenerateExternalConfigs(configPath string) error {
 	}
 
 	dc := NewDataplaneConf()
-	if _, err := os.Stat(dc.ConfigPath); os.IsNotExist(err) {
+	if cfg.Dataplane.SkipConfGen {
+		log.Printf("Skipping %s (skip-conf-gen: true)", dc.ConfigPath)
+	} else {
 		dpData := NewDataplaneTemplateDataWithDefaults(cfg, runtime.NumCPU())
 		if err := dc.Write(dpData); err != nil {
 			return fmt.Errorf("write dataplane config: %w", err)
 		}
 		log.Printf("Generated %s", dc.ConfigPath)
-	} else {
-		log.Printf("Skipping %s (already exists)", dc.ConfigPath)
 	}
 
 	rc := NewRoutingConf()
