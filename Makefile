@@ -40,8 +40,15 @@ deps:
 	go mod download
 	go mod tidy
 
+TEST_PACKAGES := $(shell go list ./... | grep -v /pkg/vpp/)
+
 test:
-	go test -v ./...
+	go test $(TEST_PACKAGES) -count=1 -timeout 120s
+
+test-report:
+	@mkdir -p build/reports
+	@which gotestsum > /dev/null 2>&1 || go install gotest.tools/gotestsum@latest
+	gotestsum --format pkgname --junitfile build/reports/unit-tests.xml -- $(TEST_PACKAGES) -count=1 -timeout 120s
 
 build-cli: generate
 	go build -o bin/osvbngcli ./cmd/osvbngcli
