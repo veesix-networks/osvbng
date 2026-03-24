@@ -78,9 +78,14 @@ plugins {
   plugin arp_plugin.so { disable }
   plugin rd_cp_plugin.so { disable }
   plugin igmp_plugin.so { disable }
-  plugin v6n_osvbng_arp_punt_plugin.so { enable }
-  plugin v6n_osvbng_fib_control_plugin.so { enable }
-  plugin v6n_osvbng_accounting_plugin.so { enable }
+  plugin osvbng_punt_plugin.so { enable }
+  plugin osvbng_fib_control_plugin.so { enable }
+  plugin osvbng_accounting_plugin.so { enable }
+  plugin osvbng_pppoe_plugin.so { enable }
+  plugin osvbng_ipoe_plugin.so { enable }
+  plugin osvbng_srg_plugin.so { enable }
+  plugin osvbng_cgnat_plugin.so { enable }
+  plugin osvbng_qos_sched_plugin.so { enable }
 }
 
 logging {
@@ -95,13 +100,8 @@ linux-cp {
   del-dynamic-on-link-down
 }
 
-punt {
-  socket /run/osvbng/punt.sock
-}
-
 statseg {
   default
-  per-node-counters on
 }
 
 dpdk {
@@ -179,9 +179,14 @@ plugins {
   plugin arp_plugin.so { disable }
   plugin rd_cp_plugin.so { disable }
   plugin igmp_plugin.so { disable }
-  plugin v6n_osvbng_arp_punt_plugin.so { enable }
-  plugin v6n_osvbng_fib_control_plugin.so { enable }
-  plugin v6n_osvbng_accounting_plugin.so { enable }
+  plugin osvbng_punt_plugin.so { enable }
+  plugin osvbng_fib_control_plugin.so { enable }
+  plugin osvbng_accounting_plugin.so { enable }
+  plugin osvbng_pppoe_plugin.so { enable }
+  plugin osvbng_ipoe_plugin.so { enable }
+  plugin osvbng_srg_plugin.so { enable }
+  plugin osvbng_cgnat_plugin.so { enable }
+  plugin osvbng_qos_sched_plugin.so { enable }
 }
 
 logging {
@@ -196,13 +201,8 @@ linux-cp {
   del-dynamic-on-link-down
 }
 
-punt {
-  socket /run/osvbng/punt.sock
-}
-
 statseg {
   default
-  per-node-counters on
 }
 
 dpdk {
@@ -270,9 +270,14 @@ plugins {
   plugin arp_plugin.so { disable }
   plugin rd_cp_plugin.so { disable }
   plugin igmp_plugin.so { disable }
-  plugin v6n_osvbng_arp_punt_plugin.so { enable }
-  plugin v6n_osvbng_fib_control_plugin.so { enable }
-  plugin v6n_osvbng_accounting_plugin.so { enable }
+  plugin osvbng_punt_plugin.so { enable }
+  plugin osvbng_fib_control_plugin.so { enable }
+  plugin osvbng_accounting_plugin.so { enable }
+  plugin osvbng_pppoe_plugin.so { enable }
+  plugin osvbng_ipoe_plugin.so { enable }
+  plugin osvbng_srg_plugin.so { enable }
+  plugin osvbng_cgnat_plugin.so { enable }
+  plugin osvbng_qos_sched_plugin.so { enable }
 }
 
 logging {
@@ -287,13 +292,8 @@ linux-cp {
   del-dynamic-on-link-down
 }
 
-punt {
-  socket /run/osvbng/punt.sock
-}
-
 statseg {
   default
-  per-node-counters on
 }
 `,
 		},

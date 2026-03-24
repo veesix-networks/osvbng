@@ -165,7 +165,7 @@ func GetUserByID(db *sql.DB, userID int64) (*User, error) {
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("user not found: %s", userID)
+			return nil, fmt.Errorf("user not found: %d", userID)
 		}
 		return nil, err
 	}
@@ -292,7 +292,7 @@ func DeleteUserByID(db *sql.DB, userID int64) error {
 		return err
 	}
 	if rows == 0 {
-		return fmt.Errorf("user not found with ID: %s", userID)
+		return fmt.Errorf("user not found with ID: %d", userID)
 	}
 
 	return nil

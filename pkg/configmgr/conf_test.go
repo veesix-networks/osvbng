@@ -1,16 +1,37 @@
 package configmgr
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/veesix-networks/osvbng/pkg/config"
-	"github.com/veesix-networks/osvbng/pkg/operations"
+	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
+	conf "github.com/veesix-networks/osvbng/pkg/handlers/conf"
+	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
 )
 
+type noopHandler struct {
+	path paths.Path
+}
+
+func (h *noopHandler) Validate(ctx context.Context, hctx *conf.HandlerContext) error { return nil }
+func (h *noopHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error    { return nil }
+func (h *noopHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) error { return nil }
+func (h *noopHandler) PathPattern() paths.Path                                       { return h.path }
+func (h *noopHandler) Dependencies() []paths.Path                                    { return nil }
+func (h *noopHandler) Callbacks() *conf.Callbacks                                    { return nil }
+
+func newTestConfigManager(t *testing.T) *ConfigManager {
+	cd := NewConfigManager()
+	cd.registry.MustRegister(&noopHandler{path: "interfaces.<*>"})
+	cd.startupConfigPath = filepath.Join(t.TempDir(), "startup-config.yaml")
+	return cd
+}
+
 func TestSessionLifecycle(t *testing.T) {
-	cd := NewConfigManager(operations.NewMockDataplane())
+	cd := newTestConfigManager(t)
 
 	sessionID, err := cd.CreateCandidateSession()
 	if err != nil {
@@ -33,7 +54,7 @@ func TestSessionLifecycle(t *testing.T) {
 }
 
 func TestLoadConfig(t *testing.T) {
-	cd := NewConfigManager(operations.NewMockDataplane())
+	cd := newTestConfigManager(t)
 
 	sessionID, err := cd.CreateCandidateSession()
 	if err != nil {
@@ -41,7 +62,7 @@ func TestLoadConfig(t *testing.T) {
 	}
 
 	config := &config.Config{
-		Interfaces: map[string]*config.InterfaceConfig{
+		Interfaces: map[string]*interfaces.InterfaceConfig{
 			"eth0": {
 				Name:        "eth0",
 				Description: "Test Interface",
@@ -75,7 +96,7 @@ func TestLoadConfig(t *testing.T) {
 }
 
 func TestCommit(t *testing.T) {
-	cd := NewConfigManager(operations.NewMockDataplane())
+	cd := newTestConfigManager(t)
 	cd.disableVersions = true
 
 	sessionID, err := cd.CreateCandidateSession()
@@ -84,7 +105,7 @@ func TestCommit(t *testing.T) {
 	}
 
 	config := &config.Config{
-		Interfaces: map[string]*config.InterfaceConfig{
+		Interfaces: map[string]*interfaces.InterfaceConfig{
 			"eth0": {
 				Name:    "eth0",
 				Enabled: true,
@@ -113,7 +134,7 @@ func TestCommit(t *testing.T) {
 }
 
 func TestVersionHistory(t *testing.T) {
-	cd := NewConfigManager(operations.NewMockDataplane())
+	cd := newTestConfigManager(t)
 	cd.disableVersions = true
 
 	sessionID, err := cd.CreateCandidateSession()
@@ -122,7 +143,7 @@ func TestVersionHistory(t *testing.T) {
 	}
 
 	config := &config.Config{
-		Interfaces: map[string]*config.InterfaceConfig{
+		Interfaces: map[string]*interfaces.InterfaceConfig{
 			"eth0": {
 				Name:    "eth0",
 				Enabled: true,
@@ -151,7 +172,7 @@ func TestVersionHistory(t *testing.T) {
 }
 
 func TestMultipleSessions(t *testing.T) {
-	cd := NewConfigManager(operations.NewMockDataplane())
+	cd := newTestConfigManager(t)
 
 	sessionID1, err := cd.CreateCandidateSession()
 	if err != nil {
@@ -173,7 +194,7 @@ func TestMultipleSessions(t *testing.T) {
 }
 
 func TestCandidateVsRunningConfig(t *testing.T) {
-	cd := NewConfigManager(operations.NewMockDataplane())
+	cd := newTestConfigManager(t)
 	cd.disableVersions = true
 
 	if len(cd.runningConfig.Interfaces) != 0 {
@@ -186,7 +207,7 @@ func TestCandidateVsRunningConfig(t *testing.T) {
 	}
 
 	config := &config.Config{
-		Interfaces: map[string]*config.InterfaceConfig{
+		Interfaces: map[string]*interfaces.InterfaceConfig{
 			"eth0": {
 				Name:    "eth0",
 				Enabled: true,
@@ -220,7 +241,7 @@ func TestCandidateVsRunningConfig(t *testing.T) {
 func TestStartupConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	cd := NewConfigManager(operations.NewMockDataplane())
+	cd := newTestConfigManager(t)
 	cd.disableVersions = true
 	cd.startupConfigPath = filepath.Join(tmpDir, "startup-config.yaml")
 
@@ -230,7 +251,7 @@ func TestStartupConfig(t *testing.T) {
 	}
 
 	config := &config.Config{
-		Interfaces: map[string]*config.InterfaceConfig{
+		Interfaces: map[string]*interfaces.InterfaceConfig{
 			"eth0": {
 				Name:        "eth0",
 				Description: "Test Interface",
@@ -249,8 +270,8 @@ func TestStartupConfig(t *testing.T) {
 		t.Fatalf("Commit failed: %v", err)
 	}
 
-	if len(cd.startupConfig.Interfaces) != 0 {
-		t.Fatal("Startup config should be empty before SaveStartup")
+	if len(cd.startupConfig.Interfaces) != 1 {
+		t.Fatal("Startup config should have 1 interface after Commit (auto-saved)")
 	}
 
 	err = cd.SaveStartup()
@@ -276,7 +297,7 @@ func TestStartupConfig(t *testing.T) {
 }
 
 func TestVersionDiff(t *testing.T) {
-	cd := NewConfigManager(operations.NewMockDataplane())
+	cd := newTestConfigManager(t)
 	cd.disableVersions = true
 
 	sessionID, err := cd.CreateCandidateSession()
@@ -285,7 +306,7 @@ func TestVersionDiff(t *testing.T) {
 	}
 
 	config1 := &config.Config{
-		Interfaces: map[string]*config.InterfaceConfig{
+		Interfaces: map[string]*interfaces.InterfaceConfig{
 			"eth0": {
 				Name:    "eth0",
 				Enabled: true,
@@ -313,7 +334,7 @@ func TestVersionDiff(t *testing.T) {
 	}
 
 	config2 := &config.Config{
-		Interfaces: map[string]*config.InterfaceConfig{
+		Interfaces: map[string]*interfaces.InterfaceConfig{
 			"eth0": {
 				Name:    "eth0",
 				Enabled: true,
@@ -346,7 +367,7 @@ func TestVersionDiff(t *testing.T) {
 }
 
 func TestDryRun(t *testing.T) {
-	cd := NewConfigManager(operations.NewMockDataplane())
+	cd := newTestConfigManager(t)
 	cd.disableVersions = true
 
 	sessionID, err := cd.CreateCandidateSession()
@@ -355,7 +376,7 @@ func TestDryRun(t *testing.T) {
 	}
 
 	config := &config.Config{
-		Interfaces: map[string]*config.InterfaceConfig{
+		Interfaces: map[string]*interfaces.InterfaceConfig{
 			"eth0": {
 				Name:        "eth0",
 				Description: "Test Interface",
