@@ -3,18 +3,18 @@ package metrics
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 	"reflect"
 	"strconv"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/veesix-networks/osvbng/pkg/cache"
+	"github.com/veesix-networks/osvbng/pkg/logger"
 )
 
 type StructHandler[T any] struct {
 	name        string
 	path        string
-	logger      *slog.Logger
+	logger      *logger.Logger
 	metrics     []fieldAccessor
 	labelFields []labelAccessor
 	descs       map[string]*prometheus.Desc
@@ -31,7 +31,7 @@ type labelAccessor struct {
 	index int
 }
 
-func NewStructHandler[T any](name, path string, isSlice bool, constLabels prometheus.Labels, logger *slog.Logger) (*StructHandler[T], error) {
+func NewStructHandler[T any](name, path string, isSlice bool, constLabels prometheus.Labels, logger *logger.Logger) (*StructHandler[T], error) {
 	var zero T
 	structType := reflect.TypeOf(zero)
 
@@ -153,28 +153,28 @@ type pathLike interface {
 
 func RegisterMetricSingle[T any](path pathLike) {
 	pathStr := path.String()
-	Register(pathStr, func(logger *slog.Logger) (MetricHandler, error) {
+	Register(pathStr, func(logger *logger.Logger) (MetricHandler, error) {
 		return NewStructHandler[T](pathStr, pathStr, false, nil, logger)
 	})
 }
 
 func RegisterMetricMulti[T any](path pathLike) {
 	pathStr := path.String()
-	Register(pathStr, func(logger *slog.Logger) (MetricHandler, error) {
+	Register(pathStr, func(logger *logger.Logger) (MetricHandler, error) {
 		return NewStructHandler[T](pathStr, pathStr, true, nil, logger)
 	})
 }
 
 func RegisterMetricSingleWithLabels[T any](path pathLike, constLabels prometheus.Labels) {
 	pathStr := path.String()
-	Register(pathStr, func(logger *slog.Logger) (MetricHandler, error) {
+	Register(pathStr, func(logger *logger.Logger) (MetricHandler, error) {
 		return NewStructHandler[T](pathStr, pathStr, false, constLabels, logger)
 	})
 }
 
 func RegisterMetricMultiWithLabels[T any](path pathLike, constLabels prometheus.Labels) {
 	pathStr := path.String()
-	Register(pathStr, func(logger *slog.Logger) (MetricHandler, error) {
+	Register(pathStr, func(logger *logger.Logger) (MetricHandler, error) {
 		return NewStructHandler[T](pathStr, pathStr, true, constLabels, logger)
 	})
 }

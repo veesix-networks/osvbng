@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -51,7 +50,7 @@ type Manager struct {
 	peer     *PeerClient
 	srgs     map[string]*SRGStateMachine
 	eventBus events.Bus
-	logger   *slog.Logger
+	logger   *logger.Logger
 
 	dataplane       southbound.SRGDataplane
 	routingCtrl     RoutingController

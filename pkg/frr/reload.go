@@ -3,7 +3,6 @@ package frr
 import (
 	"bytes"
 	"fmt"
-	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,7 +22,7 @@ type Config struct {
 	TemplateDir string
 	ConfigPath  string
 	ReloadCmd   string
-	logger      *slog.Logger
+	logger      *logger.Logger
 }
 
 func NewConfig() *Config {

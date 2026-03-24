@@ -31,7 +31,7 @@ type Provider struct {
 	bindings *Bindings
 	duidMu   sync.RWMutex
 	duidMap  map[string][]byte
-	logger   *slog.Logger
+	logger   *logger.Logger
 }
 
 func New(cfg *config.Config) (dhcp6.DHCPProvider, error) {

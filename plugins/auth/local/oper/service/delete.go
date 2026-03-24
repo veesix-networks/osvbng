@@ -4,8 +4,6 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"context"
 	"fmt"
-	"log/slog"
-
 	"github.com/veesix-networks/osvbng/pkg/handlers/oper"
 	operpaths "github.com/veesix-networks/osvbng/pkg/handlers/oper/paths"
 	"github.com/veesix-networks/osvbng/pkg/logger"
@@ -18,7 +16,7 @@ func init() {
 
 type DeleteServiceHandler struct {
 	deps   *deps.OperDeps
-	logger *slog.Logger
+	logger *logger.Logger
 }
 
 func NewDeleteServiceHandler(deps *deps.OperDeps) oper.OperHandler {

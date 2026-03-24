@@ -2,7 +2,6 @@ package aaa
 
 import (
 	"context"
-	"log/slog"
 	"net"
 	"testing"
 	"time"
@@ -10,6 +9,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/auth"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/events"
+	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/provider"
 )
@@ -94,7 +94,7 @@ func TestHandleSessionLifecycle(t *testing.T) {
 
 	c := &Component{
 		Base:         base,
-		logger:       slog.Default(),
+		logger:       logger.NewTest(),
 		authProvider: noopAuthProvider{},
 		buckets:      make(map[int][]string),
 		acctCache:    make(map[string]*AccountingSession),

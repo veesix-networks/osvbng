@@ -3,8 +3,6 @@ package hello
 import (
 	"context"
 	"fmt"
-	"log/slog"
-
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
 	"github.com/veesix-networks/osvbng/pkg/logger"
@@ -12,7 +10,7 @@ import (
 
 type Component struct {
 	*component.Base
-	logger  *slog.Logger
+	logger  *logger.Logger
 	message string
 }
 

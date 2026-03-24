@@ -1,13 +1,22 @@
+// Copyright 2025 Veesix Networks Ltd
+// Licensed under the GNU General Public License v3.0 or later.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package logger
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/diode"
 )
 
 type LogLevel string
@@ -19,269 +28,316 @@ const (
 	LogLevelError LogLevel = "error"
 )
 
-var (
-	Log             *slog.Logger
-	defaultLevel    slog.Level
-	componentLevels map[string]slog.Level
-	levelsMu        sync.RWMutex
-	format          string
-	pid             int
-	loggerCache     sync.Map
-)
-
-func init() {
-	defaultLevel = slog.LevelInfo
-	componentLevels = make(map[string]slog.Level)
-	format = "text"
-	pid = os.Getpid()
-
-	handler := NewBNGTextHandler(os.Stdout, nil, "")
-	Log = slog.New(handler)
-}
-
-func Configure(logFormat string, level LogLevel, components map[string]LogLevel) {
-	levelsMu.Lock()
-	defaultLevel = parseLevel(string(level))
-	format = logFormat
-	componentLevels = make(map[string]slog.Level)
-	for name, lvl := range components {
-		componentLevels[name] = parseLevel(string(lvl))
-	}
-	levelsMu.Unlock()
-
-	loggerCache = sync.Map{}
-
-	var handler slog.Handler
-	if strings.ToLower(format) == "json" {
-		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-			Level: defaultLevel,
-		})
-	} else {
-		handler = NewBNGTextHandler(os.Stdout, nil, "")
-	}
-
-	Log = slog.New(handler)
-}
-
-type BNGTextHandler struct {
-	opts      *slog.HandlerOptions
-	mu        sync.Mutex
-	w         io.Writer
-	attrs     []slog.Attr
+type Logger struct {
+	zl        zerolog.Logger
 	component string
 }
 
-func NewBNGTextHandler(w io.Writer, opts *slog.HandlerOptions, component string) *BNGTextHandler {
-	if opts == nil {
-		opts = &slog.HandlerOptions{}
+type levelMap = map[string]zerolog.Level
+
+var (
+	Log             *Logger
+	defaultLevel    zerolog.Level
+	componentLevels atomic.Pointer[levelMap]
+	loggerCache     sync.Map
+	diodeWriter     *diode.Writer
+)
+
+func init() {
+	defaultLevel = zerolog.InfoLevel
+	m := make(levelMap)
+	componentLevels.Store(&m)
+
+	zerolog.TimeFieldFormat = "2006/01/02 15:04:05.000"
+
+	w := zerolog.ConsoleWriter{
+		Out:        os.Stdout,
+		TimeFormat: "2006/01/02 15:04:05.000",
+		NoColor:    true,
 	}
-	return &BNGTextHandler{
-		w:         w,
-		opts:      opts,
-		component: component,
-	}
-}
-
-func (h *BNGTextHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	return level >= getEffectiveLevel(h.component)
-}
-
-func (h *BNGTextHandler) Handle(ctx context.Context, r slog.Record) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	attrs := make(map[string]any)
-
-	r.Attrs(func(a slog.Attr) bool {
-		attrs[a.Key] = a.Value.Any()
-		return true
-	})
-
-	for _, a := range h.attrs {
-		attrs[a.Key] = a.Value.Any()
-	}
-
-	buf := make([]byte, 0, 256)
-	buf = append(buf, r.Time.Format("2006/01/02 15:04:05.000")...)
-	buf = append(buf, fmt.Sprintf(" [%d]", pid)...)
-
-	if h.component != "" {
-		buf = append(buf, fmt.Sprintf(" [%s]", h.component)...)
-	}
-
-	buf = append(buf, ' ')
-	buf = append(buf, r.Message...)
-
-	for k, v := range attrs {
-		buf = append(buf, fmt.Sprintf(" %s=%v", k, v)...)
-	}
-
-	buf = append(buf, '\n')
-	_, err := h.w.Write(buf)
-	return err
-}
-
-func (h *BNGTextHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return &BNGTextHandler{
-		w:         h.w,
-		opts:      h.opts,
-		attrs:     append(h.attrs, attrs...),
-		component: h.component,
+	Log = &Logger{
+		zl: zerolog.New(w).With().Timestamp().Logger(),
 	}
 }
 
-func (h *BNGTextHandler) WithGroup(name string) slog.Handler {
-	newComponent := h.component
-	if newComponent != "" {
-		newComponent = newComponent + "." + name
+func Configure(logFormat string, level LogLevel, components map[string]LogLevel) {
+	defaultLevel = parseZerologLevel(string(level))
+
+	m := make(levelMap, len(components))
+	for name, lvl := range components {
+		m[name] = parseZerologLevel(string(lvl))
+	}
+	componentLevels.Store(&m)
+
+	loggerCache = sync.Map{}
+
+	var w io.Writer
+	if strings.ToLower(logFormat) == "json" {
+		dw := diode.NewWriter(os.Stdout, 100000, 10*time.Millisecond, func(missed int) {
+			fmt.Fprintf(os.Stderr, "WARN: logger dropped %d messages\n", missed)
+		})
+		diodeWriter = &dw
+		w = diodeWriter
 	} else {
-		newComponent = name
+		cw := zerolog.ConsoleWriter{
+			Out:        os.Stdout,
+			TimeFormat: "2006/01/02 15:04:05.000",
+			NoColor:    true,
+		}
+		dw := diode.NewWriter(cw, 100000, 10*time.Millisecond, func(missed int) {
+			fmt.Fprintf(os.Stderr, "WARN: logger dropped %d messages\n", missed)
+		})
+		diodeWriter = &dw
+		w = diodeWriter
 	}
-	return &BNGTextHandler{
-		w:         h.w,
-		opts:      h.opts,
-		attrs:     h.attrs,
-		component: newComponent,
-	}
-}
 
-func parseLevel(level string) slog.Level {
-	switch strings.ToLower(level) {
-	case "debug":
-		return slog.LevelDebug
-	case "info":
-		return slog.LevelInfo
-	case "warn", "warning":
-		return slog.LevelWarn
-	case "error":
-		return slog.LevelError
-	default:
-		return slog.LevelInfo
+	Log = &Logger{
+		zl: zerolog.New(w).With().Timestamp().Logger(),
 	}
 }
 
-func getEffectiveLevel(component string) slog.Level {
-	levelsMu.RLock()
-	defer levelsMu.RUnlock()
+func Sync() {
+	if diodeWriter != nil {
+		diodeWriter.Close()
+	}
+}
 
-	if level, ok := componentLevels[component]; ok {
-		return level
+func (l *Logger) enabled(level zerolog.Level) bool {
+	levels := *componentLevels.Load()
+
+	if lvl, ok := levels[l.component]; ok {
+		return level >= lvl
 	}
 
-	path := component
+	path := l.component
 	for {
 		idx := strings.LastIndex(path, ".")
 		if idx < 0 {
 			break
 		}
 		path = path[:idx]
-		if level, ok := componentLevels[path]; ok {
-			return level
+		if lvl, ok := levels[path]; ok {
+			return level >= lvl
 		}
 	}
 
-	return defaultLevel
+	return level >= defaultLevel
 }
 
-type BNGJSONHandler struct {
-	inner     *slog.JSONHandler
-	component string
+func (l *Logger) Info(msg string, args ...any) {
+	if !l.enabled(zerolog.InfoLevel) {
+		return
+	}
+	logEvent(l.zl.Info(), msg, args)
 }
 
-func newJSONHandler(component string) *BNGJSONHandler {
-	return &BNGJSONHandler{
-		inner: slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-			Level: slog.LevelDebug,
-		}),
+func (l *Logger) Debug(msg string, args ...any) {
+	if !l.enabled(zerolog.DebugLevel) {
+		return
+	}
+	logEvent(l.zl.Debug(), msg, args)
+}
+
+func (l *Logger) Error(msg string, args ...any) {
+	logEvent(l.zl.Error(), msg, args)
+}
+
+func (l *Logger) Warn(msg string, args ...any) {
+	logEvent(l.zl.Warn(), msg, args)
+}
+
+func (l *Logger) With(args ...any) *Logger {
+	zctx := l.zl.With()
+	for i := 0; i < len(args); i++ {
+		switch v := args[i].(type) {
+		case slog.Attr:
+			zctx = addContext(zctx, v.Key, v.Value.Any())
+		case string:
+			if i+1 < len(args) {
+				i++
+				zctx = addContext(zctx, v, args[i])
+			}
+		}
+	}
+	return &Logger{zl: zctx.Logger(), component: l.component}
+}
+
+func (l *Logger) WithGroup(name string) *Logger {
+	component := l.component
+	if component != "" {
+		component = component + "." + name
+	} else {
+		component = name
+	}
+	return &Logger{
+		zl:        l.zl.With().Str("component", component).Logger(),
 		component: component,
 	}
 }
 
-func (h *BNGJSONHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	return level >= getEffectiveLevel(h.component)
+func logEvent(e *zerolog.Event, msg string, args []any) {
+	for i := 0; i < len(args); i++ {
+		switch v := args[i].(type) {
+		case slog.Attr:
+			e = addField(e, v.Key, v.Value.Any())
+		case string:
+			if i+1 < len(args) {
+				i++
+				e = addField(e, v, args[i])
+			}
+		}
+	}
+	e.Msg(msg)
 }
 
-func (h *BNGJSONHandler) Handle(ctx context.Context, r slog.Record) error {
-	if h.component != "" {
-		r.AddAttrs(slog.String("component", h.component))
+func addField(e *zerolog.Event, key string, val any) *zerolog.Event {
+	switch v := val.(type) {
+	case string:
+		return e.Str(key, v)
+	case int:
+		return e.Int(key, v)
+	case int64:
+		return e.Int64(key, v)
+	case uint:
+		return e.Uint(key, v)
+	case uint8:
+		return e.Uint8(key, v)
+	case uint16:
+		return e.Uint16(key, v)
+	case uint32:
+		return e.Uint32(key, v)
+	case uint64:
+		return e.Uint64(key, v)
+	case float64:
+		return e.Float64(key, v)
+	case bool:
+		return e.Bool(key, v)
+	case error:
+		return e.AnErr(key, v)
+	case net.IP:
+		return e.IPAddr(key, v)
+	case net.HardwareAddr:
+		return e.Str(key, v.String())
+	case time.Duration:
+		return e.Dur(key, v)
+	case time.Time:
+		return e.Time(key, v)
+	case fmt.Stringer:
+		return e.Stringer(key, v)
+	default:
+		return e.Interface(key, v)
 	}
-	return h.inner.Handle(ctx, r)
 }
 
-func (h *BNGJSONHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return &BNGJSONHandler{
-		inner:     h.inner.WithAttrs(attrs).(*slog.JSONHandler),
-		component: h.component,
+func addContext(zctx zerolog.Context, key string, val any) zerolog.Context {
+	switch v := val.(type) {
+	case string:
+		return zctx.Str(key, v)
+	case int:
+		return zctx.Int(key, v)
+	case int64:
+		return zctx.Int64(key, v)
+	case uint16:
+		return zctx.Uint16(key, v)
+	case uint32:
+		return zctx.Uint32(key, v)
+	case uint64:
+		return zctx.Uint64(key, v)
+	case bool:
+		return zctx.Bool(key, v)
+	case error:
+		return zctx.AnErr(key, v)
+	case net.IP:
+		return zctx.IPAddr(key, v)
+	case net.HardwareAddr:
+		return zctx.Str(key, v.String())
+	case fmt.Stringer:
+		return zctx.Stringer(key, v)
+	default:
+		return zctx.Interface(key, v)
 	}
 }
 
-func (h *BNGJSONHandler) WithGroup(name string) slog.Handler {
-	newComponent := h.component
-	if newComponent != "" {
-		newComponent = newComponent + "." + name
-	} else {
-		newComponent = name
-	}
-	return &BNGJSONHandler{
-		inner:     h.inner,
-		component: newComponent,
-	}
-}
-
-func Get(name string) *slog.Logger {
+func Get(name string) *Logger {
 	if l, ok := loggerCache.Load(name); ok {
-		return l.(*slog.Logger)
+		return l.(*Logger)
 	}
 
-	var handler slog.Handler
-	if strings.ToLower(format) == "json" {
-		handler = newJSONHandler(name)
-	} else {
-		handler = NewBNGTextHandler(os.Stdout, nil, name)
+	l := &Logger{
+		zl:        Log.zl.With().Str("component", name).Logger(),
+		component: name,
 	}
-
-	l := slog.New(handler)
 	loggerCache.Store(name, l)
 	return l
 }
 
+func NewTest() *Logger {
+	return &Logger{
+		zl:        zerolog.New(io.Discard),
+		component: "test",
+	}
+}
+
 func SetComponentLevel(name string, level LogLevel) {
-	levelsMu.Lock()
-	componentLevels[name] = parseLevel(string(level))
-	levelsMu.Unlock()
+	old := *componentLevels.Load()
+	newMap := make(levelMap, len(old)+1)
+	for k, v := range old {
+		newMap[k] = v
+	}
+	newMap[name] = parseZerologLevel(string(level))
+	componentLevels.Store(&newMap)
 	loggerCache.Delete(name)
 }
 
 func ClearComponentLevel(name string) {
-	levelsMu.Lock()
-	delete(componentLevels, name)
-	levelsMu.Unlock()
+	old := *componentLevels.Load()
+	newMap := make(levelMap, len(old))
+	for k, v := range old {
+		if k != name {
+			newMap[k] = v
+		}
+	}
+	componentLevels.Store(&newMap)
 	loggerCache.Delete(name)
 }
 
 func GetComponentLevels() map[string]LogLevel {
-	levelsMu.RLock()
-	defer levelsMu.RUnlock()
-	result := make(map[string]LogLevel)
-	for name, level := range componentLevels {
-		result[name] = levelToLogLevel(level)
+	levels := *componentLevels.Load()
+	result := make(map[string]LogLevel, len(levels))
+	for name, level := range levels {
+		result[name] = zerologToLogLevel(level)
 	}
 	return result
 }
 
 func GetDefaultLevel() LogLevel {
-	return levelToLogLevel(defaultLevel)
+	return zerologToLogLevel(defaultLevel)
 }
 
-func levelToLogLevel(level slog.Level) LogLevel {
+func parseZerologLevel(level string) zerolog.Level {
+	switch strings.ToLower(level) {
+	case "debug":
+		return zerolog.DebugLevel
+	case "info":
+		return zerolog.InfoLevel
+	case "warn", "warning":
+		return zerolog.WarnLevel
+	case "error":
+		return zerolog.ErrorLevel
+	default:
+		return zerolog.InfoLevel
+	}
+}
+
+func zerologToLogLevel(level zerolog.Level) LogLevel {
 	switch level {
-	case slog.LevelDebug:
+	case zerolog.DebugLevel:
 		return LogLevelDebug
-	case slog.LevelInfo:
+	case zerolog.InfoLevel:
 		return LogLevelInfo
-	case slog.LevelWarn:
+	case zerolog.WarnLevel:
 		return LogLevelWarn
-	case slog.LevelError:
+	case zerolog.ErrorLevel:
 		return LogLevelError
 	default:
 		return LogLevelInfo
@@ -298,30 +354,30 @@ type SessionAttrs struct {
 	Username      string
 }
 
-func WithSession(logger *slog.Logger, attrs SessionAttrs) *slog.Logger {
-	args := make([]any, 0, 14)
+func WithSession(l *Logger, attrs SessionAttrs) *Logger {
+	zctx := l.zl.With()
 
 	if attrs.SessionID != "" {
-		args = append(args, "session_id", attrs.SessionID)
+		zctx = zctx.Str("session_id", attrs.SessionID)
 	}
 	if attrs.AcctSessionID != "" {
-		args = append(args, "acct_session_id", attrs.AcctSessionID)
+		zctx = zctx.Str("acct_session_id", attrs.AcctSessionID)
 	}
 	if attrs.MAC != "" {
-		args = append(args, "mac", attrs.MAC)
+		zctx = zctx.Str("mac", attrs.MAC)
 	}
 	if attrs.SVLAN > 0 {
-		args = append(args, "svlan", attrs.SVLAN)
+		zctx = zctx.Uint16("svlan", attrs.SVLAN)
 	}
 	if attrs.CVLAN > 0 {
-		args = append(args, "cvlan", attrs.CVLAN)
+		zctx = zctx.Uint16("cvlan", attrs.CVLAN)
 	}
 	if attrs.Protocol != "" {
-		args = append(args, "protocol", attrs.Protocol)
+		zctx = zctx.Str("protocol", attrs.Protocol)
 	}
 	if attrs.Username != "" {
-		args = append(args, "username", attrs.Username)
+		zctx = zctx.Str("username", attrs.Username)
 	}
 
-	return logger.With(args...)
+	return &Logger{zl: zctx.Logger(), component: l.component}
 }

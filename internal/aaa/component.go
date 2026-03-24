@@ -2,7 +2,6 @@ package aaa
 
 import (
 	"context"
-	"log/slog"
 	"sync"
 	"time"
 
@@ -33,7 +32,7 @@ type AccountingSession struct {
 type Component struct {
 	*component.Base
 
-	logger       *slog.Logger
+	logger       *logger.Logger
 	authProvider auth.AuthProvider
 	eventBus     events.Bus
 	cache        cache.Cache

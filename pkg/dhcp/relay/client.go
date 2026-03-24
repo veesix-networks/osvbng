@@ -7,7 +7,6 @@ package relay
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"net"
 	"sort"
 	"sync"
@@ -57,7 +56,7 @@ type Client struct {
 	mu6       sync.Mutex
 	replyPool sync.Pool
 	closed    chan struct{}
-	logger    *slog.Logger
+	logger    *logger.Logger
 
 	serversMu     sync.RWMutex
 	servers       map[string]*Server

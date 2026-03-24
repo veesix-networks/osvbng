@@ -3,26 +3,26 @@ package metrics
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/veesix-networks/osvbng/pkg/cache"
+	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models/protocols/isis"
 	"github.com/veesix-networks/osvbng/pkg/state/paths"
 )
 
 func init() {
-	Register("protocols.isis", func(logger *slog.Logger) (MetricHandler, error) {
+	Register("protocols.isis", func(logger *logger.Logger) (MetricHandler, error) {
 		return NewISISMetricHandler(logger), nil
 	})
 }
 
 type ISISMetricHandler struct {
-	logger         *slog.Logger
+	logger         *logger.Logger
 	adjacencyCount *prometheus.Desc
 }
 
-func NewISISMetricHandler(logger *slog.Logger) *ISISMetricHandler {
+func NewISISMetricHandler(logger *logger.Logger) *ISISMetricHandler {
 	return &ISISMetricHandler{
 		logger: logger,
 		adjacencyCount: prometheus.NewDesc(

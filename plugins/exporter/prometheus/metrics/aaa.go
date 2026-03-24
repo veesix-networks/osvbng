@@ -4,29 +4,29 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"reflect"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/veesix-networks/osvbng/internal/aaa"
 	"github.com/veesix-networks/osvbng/pkg/cache"
+	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/state/paths"
 )
 
 func init() {
-	Register("aaa.radius", func(logger *slog.Logger) (MetricHandler, error) {
+	Register("aaa.radius", func(logger *logger.Logger) (MetricHandler, error) {
 		return NewAAAMetricHandler(logger)
 	})
 }
 
 type AAAMetricHandler struct {
-	logger      *slog.Logger
+	logger      *logger.Logger
 	metrics     []FieldMetric
 	labelFields []string
 	descs       map[string]*prometheus.Desc
 }
 
-func NewAAAMetricHandler(logger *slog.Logger) (*AAAMetricHandler, error) {
+func NewAAAMetricHandler(logger *logger.Logger) (*AAAMetricHandler, error) {
 	statsType := reflect.TypeOf(aaa.ServerStats{})
 	metrics, labelFields, err := GenerateMetrics(statsType)
 	if err != nil {

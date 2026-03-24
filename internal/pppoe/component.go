@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net"
 	"sync"
 	"time"
@@ -46,7 +45,7 @@ const (
 type Component struct {
 	*component.Base
 
-	logger           *slog.Logger
+	logger           *logger.Logger
 	eventBus         events.Bus
 	srgMgr           ha.SRGProvider
 	ifMgr            *ifmgr.Manager

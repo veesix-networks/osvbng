@@ -2,11 +2,12 @@ package watchdog
 
 import (
 	"context"
-	"log/slog"
 	"math"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/veesix-networks/osvbng/pkg/logger"
 )
 
 type FailureAction string
@@ -34,7 +35,7 @@ type RunnerConfig struct {
 type targetRunner struct {
 	target Target
 	config RunnerConfig
-	logger *slog.Logger
+	logger *logger.Logger
 
 	state           atomicState
 	lastCheck       atomic.Pointer[HealthResult]
@@ -50,7 +51,7 @@ type targetRunner struct {
 	wg     sync.WaitGroup
 }
 
-func newTargetRunner(target Target, config RunnerConfig, logger *slog.Logger) *targetRunner {
+func newTargetRunner(target Target, config RunnerConfig, logger *logger.Logger) *targetRunner {
 	r := &targetRunner{
 		target: target,
 		config: config,

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"sort"
 	"strings"
 
@@ -21,7 +20,7 @@ import (
 )
 
 type Adapter struct {
-	logger       *slog.Logger
+	logger       *logger.Logger
 	showRegistry *show.Registry
 	confRegistry *conf.Registry
 	operRegistry *oper.Registry

@@ -3,7 +3,6 @@ package configmgr
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"sort"
 	"strings"
 	"sync"
@@ -23,7 +22,7 @@ import (
 type ConfigManager struct {
 	registry  *conf.Registry
 	frrConfig *frr.Config
-	logger    *slog.Logger
+	logger    *logger.Logger
 
 	runningConfig  *config.Config
 	startupConfig  *config.Config

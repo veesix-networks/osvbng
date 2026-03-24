@@ -3,26 +3,26 @@ package metrics
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/veesix-networks/osvbng/pkg/cache"
+	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models/protocols/ospf"
 	"github.com/veesix-networks/osvbng/pkg/state/paths"
 )
 
 func init() {
-	Register("protocols.ospf", func(logger *slog.Logger) (MetricHandler, error) {
+	Register("protocols.ospf", func(logger *logger.Logger) (MetricHandler, error) {
 		return NewOSPFMetricHandler(logger), nil
 	})
 }
 
 type OSPFMetricHandler struct {
-	logger        *slog.Logger
+	logger        *logger.Logger
 	neighborCount *prometheus.Desc
 }
 
-func NewOSPFMetricHandler(logger *slog.Logger) *OSPFMetricHandler {
+func NewOSPFMetricHandler(logger *logger.Logger) *OSPFMetricHandler {
 	return &OSPFMetricHandler{
 		logger: logger,
 		neighborCount: prometheus.NewDesc(

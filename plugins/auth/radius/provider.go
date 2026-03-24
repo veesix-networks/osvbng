@@ -10,7 +10,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"log/slog"
 	"net"
 	"regexp"
 	"sync/atomic"
@@ -49,7 +48,7 @@ type compiledRequestMapping struct {
 type Provider struct {
 	cfg       *Config
 	globalCfg *config.Config
-	logger    *slog.Logger
+	logger    *logger.Logger
 
 	authConns       []*radiusConn
 	acctConns       []*radiusConn

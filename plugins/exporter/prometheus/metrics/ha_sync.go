@@ -7,15 +7,15 @@ package metrics
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/veesix-networks/osvbng/pkg/cache"
+	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/state/paths"
 )
 
 func init() {
-	Register(paths.HASync.String(), func(logger *slog.Logger) (MetricHandler, error) {
+	Register(paths.HASync.String(), func(logger *logger.Logger) (MetricHandler, error) {
 		return newHASyncMetricHandler(logger), nil
 	})
 }
@@ -31,11 +31,11 @@ type haSyncSRG struct {
 }
 
 type haSyncMetricHandler struct {
-	logger *slog.Logger
+	logger *logger.Logger
 	descs  map[string]*prometheus.Desc
 }
 
-func newHASyncMetricHandler(logger *slog.Logger) *haSyncMetricHandler {
+func newHASyncMetricHandler(logger *logger.Logger) *haSyncMetricHandler {
 	return &haSyncMetricHandler{
 		logger: logger,
 		descs: map[string]*prometheus.Desc{

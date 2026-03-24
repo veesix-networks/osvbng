@@ -82,7 +82,7 @@ func (r ServiceGroup) LogAttrs() []slog.Attr {
 type Resolver struct {
 	mu     sync.RWMutex
 	groups map[string]*servicegroup.Config
-	logger *slog.Logger
+	logger *logger.Logger
 }
 
 func New() *Resolver {

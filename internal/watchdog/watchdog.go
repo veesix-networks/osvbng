@@ -2,7 +2,6 @@ package watchdog
 
 import (
 	"context"
-	"log/slog"
 	"sync"
 
 	"github.com/veesix-networks/osvbng/pkg/component"
@@ -16,7 +15,7 @@ type StateProvider interface {
 
 type Watchdog struct {
 	*component.Base
-	logger  *slog.Logger
+	logger  *logger.Logger
 	runners map[string]*targetRunner
 	mu      sync.RWMutex
 }

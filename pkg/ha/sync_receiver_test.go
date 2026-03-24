@@ -6,7 +6,6 @@ package ha
 
 import (
 	"context"
-	"log/slog"
 	"net"
 	"net/netip"
 	"sync"
@@ -14,6 +13,7 @@ import (
 
 	hapb "github.com/veesix-networks/osvbng/api/proto/ha"
 	"github.com/veesix-networks/osvbng/pkg/allocator"
+	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/opdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -89,7 +89,7 @@ func newTestRegistry() *allocator.Registry {
 func TestSyncReceiver_CreateStoresAndReserves(t *testing.T) {
 	store := newMemStore()
 	reg := newTestRegistry()
-	recv := NewSyncReceiver(store, reg, slog.Default())
+	recv := NewSyncReceiver(store, reg, logger.NewTest())
 	ctx := context.Background()
 
 	req := &hapb.SyncSessionRequest{
@@ -118,7 +118,7 @@ func TestSyncReceiver_CreateStoresAndReserves(t *testing.T) {
 func TestSyncReceiver_DeleteReleasesIP(t *testing.T) {
 	store := newMemStore()
 	reg := newTestRegistry()
-	recv := NewSyncReceiver(store, reg, slog.Default())
+	recv := NewSyncReceiver(store, reg, logger.NewTest())
 	ctx := context.Background()
 
 	createReq := &hapb.SyncSessionRequest{
@@ -157,7 +157,7 @@ func TestSyncReceiver_DeleteReleasesIP(t *testing.T) {
 
 func TestSyncReceiver_PPPoENamespace(t *testing.T) {
 	store := newMemStore()
-	recv := NewSyncReceiver(store, nil, slog.Default())
+	recv := NewSyncReceiver(store, nil, logger.NewTest())
 	ctx := context.Background()
 
 	req := &hapb.SyncSessionRequest{
@@ -179,7 +179,7 @@ func TestSyncReceiver_PPPoENamespace(t *testing.T) {
 
 func TestSyncReceiver_SequenceTracking(t *testing.T) {
 	store := newMemStore()
-	recv := NewSyncReceiver(store, nil, slog.Default())
+	recv := NewSyncReceiver(store, nil, logger.NewTest())
 	ctx := context.Background()
 
 	for seq := uint64(1); seq <= 5; seq++ {
@@ -202,7 +202,7 @@ func TestSyncReceiver_SequenceTracking(t *testing.T) {
 func TestSyncReceiver_BulkSyncPage(t *testing.T) {
 	store := newMemStore()
 	reg := newTestRegistry()
-	recv := NewSyncReceiver(store, reg, slog.Default())
+	recv := NewSyncReceiver(store, reg, logger.NewTest())
 	ctx := context.Background()
 
 	page := &hapb.BulkSyncResponse{
@@ -227,7 +227,7 @@ func TestSyncReceiver_BulkSyncPage(t *testing.T) {
 
 func TestSyncReceiver_ClearSyncedNamespace(t *testing.T) {
 	store := newMemStore()
-	recv := NewSyncReceiver(store, nil, slog.Default())
+	recv := NewSyncReceiver(store, nil, logger.NewTest())
 	ctx := context.Background()
 
 	store.Put(ctx, opdb.NamespaceHASyncedIPoE, "s1", []byte("data"))

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -24,7 +23,7 @@ type Provider struct {
 	cfg             *Config
 	globalCfg       *config.Config
 	client          *http.Client
-	logger          *slog.Logger
+	logger          *logger.Logger
 	endpointTmpl    *Template
 	requestBodyTmpl *Template
 }

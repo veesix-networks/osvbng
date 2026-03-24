@@ -1,7 +1,6 @@
 package pppoe
 
 import (
-	"log/slog"
 	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/logger"
@@ -15,7 +14,7 @@ type EchoGenerator struct {
 	interval   time.Duration
 	maxMisses  int
 	maxPerTick int
-	logger     *slog.Logger
+	logger     *logger.Logger
 }
 
 type EchoConfig struct {

@@ -9,7 +9,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"log/slog"
 	"os"
 	"os/signal"
 	"runtime"
@@ -605,7 +604,7 @@ func buildRunnerConfig(wdCfg syscfg.WatchdogConfig, tc *syscfg.WatchdogTargetCon
 }
 
 func bootstrapDataplane(
-	log *slog.Logger,
+	log *logger.Logger,
 	configd *configmgr.ConfigManager,
 	sb *vpp.VPP,
 	vrfMgr *vrfmgr.Manager,

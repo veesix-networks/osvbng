@@ -11,14 +11,14 @@ import (
 
 	hapb "github.com/veesix-networks/osvbng/api/proto/ha"
 	"github.com/veesix-networks/osvbng/pkg/events"
+	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"log/slog"
 )
 
 func newTestSender(srgNames ...string) *SyncSender {
-	return NewSyncSender(nil, 100, srgNames, slog.Default())
+	return NewSyncSender(nil, 100, srgNames, logger.NewTest())
 }
 
 func makeLifecycleEvent(sessID, srgName string, state models.SessionState, accessType models.AccessType) events.Event {

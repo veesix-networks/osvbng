@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net"
 	"sync"
 	"time"
@@ -46,7 +45,7 @@ import (
 type Component struct {
 	*component.Base
 
-	logger           *slog.Logger
+	logger           *logger.Logger
 	eventBus         events.Bus
 	srgMgr           ha.SRGProvider
 	ifMgr            *ifmgr.Manager

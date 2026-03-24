@@ -3,7 +3,6 @@ package state
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
+	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/paths"
 )
 
@@ -21,7 +21,7 @@ type CachedShowCollector struct {
 	configMgr   *configmgr.ConfigManager
 	store       cache.Cache
 	config      CollectorConfig
-	logger      *slog.Logger
+	logger      *logger.Logger
 	cancel      context.CancelFunc
 	wg          sync.WaitGroup
 }
@@ -33,7 +33,7 @@ func NewCachedShowCollector(
 	configMgr *configmgr.ConfigManager,
 	store cache.Cache,
 	config CollectorConfig,
-	logger *slog.Logger,
+	logger *logger.Logger,
 ) (*CachedShowCollector, error) {
 	handler, err := registry.GetHandler(handlerPath)
 	if err != nil {
