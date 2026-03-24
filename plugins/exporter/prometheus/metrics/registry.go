@@ -2,11 +2,11 @@ package metrics
 
 import (
 	"context"
-	"log/slog"
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/veesix-networks/osvbng/pkg/cache"
+	"github.com/veesix-networks/osvbng/pkg/logger"
 )
 
 type MetricHandler interface {
@@ -16,7 +16,7 @@ type MetricHandler interface {
 	Collect(ctx context.Context, c cache.Cache, ch chan<- prometheus.Metric) error
 }
 
-type MetricHandlerFactory func(logger *slog.Logger) (MetricHandler, error)
+type MetricHandlerFactory func(logger *logger.Logger) (MetricHandler, error)
 
 type MetricHandlerRegistry struct {
 	mu        sync.RWMutex
@@ -41,7 +41,7 @@ func (r *MetricHandlerRegistry) RegisterFactory(name string, factory MetricHandl
 	r.factories[name] = factory
 }
 
-func (r *MetricHandlerRegistry) CreateHandlers(logger *slog.Logger) ([]MetricHandler, error) {
+func (r *MetricHandlerRegistry) CreateHandlers(logger *logger.Logger) ([]MetricHandler, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 

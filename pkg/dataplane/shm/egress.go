@@ -3,7 +3,6 @@ package shm
 import (
 	"encoding/binary"
 	"fmt"
-	"log/slog"
 	"sync"
 	"time"
 
@@ -15,7 +14,7 @@ import (
 type Egress struct {
 	client    *Client
 	writer    *EgressWriter
-	logger    *slog.Logger
+	logger    *logger.Logger
 	mu        sync.Mutex
 	txChan    chan *dataplane.EgressPacket
 	closeChan chan struct{}

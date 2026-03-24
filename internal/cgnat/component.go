@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net"
 
 	"github.com/veesix-networks/osvbng/pkg/component"
@@ -28,7 +27,7 @@ const opdbNamespace = "cgnat_mappings"
 type Component struct {
 	*component.Base
 
-	logger    *slog.Logger
+	logger    *logger.Logger
 	eventBus  events.Bus
 	dataplane southbound.Southbound
 	opdb      opdb.Store

@@ -2,7 +2,6 @@ package local
 
 import (
 	"context"
-	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -49,7 +48,7 @@ type Bus struct {
 	mu           sync.RWMutex
 	nextID       atomic.Uint64
 	publishCh    chan publishRequest
-	logger       *slog.Logger
+	logger       *logger.Logger
 	published    atomic.Uint64
 	dropped      atomic.Uint64
 	debugTopics  map[string]bool

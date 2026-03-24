@@ -4,8 +4,6 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"context"
 	"fmt"
-	"log/slog"
-
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
 	"github.com/veesix-networks/osvbng/pkg/logger"
@@ -18,7 +16,7 @@ func init() {
 
 type MessageHandler struct {
 	deps   *deps.ConfDeps
-	logger *slog.Logger
+	logger *logger.Logger
 }
 
 func NewMessageHandler(deps *deps.ConfDeps) conf.Handler {

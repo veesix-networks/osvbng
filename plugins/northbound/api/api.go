@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
-	"log/slog"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -21,7 +20,7 @@ import (
 
 type Component struct {
 	*component.Base
-	logger   *slog.Logger
+	logger   *logger.Logger
 	adapter  *northbound.Adapter
 	addr     string
 	server   *http.Server

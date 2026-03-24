@@ -4,7 +4,6 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"context"
 	"fmt"
-	"log/slog"
 	"strconv"
 
 	"github.com/veesix-networks/osvbng/pkg/handlers/oper"
@@ -19,7 +18,7 @@ func init() {
 
 type DeleteUserHandler struct {
 	deps   *deps.OperDeps
-	logger *slog.Logger
+	logger *logger.Logger
 }
 
 

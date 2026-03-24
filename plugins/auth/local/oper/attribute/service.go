@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
-
 	"github.com/veesix-networks/osvbng/pkg/handlers/oper"
 	operpaths "github.com/veesix-networks/osvbng/pkg/handlers/oper/paths"
 	"github.com/veesix-networks/osvbng/pkg/logger"
@@ -19,7 +17,7 @@ func init() {
 
 type SetServiceAttributeHandler struct {
 	deps   *deps.OperDeps
-	logger *slog.Logger
+	logger *logger.Logger
 }
 
 

@@ -25,7 +25,7 @@ func init() {
 
 type Provider struct {
 	client *relay.Client
-	logger *slog.Logger
+	logger *logger.Logger
 }
 
 func New(cfg *config.Config) (dhcp6.DHCPProvider, error) {

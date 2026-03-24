@@ -7,26 +7,26 @@ package metrics
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/dhcp/relay"
+	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/state/paths"
 )
 
 func init() {
-	Register(paths.DHCPRelay.String(), func(logger *slog.Logger) (MetricHandler, error) {
+	Register(paths.DHCPRelay.String(), func(logger *logger.Logger) (MetricHandler, error) {
 		return newDHCPRelayMetricHandler(logger), nil
 	})
 
-	Register(paths.DHCPProxy.String(), func(logger *slog.Logger) (MetricHandler, error) {
+	Register(paths.DHCPProxy.String(), func(logger *logger.Logger) (MetricHandler, error) {
 		return newDHCPProxyMetricHandler(logger), nil
 	})
 }
 
 type dhcpRelayMetricHandler struct {
-	logger *slog.Logger
+	logger *logger.Logger
 	descs  map[string]*prometheus.Desc
 }
 
@@ -35,7 +35,7 @@ type dhcpRelayData struct {
 	Servers []relay.ServerStatus `json:"servers"`
 }
 
-func newDHCPRelayMetricHandler(logger *slog.Logger) *dhcpRelayMetricHandler {
+func newDHCPRelayMetricHandler(logger *logger.Logger) *dhcpRelayMetricHandler {
 	serverLabels := []string{"address"}
 	return &dhcpRelayMetricHandler{
 		logger: logger,
@@ -99,7 +99,7 @@ func (h *dhcpRelayMetricHandler) Collect(ctx context.Context, store cache.Cache,
 }
 
 type dhcpProxyMetricHandler struct {
-	logger *slog.Logger
+	logger *logger.Logger
 	descs  map[string]*prometheus.Desc
 }
 
@@ -108,7 +108,7 @@ type dhcpProxyData struct {
 	V6Bindings int `json:"v6Bindings"`
 }
 
-func newDHCPProxyMetricHandler(logger *slog.Logger) *dhcpProxyMetricHandler {
+func newDHCPProxyMetricHandler(logger *logger.Logger) *dhcpProxyMetricHandler {
 	return &dhcpProxyMetricHandler{
 		logger: logger,
 		descs: map[string]*prometheus.Desc{

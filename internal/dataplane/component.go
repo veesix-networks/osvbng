@@ -3,7 +3,6 @@ package dataplane
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -23,7 +22,7 @@ import (
 type Component struct {
 	*component.Base
 
-	logger   *slog.Logger
+	logger   *logger.Logger
 	eventBus events.Bus
 	ingress  *shm.Ingress
 	egress   *shm.Egress

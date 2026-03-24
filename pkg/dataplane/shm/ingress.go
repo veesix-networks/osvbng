@@ -3,7 +3,6 @@ package shm
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/google/gopacket"
@@ -16,7 +15,7 @@ import (
 type Ingress struct {
 	client *Client
 	reader *PuntReader
-	logger *slog.Logger
+	logger *logger.Logger
 }
 
 func NewIngress() *Ingress {

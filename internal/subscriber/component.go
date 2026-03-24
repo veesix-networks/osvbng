@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/cache"
@@ -25,7 +24,7 @@ import (
 type Component struct {
 	*component.Base
 
-	logger    *slog.Logger
+	logger    *logger.Logger
 	eventBus  events.Bus
 	srgMgr    ha.SRGProvider
 	vpp       southbound.Southbound

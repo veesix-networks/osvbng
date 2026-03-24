@@ -2,7 +2,6 @@ package vpp
 
 import (
 	"fmt"
-	"log/slog"
 	"sync"
 
 	"github.com/veesix-networks/osvbng/pkg/ifmgr"
@@ -20,7 +19,7 @@ var _ southbound.Southbound = (*VPP)(nil)
 type VPP struct {
 	conn           *core.Connection
 	ifMgr          *ifmgr.Manager
-	logger         *slog.Logger
+	logger         *logger.Logger
 	fibChan        api.Channel
 	fibMux         sync.Mutex
 	useDPDK        bool

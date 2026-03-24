@@ -6,7 +6,6 @@ package ha
 
 import (
 	"context"
-	"log/slog"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -14,6 +13,7 @@ import (
 
 	hapb "github.com/veesix-networks/osvbng/api/proto/ha"
 	"github.com/veesix-networks/osvbng/pkg/events"
+	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
 )
 
@@ -23,7 +23,7 @@ type SyncSender struct {
 	seqNums  map[string]*atomic.Uint64
 	counters map[string]*syncCounters
 	sendCh   chan *hapb.SyncSessionRequest
-	logger   *slog.Logger
+	logger   *logger.Logger
 	active   atomic.Bool
 	mu       sync.RWMutex
 }
@@ -35,7 +35,7 @@ type syncCounters struct {
 	lastSendNs atomic.Int64
 }
 
-func NewSyncSender(peer *PeerClient, backlogSize int, srgNames []string, logger *slog.Logger) *SyncSender {
+func NewSyncSender(peer *PeerClient, backlogSize int, srgNames []string, logger *logger.Logger) *SyncSender {
 	backlogs := make(map[string]*SyncBacklog, len(srgNames))
 	seqNums := make(map[string]*atomic.Uint64, len(srgNames))
 	ctrs := make(map[string]*syncCounters, len(srgNames))

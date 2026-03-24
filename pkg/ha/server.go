@@ -8,10 +8,10 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"log/slog"
 	"time"
 
 	hapb "github.com/veesix-networks/osvbng/api/proto/ha"
+	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
 )
 
@@ -19,10 +19,10 @@ type HAPeerServer struct {
 	hapb.UnimplementedHAPeerServiceServer
 
 	manager *Manager
-	logger  *slog.Logger
+	logger  *logger.Logger
 }
 
-func NewHAPeerServer(manager *Manager, logger *slog.Logger) *HAPeerServer {
+func NewHAPeerServer(manager *Manager, logger *logger.Logger) *HAPeerServer {
 	return &HAPeerServer{
 		manager: manager,
 		logger:  logger,
