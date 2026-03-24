@@ -6,8 +6,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
-	"log/slog"
-
 	"github.com/veesix-networks/osvbng/pkg/aaa"
 	"github.com/veesix-networks/osvbng/pkg/auth"
 	"github.com/veesix-networks/osvbng/pkg/config"
@@ -20,7 +18,7 @@ var globalProvider *Provider
 
 type Provider struct {
 	db       *sql.DB
-	logger   *slog.Logger
+	logger   *logger.Logger
 	cfg      *config.Config
 	allowAll bool
 }

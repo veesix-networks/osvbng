@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net"
 
 	pb "github.com/veesix-networks/osvbng/api/proto"
@@ -28,7 +27,7 @@ type Component struct {
 	*component.Base
 	pb.UnimplementedBNGServiceServer
 
-	logger       *slog.Logger
+	logger       *logger.Logger
 	server       *grpc.Server
 	showRegistry *show.Registry
 	operRegistry *oper.Registry

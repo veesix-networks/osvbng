@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net"
 	"time"
 
@@ -28,7 +27,7 @@ import (
 type Component struct {
 	*component.Base
 
-	logger    *slog.Logger
+	logger    *logger.Logger
 	eventBus  events.Bus
 	cache     cache.Cache
 	srgMgr    ha.SRGProvider

@@ -3,7 +3,6 @@ package vrfmgr
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"sync"
 
 	"github.com/vishvananda/netlink"
@@ -30,7 +29,7 @@ type Manager struct {
 	mu            sync.RWMutex
 	vrfs          map[string]*vrfEntry
 	tables        southbound.Tables
-	logger        *slog.Logger
+	logger        *logger.Logger
 	netlinkHandle *netlink.Handle
 }
 

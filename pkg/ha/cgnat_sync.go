@@ -6,7 +6,6 @@ package ha
 
 import (
 	"context"
-	"log/slog"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -14,6 +13,7 @@ import (
 
 	hapb "github.com/veesix-networks/osvbng/api/proto/ha"
 	"github.com/veesix-networks/osvbng/pkg/events"
+	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
 )
 
@@ -23,7 +23,7 @@ type CGNATSyncSender struct {
 	seqNums  map[string]*atomic.Uint64
 	active   map[string]*atomic.Bool
 	sendCh   chan *hapb.SyncCGNATMappingRequest
-	logger   *slog.Logger
+	logger   *logger.Logger
 	mu       sync.RWMutex
 
 	creates    atomic.Uint64
@@ -31,7 +31,7 @@ type CGNATSyncSender struct {
 	lastSendNs atomic.Int64
 }
 
-func NewCGNATSyncSender(peer *PeerClient, backlogSize int, srgNames []string, logger *slog.Logger) *CGNATSyncSender {
+func NewCGNATSyncSender(peer *PeerClient, backlogSize int, srgNames []string, logger *logger.Logger) *CGNATSyncSender {
 	backlogs := make(map[string]*SyncBacklog, len(srgNames))
 	seqNums := make(map[string]*atomic.Uint64, len(srgNames))
 	activeMap := make(map[string]*atomic.Bool, len(srgNames))

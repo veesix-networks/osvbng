@@ -3,15 +3,15 @@ package metrics
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/veesix-networks/osvbng/pkg/cache"
+	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/state/paths"
 )
 
 func init() {
-	Register(paths.SystemWatchdog.String(), func(logger *slog.Logger) (MetricHandler, error) {
+	Register(paths.SystemWatchdog.String(), func(logger *logger.Logger) (MetricHandler, error) {
 		return newWatchdogMetricHandler(logger), nil
 	})
 }
@@ -29,11 +29,11 @@ type watchdogTargetMetric struct {
 }
 
 type watchdogMetricHandler struct {
-	logger *slog.Logger
+	logger *logger.Logger
 	descs  map[string]*prometheus.Desc
 }
 
-func newWatchdogMetricHandler(logger *slog.Logger) *watchdogMetricHandler {
+func newWatchdogMetricHandler(logger *logger.Logger) *watchdogMetricHandler {
 	labels := []string{"target"}
 	return &watchdogMetricHandler{
 		logger: logger,

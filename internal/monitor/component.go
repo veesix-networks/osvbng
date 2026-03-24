@@ -3,8 +3,6 @@ package monitor
 import (
 	"context"
 	"fmt"
-	"log/slog"
-
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
@@ -16,7 +14,7 @@ import (
 type Component struct {
 	*component.Base
 
-	logger *slog.Logger
+	logger *logger.Logger
 
 	cache              cache.Cache
 	collectorRegistry  *state.CollectorRegistry

@@ -7,13 +7,13 @@ package ha
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net"
 	"sync"
 	"time"
 
 	hapb "github.com/veesix-networks/osvbng/api/proto/ha"
 	"github.com/veesix-networks/osvbng/pkg/allocator"
+	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/opdb"
 	"google.golang.org/protobuf/proto"
 )
@@ -21,14 +21,14 @@ import (
 type SyncReceiver struct {
 	opdb     opdb.Store
 	registry *allocator.Registry
-	logger   *slog.Logger
+	logger   *logger.Logger
 
 	lastSeq    map[string]uint64
 	lastRecvNs map[string]int64
 	mu         sync.Mutex
 }
 
-func NewSyncReceiver(store opdb.Store, registry *allocator.Registry, logger *slog.Logger) *SyncReceiver {
+func NewSyncReceiver(store opdb.Store, registry *allocator.Registry, logger *logger.Logger) *SyncReceiver {
 	return &SyncReceiver{
 		opdb:       store,
 		registry:   registry,

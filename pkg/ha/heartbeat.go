@@ -5,10 +5,10 @@
 package ha
 
 import (
-	"log/slog"
 	"time"
 
 	hapb "github.com/veesix-networks/osvbng/api/proto/ha"
+	"github.com/veesix-networks/osvbng/pkg/logger"
 )
 
 const (
@@ -18,14 +18,14 @@ const (
 
 type HeartbeatLoop struct {
 	manager   *Manager
-	logger    *slog.Logger
+	logger    *logger.Logger
 	interval  time.Duration
 	timeout   time.Duration
 	seq       uint64
 	startedAt time.Time
 }
 
-func NewHeartbeatLoop(manager *Manager, logger *slog.Logger, interval, timeout time.Duration) *HeartbeatLoop {
+func NewHeartbeatLoop(manager *Manager, logger *logger.Logger, interval, timeout time.Duration) *HeartbeatLoop {
 	return &HeartbeatLoop{
 		manager:   manager,
 		logger:    logger,

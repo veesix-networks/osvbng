@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os/exec"
 	"strings"
 
@@ -18,7 +17,7 @@ import (
 
 type Component struct {
 	*component.Base
-	logger     *slog.Logger
+	logger     *logger.Logger
 	southbound southbound.Southbound
 	configMgr  component.ConfigManager
 }

@@ -2,7 +2,6 @@ package prometheus
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -28,7 +27,7 @@ func init() {
 
 type Component struct {
 	*component.Base
-	logger        *slog.Logger
+	logger        *logger.Logger
 	cache         cache.Cache
 	addr          string
 	server        *http.Server
@@ -116,7 +115,7 @@ func (c *Component) Stop(ctx context.Context) error {
 
 type prometheusCollector struct {
 	cache    cache.Cache
-	logger   *slog.Logger
+	logger   *logger.Logger
 	handlers []metrics.MetricHandler
 }
 

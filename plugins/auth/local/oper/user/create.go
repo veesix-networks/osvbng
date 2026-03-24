@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
-
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/oper"
 	operpaths "github.com/veesix-networks/osvbng/pkg/handlers/oper/paths"
@@ -19,7 +17,7 @@ func init() {
 
 type CreateUserHandler struct {
 	deps   *deps.OperDeps
-	logger *slog.Logger
+	logger *logger.Logger
 }
 
 

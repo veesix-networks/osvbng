@@ -2,13 +2,13 @@ package state
 
 import (
 	"context"
-	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
+	"github.com/veesix-networks/osvbng/pkg/logger"
 )
 
 type CollectorConfig struct {
@@ -29,7 +29,7 @@ type CollectorFactory func(deps *CollectorDeps) (MetricCollector, error)
 type CollectorDeps struct {
 	Cache        cache.Cache
 	Config       CollectorConfig
-	Logger       *slog.Logger
+	Logger       *logger.Logger
 	ShowRegistry show.Registry
 	ConfigMgr    *configmgr.ConfigManager
 }

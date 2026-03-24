@@ -4,7 +4,6 @@ import (
 	"container/list"
 	"context"
 	"fmt"
-	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -42,7 +41,7 @@ type AsyncWorker struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
-	logger *slog.Logger
+	logger *logger.Logger
 
 	requestsSent   atomic.Uint64
 	repliesRecv    atomic.Uint64

@@ -6,12 +6,12 @@ package ha
 
 import (
 	"context"
-	"log/slog"
 	"math"
 	"sync"
 	"time"
 
 	hapb "github.com/veesix-networks/osvbng/api/proto/ha"
+	"github.com/veesix-networks/osvbng/pkg/logger"
 	"google.golang.org/grpc"
 )
 
@@ -26,7 +26,7 @@ type PeerState struct {
 type PeerClient struct {
 	address  string
 	dialOpts []grpc.DialOption
-	logger   *slog.Logger
+	logger   *logger.Logger
 
 	conn   *grpc.ClientConn
 	client hapb.HAPeerServiceClient
@@ -39,7 +39,7 @@ type PeerClient struct {
 	cancel context.CancelFunc
 }
 
-func NewPeerClient(address string, dialOpts []grpc.DialOption, logger *slog.Logger) *PeerClient {
+func NewPeerClient(address string, dialOpts []grpc.DialOption, logger *logger.Logger) *PeerClient {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &PeerClient{
 		address:  address,
