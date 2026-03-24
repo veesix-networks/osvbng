@@ -116,8 +116,27 @@ jobs:
       - name: Build
         run: make build
 
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@latest
+
       - name: Unit tests
-        run: go test ./... -count=1 -timeout 120s
+        run: make test-report
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: build/reports/unit-tests.xml
+          retention-days: 30
+
+      - name: Test report summary
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Unit Tests
+          path: build/reports/unit-tests.xml
+          reporter: java-junit
 
       - name: Build Docker image
         run: make docker-local
