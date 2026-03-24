@@ -9,29 +9,44 @@ func TestMatchPattern(t *testing.T) {
 		want    bool
 	}{
 		{
-			pattern: "subscriber:auth:local:user:*:enabled",
-			path:    "subscriber:auth:local:user:example@veesix-networks.co.uk:enabled",
+			pattern: "subscriber.auth.local.user.<*>.enabled",
+			path:    "subscriber.auth.local.user.alice.enabled",
 			want:    true,
 		},
 		{
-			pattern: "subscriber:auth:local:user:*:password",
-			path:    "subscriber:auth:local:user:alice:password",
+			pattern: "subscriber.auth.local.user.<*>.password",
+			path:    "subscriber.auth.local.user.bob.password",
 			want:    true,
 		},
 		{
-			pattern: "interfaces:*:enabled",
-			path:    "interfaces:eth0:enabled",
+			pattern: "interfaces.<*>.enabled",
+			path:    "interfaces.eth0.enabled",
 			want:    true,
 		},
 		{
-			pattern: "interfaces:*:enabled",
-			path:    "interfaces:eth0:description",
+			pattern: "interfaces.<*>.enabled",
+			path:    "interfaces.eth0.description",
 			want:    false,
 		},
 		{
-			pattern: "subscriber:*:*:user",
-			path:    "subscriber:auth:local:user",
+			pattern: "subscriber.<*>.<*>.user",
+			path:    "subscriber.auth.local.user",
 			want:    true,
+		},
+		{
+			pattern: "protocols.ospf.areas.<*>.interfaces.<*>",
+			path:    "protocols.ospf.areas.0.interfaces.eth0",
+			want:    true,
+		},
+		{
+			pattern: "vrfs.<*>",
+			path:    "vrfs.default",
+			want:    true,
+		},
+		{
+			pattern: "vrfs.<*>",
+			path:    "vrfs.default.extra",
+			want:    false,
 		},
 	}
 
