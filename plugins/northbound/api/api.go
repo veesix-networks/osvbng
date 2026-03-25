@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"net"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -51,7 +52,7 @@ func NewComponent(deps component.Dependencies) (component.Component, error) {
 	}
 
 	return &Component{
-		Base:   component.NewBase(Namespace),
+		Base:   component.NewBaseAsync(Namespace),
 		logger: logger.Get(Namespace),
 		addr:   addr,
 	}, nil
@@ -156,12 +157,19 @@ func (c *Component) startServer() {
 		Handler: mux,
 	}
 
+	ln, err := net.Listen("tcp", c.addr)
+	if err != nil {
+		c.logger.Error("Failed to bind API server", "addr", c.addr, "error", err)
+		return
+	}
+
 	c.mu.Lock()
 	c.running = true
 	c.mu.Unlock()
 
 	c.logger.Info("API server listening", "addr", c.addr)
-	if err := c.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	c.SignalReady()
+	if err := c.server.Serve(ln); err != nil && err != http.ErrServerClosed {
 		c.logger.Error("API server error", "error", err)
 		c.mu.Lock()
 		c.running = false

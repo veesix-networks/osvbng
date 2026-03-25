@@ -471,7 +471,7 @@ func main() {
 	for _, comp := range pluginComponents {
 		if comp != nil {
 			mainLog.Info("Loaded plugin component", "name", comp.Name())
-			orch.Register(comp)
+			orch.RegisterPlugin(comp)
 			pluginComponentsMap[comp.Name()] = comp
 		}
 	}
@@ -529,6 +529,10 @@ func main() {
 	ctx := context.Background()
 	if err := orch.Start(ctx); err != nil {
 		log.Fatalf("Failed to start components: %v", err)
+	}
+
+	if err := orch.WaitReady(ctx, 10*time.Second); err != nil {
+		log.Fatalf("Failed waiting for components to be ready: %v", err)
 	}
 
 	mainLog.Info("osvbng started successfully")
