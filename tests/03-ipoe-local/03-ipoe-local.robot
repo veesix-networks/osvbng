@@ -16,7 +16,7 @@ Resource            ../bngblaster.robot
 Resource            ../sessions.robot
 Resource            ../localauth.robot
 
-Suite Setup         Setup IPoE Test
+Suite Setup         Deploy IPoE Topology
 Suite Teardown      Teardown IPoE Test
 
 *** Variables ***
@@ -27,6 +27,26 @@ ${subscribers}      clab-${lab-name}-subscribers
 ${session-count}    1
 
 *** Test Cases ***
+Verify BNG Is Healthy
+    [Documentation]    Wait for osvbng to fully start.
+    Wait For osvbng Healthy    bng1    ${lab-name}
+
+Verify REST API Responds
+    [Documentation]    Verify the osvbng REST API returns valid data.
+    Wait Until Keyword Succeeds    12 x    5s
+    ...    Check API Responds    ${bng1}
+
+Verify VPP Is Running
+    [Documentation]    Check VPP is running and responsive.
+    ${output} =    Execute VPP Command    ${bng1}    show version
+    Should Contain    ${output}    vpp
+
+Establish Subscriber Sessions
+    [Documentation]    Create local auth users and start BNG Blaster sessions.
+    Create IPoE Users    ${bng1}    ${session-count}
+    Start BNG Blaster In Background    ${subscribers}
+    Wait For Sessions Established    ${bng1}    ${subscribers}    ${session-count}    check_ipv6=true
+
 Verify Sessions In osvbng API
     [Documentation]    Verify osvbng REST API reports the correct session count.
     Verify Sessions In API    ${bng1}    ${session-count}
@@ -50,13 +70,14 @@ Verify BNG Blaster Report
     Should Be Equal As Strings    ${established}    ${session-count}
 
 *** Keywords ***
-Setup IPoE Test
+Deploy IPoE Topology
     Deploy Topology    ${lab-file}
-    Wait For osvbng Healthy    bng1    ${lab-name}
-    Create IPoE Users    ${bng1}    ${session-count}
-    Start BNG Blaster In Background    ${subscribers}
-    Wait For Sessions Established    ${bng1}    ${subscribers}    ${session-count}    check_ipv6=true
 
 Teardown IPoE Test
     Run Keyword And Ignore Error    Stop BNG Blaster    ${subscribers}
     Destroy Topology    ${lab-file}
+
+Check API Responds
+    [Arguments]    ${container}
+    ${output} =    Get osvbng API Response    ${container}    /api/show/system/version
+    Should Not Be Empty    ${output}

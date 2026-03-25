@@ -20,6 +20,8 @@ Start BNG Blaster In Background
     ${rc}    ${output} =    Run And Return Rc And Output
     ...    sudo docker exec -d ${container} bngblaster -C ${config} -J ${report} -L /tmp/bngblaster.log -S ${socket} -b -f
     Should Be Equal As Integers    ${rc}    0
+    Wait Until Keyword Succeeds    30 x    2s
+    ...    BNG Blaster Is Running    ${container}
 
 Stop BNG Blaster
     [Arguments]    ${container}
@@ -27,6 +29,11 @@ Stop BNG Blaster
     ...    sudo docker exec ${container} bash -c 'kill -INT $(pidof bngblaster) 2>/dev/null'
     Wait Until Keyword Succeeds    30s    1s
     ...    BNG Blaster Has Exited    ${container}
+
+BNG Blaster Is Running
+    [Arguments]    ${container}    ${socket}=/run/bngblaster.sock
+    ${rc}    ${output} =    BNG Blaster CLI Command    ${container}    session-counters    ${socket}
+    Should Be Equal As Integers    ${rc}    0    BNG Blaster control socket not ready yet
 
 BNG Blaster Has Exited
     [Arguments]    ${container}

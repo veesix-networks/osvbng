@@ -15,6 +15,7 @@ ${OSVBNG_API_PORT}      8080
 ${HEALTH_RETRIES}       12
 ${HEALTH_INTERVAL}      5s
 ${VPPCTL_SOCK}          /run/osvbng/cli.sock
+${TEST_LOG_DIR}         /tmp/test-logs
 
 *** Keywords ***
 Deploy Topology
@@ -34,14 +35,17 @@ Destroy Topology
 
 Capture Container Logs
     [Arguments]    ${topology_file}
+    Create Directory    ${TEST_LOG_DIR}
     ${rc}    ${containers} =    Run And Return Rc And Output
     ...    ${CLAB_BIN} inspect -t ${topology_file} --format json 2>/dev/null | python3 -c "import sys,json; cs=json.load(sys.stdin).get('containers',[]); print(' '.join(c['name'] for c in cs))" 2>/dev/null || true
     IF    '${containers}' != ''
         @{container_list} =    Split String    ${containers}
         FOR    ${container}    IN    @{container_list}
-            ${rc}    ${logs} =    Run And Return Rc And Output
-            ...    sudo docker logs ${container} 2>&1 | tail -200
-            Log    Container logs for ${container}:\n${logs}    console=no
+            ${log_file} =    Set Variable    ${TEST_LOG_DIR}/${container}.log
+            ${result} =    Run Process    sudo    docker    logs    ${container}    stdout=${log_file}    stderr=STDOUT
+            Log    Captured full container logs for ${container} to ${log_file} (rc=${result.rc})    console=yes
+            ${tail_result} =    Run Process    tail    -200    ${log_file}
+            Log    Container logs for ${container}:\n${tail_result.stdout}    console=no
         END
     END
 
