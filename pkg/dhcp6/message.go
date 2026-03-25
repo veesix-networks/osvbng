@@ -140,7 +140,11 @@ func ParseOptions(data []byte) Options {
 		case OptInterfaceID:
 			opts.InterfaceID = optData
 		case OptRemoteID:
-			opts.RemoteID = optData
+			if len(optData) > 4 {
+				opts.RemoteID = optData[4:]
+			} else {
+				opts.RemoteID = optData
+			}
 		case OptClientLinkLayerAddr:
 			opts.ClientLinkLayerAddr = optData
 		case OptRapidCommit:

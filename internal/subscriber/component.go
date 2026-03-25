@@ -347,6 +347,10 @@ func (c *Component) handleSessionLifecycle(event events.Event) {
 
 	c.logger.Debug("Processing session", "session_id", sessionID, "state", state, "username", sess.GetUsername())
 
+	if ipoeSess, ok := sess.(*models.IPoESession); ok && state == models.SessionStateActive {
+		c.mergeExistingIPoESession(ipoeSess)
+	}
+
 	if err := c.persistSession(sess); err != nil {
 		c.logger.Error("Failed to persist session", "session_id", sessionID, "error", err)
 		return
@@ -512,6 +516,30 @@ func (c *Component) countActiveSessions(svlan, cvlan uint16) int {
 	}
 
 	return count
+}
+
+func (c *Component) mergeExistingIPoESession(sess *models.IPoESession) {
+	key := fmt.Sprintf("osvbng:sessions:%s", sess.SessionID)
+	data, err := c.cache.Get(c.Ctx, key)
+	if err != nil || len(data) == 0 {
+		return
+	}
+	var existing models.IPoESession
+	if err := json.Unmarshal(data, &existing); err != nil {
+		return
+	}
+	if sess.IPv4Address == nil && existing.IPv4Address != nil {
+		sess.IPv4Address = existing.IPv4Address
+		sess.LeaseTime = existing.LeaseTime
+		sess.IPv4Pool = existing.IPv4Pool
+	}
+	if sess.IPv6Address == nil && existing.IPv6Address != nil {
+		sess.IPv6Address = existing.IPv6Address
+		sess.IPv6LeaseTime = existing.IPv6LeaseTime
+		sess.IPv6Prefix = existing.IPv6Prefix
+		sess.IANAPool = existing.IANAPool
+		sess.PDPool = existing.PDPool
+	}
 }
 
 func (c *Component) persistSession(sess models.SubscriberSession) error {
