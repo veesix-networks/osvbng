@@ -1113,6 +1113,9 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 	svlan := sess.OuterVLAN
 	cvlan := sess.InnerVLAN
 	ipoeSwIfIndex := sess.IPoESwIfIndex
+	snapshotIPv6 := sess.IPv6Address
+	snapshotIPv6LeaseTime := sess.IPv6LeaseTime
+	snapshotIPv6Prefix := sess.IPv6Prefix
 	sess.mu.Unlock()
 
 	c.logger.WithGroup(logger.IPoEDHCP4).Info("Session bound", "session_id", sess.SessionID, "ipv4", sess.IPv4.String())
@@ -1157,12 +1160,6 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 
 	c.logger.Info("Publishing session lifecycle event", "session_id", sess.SessionID, "sw_if_index", ipoeSwIfIndex, "ipv4", sess.IPv4.String())
 
-	sess.mu.Lock()
-	currentIPv6 := sess.IPv6Address
-	currentIPv6LeaseTime := sess.IPv6LeaseTime
-	currentIPv6Prefix := sess.IPv6Prefix
-	sess.mu.Unlock()
-
 	ipoeSess := &models.IPoESession{
 		SessionID:     sess.SessionID,
 		State:         models.SessionStateActive,
@@ -1178,8 +1175,8 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 		SRGName:       sess.SRGName,
 		IPv4Address:   sess.IPv4,
 		LeaseTime:     sess.LeaseTime,
-		IPv6Address:   currentIPv6,
-		IPv6LeaseTime: currentIPv6LeaseTime,
+		IPv6Address:   snapshotIPv6,
+		IPv6LeaseTime: snapshotIPv6LeaseTime,
 		DUID:          sess.DHCPv6DUID,
 		Username:      sess.Username,
 		AAASessionID:  sess.AcctSessionID,
@@ -1191,8 +1188,8 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 		ipoeSess.IANAPool = sess.AllocCtx.AllocatedIANAPool
 		ipoeSess.PDPool = sess.AllocCtx.AllocatedPDPool
 	}
-	if currentIPv6Prefix != nil {
-		ipoeSess.IPv6Prefix = currentIPv6Prefix.String()
+	if snapshotIPv6Prefix != nil {
+		ipoeSess.IPv6Prefix = snapshotIPv6Prefix.String()
 	}
 
 	return c.publishSessionLifecycle(ipoeSess)
@@ -1460,48 +1457,6 @@ func (c *Component) handleAAAResponse(event events.Event) {
 	}
 
 	wg.Wait()
-
-	if hasV4 && hasV6 {
-		sess.mu.Lock()
-		if sess.State == "bound" && sess.IPv6Bound {
-			ipoeSwIfIndex := sess.IPoESwIfIndex
-			ipoeSess := &models.IPoESession{
-				SessionID:     sess.SessionID,
-				State:         models.SessionStateActive,
-				AccessType:    string(models.AccessTypeIPoE),
-				Protocol:      string(models.ProtocolDHCPv6),
-				MAC:           sess.MAC,
-				OuterVLAN:     sess.OuterVLAN,
-				InnerVLAN:     sess.InnerVLAN,
-				VLANCount:     c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
-				IfIndex:       ipoeSwIfIndex,
-				VRF:           sess.VRF,
-				ServiceGroup:  sess.ServiceGroup.Name,
-				SRGName:       sess.SRGName,
-				IPv4Address:   sess.IPv4,
-				LeaseTime:     sess.LeaseTime,
-				IPv6Address:   sess.IPv6Address,
-				IPv6LeaseTime: sess.IPv6LeaseTime,
-				DUID:          sess.DHCPv6DUID,
-				Username:      sess.Username,
-				AAASessionID:  sess.AcctSessionID,
-				ActivatedAt:   time.Now(),
-				OuterTPID:     sess.OuterTPID,
-			}
-			if sess.IPv6Prefix != nil {
-				ipoeSess.IPv6Prefix = sess.IPv6Prefix.String()
-			}
-			if sess.AllocCtx != nil {
-				ipoeSess.IPv4Pool = sess.AllocCtx.AllocatedPool
-				ipoeSess.IANAPool = sess.AllocCtx.AllocatedIANAPool
-				ipoeSess.PDPool = sess.AllocCtx.AllocatedPDPool
-			}
-			sess.mu.Unlock()
-			c.publishSessionLifecycle(ipoeSess)
-		} else {
-			sess.mu.Unlock()
-		}
-	}
 }
 
 func (c *Component) getVLANCount(svlan, cvlan uint16) int {
@@ -2525,6 +2480,9 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, msg *dhcp6.Message) er
 	sess.IPv6BoundAt = time.Now()
 	sess.IPv6Bound = true
 	ipoeSwIfIndex := sess.IPoESwIfIndex
+	v4AlreadyBound := sess.State == "bound" && sess.IPv4 != nil
+	snapshotIPv4 := sess.IPv4
+	snapshotLeaseTime := sess.LeaseTime
 	sess.mu.Unlock()
 
 	c.logger.Info("DHCPv6 session bound", "session_id", sess.SessionID, "ipv6", ianaAddr, "prefix", pdPrefix)
@@ -2579,10 +2537,10 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, msg *dhcp6.Message) er
 		prefixStr = pdPrefix.String()
 	}
 
-	sess.mu.Lock()
-	currentIPv4 := sess.IPv4
-	currentLeaseTime := sess.LeaseTime
-	sess.mu.Unlock()
+	sessionMode := c.getSessionMode(sess.OuterVLAN)
+	if sessionMode == subscriber.SessionModeUnified && !v4AlreadyBound {
+		return nil
+	}
 
 	ipoeSess := &models.IPoESession{
 		SessionID:     sess.SessionID,
@@ -2597,8 +2555,8 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, msg *dhcp6.Message) er
 		VRF:           sess.VRF,
 		ServiceGroup:  sess.ServiceGroup.Name,
 		SRGName:       sess.SRGName,
-		IPv4Address:   currentIPv4,
-		LeaseTime:     currentLeaseTime,
+		IPv4Address:   snapshotIPv4,
+		LeaseTime:     snapshotLeaseTime,
 		IPv6Address:   ianaAddr,
 		IPv6Prefix:    prefixStr,
 		IPv6LeaseTime: sess.IPv6LeaseTime,
