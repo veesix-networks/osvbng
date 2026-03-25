@@ -519,6 +519,9 @@ func (c *Component) countActiveSessions(svlan, cvlan uint16) int {
 }
 
 func (c *Component) mergeExistingIPoESession(sess *models.IPoESession) {
+	if sess.IPv4Address != nil && sess.IPv6Address != nil {
+		return
+	}
 	key := fmt.Sprintf("osvbng:sessions:%s", sess.SessionID)
 	data, err := c.cache.Get(c.Ctx, key)
 	if err != nil || len(data) == 0 {
