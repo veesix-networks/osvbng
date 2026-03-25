@@ -6,14 +6,38 @@ import (
 )
 
 type Base struct {
-	name   string
-	Ctx    context.Context
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	name    string
+	Ctx     context.Context
+	cancel  context.CancelFunc
+	wg      sync.WaitGroup
+	readyCh chan struct{}
+	readyOn sync.Once
 }
 
 func NewBase(name string) *Base {
-	return &Base{name: name}
+	ch := make(chan struct{})
+	close(ch)
+	return &Base{
+		name:    name,
+		readyCh: ch,
+	}
+}
+
+func NewBaseAsync(name string) *Base {
+	return &Base{
+		name:    name,
+		readyCh: make(chan struct{}),
+	}
+}
+
+func (b *Base) Ready() <-chan struct{} {
+	return b.readyCh
+}
+
+func (b *Base) SignalReady() {
+	b.readyOn.Do(func() {
+		close(b.readyCh)
+	})
 }
 
 func (b *Base) Name() string {

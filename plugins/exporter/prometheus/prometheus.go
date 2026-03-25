@@ -2,6 +2,7 @@ package prometheus
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -78,7 +79,7 @@ func New(deps component.Dependencies) (component.Component, error) {
 	}
 
 	return &Component{
-		Base:   component.NewBase(Namespace),
+		Base:   component.NewBaseAsync(Namespace),
 		logger: logger.Get(Namespace),
 		cache:  deps.Cache,
 		addr:   addr,
@@ -174,12 +175,19 @@ func (c *Component) startServer() {
 		Handler: mux,
 	}
 
+	ln, err := net.Listen("tcp", c.addr)
+	if err != nil {
+		c.logger.Error("Failed to bind Prometheus HTTP server", "addr", c.addr, "error", err)
+		return
+	}
+
 	c.mu.Lock()
 	c.serverRunning = true
 	c.mu.Unlock()
 
 	c.logger.Info("Prometheus HTTP server listening", "addr", c.addr)
-	if err := c.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	c.SignalReady()
+	if err := c.server.Serve(ln); err != nil && err != http.ErrServerClosed {
 		c.logger.Error("Prometheus HTTP server error", "error", err)
 		c.mu.Lock()
 		c.serverRunning = false
