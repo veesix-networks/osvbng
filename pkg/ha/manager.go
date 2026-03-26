@@ -36,6 +36,7 @@ type SRGProvider interface {
 	GetVirtualMAC(srgName string) net.HardwareAddr
 	IsActive(srgName string) bool
 	GetSRGForGroup(subscriberGroup string) string
+	RequestGARP(srgName string)
 }
 
 type SessionIterator interface {
@@ -73,6 +74,8 @@ type Manager struct {
 	ifDownCount map[string]int
 	peerNodeID  string
 	mu          sync.RWMutex
+
+	garpCancels map[string]context.CancelFunc
 }
 
 func WithSRGDataplane(dp southbound.SRGDataplane) ManagerOption {
@@ -115,6 +118,7 @@ func NewManager(cfg *config.HAConfig, eventBus events.Bus, opts ...ManagerOption
 		logger:         log,
 		peerSyncSeqs:   make(map[string]uint64),
 		bulkSyncCounts: bulkCounts,
+		garpCancels:    make(map[string]context.CancelFunc),
 	}
 
 	for _, opt := range opts {
@@ -490,6 +494,7 @@ func (m *Manager) driveDataplane(t *StateTransition) {
 		}
 		m.sendGarpForSRG(t.SRGName)
 	} else if !isActive && wasActive {
+		m.cancelGarpForSRG(t.SRGName)
 		if err := m.dataplane.SetSRGState(t.SRGName, false); err != nil {
 			m.logger.Error("Failed to set SRG standby in dataplane", "srg", t.SRGName, "error", err)
 		}
@@ -603,18 +608,137 @@ func (m *Manager) requestCGNATBulkSync(srgName string) {
 }
 
 func (m *Manager) sendGarpForSRG(srgName string) {
-	if m.garpCollector == nil {
+	m.cancelGarpForSRG(srgName)
+
+	srgCfg, ok := m.cfg.SRGs[srgName]
+	if !ok || !srgCfg.GARP.IsEnabled() {
 		return
 	}
-	entries := m.garpCollector(srgName)
+	if m.dataplane == nil {
+		return
+	}
+
+	m.logger.Info("GARP flood scheduled (waiting for session restoration)", "srg", srgName)
+}
+
+func (m *Manager) RequestGARP(srgName string) {
+	if m.dataplane == nil {
+		return
+	}
+	srgCfg, ok := m.cfg.SRGs[srgName]
+	if !ok || !srgCfg.GARP.IsEnabled() {
+		return
+	}
+
+	m.cancelGarpForSRG(srgName)
+
+	ctx, cancel := context.WithCancel(m.Ctx)
+	m.mu.Lock()
+	m.garpCancels[srgName] = cancel
+	m.mu.Unlock()
+
+	go m.executeGarpFlood(ctx, srgName, srgCfg.GARP)
+}
+
+func (m *Manager) cancelGarpForSRG(srgName string) {
+	m.mu.Lock()
+	if cancel, ok := m.garpCancels[srgName]; ok {
+		cancel()
+		delete(m.garpCancels, srgName)
+	}
+	m.mu.Unlock()
+}
+
+func (m *Manager) executeGarpFlood(ctx context.Context, srgName string, garpCfg *config.SRGGARPConfig) {
+	batchSize := garpCfg.GetBatchSize()
+	batchDelay := garpCfg.GetBatchDelay()
+	repeatCount := garpCfg.GetRepeatCount()
+	repeatInterval := garpCfg.GetRepeatInterval()
+
+	entries := m.collectGarpEntries(srgName)
 	if len(entries) == 0 {
+		m.logger.Debug("No GARP entries to send", "srg", srgName)
 		return
 	}
-	if err := m.dataplane.SendSRGGarp(srgName, entries); err != nil {
-		m.logger.Error("Failed to send GARP flood", "srg", srgName, "entries", len(entries), "error", err)
-	} else {
-		m.logger.Info("GARP flood sent", "srg", srgName, "entries", len(entries))
+
+	m.logger.Info("Starting GARP flood", "srg", srgName, "entries", len(entries), "repeats", repeatCount)
+
+	for cycle := 0; cycle < repeatCount; cycle++ {
+		if ctx.Err() != nil {
+			m.logger.Info("GARP flood cancelled", "srg", srgName, "cycle", cycle)
+			return
+		}
+
+		if cycle > 0 {
+			select {
+			case <-ctx.Done():
+				m.logger.Info("GARP flood cancelled during repeat interval", "srg", srgName)
+				return
+			case <-time.After(repeatInterval):
+			}
+		}
+
+		sent := 0
+		for i := 0; i < len(entries); i += batchSize {
+			if ctx.Err() != nil {
+				return
+			}
+
+			end := i + batchSize
+			if end > len(entries) {
+				end = len(entries)
+			}
+
+			if err := m.dataplane.SendSRGGarp(srgName, entries[i:end]); err != nil {
+				m.logger.Error("Failed to send GARP batch", "srg", srgName, "error", err)
+				continue
+			}
+			sent += end - i
+
+			if end < len(entries) {
+				time.Sleep(batchDelay)
+			}
+		}
+
+		m.logger.Info("GARP flood cycle complete", "srg", srgName, "cycle", cycle+1, "sent", sent)
 	}
+}
+
+func (m *Manager) collectGarpEntries(srgName string) []southbound.SRGGarpEntry {
+	m.mu.RLock()
+	iterators := m.sessionIterators
+	m.mu.RUnlock()
+
+	if len(iterators) == 0 {
+		if m.garpCollector != nil {
+			return m.garpCollector(srgName)
+		}
+		return nil
+	}
+
+	var entries []southbound.SRGGarpEntry
+	for _, iter := range iterators {
+		iter.ForEachSession(func(sess models.SubscriberSession) bool {
+			if sess.GetSRGName() != srgName {
+				return true
+			}
+			if sess.GetState() != models.SessionStateActive {
+				return true
+			}
+			ifIdx := sess.GetIfIndex()
+			if ifIdx == 0 {
+				return true
+			}
+			if ip := sess.GetIPv4Address(); ip != nil {
+				entries = append(entries, southbound.SRGGarpEntry{SwIfIndex: ifIdx, IP: ip})
+			}
+			if ip := sess.GetIPv6Address(); ip != nil {
+				entries = append(entries, southbound.SRGGarpEntry{SwIfIndex: ifIdx, IP: ip})
+			}
+			return true
+		})
+	}
+	return entries
 }
 
 func (m *Manager) registerSRGsWithDataplane() {

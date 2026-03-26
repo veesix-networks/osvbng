@@ -3498,6 +3498,10 @@ func (c *Component) restoreFromHASync(srgName string) {
 		"srg", srgName,
 		"restored", restored,
 		"failed", failed)
+
+	if restored > 0 && c.srgMgr != nil {
+		c.srgMgr.RequestGARP(srgName)
+	}
 }
 
 func (c *Component) ForEachSession(fn func(models.SubscriberSession) bool) {
