@@ -34,6 +34,15 @@ Verify bng1 Is Healthy
 Verify bng2 Is Healthy
     Wait For osvbng Healthy    bng2    ${lab-name}
 
+Verify VPP Is Running On bng1
+    [Documentation]    Check VPP is running and responsive on bng1.
+    ${output} =    Execute VPP Command    ${bng1}    show version
+    Should Contain    ${output}    vpp
+
+Verify VPP Is Running On bng2
+    [Documentation]    Check VPP is running and responsive on bng2.
+    ${output} =    Execute VPP Command    ${bng2}    show version
+    Should Contain    ${output}    vpp
 Verify bng1 Is ACTIVE
     Wait Until Keyword Succeeds    20 x    5s
     ...    Check HA Status    ${bng1}    ACTIVE

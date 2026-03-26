@@ -29,6 +29,10 @@ ${session-count}    5
 ${trace-input}      af-packet-input
 
 *** Test Cases ***
+Verify BNG Is Healthy
+    [Documentation]    Wait for osvbng to fully start.
+    Wait For osvbng Healthy    bng1    ${lab-name}
+
 Verify VPP Is Running
     ${output} =    Execute VPP Command    ${bng1}    show version
     Should Contain    ${output}    vpp
@@ -73,8 +77,6 @@ Verify Outside Addresses Advertised Via BGP
 *** Keywords ***
 Deploy CGNAT Topology
     Deploy Topology    ${lab-file}
-    Wait For osvbng Healthy    bng1    ${lab-name}
-    Start VPP Trace    ${bng1}    ${trace-input}    100
 
 Teardown CGNAT Topology
     Run Keyword And Ignore Error    Dump VPP Trace    ${bng1}

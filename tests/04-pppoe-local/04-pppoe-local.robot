@@ -16,7 +16,7 @@ Resource            ../bngblaster.robot
 Resource            ../sessions.robot
 Resource            ../localauth.robot
 
-Suite Setup         Setup PPPoE Test
+Suite Setup         Deploy Topology    ${lab-file}
 Suite Teardown      Teardown PPPoE Test
 
 *** Variables ***
@@ -27,6 +27,21 @@ ${subscribers}      clab-${lab-name}-subscribers
 ${session-count}    1
 
 *** Test Cases ***
+Verify BNG Is Healthy
+    [Documentation]    Wait for osvbng to fully start.
+    Wait For osvbng Healthy    bng1    ${lab-name}
+
+Verify VPP Is Running
+    [Documentation]    Check VPP is running and responsive.
+    ${output} =    Execute VPP Command    ${bng1}    show version
+    Should Contain    ${output}    vpp
+
+Establish Subscriber Sessions
+    [Documentation]    Create local auth users and start PPPoE sessions.
+    Create PPPoE Users    ${bng1}    ${session-count}
+    Start BNG Blaster In Background    ${subscribers}
+    Wait For Sessions Established    ${bng1}    ${subscribers}    ${session-count}    check_ipv6=true
+
 Verify Sessions In osvbng API
     [Documentation]    Verify osvbng REST API reports the correct session count.
     Verify Sessions In API    ${bng1}    ${session-count}
@@ -50,13 +65,6 @@ Verify BNG Blaster Report
     Should Be Equal As Strings    ${established}    ${session-count}
 
 *** Keywords ***
-Setup PPPoE Test
-    Deploy Topology    ${lab-file}
-    Wait For osvbng Healthy    bng1    ${lab-name}
-    Create PPPoE Users    ${bng1}    ${session-count}
-    Start BNG Blaster In Background    ${subscribers}
-    Wait For Sessions Established    ${bng1}    ${subscribers}    ${session-count}    check_ipv6=true
-
 Teardown PPPoE Test
     Run Keyword And Ignore Error    Stop BNG Blaster    ${subscribers}
     Destroy Topology    ${lab-file}
