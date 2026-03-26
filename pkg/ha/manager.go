@@ -261,6 +261,9 @@ func (m *Manager) GetVirtualMAC(srgName string) net.HardwareAddr {
 	if !ok {
 		return nil
 	}
+	if !sm.IsActive() {
+		return nil
+	}
 	return sm.VirtualMAC()
 }
 

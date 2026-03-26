@@ -2717,6 +2717,13 @@ func (c *Component) processRSPacket(pkt *dataplane.ParsedPacket) error {
 		return fmt.Errorf("packet rejected: S-VLAN required")
 	}
 
+	if c.srgMgr != nil {
+		srgName := c.resolveSRGName(pkt.OuterVLAN)
+		if !c.srgMgr.IsActive(srgName) {
+			return nil
+		}
+	}
+
 	cfg, err := c.cfgMgr.GetRunning()
 	if err != nil || cfg == nil {
 		return fmt.Errorf("no running config available")
