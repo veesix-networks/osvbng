@@ -62,12 +62,22 @@ Wait For osvbng Healthy
     ${container} =    Set Variable    clab-${lab_name}-${node}
     Wait Until Keyword Succeeds    ${HEALTH_RETRIES} x    ${HEALTH_INTERVAL}
     ...    Check osvbng Started    ${container}
+    Wait Until Keyword Succeeds    ${HEALTH_RETRIES} x    ${HEALTH_INTERVAL}
+    ...    Check osvbng API Ready    ${container}
 
 Check osvbng Started
     [Arguments]    ${container}
     ${rc}    ${output} =    Run And Return Rc And Output
     ...    sudo docker logs ${container} 2>&1 | grep -q "osvbng started successfully"
     Should Be Equal As Integers    ${rc}    0    osvbng has not fully started yet
+
+Check osvbng API Ready
+    [Arguments]    ${container}
+    ${ip} =    Get Container IPv4    ${container}
+    ${rc}    ${output} =    Run And Return Rc And Output
+    ...    curl -sf http://${ip}:${OSVBNG_API_PORT}/api/show/system/version
+    Should Be Equal As Integers    ${rc}    0    osvbng API not responding yet
+    Should Not Be Empty    ${output}
 
 Execute VPP Command
     [Arguments]    ${container}    ${command}
@@ -111,6 +121,11 @@ Verify BGP Session On Router
     [Arguments]    ${container}    ${neighbor_ip}
     ${output} =    Execute Vtysh On Router    ${container}    show bgp summary
     Should Contain    ${output}    ${neighbor_ip}
+
+Check BGP Route On Router
+    [Arguments]    ${container}    ${prefix}
+    ${output} =    Execute Vtysh On Router    ${container}    show ip bgp
+    Should Contain    ${output}    ${prefix}    BGP route ${prefix} not found on router
 
 Start VPP Trace
     [Arguments]    ${container}    ${input_node}=af-packet-input    ${count}=50

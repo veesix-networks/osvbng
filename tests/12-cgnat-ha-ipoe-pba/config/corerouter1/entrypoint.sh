@@ -39,6 +39,10 @@ while [ ! -e /sys/class/net/eth3 ]; do
     fi
 done
 
+echo "Pre-configuring network interface..."
+ip addr add 10.100.0.1/24 dev eth3 2>/dev/null || true
+ip link set eth3 up
+
 echo "Enabling IP forwarding..."
 sysctl -w net.ipv4.ip_forward=1 || true
 
@@ -54,3 +58,5 @@ vtysh -b 2>&1 || true
 
 echo "FRR core router started"
 /usr/lib/frr/frrinit.sh status || true
+
+ping -c 5 -W 1 10.100.0.2 &>/dev/null &

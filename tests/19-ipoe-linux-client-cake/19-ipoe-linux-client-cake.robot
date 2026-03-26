@@ -19,7 +19,7 @@ Suite Teardown      Destroy Linux Client Topology
 
 *** Variables ***
 ${lab-name}         osvbng-ipoe-linux-client
-${lab-file}         ${CURDIR}/18-ipoe-linux-client.clab.yml
+${lab-file}         ${CURDIR}/19-ipoe-linux-client-cake.clab.yml
 ${bng1}             clab-${lab-name}-bng1
 ${corerouter1}      clab-${lab-name}-corerouter1
 ${subscriber}       clab-${lab-name}-subscriber
@@ -29,6 +29,11 @@ ${subscriber-image}    veesixnetworks/bngtester:alpine-latest
 *** Test Cases ***
 Verify BNG Is Healthy
     Wait For osvbng Healthy    bng1    ${lab-name}
+
+Verify VPP Is Running
+    [Documentation]    Check VPP is running and responsive.
+    ${output} =    Execute VPP Command    ${bng1}    show version
+    Should Contain    ${output}    vpp
 
 Verify OSPF Adjacency
     Wait Until Keyword Succeeds    12 x    10s

@@ -31,11 +31,6 @@ Verify BNG Is Healthy
     [Documentation]    Wait for osvbng to fully start.
     Wait For osvbng Healthy    bng1    ${lab-name}
 
-Verify REST API Responds
-    [Documentation]    Verify the osvbng REST API returns valid data.
-    Wait Until Keyword Succeeds    12 x    5s
-    ...    Check API Responds    ${bng1}
-
 Verify VPP Is Running
     [Documentation]    Check VPP is running and responsive.
     ${output} =    Execute VPP Command    ${bng1}    show version
@@ -76,8 +71,3 @@ Deploy IPoE Topology
 Teardown IPoE Test
     Run Keyword And Ignore Error    Stop BNG Blaster    ${subscribers}
     Destroy Topology    ${lab-file}
-
-Check API Responds
-    [Arguments]    ${container}
-    ${output} =    Get osvbng API Response    ${container}    /api/show/system/version
-    Should Not Be Empty    ${output}

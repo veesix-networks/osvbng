@@ -15,7 +15,7 @@ Resource            ../common.robot
 Resource            ../bngblaster.robot
 Resource            ../sessions.robot
 
-Suite Setup         Setup DHCP Relay Proxy Test
+Suite Setup         Deploy Topology    ${lab-file}
 Suite Teardown      Teardown DHCP Relay Proxy Test
 
 *** Variables ***
@@ -27,6 +27,25 @@ ${subscribers}      clab-${lab-name}-subscribers
 ${session-count}    2
 
 *** Test Cases ***
+Verify BNG Is Healthy
+    [Documentation]    Wait for osvbng to fully start.
+    Wait For osvbng Healthy    bng1    ${lab-name}
+
+Verify Kea Is Healthy
+    [Documentation]    Wait for Kea DHCPv4 process to be running.
+    Wait Until Keyword Succeeds    12 x    5s
+    ...    Kea Process Running    clab-${lab-name}-kea
+
+Verify VPP Is Running
+    [Documentation]    Check VPP is running and responsive.
+    ${output} =    Execute VPP Command    ${bng1}    show version
+    Should Contain    ${output}    vpp
+
+Establish Subscriber Sessions
+    [Documentation]    Start BNG Blaster and wait for sessions.
+    Start BNG Blaster In Background    ${subscribers}
+    Wait For Sessions Established    ${bng1}    ${subscribers}    ${session-count}
+
 Verify Sessions In osvbng API
     [Documentation]    Verify osvbng REST API reports 2 sessions (1 relay, 1 proxy).
     Verify Sessions In API    ${bng1}    ${session-count}
@@ -71,22 +90,9 @@ Verify BNG Blaster Report
     Should Be Equal As Strings    ${established}    ${session-count}
 
 *** Keywords ***
-Setup DHCP Relay Proxy Test
-    Deploy Topology    ${lab-file}
-    Wait For osvbng Healthy    bng1    ${lab-name}
-    Wait For Kea Healthy
-    Start BNG Blaster In Background    ${subscribers}
-    Wait For Sessions Established    ${bng1}    ${subscribers}    ${session-count}
-
 Teardown DHCP Relay Proxy Test
     Run Keyword And Ignore Error    Stop BNG Blaster    ${subscribers}
     Destroy Topology    ${lab-file}
-
-Wait For Kea Healthy
-    [Documentation]    Wait for Kea DHCPv4 process to be running.
-    ${kea} =    Set Variable    clab-${lab-name}-kea
-    Wait Until Keyword Succeeds    12 x    5s
-    ...    Kea Process Running    ${kea}
 
 Kea Process Running
     [Arguments]    ${container}

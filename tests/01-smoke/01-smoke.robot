@@ -27,6 +27,10 @@ ${subscribers}      clab-${lab-name}-subscribers
 ${session-count}    5
 
 *** Test Cases ***
+Verify BNG Is Healthy
+    [Documentation]    Wait for osvbng to fully start.
+    Wait For osvbng Healthy    bng1    ${lab-name}
+
 Verify VPP Is Running
     [Documentation]    Check VPP is running and responsive via vppctl.
     ${output} =    Execute VPP Command    ${bng1}    show version
@@ -75,7 +79,6 @@ Verify Traffic Flowing
 *** Keywords ***
 Deploy Smoke Topology
     Deploy Topology    ${lab-file}
-    Wait For osvbng Healthy    bng1    ${lab-name}
 
 Teardown Smoke Topology
     Run Keyword And Ignore Error    Stop BNG Blaster    ${subscribers}
