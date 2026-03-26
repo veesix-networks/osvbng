@@ -264,6 +264,13 @@ func (c *Component) handlePacket(pkt *dataplane.ParsedPacket) error {
 }
 
 func (c *Component) handleDiscovery(pkt *dataplane.ParsedPacket) error {
+	if c.srgMgr != nil && pkt.OuterVLAN != 0 {
+		srgName := c.resolveSRGName(pkt.OuterVLAN)
+		if !c.srgMgr.IsActive(srgName) {
+			return nil
+		}
+	}
+
 	switch pkt.PPPoE.Code {
 	case layers.PPPoECodePADI:
 		return c.handlePADI(pkt)
