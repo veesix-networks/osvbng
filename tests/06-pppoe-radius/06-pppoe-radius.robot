@@ -15,7 +15,7 @@ Resource            ../common.robot
 Resource            ../bngblaster.robot
 Resource            ../sessions.robot
 
-Suite Setup         Setup PPPoE RADIUS Test
+Suite Setup         Deploy Topology    ${lab-file}
 Suite Teardown      Teardown PPPoE RADIUS Test
 
 *** Variables ***
@@ -26,6 +26,20 @@ ${subscribers}      clab-${lab-name}-subscribers
 ${session-count}    1
 
 *** Test Cases ***
+Verify BNG Is Healthy
+    [Documentation]    Wait for osvbng to fully start.
+    Wait For osvbng Healthy    bng1    ${lab-name}
+
+Verify VPP Is Running
+    [Documentation]    Check VPP is running and responsive.
+    ${output} =    Execute VPP Command    ${bng1}    show version
+    Should Contain    ${output}    vpp
+
+Establish Subscriber Sessions
+    [Documentation]    Start BNG Blaster PPPoE sessions with RADIUS auth.
+    Start BNG Blaster In Background    ${subscribers}
+    Wait For Sessions Established    ${bng1}    ${subscribers}    ${session-count}    check_ipv6=true
+
 Verify Sessions In osvbng API
     [Documentation]    Verify osvbng REST API reports the correct session count.
     Verify Sessions In API    ${bng1}    ${session-count}
@@ -57,12 +71,6 @@ Verify BNG Blaster Report
     Should Be Equal As Strings    ${established}    ${session-count}
 
 *** Keywords ***
-Setup PPPoE RADIUS Test
-    Deploy Topology    ${lab-file}
-    Wait For osvbng Healthy    bng1    ${lab-name}
-    Start BNG Blaster In Background    ${subscribers}
-    Wait For Sessions Established    ${bng1}    ${subscribers}    ${session-count}    check_ipv6=true
-
 Teardown PPPoE RADIUS Test
     Run Keyword And Ignore Error    Stop BNG Blaster    ${subscribers}
     Destroy Topology    ${lab-file}

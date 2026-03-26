@@ -30,6 +30,11 @@ ${subscriber-image}    veesixnetworks/bngtester:alpine-latest
 Verify BNG Is Healthy
     Wait For osvbng Healthy    bng1    ${lab-name}
 
+Verify VPP Is Running
+    [Documentation]    Check VPP is running and responsive.
+    ${output} =    Execute VPP Command    ${bng1}    show version
+    Should Contain    ${output}    vpp
+
 Verify OSPF Adjacency
     Wait Until Keyword Succeeds    12 x    10s
     ...    Check OSPF Neighbor    ${corerouter1}    10.254.0.1

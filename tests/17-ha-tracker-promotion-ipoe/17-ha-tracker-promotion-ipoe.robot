@@ -37,6 +37,15 @@ Verify bng1 Is Healthy
 Verify bng2 Is Healthy
     Wait For osvbng Healthy    bng2    ${lab-name}
 
+Verify VPP Is Running On bng1
+    [Documentation]    Check VPP is running and responsive on bng1.
+    ${output} =    Execute VPP Command    ${bng1}    show version
+    Should Contain    ${output}    vpp
+
+Verify VPP Is Running On bng2
+    [Documentation]    Check VPP is running and responsive on bng2.
+    ${output} =    Execute VPP Command    ${bng2}    show version
+    Should Contain    ${output}    vpp
 Verify bng1 Is ACTIVE
     Wait Until Keyword Succeeds    20 x    5s
     ...    Check HA Status    ${bng1}    ACTIVE
@@ -82,6 +91,10 @@ Verify Sessions Have IPv4 In Shared Address Space
 Verify CGNAT Mappings Exist On bng1
     Wait Until Keyword Succeeds    12 x    5s
     ...    Check CGNAT Mapping Count    ${bng1}    ${session-count}
+
+Verify CGNAT Outside Routes On Core Router
+    Wait Until Keyword Succeeds    12 x    10s
+    ...    Check BGP Route On Router    ${corerouter1}    203.0.113.
 
 Verify NAT Traffic Flowing On bng1
     Wait Until Keyword Succeeds    12 x    10s

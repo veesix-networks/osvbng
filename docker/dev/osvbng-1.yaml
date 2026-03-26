@@ -395,6 +395,8 @@ logging:
         subscriber: info
 dataplane:
     lcp-netns: dataplane
+    main-core: 0
+    workers: "1-2"
     statseg:
         size: "512m"
         page-size: "4k"

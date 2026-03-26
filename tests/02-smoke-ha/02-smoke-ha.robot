@@ -47,13 +47,13 @@ Verify bng2 Is STANDBY
     Wait Until Keyword Succeeds    20 x    5s
     ...    Check HA Status    ${bng2}    STANDBY
 
-Verify VPP Running On bng1
-    [Documentation]    Check VPP is running on bng1.
+Verify VPP Is Running On bng1
+    [Documentation]    Check VPP is running and responsive on bng1.
     ${output} =    Execute VPP Command    ${bng1}    show version
     Should Contain    ${output}    vpp
 
-Verify VPP Running On bng2
-    [Documentation]    Check VPP is running on bng2.
+Verify VPP Is Running On bng2
+    [Documentation]    Check VPP is running and responsive on bng2.
     ${output} =    Execute VPP Command    ${bng2}    show version
     Should Contain    ${output}    vpp
 
