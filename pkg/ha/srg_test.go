@@ -530,14 +530,21 @@ func TestManager_GetSRGForGroup(t *testing.T) {
 func TestManager_GetVirtualMAC(t *testing.T) {
 	m := newTestManager(t)
 
+	if vmac := m.GetVirtualMAC("srg1"); vmac != nil {
+		t.Fatalf("expected nil for inactive SRG, got %v", vmac)
+	}
+
+	m.srgs["srg1"].mu.Lock()
+	m.srgs["srg1"].state = SRGStateActive
+	m.srgs["srg1"].mu.Unlock()
+
 	vmac := m.GetVirtualMAC("srg1")
 	if vmac == nil || vmac.String() != "02:ab:cd:00:00:01" {
 		t.Fatalf("expected 02:ab:cd:00:00:01, got %v", vmac)
 	}
 
-	vmac = m.GetVirtualMAC("srg2")
-	if vmac == nil || vmac.String() != "02:ab:cd:00:00:02" {
-		t.Fatalf("expected 02:ab:cd:00:00:02, got %v", vmac)
+	if vmac := m.GetVirtualMAC("srg2"); vmac != nil {
+		t.Fatalf("expected nil for inactive srg2, got %v", vmac)
 	}
 
 	if vmac := m.GetVirtualMAC("nonexistent"); vmac != nil {
