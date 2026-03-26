@@ -178,6 +178,9 @@ func (c *Component) handlePacket(pkt *dataplane.ParsedPacket) error {
 			srgName = c.resolveSRGName(pkt.OuterVLAN)
 		}
 		if srgName != "" {
+			if !c.srgMgr.IsActive(srgName) {
+				return nil
+			}
 			gatewayMAC = c.srgMgr.GetVirtualMAC(srgName)
 		}
 	}
