@@ -113,6 +113,10 @@ func GenerateExternalConfigs(configPath string) error {
 	log.Printf("CPU layout: total=%d main=%d workers=%s cp=%s",
 		cpu.TotalCores, cpu.MainCore, cpu.WorkerCores, cpu.CPCores)
 
+	if err := cpu.WriteEnvFile("/run/osvbng/cpu-layout.env"); err != nil {
+		log.Printf("Warning: failed to write CPU layout env file: %v", err)
+	}
+
 	dc := NewDataplaneConf()
 	if cfg.Dataplane.SkipConfGen {
 		log.Printf("Skipping %s (skip-conf-gen: true)", dc.ConfigPath)

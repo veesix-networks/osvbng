@@ -97,6 +97,13 @@ func autoCPCores(total int) string {
 	}
 }
 
+// WriteEnvFile writes the resolved layout as shell-evaluable variables.
+func (r *ResolvedCPU) WriteEnvFile(path string) error {
+	content := fmt.Sprintf("OSVBNG_RESOLVED_MAIN_CORE=%d\nOSVBNG_RESOLVED_WORKER_CORES=%s\nOSVBNG_RESOLVED_CP_CORES=%s\nOSVBNG_RESOLVED_TOTAL_CORES=%d\n",
+		r.MainCore, r.WorkerCores, r.CPCores, r.TotalCores)
+	return os.WriteFile(path, []byte(content), 0644)
+}
+
 // CPCoreCount returns the number of control plane cores in the resolved layout.
 func (r *ResolvedCPU) CPCoreCount() int {
 	cores, err := parseCoreSet(r.CPCores)
