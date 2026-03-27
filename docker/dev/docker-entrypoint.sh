@@ -33,44 +33,11 @@ done
 # First dataplane interface is the primary access interface
 OSVBNG_ACCESS_INTERFACE="eth1"
 
-TOTAL_CORES=$(nproc)
-
-if [ -z "$OSVBNG_DP_MAIN_CORE" ] || [ -z "$OSVBNG_DP_WORKER_CORES" ] || [ -z "$OSVBNG_CP_CORES" ]; then
-    case $TOTAL_CORES in
-        1)
-            OSVBNG_DP_MAIN_CORE=0
-            OSVBNG_DP_WORKER_CORES=""
-            OSVBNG_CP_CORES=""
-            USE_TASKSET=false
-            ;;
-        2)
-            OSVBNG_DP_MAIN_CORE=0
-            OSVBNG_DP_WORKER_CORES=1
-            OSVBNG_CP_CORES=0
-            USE_TASKSET=true
-            ;;
-        3)
-            OSVBNG_DP_MAIN_CORE=0
-            OSVBNG_DP_WORKER_CORES=1-2
-            OSVBNG_CP_CORES=0
-            USE_TASKSET=true
-            ;;
-        4)
-            OSVBNG_DP_MAIN_CORE=0
-            OSVBNG_DP_WORKER_CORES=1-3
-            OSVBNG_CP_CORES=0
-            USE_TASKSET=true
-            ;;
-        *)
-            OSVBNG_DP_MAIN_CORE=0
-            OSVBNG_DP_WORKER_CORES=1-$((TOTAL_CORES-2))
-            OSVBNG_CP_CORES=$((TOTAL_CORES-1))
-            USE_TASKSET=true
-            ;;
-    esac
+if [ -n "$OSVBNG_CP_CORES" ]; then
+    USE_TASKSET=true
+else
+    USE_TASKSET=false
 fi
-
-echo "Core allocation: Total=$TOTAL_CORES DP_MAIN=$OSVBNG_DP_MAIN_CORE DP_WORKERS=$OSVBNG_DP_WORKER_CORES CP=$OSVBNG_CP_CORES"
 
 mkdir -p /etc/osvbng
 mkdir -p /var/log/osvbng
