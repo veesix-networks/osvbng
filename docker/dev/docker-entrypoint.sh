@@ -33,12 +33,6 @@ done
 # First dataplane interface is the primary access interface
 OSVBNG_ACCESS_INTERFACE="eth1"
 
-if [ -n "$OSVBNG_CP_CORES" ]; then
-    USE_TASKSET=true
-else
-    USE_TASKSET=false
-fi
-
 mkdir -p /etc/osvbng
 mkdir -p /var/log/osvbng
 
@@ -68,6 +62,11 @@ echo "Generating external configurations..."
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to generate external configurations"
     exit 1
+fi
+
+if [ -f /run/osvbng/cpu-layout.env ]; then
+    source /run/osvbng/cpu-layout.env
+    echo "Resolved CPU layout: main=$OSVBNG_RESOLVED_MAIN_CORE workers=$OSVBNG_RESOLVED_WORKER_CORES cp=$OSVBNG_RESOLVED_CP_CORES total=$OSVBNG_RESOLVED_TOTAL_CORES"
 fi
 
 echo "Starting dataplane..."
@@ -127,8 +126,9 @@ fi
 
 echo "Starting osvbng..."
 
-if [ "$USE_TASKSET" = true ] && [ -n "$OSVBNG_CP_CORES" ]; then
-    exec taskset -c ${OSVBNG_CP_CORES} /usr/local/bin/osvbngd -config /etc/osvbng/osvbng.yaml
+RESOLVED_CP="${OSVBNG_CP_CORES:-$OSVBNG_RESOLVED_CP_CORES}"
+if [ -n "$RESOLVED_CP" ]; then
+    exec taskset -c ${RESOLVED_CP} /usr/local/bin/osvbngd -config /etc/osvbng/osvbng.yaml
 else
     exec /usr/local/bin/osvbngd -config /etc/osvbng/osvbng.yaml
 fi
