@@ -59,45 +59,6 @@ if [ "$OSVBNG_WAIT_FOR_INTERFACES" = "true" ]; then
     wait_for_interfaces $WAIT_IFACES
 fi
 
-TOTAL_CORES=$(nproc)
-
-if [ -z "$OSVBNG_DP_MAIN_CORE" ] || [ -z "$OSVBNG_DP_WORKER_CORES" ] || [ -z "$OSVBNG_CP_CORES" ]; then
-    case $TOTAL_CORES in
-        1)
-            OSVBNG_DP_MAIN_CORE=0
-            OSVBNG_DP_WORKER_CORES=""
-            OSVBNG_CP_CORES=""
-            USE_TASKSET=false
-            ;;
-        2)
-            OSVBNG_DP_MAIN_CORE=0
-            OSVBNG_DP_WORKER_CORES=1
-            OSVBNG_CP_CORES=0
-            USE_TASKSET=true
-            ;;
-        3)
-            OSVBNG_DP_MAIN_CORE=0
-            OSVBNG_DP_WORKER_CORES=1-2
-            OSVBNG_CP_CORES=0
-            USE_TASKSET=true
-            ;;
-        4)
-            OSVBNG_DP_MAIN_CORE=0
-            OSVBNG_DP_WORKER_CORES=1-3
-            OSVBNG_CP_CORES=0
-            USE_TASKSET=true
-            ;;
-        *)
-            OSVBNG_DP_MAIN_CORE=0
-            OSVBNG_DP_WORKER_CORES=1-$((TOTAL_CORES-2))
-            OSVBNG_CP_CORES=$((TOTAL_CORES-1))
-            USE_TASKSET=true
-            ;;
-    esac
-fi
-
-echo "Core allocation: Total=$TOTAL_CORES DP_MAIN=$OSVBNG_DP_MAIN_CORE DP_WORKERS=$OSVBNG_DP_WORKER_CORES CP=$OSVBNG_CP_CORES"
-
 mkdir -p /etc/osvbng
 mkdir -p /var/log/osvbng
 
@@ -131,6 +92,11 @@ echo "Generating external configurations..."
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to generate external configurations"
     exit 1
+fi
+
+if [ -f /run/osvbng/cpu-layout.env ]; then
+    source /run/osvbng/cpu-layout.env
+    echo "Resolved CPU layout: main=$OSVBNG_RESOLVED_MAIN_CORE workers=$OSVBNG_RESOLVED_WORKER_CORES cp=$OSVBNG_RESOLVED_CP_CORES total=$OSVBNG_RESOLVED_TOTAL_CORES"
 fi
 
 echo "Starting dataplane..."
@@ -181,8 +147,9 @@ ip netns exec dataplane /usr/lib/frr/frrinit.sh status || true
 
 echo "Starting osvbng..."
 
-if [ "$USE_TASKSET" = true ] && [ -n "$OSVBNG_CP_CORES" ]; then
-    exec taskset -c ${OSVBNG_CP_CORES} /usr/local/bin/osvbngd -config /etc/osvbng/osvbng.yaml
+RESOLVED_CP="${OSVBNG_CP_CORES:-$OSVBNG_RESOLVED_CP_CORES}"
+if [ -n "$RESOLVED_CP" ]; then
+    exec taskset -c ${RESOLVED_CP} /usr/local/bin/osvbngd -config /etc/osvbng/osvbng.yaml
 else
     exec /usr/local/bin/osvbngd -config /etc/osvbng/osvbng.yaml
 fi

@@ -124,6 +124,26 @@ func main() {
 
 	mainLog := logger.Get(logger.Main)
 
+	cpu := config.ResolveCPULayout(cfg)
+	if cpu.CPCores != "" {
+		cpCoreCount := cpu.CPCoreCount()
+		runtime.GOMAXPROCS(cpCoreCount)
+		mainLog.Info("CPU layout resolved",
+			"available_cores", cpu.TotalCores,
+			"vpp_main_core", cpu.MainCore,
+			"vpp_worker_cores", cpu.WorkerCores,
+			"cp_cores", cpu.CPCores,
+			"GOMAXPROCS", cpCoreCount,
+		)
+	} else {
+		mainLog.Info("CPU layout resolved",
+			"available_cores", cpu.TotalCores,
+			"vpp_main_core", cpu.MainCore,
+			"vpp_worker_cores", cpu.WorkerCores,
+			"cp_cores", "shared with vpp main",
+		)
+	}
+
 	mainLog.Info("Starting osvbng")
 
 	apiSocket := cfg.Dataplane.DPAPISocket
