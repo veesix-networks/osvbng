@@ -10,58 +10,33 @@ on:
 jobs:
   ipoe-linux-client:
     name: IPoE Linux Client (${{ matrix.subscriber }})
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    concurrency:
+      group: integration-tests
     timeout-minutes: 25
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         subscriber: [alpine, debian, ubuntu]
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: osvbng-image
-          path: /tmp
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: test-runner-image
-          path: /tmp
+      - name: Build Docker image
+        run: make docker-local
 
       - name: Pull bngtester image
         env:
           SUBSCRIBER: ${{ matrix.subscriber }}
-        run: |
-          docker pull "veesixnetworks/bngtester:${SUBSCRIBER}-latest"
-          docker save "veesixnetworks/bngtester:${SUBSCRIBER}-latest" -o "/tmp/bngtester-${SUBSCRIBER}.tar"
-
-      - name: Install QEMU and tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 qemu-utils sshpass
-          sudo chmod 666 /dev/kvm || true
+        run: docker pull "veesixnetworks/bngtester:${SUBSCRIBER}-latest"
 
       - name: Run IPoE linux client tests
         env:
           SUBSCRIBER: ${{ matrix.subscriber }}
-          ROBOT_EXTRA_ARGS: "--variable subscriber-image:veesixnetworks/bngtester:${{ matrix.subscriber }}-latest"
         run: |
-          scripts/qemu/test-runner/scripts/vm-run-tests.sh \
-            /tmp/test-runner.qcow2 \
-            /tmp/osvbng-local.tar \
-            18-ipoe-linux-client \
-            ./test-results \
-            "/tmp/bngtester-${SUBSCRIBER}.tar"
-
-      - name: Test report
-        if: ${{ !cancelled() }}
-        uses: joonvena/robotframework-reporter-action@v2.5
-        with:
-          gh_access_token: ${{ secrets.GITHUB_TOKEN }}
-          report_path: test-results/out
-          only_summary: true
+          mkdir -p test-results
+          robot --loglevel DEBUG --variable "subscriber-image:veesixnetworks/bngtester:${{ matrix.subscriber }}-latest" --output test-results/output.xml --log test-results/18-ipoe-linux-client-${SUBSCRIBER}-log.html --report NONE tests/18-ipoe-linux-client/
 
       - name: Upload test results
         if: always()

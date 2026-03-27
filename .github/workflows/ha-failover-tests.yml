@@ -10,43 +10,21 @@ on:
 jobs:
   ha-failover-ipoe:
     name: HA Failover IPoE
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    concurrency:
+      group: integration-tests
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: osvbng-image
-          path: /tmp
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: test-runner-image
-          path: /tmp
-
-      - name: Install QEMU and tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 qemu-utils sshpass
-          sudo chmod 666 /dev/kvm || true
+      - name: Build Docker image
+        run: make docker-local
 
       - name: Run HA Failover IPoE tests
         run: |
-          scripts/qemu/test-runner/scripts/vm-run-tests.sh \
-            /tmp/test-runner.qcow2 \
-            /tmp/osvbng-local.tar \
-            14-ha-failover-ipoe \
-            ./test-results
-
-      - name: Test report
-        if: ${{ !cancelled() }}
-        uses: joonvena/robotframework-reporter-action@v2.5
-        with:
-          gh_access_token: ${{ secrets.GITHUB_TOKEN }}
-          report_path: test-results/out
-          only_summary: true
+          mkdir -p test-results
+          robot --loglevel DEBUG --output test-results/output.xml --log test-results/14-ha-failover-ipoe-log.html --report NONE tests/14-ha-failover-ipoe/
 
       - name: Upload test results
         if: always()
@@ -58,43 +36,21 @@ jobs:
 
   ha-failover-pppoe:
     name: HA Failover PPPoE
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    concurrency:
+      group: integration-tests
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: osvbng-image
-          path: /tmp
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: test-runner-image
-          path: /tmp
-
-      - name: Install QEMU and tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 qemu-utils sshpass
-          sudo chmod 666 /dev/kvm || true
+      - name: Build Docker image
+        run: make docker-local
 
       - name: Run HA Failover PPPoE tests
         run: |
-          scripts/qemu/test-runner/scripts/vm-run-tests.sh \
-            /tmp/test-runner.qcow2 \
-            /tmp/osvbng-local.tar \
-            15-ha-failover-pppoe \
-            ./test-results
-
-      - name: Test report
-        if: ${{ !cancelled() }}
-        uses: joonvena/robotframework-reporter-action@v2.5
-        with:
-          gh_access_token: ${{ secrets.GITHUB_TOKEN }}
-          report_path: test-results/out
-          only_summary: true
+          mkdir -p test-results
+          robot --loglevel DEBUG --output test-results/output.xml --log test-results/15-ha-failover-pppoe-log.html --report NONE tests/15-ha-failover-pppoe/
 
       - name: Upload test results
         if: always()
@@ -106,43 +62,21 @@ jobs:
 
   ha-failover-radius-ipoe:
     name: HA Failover RADIUS IPoE
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    concurrency:
+      group: integration-tests
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: osvbng-image
-          path: /tmp
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: test-runner-image
-          path: /tmp
-
-      - name: Install QEMU and tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 qemu-utils sshpass
-          sudo chmod 666 /dev/kvm || true
+      - name: Build Docker image
+        run: make docker-local
 
       - name: Run HA Failover RADIUS IPoE tests
         run: |
-          scripts/qemu/test-runner/scripts/vm-run-tests.sh \
-            /tmp/test-runner.qcow2 \
-            /tmp/osvbng-local.tar \
-            16-ha-failover-radius-ipoe \
-            ./test-results
-
-      - name: Test report
-        if: ${{ !cancelled() }}
-        uses: joonvena/robotframework-reporter-action@v2.5
-        with:
-          gh_access_token: ${{ secrets.GITHUB_TOKEN }}
-          report_path: test-results/out
-          only_summary: true
+          mkdir -p test-results
+          robot --loglevel DEBUG --output test-results/output.xml --log test-results/16-ha-failover-radius-ipoe-log.html --report NONE tests/16-ha-failover-radius-ipoe/
 
       - name: Upload test results
         if: always()
@@ -154,43 +88,21 @@ jobs:
 
   ha-tracker-promotion-ipoe:
     name: HA Tracker Promotion IPoE
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    concurrency:
+      group: integration-tests
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: osvbng-image
-          path: /tmp
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: test-runner-image
-          path: /tmp
-
-      - name: Install QEMU and tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 qemu-utils sshpass
-          sudo chmod 666 /dev/kvm || true
+      - name: Build Docker image
+        run: make docker-local
 
       - name: Run HA Tracker Promotion IPoE tests
         run: |
-          scripts/qemu/test-runner/scripts/vm-run-tests.sh \
-            /tmp/test-runner.qcow2 \
-            /tmp/osvbng-local.tar \
-            17-ha-tracker-promotion-ipoe \
-            ./test-results
-
-      - name: Test report
-        if: ${{ !cancelled() }}
-        uses: joonvena/robotframework-reporter-action@v2.5
-        with:
-          gh_access_token: ${{ secrets.GITHUB_TOKEN }}
-          report_path: test-results/out
-          only_summary: true
+          mkdir -p test-results
+          robot --loglevel DEBUG --output test-results/output.xml --log test-results/17-ha-tracker-promotion-ipoe-log.html --report NONE tests/17-ha-tracker-promotion-ipoe/
 
       - name: Upload test results
         if: always()

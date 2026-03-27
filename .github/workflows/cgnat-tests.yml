@@ -10,43 +10,21 @@ on:
 jobs:
   cgnat-ipoe-pba:
     name: CGNAT IPoE PBA
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    concurrency:
+      group: integration-tests
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: osvbng-image
-          path: /tmp
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: test-runner-image
-          path: /tmp
-
-      - name: Install QEMU and tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 qemu-utils sshpass
-          sudo chmod 666 /dev/kvm || true
+      - name: Build Docker image
+        run: make docker-local
 
       - name: Run CGNAT IPoE PBA tests
         run: |
-          scripts/qemu/test-runner/scripts/vm-run-tests.sh \
-            /tmp/test-runner.qcow2 \
-            /tmp/osvbng-local.tar \
-            08-cgnat-ipoe-pba \
-            ./test-results
-
-      - name: Test report
-        if: ${{ !cancelled() }}
-        uses: joonvena/robotframework-reporter-action@v2.5
-        with:
-          gh_access_token: ${{ secrets.GITHUB_TOKEN }}
-          report_path: test-results/out
-          only_summary: true
+          mkdir -p test-results
+          robot --loglevel DEBUG --output test-results/output.xml --log test-results/08-cgnat-ipoe-pba-log.html --report NONE tests/08-cgnat-ipoe-pba/
 
       - name: Upload test results
         if: always()
@@ -58,43 +36,21 @@ jobs:
 
   cgnat-ha-ipoe-pba:
     name: CGNAT HA IPoE PBA
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    concurrency:
+      group: integration-tests
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: osvbng-image
-          path: /tmp
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: test-runner-image
-          path: /tmp
-
-      - name: Install QEMU and tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 qemu-utils sshpass
-          sudo chmod 666 /dev/kvm || true
+      - name: Build Docker image
+        run: make docker-local
 
       - name: Run CGNAT HA IPoE PBA tests
         run: |
-          scripts/qemu/test-runner/scripts/vm-run-tests.sh \
-            /tmp/test-runner.qcow2 \
-            /tmp/osvbng-local.tar \
-            12-cgnat-ha-ipoe-pba \
-            ./test-results
-
-      - name: Test report
-        if: ${{ !cancelled() }}
-        uses: joonvena/robotframework-reporter-action@v2.5
-        with:
-          gh_access_token: ${{ secrets.GITHUB_TOKEN }}
-          report_path: test-results/out
-          only_summary: true
+          mkdir -p test-results
+          robot --loglevel DEBUG --output test-results/output.xml --log test-results/12-cgnat-ha-ipoe-pba-log.html --report NONE tests/12-cgnat-ha-ipoe-pba/
 
       - name: Upload test results
         if: always()
@@ -106,43 +62,21 @@ jobs:
 
   cgnat-pppoe-pba:
     name: CGNAT PPPoE PBA
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    concurrency:
+      group: integration-tests
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: osvbng-image
-          path: /tmp
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: test-runner-image
-          path: /tmp
-
-      - name: Install QEMU and tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 qemu-utils sshpass
-          sudo chmod 666 /dev/kvm || true
+      - name: Build Docker image
+        run: make docker-local
 
       - name: Run CGNAT PPPoE PBA tests
         run: |
-          scripts/qemu/test-runner/scripts/vm-run-tests.sh \
-            /tmp/test-runner.qcow2 \
-            /tmp/osvbng-local.tar \
-            10-cgnat-pppoe-pba \
-            ./test-results
-
-      - name: Test report
-        if: ${{ !cancelled() }}
-        uses: joonvena/robotframework-reporter-action@v2.5
-        with:
-          gh_access_token: ${{ secrets.GITHUB_TOKEN }}
-          report_path: test-results/out
-          only_summary: true
+          mkdir -p test-results
+          robot --loglevel DEBUG --output test-results/output.xml --log test-results/10-cgnat-pppoe-pba-log.html --report NONE tests/10-cgnat-pppoe-pba/
 
       - name: Upload test results
         if: always()
@@ -154,43 +88,21 @@ jobs:
 
   cgnat-ha-pppoe-pba:
     name: CGNAT HA PPPoE PBA
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    concurrency:
+      group: integration-tests
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: osvbng-image
-          path: /tmp
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: test-runner-image
-          path: /tmp
-
-      - name: Install QEMU and tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 qemu-utils sshpass
-          sudo chmod 666 /dev/kvm || true
+      - name: Build Docker image
+        run: make docker-local
 
       - name: Run CGNAT HA PPPoE PBA tests
         run: |
-          scripts/qemu/test-runner/scripts/vm-run-tests.sh \
-            /tmp/test-runner.qcow2 \
-            /tmp/osvbng-local.tar \
-            13-cgnat-ha-pppoe-pba \
-            ./test-results
-
-      - name: Test report
-        if: ${{ !cancelled() }}
-        uses: joonvena/robotframework-reporter-action@v2.5
-        with:
-          gh_access_token: ${{ secrets.GITHUB_TOKEN }}
-          report_path: test-results/out
-          only_summary: true
+          mkdir -p test-results
+          robot --loglevel DEBUG --output test-results/output.xml --log test-results/13-cgnat-ha-pppoe-pba-log.html --report NONE tests/13-cgnat-ha-pppoe-pba/
 
       - name: Upload test results
         if: always()
@@ -199,4 +111,3 @@ jobs:
           name: cgnat-ha-pppoe-pba-test-results
           path: test-results/
           retention-days: 14
-

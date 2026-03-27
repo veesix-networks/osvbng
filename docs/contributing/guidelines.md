@@ -9,10 +9,33 @@ When contributing to low-level protocol implementations (e.g., DHCP, PPPoE, RADI
 
 ## Testing Requirements
 
-All PRs must pass unit tests before merge. CI enforces this automatically.
+CI runs build and unit tests on every PR using GitHub shared runners.
+Integration tests (containerlab + Robot Framework) run on a self-hosted
+runner only when changes are merged to main.
 
-!!! warning "Before opening a PR"
-    Run `make test` locally and fix any failures. Integration tests (containerlab + robot framework) will not run until unit tests pass.
+### Running integration tests locally
+
+GitHub shared runners cannot reliably run the integration suite due to
+nested QEMU virtualisation and resource constraints. Contributors must
+run integration tests locally before requesting a merge.
+
+Prerequisites:
+
+- [containerlab](https://containerlab.dev/install/)
+- [Robot Framework](https://robotframework.org/) (`pip install robotframework`)
+- Docker
+
+Steps:
+
+1. Run `make test` and fix any unit test failures.
+2. Build the local Docker image: `make docker-local`
+3. Run the full QA suite: `bash scripts/run-qa-tests.sh -r 1`
+4. Include the summary output from `run-qa-tests.sh` in your PR description.
+
+!!! warning "When is a full integration run required?"
+    For minor and major version bumps the full QA suite must pass. Patch
+    fixes that are fully covered by unit tests do not require a full
+    integration run, but the maintainer merging the PR may request one.
 
 When adding new functionality:
 
