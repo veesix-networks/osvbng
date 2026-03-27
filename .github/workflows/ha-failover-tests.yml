@@ -11,16 +11,10 @@ jobs:
   ha-failover-ipoe:
     name: HA Failover IPoE
     runs-on: self-hosted
-    concurrency:
-      group: integration-tests
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build Docker image
-        run: make docker-local
-
       - name: Run HA Failover IPoE tests
         run: |
           mkdir -p test-results
@@ -37,16 +31,10 @@ jobs:
   ha-failover-pppoe:
     name: HA Failover PPPoE
     runs-on: self-hosted
-    concurrency:
-      group: integration-tests
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build Docker image
-        run: make docker-local
-
       - name: Run HA Failover PPPoE tests
         run: |
           mkdir -p test-results
@@ -63,16 +51,10 @@ jobs:
   ha-failover-radius-ipoe:
     name: HA Failover RADIUS IPoE
     runs-on: self-hosted
-    concurrency:
-      group: integration-tests
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build Docker image
-        run: make docker-local
-
       - name: Run HA Failover RADIUS IPoE tests
         run: |
           mkdir -p test-results
@@ -89,16 +71,10 @@ jobs:
   ha-tracker-promotion-ipoe:
     name: HA Tracker Promotion IPoE
     runs-on: self-hosted
-    concurrency:
-      group: integration-tests
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build Docker image
-        run: make docker-local
-
       - name: Run HA Tracker Promotion IPoE tests
         run: |
           mkdir -p test-results

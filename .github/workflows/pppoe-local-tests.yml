@@ -11,16 +11,10 @@ jobs:
   pppoe-local:
     name: PPPoE Local Auth Tests
     runs-on: self-hosted
-    concurrency:
-      group: integration-tests
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build Docker image
-        run: make docker-local
-
       - name: Run PPPoE local auth tests
         run: |
           mkdir -p test-results

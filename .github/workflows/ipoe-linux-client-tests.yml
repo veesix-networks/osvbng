@@ -11,8 +11,6 @@ jobs:
   ipoe-linux-client:
     name: IPoE Linux Client (${{ matrix.subscriber }})
     runs-on: self-hosted
-    concurrency:
-      group: integration-tests
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -22,10 +20,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build Docker image
-        run: make docker-local
-
       - name: Pull bngtester image
         env:
           SUBSCRIBER: ${{ matrix.subscriber }}
