@@ -1,0 +1,33 @@
+# Copyright 2026 Veesix Networks Ltd
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: ha-failover-tests-self-hosted
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ha-failover-pppoe:
+    name: HA Failover PPPoE (self-hosted)
+    runs-on: self-hosted
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: make docker-local
+
+      - name: Run HA Failover PPPoE tests
+        run: |
+          mkdir -p test-results
+          robot --loglevel DEBUG --output test-results/output.xml --log test-results/15-ha-failover-pppoe-log.html --report NONE tests/15-ha-failover-pppoe/
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ha-failover-pppoe-self-hosted-results
+          path: test-results/
+          retention-days: 14
