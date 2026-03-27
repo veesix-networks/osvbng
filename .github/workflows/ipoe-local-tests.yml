@@ -1,4 +1,4 @@
-# Copyright 2025 Veesix Networks Ltd
+# Copyright 2026 Veesix Networks Ltd
 # Licensed under the GNU General Public License v3.0 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -10,43 +10,21 @@ on:
 jobs:
   ipoe-local:
     name: IPoE Local Auth Tests
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    concurrency:
+      group: integration-tests
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: osvbng-image
-          path: /tmp
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: test-runner-image
-          path: /tmp
-
-      - name: Install QEMU and tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 qemu-utils sshpass
-          sudo chmod 666 /dev/kvm || true
+      - name: Build Docker image
+        run: make docker-local
 
       - name: Run IPoE local auth tests
         run: |
-          scripts/qemu/test-runner/scripts/vm-run-tests.sh \
-            /tmp/test-runner.qcow2 \
-            /tmp/osvbng-local.tar \
-            03-ipoe-local \
-            ./test-results
-
-      - name: Test report
-        if: ${{ !cancelled() }}
-        uses: joonvena/robotframework-reporter-action@v2.5
-        with:
-          gh_access_token: ${{ secrets.GITHUB_TOKEN }}
-          report_path: test-results/out
-          only_summary: true
+          mkdir -p test-results
+          robot --loglevel DEBUG --output test-results/output.xml --log test-results/03-ipoe-local-log.html --report NONE tests/03-ipoe-local/
 
       - name: Upload test results
         if: always()

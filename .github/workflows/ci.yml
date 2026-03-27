@@ -1,4 +1,4 @@
-# Copyright 2025 Veesix Networks Ltd
+# Copyright 2026 Veesix Networks Ltd
 # Licensed under the GNU General Public License v3.0 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -138,116 +138,52 @@ jobs:
           path: build/reports/unit-tests.xml
           reporter: java-junit
 
-      - name: Build Docker image
-        run: make docker-local
-
-      - name: Save Docker image
-        run: docker save veesixnetworks/osvbng:local -o /tmp/osvbng-local.tar
-
-      - name: Upload Docker image
-        uses: actions/upload-artifact@v4
-        with:
-          name: osvbng-image
-          path: /tmp/osvbng-local.tar
-          retention-days: 1
-
-      - name: Build Kea Docker image
-        run: make docker-kea-local
-
-      - name: Save Kea Docker image
-        run: docker save veesixnetworks/kea:local -o /tmp/kea-local.tar
-
-      - name: Upload Kea Docker image
-        uses: actions/upload-artifact@v4
-        with:
-          name: kea-image
-          path: /tmp/kea-local.tar
-          retention-days: 1
-
-  prepare-test-runner:
-    name: Prepare Test Runner
-    runs-on: ubuntu-latest
-    needs: [file-changes, build]
-    if: needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Load versions
-        id: versions
-        run: |
-          source versions.env
-          echo "test_runner_version=${TEST_RUNNER_VERSION}" >> $GITHUB_OUTPUT
-
-      - name: Cache test runner image
-        id: cache-test-runner
-        uses: actions/cache@v4
-        with:
-          path: /tmp/test-runner.qcow2
-          key: test-runner-${{ steps.versions.outputs.test_runner_version }}
-
-      - name: Download test runner image
-        if: steps.cache-test-runner.outputs.cache-hit != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release download "${{ steps.versions.outputs.test_runner_version }}" \
-            --pattern "test-runner.qcow2.gz" \
-            --output /tmp/test-runner.qcow2.gz
-          gunzip /tmp/test-runner.qcow2.gz
-
-      - name: Upload test runner image
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-runner-image
-          path: /tmp/test-runner.qcow2
-          retention-days: 1
-
   smoke-tests:
     uses: ./.github/workflows/smoke-tests.yml
-    needs: [file-changes, build, prepare-test-runner]
-    if: needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
+    needs: [file-changes, build]
+    if: (needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
 
   smoke-ha-tests:
     uses: ./.github/workflows/smoke-ha-tests.yml
-    needs: [file-changes, build, prepare-test-runner]
-    if: needs.file-changes.outputs.ha == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
+    needs: [file-changes, build]
+    if: (needs.file-changes.outputs.ha == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
 
   ipoe-local-tests:
     uses: ./.github/workflows/ipoe-local-tests.yml
-    needs: [file-changes, build, prepare-test-runner]
-    if: needs.file-changes.outputs.sessions == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
+    needs: [file-changes, build]
+    if: (needs.file-changes.outputs.sessions == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
 
   pppoe-local-tests:
     uses: ./.github/workflows/pppoe-local-tests.yml
-    needs: [file-changes, build, prepare-test-runner]
-    if: needs.file-changes.outputs.sessions == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
+    needs: [file-changes, build]
+    if: (needs.file-changes.outputs.sessions == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
 
   dhcp-relay-proxy-tests:
     uses: ./.github/workflows/dhcp-relay-proxy-tests.yml
-    needs: [file-changes, build, prepare-test-runner]
-    if: needs.file-changes.outputs.dhcp == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
+    needs: [file-changes, build]
+    if: (needs.file-changes.outputs.dhcp == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
 
   ipoe-radius-tests:
     uses: ./.github/workflows/ipoe-radius-tests.yml
-    needs: [file-changes, build, prepare-test-runner]
-    if: needs.file-changes.outputs.radius == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
+    needs: [file-changes, build]
+    if: (needs.file-changes.outputs.radius == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
 
   pppoe-radius-tests:
     uses: ./.github/workflows/pppoe-radius-tests.yml
-    needs: [file-changes, build, prepare-test-runner]
-    if: needs.file-changes.outputs.radius == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
+    needs: [file-changes, build]
+    if: (needs.file-changes.outputs.radius == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
 
   cgnat-tests:
     uses: ./.github/workflows/cgnat-tests.yml
-    needs: [file-changes, build, prepare-test-runner]
-    if: needs.file-changes.outputs.cgnat == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
+    needs: [file-changes, build]
+    if: (needs.file-changes.outputs.cgnat == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
 
   ha-failover-tests:
     uses: ./.github/workflows/ha-failover-tests.yml
-    needs: [file-changes, build, prepare-test-runner]
-    if: needs.file-changes.outputs.ha == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
+    needs: [file-changes, build]
+    if: (needs.file-changes.outputs.ha == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
 
   ipoe-linux-client-tests:
     uses: ./.github/workflows/ipoe-linux-client-tests.yml
-    needs: [file-changes, build, prepare-test-runner]
-    if: needs.file-changes.outputs.sessions == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
+    needs: [file-changes, build]
+    if: (needs.file-changes.outputs.sessions == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
