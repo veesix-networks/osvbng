@@ -15,10 +15,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/test-setup
+        with:
+          topology: tests/04-pppoe-local/04-pppoe-local.clab.yml
+
       - name: Run PPPoE local auth tests
         run: |
           mkdir -p test-results
           robot --loglevel DEBUG --output test-results/output.xml --log test-results/04-pppoe-local-log.html --report NONE tests/04-pppoe-local/
+
+      - uses: ./.github/actions/test-cleanup
+        if: always()
+        with:
+          topology: tests/04-pppoe-local/04-pppoe-local.clab.yml
 
       - name: Upload test results
         if: always()

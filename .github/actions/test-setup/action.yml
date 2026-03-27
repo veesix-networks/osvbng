@@ -1,0 +1,27 @@
+# Copyright 2026 Veesix Networks Ltd
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: Test Environment Setup
+description: Validate test environment and cleanup stale topology from previous runs
+
+inputs:
+  topology:
+    description: Path to the containerlab topology file
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Validate test environment
+      shell: bash
+      run: |
+        echo "=== Docker ===" && docker info --format '{{.ServerVersion}}'
+        echo "=== Containerlab ===" && containerlab version 2>&1 | head -3
+        echo "=== Robot Framework ===" && robot --version
+        echo "=== Required Images ==="
+        docker images --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}' | grep -E 'osvbng|bngblaster|frr|kea' || echo "WARNING: some images missing"
+
+    - name: Cleanup stale topology
+      shell: bash
+      run: sudo containerlab destroy -t ${{ inputs.topology }} --cleanup 2>/dev/null || true

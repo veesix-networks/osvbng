@@ -15,10 +15,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/test-setup
+        with:
+          topology: tests/03-ipoe-local/03-ipoe-local.clab.yml
+
       - name: Run IPoE local auth tests
         run: |
           mkdir -p test-results
           robot --loglevel DEBUG --output test-results/output.xml --log test-results/03-ipoe-local-log.html --report NONE tests/03-ipoe-local/
+
+      - uses: ./.github/actions/test-cleanup
+        if: always()
+        with:
+          topology: tests/03-ipoe-local/03-ipoe-local.clab.yml
 
       - name: Upload test results
         if: always()

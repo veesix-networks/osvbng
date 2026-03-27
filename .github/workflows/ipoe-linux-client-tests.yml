@@ -20,6 +20,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/test-setup
+        with:
+          topology: tests/18-ipoe-linux-client/18-ipoe-linux-client.clab.yml
+
       - name: Pull bngtester image
         env:
           SUBSCRIBER: ${{ matrix.subscriber }}
@@ -31,6 +35,11 @@ jobs:
         run: |
           mkdir -p test-results
           robot --loglevel DEBUG --variable "subscriber-image:veesixnetworks/bngtester:${{ matrix.subscriber }}-latest" --output test-results/output.xml --log test-results/18-ipoe-linux-client-${SUBSCRIBER}-log.html --report NONE tests/18-ipoe-linux-client/
+
+      - uses: ./.github/actions/test-cleanup
+        if: always()
+        with:
+          topology: tests/18-ipoe-linux-client/18-ipoe-linux-client.clab.yml
 
       - name: Upload test results
         if: always()
