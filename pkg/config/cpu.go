@@ -72,29 +72,17 @@ func ResolveCPULayout(cfg *Config) *ResolvedCPU {
 }
 
 func autoWorkerCores(total int) string {
-	switch {
-	case total <= 1:
-		return ""
-	case total <= 2:
+	if total > 1 {
 		return "1"
-	case total <= 3:
-		return "1"
-	case total <= 7:
-		return fmt.Sprintf("1-%d", total-2)
-	default:
-		return fmt.Sprintf("1-%d", total-3)
 	}
+	return ""
 }
 
 func autoCPCores(total int) string {
-	switch {
-	case total <= 2:
-		return ""
-	case total <= 7:
-		return strconv.Itoa(total - 1)
-	default:
-		return fmt.Sprintf("%d-%d", total-2, total-1)
+	if total >= 3 {
+		return "2"
 	}
+	return ""
 }
 
 // WriteEnvFile writes the resolved layout as shell-evaluable variables.
