@@ -138,52 +138,68 @@ jobs:
           path: build/reports/unit-tests.xml
           reporter: java-junit
 
+  build-image:
+    name: Build Docker Image
+    runs-on: self-hosted
+    needs: [file-changes, build-image]
+    if: (needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build osvbng Docker image
+        run: make docker-local
+
+      - name: Build Kea Docker image
+        run: make docker-kea-local
+
   smoke-tests:
     uses: ./.github/workflows/smoke-tests.yml
-    needs: [file-changes, build]
+    needs: [file-changes, build-image]
     if: (needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
 
   smoke-ha-tests:
     uses: ./.github/workflows/smoke-ha-tests.yml
-    needs: [file-changes, build]
+    needs: [file-changes, build-image]
     if: (needs.file-changes.outputs.ha == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
 
   ipoe-local-tests:
     uses: ./.github/workflows/ipoe-local-tests.yml
-    needs: [file-changes, build]
+    needs: [file-changes, build-image]
     if: (needs.file-changes.outputs.sessions == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
 
   pppoe-local-tests:
     uses: ./.github/workflows/pppoe-local-tests.yml
-    needs: [file-changes, build]
+    needs: [file-changes, build-image]
     if: (needs.file-changes.outputs.sessions == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
 
   dhcp-relay-proxy-tests:
     uses: ./.github/workflows/dhcp-relay-proxy-tests.yml
-    needs: [file-changes, build]
+    needs: [file-changes, build-image]
     if: (needs.file-changes.outputs.dhcp == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
 
   ipoe-radius-tests:
     uses: ./.github/workflows/ipoe-radius-tests.yml
-    needs: [file-changes, build]
+    needs: [file-changes, build-image]
     if: (needs.file-changes.outputs.radius == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
 
   pppoe-radius-tests:
     uses: ./.github/workflows/pppoe-radius-tests.yml
-    needs: [file-changes, build]
+    needs: [file-changes, build-image]
     if: (needs.file-changes.outputs.radius == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
 
   cgnat-tests:
     uses: ./.github/workflows/cgnat-tests.yml
-    needs: [file-changes, build]
+    needs: [file-changes, build-image]
     if: (needs.file-changes.outputs.cgnat == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
 
   ha-failover-tests:
     uses: ./.github/workflows/ha-failover-tests.yml
-    needs: [file-changes, build]
+    needs: [file-changes, build-image]
     if: (needs.file-changes.outputs.ha == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
 
   ipoe-linux-client-tests:
     uses: ./.github/workflows/ipoe-linux-client-tests.yml
-    needs: [file-changes, build]
+    needs: [file-changes, build-image]
     if: (needs.file-changes.outputs.sessions == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')

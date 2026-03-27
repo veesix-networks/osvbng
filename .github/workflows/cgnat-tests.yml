@@ -11,16 +11,10 @@ jobs:
   cgnat-ipoe-pba:
     name: CGNAT IPoE PBA
     runs-on: self-hosted
-    concurrency:
-      group: integration-tests
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build Docker image
-        run: make docker-local
-
       - name: Run CGNAT IPoE PBA tests
         run: |
           mkdir -p test-results
@@ -37,16 +31,10 @@ jobs:
   cgnat-ha-ipoe-pba:
     name: CGNAT HA IPoE PBA
     runs-on: self-hosted
-    concurrency:
-      group: integration-tests
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build Docker image
-        run: make docker-local
-
       - name: Run CGNAT HA IPoE PBA tests
         run: |
           mkdir -p test-results
@@ -63,16 +51,10 @@ jobs:
   cgnat-pppoe-pba:
     name: CGNAT PPPoE PBA
     runs-on: self-hosted
-    concurrency:
-      group: integration-tests
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build Docker image
-        run: make docker-local
-
       - name: Run CGNAT PPPoE PBA tests
         run: |
           mkdir -p test-results
@@ -89,16 +71,10 @@ jobs:
   cgnat-ha-pppoe-pba:
     name: CGNAT HA PPPoE PBA
     runs-on: self-hosted
-    concurrency:
-      group: integration-tests
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build Docker image
-        run: make docker-local
-
       - name: Run CGNAT HA PPPoE PBA tests
         run: |
           mkdir -p test-results

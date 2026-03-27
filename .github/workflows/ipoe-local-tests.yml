@@ -11,16 +11,10 @@ jobs:
   ipoe-local:
     name: IPoE Local Auth Tests
     runs-on: self-hosted
-    concurrency:
-      group: integration-tests
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build Docker image
-        run: make docker-local
-
       - name: Run IPoE local auth tests
         run: |
           mkdir -p test-results

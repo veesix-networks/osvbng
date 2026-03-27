@@ -11,17 +11,10 @@ jobs:
   dhcp-relay-proxy:
     name: DHCP Relay/Proxy Tests
     runs-on: self-hosted
-    concurrency:
-      group: integration-tests
     timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build Docker images
-        run: |
-          make docker-local
-          make docker-kea-local
 
       - name: Run DHCP relay/proxy tests
         run: |
