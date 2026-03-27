@@ -141,7 +141,7 @@ jobs:
   build-image:
     name: Build Docker Image
     runs-on: self-hosted
-    needs: [file-changes, build-image]
+    needs: [file-changes, build]
     if: (needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     steps:
       - uses: actions/checkout@v4
