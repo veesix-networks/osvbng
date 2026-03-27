@@ -17,8 +17,8 @@ runs:
       shell: bash
       run: |
         echo "=== Docker ===" && docker info --format '{{.ServerVersion}}'
-        echo "=== Containerlab ===" && containerlab version 2>&1 | head -3
-        echo "=== Robot Framework ===" && robot --version
+        echo "=== Containerlab ===" && (containerlab version || true)
+        echo "=== Robot Framework ===" && (robot --version || true)
         echo "=== Required Images ==="
         docker images --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}' | grep -E 'osvbng|bngblaster|frr|kea' || echo "WARNING: some images missing"
 
