@@ -159,6 +159,9 @@ jobs:
           docker pull veesixnetworks/bngblaster:0.9.30
           docker pull frrouting/frr:v8.4.1
 
+      - name: Ensure containerlab network exists
+        run: docker network create --subnet 172.20.20.0/24 --ipv6 --subnet 3fff:172:20:20::/64 clab 2>/dev/null || true
+
   smoke-tests:
     uses: ./.github/workflows/smoke-tests.yml
     needs: [file-changes, build-image]
