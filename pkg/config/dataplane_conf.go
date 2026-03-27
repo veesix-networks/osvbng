@@ -1,8 +1,6 @@
 package config
 
 import (
-	"fmt"
-
 	"github.com/veesix-networks/osvbng/pkg/config/system"
 )
 
@@ -29,20 +27,7 @@ type DataplaneTemplateData struct {
 	LCPNetNs     string
 }
 
-func NewDataplaneTemplateDataWithDefaults(cfg *Config, totalCores int) *DataplaneTemplateData {
-	mainCore := 0
-	workerCores := ""
-
-	if cfg.Dataplane.MainCore != nil {
-		mainCore = *cfg.Dataplane.MainCore
-	}
-
-	if cfg.Dataplane.Workers != "" {
-		workerCores = cfg.Dataplane.Workers
-	} else if totalCores > 1 {
-		workerCores = fmt.Sprintf("1-%d", totalCores-1)
-	}
-
+func NewDataplaneTemplateData(cfg *Config, cpu *ResolvedCPU) *DataplaneTemplateData {
 	dpdk := cfg.Dataplane.DPDK
 	if dpdk == nil || len(dpdk.Devices) == 0 {
 		devices, err := system.DiscoverDPDKDevices()
@@ -66,8 +51,8 @@ func NewDataplaneTemplateDataWithDefaults(cfg *Config, totalCores int) *Dataplan
 	}
 
 	return &DataplaneTemplateData{
-		MainCore:     mainCore,
-		WorkerCores:  workerCores,
+		MainCore:     cpu.MainCore,
+		WorkerCores:  cpu.WorkerCores,
 		LogFile:      "/var/log/osvbng/dataplane.log",
 		CLISocket:    "/run/osvbng/cli.sock",
 		APISocket:    "/run/osvbng/dataplane_api.sock",

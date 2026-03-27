@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"runtime"
 	"text/template"
 
 	"github.com/veesix-networks/osvbng/pkg/config/system"
@@ -107,11 +106,18 @@ func GenerateExternalConfigs(configPath string) error {
 		}
 	}
 
+	cpu := ResolveCPULayout(cfg)
+	if err := ValidateCPU(cpu); err != nil {
+		return fmt.Errorf("cpu layout: %w", err)
+	}
+	log.Printf("CPU layout: total=%d main=%d workers=%s cp=%s",
+		cpu.TotalCores, cpu.MainCore, cpu.WorkerCores, cpu.CPCores)
+
 	dc := NewDataplaneConf()
 	if cfg.Dataplane.SkipConfGen {
 		log.Printf("Skipping %s (skip-conf-gen: true)", dc.ConfigPath)
 	} else {
-		dpData := NewDataplaneTemplateDataWithDefaults(cfg, runtime.NumCPU())
+		dpData := NewDataplaneTemplateData(cfg, cpu)
 		if err := dc.Write(dpData); err != nil {
 			return fmt.Errorf("write dataplane config: %w", err)
 		}
