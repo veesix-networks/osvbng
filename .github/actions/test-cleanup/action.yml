@@ -1,0 +1,33 @@
+# Copyright 2026 Veesix Networks Ltd
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: Test Cleanup
+description: Capture diagnostics on failure and cleanup topology
+
+inputs:
+  topology:
+    description: Path to the containerlab topology file
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Capture failure diagnostics
+      if: failure()
+      shell: bash
+      run: |
+        LAB_NAME=$(grep '^name:' ${{ inputs.topology }} | awk '{print $2}')
+        echo "=== Topology: ${LAB_NAME} ==="
+        sudo containerlab inspect -t ${{ inputs.topology }} 2>/dev/null || echo "No topology found"
+        echo ""
+        echo "=== Container Logs ==="
+        for c in $(docker ps -a --filter "name=clab-${LAB_NAME}" --format '{{.Names}}'); do
+          echo "--- $c ---"
+          docker logs "$c" 2>&1 | tail -50
+          echo ""
+        done
+
+    - name: Cleanup topology
+      shell: bash
+      run: sudo containerlab destroy -t ${{ inputs.topology }} --cleanup 2>/dev/null || true

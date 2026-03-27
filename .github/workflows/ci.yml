@@ -154,6 +154,11 @@ jobs:
       - name: Build Kea Docker image
         run: make docker-kea-local
 
+      - name: Pre-pull test dependency images
+        run: |
+          docker pull veesixnetworks/bngblaster:0.9.30
+          docker pull frrouting/frr:v8.4.1
+
   smoke-tests:
     uses: ./.github/workflows/smoke-tests.yml
     needs: [file-changes, build-image]

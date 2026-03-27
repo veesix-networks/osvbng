@@ -15,10 +15,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/test-setup
+        with:
+          topology: tests/01-smoke/01-smoke.clab.yml
+
       - name: Run smoke tests
         run: |
           mkdir -p test-results
           robot --loglevel DEBUG --output test-results/output.xml --log test-results/01-smoke-log.html --report NONE tests/01-smoke/
+
+      - uses: ./.github/actions/test-cleanup
+        if: always()
+        with:
+          topology: tests/01-smoke/01-smoke.clab.yml
 
       - name: Upload test results
         if: always()

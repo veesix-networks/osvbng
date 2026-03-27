@@ -15,10 +15,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/test-setup
+        with:
+          topology: tests/08-cgnat-ipoe-pba/08-cgnat-ipoe-pba.clab.yml
+
       - name: Run CGNAT IPoE PBA tests
         run: |
           mkdir -p test-results
           robot --loglevel DEBUG --output test-results/output.xml --log test-results/08-cgnat-ipoe-pba-log.html --report NONE tests/08-cgnat-ipoe-pba/
+
+      - uses: ./.github/actions/test-cleanup
+        if: always()
+        with:
+          topology: tests/08-cgnat-ipoe-pba/08-cgnat-ipoe-pba.clab.yml
 
       - name: Upload test results
         if: always()
@@ -35,10 +44,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/test-setup
+        with:
+          topology: tests/12-cgnat-ha-ipoe-pba/12-cgnat-ha-ipoe-pba.clab.yml
+
       - name: Run CGNAT HA IPoE PBA tests
         run: |
           mkdir -p test-results
           robot --loglevel DEBUG --output test-results/output.xml --log test-results/12-cgnat-ha-ipoe-pba-log.html --report NONE tests/12-cgnat-ha-ipoe-pba/
+
+      - uses: ./.github/actions/test-cleanup
+        if: always()
+        with:
+          topology: tests/12-cgnat-ha-ipoe-pba/12-cgnat-ha-ipoe-pba.clab.yml
 
       - name: Upload test results
         if: always()
@@ -55,10 +73,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/test-setup
+        with:
+          topology: tests/10-cgnat-pppoe-pba/10-cgnat-pppoe-pba.clab.yml
+
       - name: Run CGNAT PPPoE PBA tests
         run: |
           mkdir -p test-results
           robot --loglevel DEBUG --output test-results/output.xml --log test-results/10-cgnat-pppoe-pba-log.html --report NONE tests/10-cgnat-pppoe-pba/
+
+      - uses: ./.github/actions/test-cleanup
+        if: always()
+        with:
+          topology: tests/10-cgnat-pppoe-pba/10-cgnat-pppoe-pba.clab.yml
 
       - name: Upload test results
         if: always()
@@ -75,10 +102,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/test-setup
+        with:
+          topology: tests/13-cgnat-ha-pppoe-pba/13-cgnat-ha-pppoe-pba.clab.yml
+
       - name: Run CGNAT HA PPPoE PBA tests
         run: |
           mkdir -p test-results
           robot --loglevel DEBUG --output test-results/output.xml --log test-results/13-cgnat-ha-pppoe-pba-log.html --report NONE tests/13-cgnat-ha-pppoe-pba/
+
+      - uses: ./.github/actions/test-cleanup
+        if: always()
+        with:
+          topology: tests/13-cgnat-ha-pppoe-pba/13-cgnat-ha-pppoe-pba.clab.yml
 
       - name: Upload test results
         if: always()

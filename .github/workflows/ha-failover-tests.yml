@@ -15,10 +15,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/test-setup
+        with:
+          topology: tests/14-ha-failover-ipoe/14-ha-failover-ipoe.clab.yml
+
       - name: Run HA Failover IPoE tests
         run: |
           mkdir -p test-results
           robot --loglevel DEBUG --output test-results/output.xml --log test-results/14-ha-failover-ipoe-log.html --report NONE tests/14-ha-failover-ipoe/
+
+      - uses: ./.github/actions/test-cleanup
+        if: always()
+        with:
+          topology: tests/14-ha-failover-ipoe/14-ha-failover-ipoe.clab.yml
 
       - name: Upload test results
         if: always()
@@ -35,10 +44,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/test-setup
+        with:
+          topology: tests/15-ha-failover-pppoe/15-ha-failover-pppoe.clab.yml
+
       - name: Run HA Failover PPPoE tests
         run: |
           mkdir -p test-results
           robot --loglevel DEBUG --output test-results/output.xml --log test-results/15-ha-failover-pppoe-log.html --report NONE tests/15-ha-failover-pppoe/
+
+      - uses: ./.github/actions/test-cleanup
+        if: always()
+        with:
+          topology: tests/15-ha-failover-pppoe/15-ha-failover-pppoe.clab.yml
 
       - name: Upload test results
         if: always()
@@ -55,10 +73,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/test-setup
+        with:
+          topology: tests/16-ha-failover-radius-ipoe/16-ha-failover-radius-ipoe.clab.yml
+
       - name: Run HA Failover RADIUS IPoE tests
         run: |
           mkdir -p test-results
           robot --loglevel DEBUG --output test-results/output.xml --log test-results/16-ha-failover-radius-ipoe-log.html --report NONE tests/16-ha-failover-radius-ipoe/
+
+      - uses: ./.github/actions/test-cleanup
+        if: always()
+        with:
+          topology: tests/16-ha-failover-radius-ipoe/16-ha-failover-radius-ipoe.clab.yml
 
       - name: Upload test results
         if: always()
@@ -75,10 +102,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/test-setup
+        with:
+          topology: tests/17-ha-tracker-promotion-ipoe/17-ha-tracker-promotion-ipoe.clab.yml
+
       - name: Run HA Tracker Promotion IPoE tests
         run: |
           mkdir -p test-results
           robot --loglevel DEBUG --output test-results/output.xml --log test-results/17-ha-tracker-promotion-ipoe-log.html --report NONE tests/17-ha-tracker-promotion-ipoe/
+
+      - uses: ./.github/actions/test-cleanup
+        if: always()
+        with:
+          topology: tests/17-ha-tracker-promotion-ipoe/17-ha-tracker-promotion-ipoe.clab.yml
 
       - name: Upload test results
         if: always()
