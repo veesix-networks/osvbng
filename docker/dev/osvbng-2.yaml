@@ -271,6 +271,9 @@ dataplane:
         size: "512m"
         page-size: "4k"
         per-node-counters: false
+    memory:
+        main-heap-size: "1G"
+        main-heap-page-size: "4k"
 
 watchdog:
   enabled: true

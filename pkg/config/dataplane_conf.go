@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+
 	"github.com/veesix-networks/osvbng/pkg/config/system"
 )
 
@@ -24,10 +26,12 @@ type DataplaneTemplateData struct {
 	UseDPDK      bool
 	DPDK         *system.DPDKConfig
 	StatsSegment *system.StatsSegmentConfig
+	Memory       *system.MemoryConfig
+	APITrace     *system.APITraceConfig
 	LCPNetNs     string
 }
 
-func NewDataplaneTemplateData(cfg *Config, cpu *ResolvedCPU) *DataplaneTemplateData {
+func NewDataplaneTemplateData(cfg *Config, cpu *ResolvedCPU) (*DataplaneTemplateData, error) {
 	dpdk := cfg.Dataplane.DPDK
 	if dpdk == nil || len(dpdk.Devices) == 0 {
 		devices, err := system.DiscoverDPDKDevices()
@@ -50,6 +54,26 @@ func NewDataplaneTemplateData(cfg *Config, cpu *ResolvedCPU) *DataplaneTemplateD
 		}
 	}
 
+	memory := cfg.Dataplane.Memory
+	if memory == nil {
+		memory = &system.MemoryConfig{
+			MainHeapSize:     "512M",
+			MainHeapPageSize: "4k",
+		}
+	}
+	if memory.MainHeapSize == "" {
+		memory.MainHeapSize = "512M"
+	}
+	if memory.MainHeapPageSize == "" {
+		memory.MainHeapPageSize = "4k"
+	}
+
+	if err := memory.Validate(); err != nil {
+		return nil, fmt.Errorf("dataplane memory config: %w", err)
+	}
+
+	apiTrace := cfg.Dataplane.APITrace
+
 	return &DataplaneTemplateData{
 		MainCore:     cpu.MainCore,
 		WorkerCores:  cpu.WorkerCores,
@@ -60,8 +84,10 @@ func NewDataplaneTemplateData(cfg *Config, cpu *ResolvedCPU) *DataplaneTemplateD
 		UseDPDK:      useDPDK,
 		DPDK:         dpdk,
 		StatsSegment: statseg,
+		Memory:       memory,
+		APITrace:     apiTrace,
 		LCPNetNs:     lcpNetNs(cfg),
-	}
+	}, nil
 }
 
 func lcpNetNs(cfg *Config) string {
