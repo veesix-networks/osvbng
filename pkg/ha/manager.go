@@ -621,7 +621,7 @@ func (m *Manager) sendGarpForSRG(srgName string) {
 		return
 	}
 
-	m.logger.Info("GARP flood scheduled (waiting for session restoration)", "srg", srgName)
+	m.logger.Debug("GARP flood scheduled (waiting for session restoration)", "srg", srgName)
 }
 
 func (m *Manager) RequestGARP(srgName string) {
@@ -668,14 +668,14 @@ func (m *Manager) executeGarpFlood(ctx context.Context, srgName string, garpCfg 
 
 	for cycle := 0; cycle < repeatCount; cycle++ {
 		if ctx.Err() != nil {
-			m.logger.Info("GARP flood cancelled", "srg", srgName, "cycle", cycle)
+			m.logger.Debug("GARP flood cancelled", "srg", srgName, "cycle", cycle)
 			return
 		}
 
 		if cycle > 0 {
 			select {
 			case <-ctx.Done():
-				m.logger.Info("GARP flood cancelled during repeat interval", "srg", srgName)
+				m.logger.Debug("GARP flood cancelled during repeat interval", "srg", srgName)
 				return
 			case <-time.After(repeatInterval):
 			}

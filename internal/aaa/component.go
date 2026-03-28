@@ -188,7 +188,7 @@ func (c *Component) handleAAARequest(event events.Event) {
 		return
 	}
 
-	c.logger.Info("Authentication response",
+	c.logger.Debug("Authentication response",
 		"allowed", authResp.Allowed,
 		"mac", req.MAC,
 		"acct_session_id", req.AcctSessionID,

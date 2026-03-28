@@ -138,7 +138,7 @@ func (p *Provider) Authenticate(ctx context.Context, req *auth.AuthRequest) (*au
 	}
 
 	if !allowed {
-		p.logger.Info("Authentication denied",
+		p.logger.Debug("Authentication denied",
 			"username", req.Username,
 			"mac", req.MAC,
 			"status", resp.StatusCode)
@@ -152,7 +152,7 @@ func (p *Provider) Authenticate(ctx context.Context, req *auth.AuthRequest) (*au
 			"username", req.Username)
 	}
 
-	p.logger.Info("Authentication allowed",
+	p.logger.Debug("Authentication allowed",
 		"username", req.Username,
 		"mac", req.MAC,
 		"attributes", len(attrs))
