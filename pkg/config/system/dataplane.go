@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/veesix-networks/osvbng/pkg/config/system/nic"
@@ -21,6 +22,46 @@ type DataplaneConfig struct {
 	LCPNetNs        string              `json:"lcp_netns,omitempty" yaml:"lcp-netns,omitempty"`
 	DPDK            *DPDKConfig         `json:"dpdk,omitempty" yaml:"dpdk,omitempty"`
 	StatsSegment    *StatsSegmentConfig `json:"statseg,omitempty" yaml:"statseg,omitempty"`
+	Memory          *MemoryConfig       `json:"memory,omitempty" yaml:"memory,omitempty"`
+	APITrace        *APITraceConfig     `json:"api-trace,omitempty" yaml:"api-trace,omitempty"`
+}
+
+var validHeapPageSizes = map[string]bool{
+	"4k": true, "2m": true, "1g": true,
+}
+
+type MemoryConfig struct {
+	MainHeapSize     string `json:"main-heap-size,omitempty" yaml:"main-heap-size,omitempty"`
+	MainHeapPageSize string `json:"main-heap-page-size,omitempty" yaml:"main-heap-page-size,omitempty"`
+}
+
+func (m *MemoryConfig) Validate() error {
+	if m.MainHeapSize != "" {
+		s := strings.ToUpper(m.MainHeapSize)
+		valid := false
+		for _, suffix := range []string{"K", "M", "G"} {
+			if strings.HasSuffix(s, suffix) {
+				numPart := strings.TrimSuffix(s, suffix)
+				if _, err := strconv.Atoi(numPart); err == nil {
+					valid = true
+				}
+				break
+			}
+		}
+		if !valid {
+			return fmt.Errorf("invalid main-heap-size %q: must be a number followed by K, M, or G (e.g. 512M, 1G)", m.MainHeapSize)
+		}
+	}
+	if m.MainHeapPageSize != "" {
+		if !validHeapPageSizes[strings.ToLower(m.MainHeapPageSize)] {
+			return fmt.Errorf("invalid main-heap-page-size %q: must be one of 4k, 2m, 1g", m.MainHeapPageSize)
+		}
+	}
+	return nil
+}
+
+type APITraceConfig struct {
+	Enabled bool `json:"enabled" yaml:"enabled"`
 }
 
 type StatsSegmentConfig struct {

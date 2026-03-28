@@ -13,12 +13,13 @@ socksvr {
 }
 
 api-trace {
-  on
-}
+{{ if .APITrace }}{{ if .APITrace.Enabled }}  on{{ else }}  off{{ end }}
+{{ else }}  on
+{{ end }}}
 
 memory {
-  main-heap-size 512M
-  main-heap-page-size 4k
+  main-heap-size {{ .Memory.MainHeapSize }}
+  main-heap-page-size {{ .Memory.MainHeapPageSize }}
 }
 
 api-segment {

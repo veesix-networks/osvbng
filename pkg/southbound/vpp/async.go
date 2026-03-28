@@ -1,8 +1,8 @@
 package vpp
 
 import (
-	"container/list"
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -24,16 +24,8 @@ type AsyncRequest struct {
 
 type AsyncWorker struct {
 	conn    *core.Connection
-	stream  api.Stream
 	reqChan chan *AsyncRequest
 	cfg     AsyncWorkerConfig
-
-	pendingMu sync.Mutex
-	pending   *list.List
-
-	inflight chan struct{}
-
-	streamMu sync.Mutex
 
 	circuitOpen     atomic.Bool
 	consecutiveFail atomic.Int32
@@ -43,142 +35,116 @@ type AsyncWorker struct {
 	wg     sync.WaitGroup
 	logger *logger.Logger
 
-	requestsSent   atomic.Uint64
-	repliesRecv    atomic.Uint64
-	errors         atomic.Uint64
-	reconnects     atomic.Uint64
-	rejected       atomic.Uint64
-	queueHighWater atomic.Int64
+	requestsSent      atomic.Uint64
+	repliesRecv       atomic.Uint64
+	errors            atomic.Uint64
+	rejected          atomic.Uint64
+	queueHighWater    atomic.Int64
+	inflight          atomic.Int64
+	replyTimeouts     atomic.Uint64
+	streamRecreations atomic.Uint64
 }
 
 type AsyncWorkerConfig struct {
+	PoolSize         int
 	RequestQueueSize int
+	ReplyTimeout     time.Duration
 	RequestBufSize   int
 	ReplyBufSize     int
-	MaxInflight      int
 }
 
 func DefaultAsyncWorkerConfig() AsyncWorkerConfig {
 	return AsyncWorkerConfig{
+		PoolSize:         64,
 		RequestQueueSize: 10000,
-		RequestBufSize:   1024,
-		ReplyBufSize:     1024,
-		MaxInflight:      256,
+		ReplyTimeout:     5 * time.Second,
+		RequestBufSize:   8,
+		ReplyBufSize:     8,
 	}
 }
 
 func NewAsyncWorker(conn *core.Connection, cfg AsyncWorkerConfig) (*AsyncWorker, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	stream, err := conn.NewStream(ctx,
-		core.WithRequestSize(cfg.RequestBufSize),
-		core.WithReplySize(cfg.ReplyBufSize),
-	)
-	if err != nil {
-		cancel()
-		return nil, fmt.Errorf("create stream: %w", err)
-	}
-
 	w := &AsyncWorker{
-		conn:     conn,
-		stream:   stream,
-		cfg:      cfg,
-		reqChan:  make(chan *AsyncRequest, cfg.RequestQueueSize),
-		pending:  list.New(),
-		inflight: make(chan struct{}, cfg.MaxInflight),
-		ctx:      ctx,
-		cancel:   cancel,
-		logger:   logger.Get("vpp-async"),
+		conn:    conn,
+		cfg:     cfg,
+		reqChan: make(chan *AsyncRequest, cfg.RequestQueueSize),
+		ctx:     ctx,
+		cancel:  cancel,
+		logger:  logger.Get("vpp-async"),
 	}
 
 	return w, nil
 }
 
 func (w *AsyncWorker) Start() {
-	w.wg.Add(2)
-	go w.sendLoop()
-	go w.recvLoop()
-	w.logger.Info("VPP async worker started", "max_inflight", w.cfg.MaxInflight)
+	w.wg.Add(w.cfg.PoolSize)
+	for i := 0; i < w.cfg.PoolSize; i++ {
+		go w.worker(i)
+	}
+	w.logger.Info("VPP async worker started", "pool_size", w.cfg.PoolSize, "reply_timeout", w.cfg.ReplyTimeout)
 }
 
 func (w *AsyncWorker) Stop() {
+	w.circuitOpen.Store(true)
 	w.cancel()
 	w.wg.Wait()
-	w.streamMu.Lock()
-	w.stream.Close()
-	w.streamMu.Unlock()
-	w.logger.Info("VPP async worker stopped",
-		"requests_sent", w.requestsSent.Load(),
-		"replies_recv", w.repliesRecv.Load(),
-		"errors", w.errors.Load(),
-		"reconnects", w.reconnects.Load(),
-		"rejected", w.rejected.Load())
-}
 
-func (w *AsyncWorker) reconnect() error {
-	w.streamMu.Lock()
-	defer w.streamMu.Unlock()
-
-	w.stream.Close()
-
-	w.pendingMu.Lock()
-	dropped := w.pending.Len()
-	for elem := w.pending.Front(); elem != nil; elem = w.pending.Front() {
-		w.pending.Remove(elem)
-		req := elem.Value.(*AsyncRequest)
-		<-w.inflight
-		if req.Callback != nil {
-			go req.Callback(nil, ErrVPPUnavailable)
+	// Drain remaining requests
+	for {
+		select {
+		case req := <-w.reqChan:
+			if req.Callback != nil {
+				go req.Callback(nil, ErrVPPUnavailable)
+			}
+		default:
+			w.logger.Info("VPP async worker stopped",
+				"requests_sent", w.requestsSent.Load(),
+				"replies_recv", w.repliesRecv.Load(),
+				"errors", w.errors.Load(),
+				"rejected", w.rejected.Load(),
+				"reply_timeouts", w.replyTimeouts.Load(),
+				"stream_recreations", w.streamRecreations.Load())
+			return
 		}
 	}
-	w.pendingMu.Unlock()
+}
 
-	backoff := time.Duration(100) * time.Millisecond
-	failCount := w.consecutiveFail.Load()
-	if failCount > 0 {
-		backoff = time.Duration(min(int64(failCount)*500, 5000)) * time.Millisecond
-	}
-
-	select {
-	case <-w.ctx.Done():
-		return w.ctx.Err()
-	case <-time.After(backoff):
-	}
-
-	stream, err := w.conn.NewStream(w.ctx,
+func (w *AsyncWorker) createStream(replyBufSize int) (api.Stream, error) {
+	return w.conn.NewStream(w.ctx,
 		core.WithRequestSize(w.cfg.RequestBufSize),
-		core.WithReplySize(w.cfg.ReplyBufSize),
+		core.WithReplySize(replyBufSize),
+		core.WithReplyTimeout(w.cfg.ReplyTimeout),
 	)
-	if err != nil {
-		fails := w.consecutiveFail.Add(1)
-		if fails >= 3 && !w.circuitOpen.Load() {
-			w.circuitOpen.Store(true)
-			w.logger.Error("VPP connection lost - circuit breaker OPEN, rejecting new requests",
-				"consecutive_failures", fails, "dropped_pending", dropped)
-		}
-		return fmt.Errorf("create stream: %w", err)
-	}
-
-	w.stream = stream
-	w.reconnects.Add(1)
-
-	wasOpen := w.circuitOpen.Swap(false)
-	w.consecutiveFail.Store(0)
-	if wasOpen {
-		w.logger.Info("VPP connection restored - circuit breaker CLOSED")
-	}
-	w.logger.Info("VPP async worker reconnected", "dropped_pending", dropped, "backoff_ms", backoff.Milliseconds())
-	return nil
 }
 
-func (w *AsyncWorker) sendLoop() {
+func (w *AsyncWorker) worker(id int) {
 	defer w.wg.Done()
+
+	stream, err := w.createStream(w.cfg.ReplyBufSize)
+	if err != nil {
+		w.logger.Error("Failed to create initial stream", "worker", id, "error", err)
+		fails := w.consecutiveFail.Add(1)
+		if fails >= 3 {
+			w.circuitOpen.Store(true)
+			w.logger.Error("VPP connection lost - circuit breaker OPEN", "consecutive_failures", fails)
+		}
+		return
+	}
+	defer stream.Close() //nolint:errcheck
+
+	recycleCount := 0
 
 	for {
 		select {
 		case <-w.ctx.Done():
 			return
-		case req := <-w.reqChan:
+		case req, ok := <-w.reqChan:
+			if !ok {
+				return
+			}
+
 			if w.circuitOpen.Load() {
 				w.rejected.Add(1)
 				if req.Callback != nil {
@@ -187,104 +153,114 @@ func (w *AsyncWorker) sendLoop() {
 				continue
 			}
 
-			select {
-			case <-w.ctx.Done():
-				return
-			case w.inflight <- struct{}{}:
-			}
-
 			depth := len(w.reqChan)
 			if int64(depth) > w.queueHighWater.Load() {
 				w.queueHighWater.Store(int64(depth))
 			}
 
-			w.streamMu.Lock()
-			err := w.stream.SendMsg(req.Message)
-			w.streamMu.Unlock()
+			w.inflight.Add(1)
 
+			err := stream.SendMsg(req.Message)
 			if err != nil {
-				<-w.inflight
-
+				w.inflight.Add(-1)
 				w.errors.Add(1)
 				w.logger.Error("Failed to send VPP message",
+					"worker", id,
 					"msg_type", req.Message.GetMessageName(),
 					"error", err)
-
-				if reconnErr := w.reconnect(); reconnErr != nil {
-					w.logger.Debug("Reconnect failed", "error", reconnErr)
-				}
-
 				if req.Callback != nil {
-					go req.Callback(nil, fmt.Errorf("send failed: %w", err))
+					go req.Callback(nil, fmt.Errorf("send %s: %w", req.Message.GetMessageName(), err))
+				}
+				stream.Close() //nolint:errcheck
+				stream, recycleCount = w.recycleStream(id, recycleCount)
+				if stream == nil {
+					return
 				}
 				continue
 			}
 
+			w.requestsSent.Add(1)
 			w.consecutiveFail.Store(0)
 
-			w.pendingMu.Lock()
-			w.pending.PushBack(req)
-			w.pendingMu.Unlock()
-			w.requestsSent.Add(1)
-
-			w.logger.Debug("Sent VPP request",
-				"msg_type", req.Message.GetMessageName(),
-				"inflight", len(w.inflight))
-		}
-	}
-}
-
-func (w *AsyncWorker) recvLoop() {
-	defer w.wg.Done()
-
-	for {
-		select {
-		case <-w.ctx.Done():
-			return
-		default:
-			w.streamMu.Lock()
-			stream := w.stream
-			w.streamMu.Unlock()
-
 			reply, err := stream.RecvMsg()
+
+			w.inflight.Add(-1)
+
 			if err != nil {
+				w.errors.Add(1)
 				if w.ctx.Err() != nil {
+					if req.Callback != nil {
+						go req.Callback(nil, ErrVPPUnavailable)
+					}
 					return
 				}
-				w.errors.Add(1)
-				w.logger.Debug("Receive error (stream may have reconnected)", "error", err)
+				isTimeout := isReplyTimeout(err)
+				if isTimeout {
+					w.replyTimeouts.Add(1)
+					w.logger.Warn("VPP reply timeout",
+						"worker", id,
+						"msg_type", req.Message.GetMessageName(),
+						"timeout", w.cfg.ReplyTimeout)
+				} else {
+					w.logger.Error("Failed to receive VPP reply",
+						"worker", id,
+						"msg_type", req.Message.GetMessageName(),
+						"error", err)
+				}
+				if req.Callback != nil {
+					go req.Callback(nil, fmt.Errorf("recv %s: %w", req.Message.GetMessageName(), err))
+				}
+				stream.Close() //nolint:errcheck
+				stream, recycleCount = w.recycleStream(id, recycleCount)
+				if stream == nil {
+					return
+				}
 				continue
 			}
 
 			w.repliesRecv.Add(1)
-
-			w.logger.Debug("Received VPP reply",
-				"msg_type", reply.GetMessageName())
-
-			w.pendingMu.Lock()
-			elem := w.pending.Front()
-			if elem != nil {
-				w.pending.Remove(elem)
-				w.pendingMu.Unlock()
-
-				<-w.inflight
-
-				req := elem.Value.(*AsyncRequest)
-				if req.Callback != nil {
-					go req.Callback(reply, nil)
-				}
-			} else {
-				w.pendingMu.Unlock()
-				w.logger.Warn("Received reply with no pending request",
-					"msg_type", reply.GetMessageName())
+			if req.Callback != nil {
+				go req.Callback(reply, nil)
 			}
 		}
 	}
+}
+
+func (w *AsyncWorker) recycleStream(id int, recycleCount int) (api.Stream, int) {
+	recycleCount++
+	w.streamRecreations.Add(1)
+
+	// Alternate reply buffer size to force govpp to allocate a fresh replyChan,
+	// preventing stale replies from a pooled channel from contaminating the next request.
+	replyBuf := w.cfg.ReplyBufSize + (recycleCount % 2)
+
+	stream, err := w.createStream(replyBuf)
+	if err != nil {
+		fails := w.consecutiveFail.Add(1)
+		if fails >= 3 && !w.circuitOpen.Load() {
+			w.circuitOpen.Store(true)
+			w.logger.Error("VPP connection lost - circuit breaker OPEN",
+				"worker", id, "consecutive_failures", fails)
+		}
+		w.logger.Error("Failed to recreate stream",
+			"worker", id, "error", err)
+		return nil, recycleCount
+	}
+
+	w.consecutiveFail.Store(0)
+	if w.circuitOpen.Swap(false) {
+		w.logger.Info("VPP connection restored - circuit breaker CLOSED", "worker", id)
+	}
+	w.logger.Warn("Stream recycled", "worker", id, "recycle_count", recycleCount)
+	return stream, recycleCount
 }
 
 func (w *AsyncWorker) SendAsync(msg api.Message, callback func(api.Message, error)) error {
 	if w.circuitOpen.Load() {
 		w.rejected.Add(1)
+		if callback != nil {
+			go callback(nil, ErrVPPUnavailable)
+		}
 		return ErrVPPUnavailable
 	}
 
@@ -298,7 +274,11 @@ func (w *AsyncWorker) SendAsync(msg api.Message, callback func(api.Message, erro
 		return nil
 	default:
 		w.errors.Add(1)
-		return fmt.Errorf("VPP request queue full")
+		err := fmt.Errorf("VPP request queue full")
+		if callback != nil {
+			go callback(nil, err)
+		}
+		return err
 	}
 }
 
@@ -308,12 +288,18 @@ func (w *AsyncWorker) IsAvailable() bool {
 
 func (w *AsyncWorker) Metrics() map[string]uint64 {
 	return map[string]uint64{
-		"requests_sent":    w.requestsSent.Load(),
-		"replies_received": w.repliesRecv.Load(),
-		"errors":           w.errors.Load(),
-		"queue_high_water": uint64(w.queueHighWater.Load()),
-		"queue_current":    uint64(len(w.reqChan)),
-		"inflight_current": uint64(len(w.inflight)),
-		"rejected":         w.rejected.Load(),
+		"requests_sent":      w.requestsSent.Load(),
+		"replies_received":   w.repliesRecv.Load(),
+		"errors":             w.errors.Load(),
+		"queue_high_water":   uint64(w.queueHighWater.Load()),
+		"queue_current":      uint64(len(w.reqChan)),
+		"inflight_current":   uint64(w.inflight.Load()),
+		"rejected":           w.rejected.Load(),
+		"reply_timeouts":     w.replyTimeouts.Load(),
+		"stream_recreations": w.streamRecreations.Load(),
 	}
+}
+
+func isReplyTimeout(err error) bool {
+	return errors.Is(err, core.ErrReplyTimeout)
 }

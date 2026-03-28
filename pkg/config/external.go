@@ -121,7 +121,10 @@ func GenerateExternalConfigs(configPath string) error {
 	if cfg.Dataplane.SkipConfGen {
 		log.Printf("Skipping %s (skip-conf-gen: true)", dc.ConfigPath)
 	} else {
-		dpData := NewDataplaneTemplateData(cfg, cpu)
+		dpData, err := NewDataplaneTemplateData(cfg, cpu)
+		if err != nil {
+			return fmt.Errorf("dataplane template data: %w", err)
+		}
 		if err := dc.Write(dpData); err != nil {
 			return fmt.Errorf("write dataplane config: %w", err)
 		}

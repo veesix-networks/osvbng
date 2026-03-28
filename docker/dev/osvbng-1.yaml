@@ -324,6 +324,8 @@ plugins:
 monitoring:
   collect_interval: 30s
   disabled_collectors:
+    - subscriber.sessions
+    - subscriber.stats
     - protocols.bgp.statistics
     - protocols.bgp.ipv6.statistics
     - protocols.bgp.neighbors.<*:ip>
@@ -400,6 +402,9 @@ dataplane:
         size: "512m"
         page-size: "4k"
         per-node-counters: false
+    memory:
+        main-heap-size: "1G"
+        main-heap-page-size: "4k"
 
 watchdog:
   enabled: true
