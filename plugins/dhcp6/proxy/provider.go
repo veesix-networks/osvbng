@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -276,13 +277,12 @@ func (p *Provider) ReleaseLease(duid []byte) {
 }
 
 func formatV6Field(format string, pkt *dhcp6.Packet) []byte {
-	r := strings.NewReplacer(
-		"{interface}", pkt.Interface,
-		"{svlan}", fmt.Sprintf("%d", pkt.SVLAN),
-		"{cvlan}", fmt.Sprintf("%d", pkt.CVLAN),
-		"{mac}", pkt.MAC,
-	)
-	return []byte(r.Replace(format))
+	s := format
+	s = strings.ReplaceAll(s, "{interface}", pkt.Interface)
+	s = strings.ReplaceAll(s, "{svlan}", strconv.FormatUint(uint64(pkt.SVLAN), 10))
+	s = strings.ReplaceAll(s, "{cvlan}", strconv.FormatUint(uint64(pkt.CVLAN), 10))
+	s = strings.ReplaceAll(s, "{mac}", pkt.MAC)
+	return []byte(s)
 }
 
 func wrapProfile(opts *ip.IPv6DHCPv6Options) *ip.IPv6Profile {
