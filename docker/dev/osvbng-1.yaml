@@ -37,7 +37,7 @@ subscriber-groups:
             ipv4-profile: default
             ipv6-profile: default-v6
             vlans:
-                - svlan: "100-110"
+                - svlan: "100-120"
                   cvlan: any
                   interface: loop100
             bgp:
@@ -50,7 +50,7 @@ subscriber-groups:
             ipv4-profile: relay-v4
             ipv6-profile: relay-v6
             vlans:
-                - svlan: "300-310"
+                - svlan: "300-320"
                   cvlan: any
                   interface: loop100
             aaa-policy: default-policy
@@ -59,7 +59,7 @@ subscriber-groups:
             ipv4-profile: proxy-v4
             ipv6-profile: proxy-v6
             vlans:
-                - svlan: "400-410"
+                - svlan: "400-420"
                   cvlan: any
                   interface: loop100
             aaa-policy: default-policy
@@ -67,7 +67,7 @@ subscriber-groups:
             access-type: pppoe
             ipv4-profile: default
             vlans:
-                - svlan: "200-210"
+                - svlan: "200-220"
                   cvlan: any
                   interface: loop100
             aaa-policy: default-policy
@@ -385,10 +385,10 @@ logging:
     format: text
     level: info
     components:
-        aaa: debug
-        arp: debug
-        dataplane: debug
-        ha: debug
+        aaa: info
+        arp: info
+        dataplane: info
+        ha: info
         ipoe: info
         pppoe: info
         southbound: info
