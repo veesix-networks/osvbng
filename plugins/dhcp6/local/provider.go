@@ -214,6 +214,42 @@ func (p *Provider) HandlePacket(ctx context.Context, pkt *dhcp6msg.Packet) (*dhc
 	}
 }
 
+// readExistingLeases reads IANA/PD leases and their pools for a DUID.
+// Caller must hold p.mu (read or write).
+func (p *Provider) readExistingLeases(msg *dhcp6msg.Message, duidKey string) (net.IP, uint32, *IANAPool, *net.IPNet, uint32, *PDPool) {
+	var ianaAddr net.IP
+	var ianaIAID uint32
+	var ianaPool *IANAPool
+	if msg.Options.IANA != nil {
+		if lease := p.ianaLeases[duidKey]; lease != nil {
+			ianaIAID = msg.Options.IANA.IAID
+			ianaAddr = lease.Address
+			for _, pool := range p.ianaPools {
+				if pool.Network.Contains(ianaAddr) {
+					ianaPool = pool
+					break
+				}
+			}
+		}
+	}
+	var pdPrefix *net.IPNet
+	var pdIAID uint32
+	var pdPool *PDPool
+	if msg.Options.IAPD != nil {
+		if lease := p.pdLeases[duidKey]; lease != nil {
+			pdIAID = msg.Options.IAPD.IAID
+			pdPrefix = lease.Prefix
+			for _, pool := range p.pdPools {
+				if pool.Network.Contains(pdPrefix.IP) {
+					pdPool = pool
+					break
+				}
+			}
+		}
+	}
+	return ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool
+}
+
 func (p *Provider) handleSolicit(pkt *dhcp6msg.Packet, msg *dhcp6msg.Message) (*dhcp6msg.Packet, error) {
 	clientDUID := msg.Options.ClientID
 	if clientDUID == nil {
@@ -222,11 +258,69 @@ func (p *Provider) handleSolicit(pkt *dhcp6msg.Packet, msg *dhcp6msg.Message) (*
 
 	duidKey := string(clientDUID)
 
+	if pkt.Resolved != nil {
+		// Fast path: if leases already exist for this session (retry Solicit),
+		// build response without exclusive lock. reserveIANA/reservePD would
+		// just overwrite with the same data.
+		p.mu.RLock()
+		existingIANA := p.ianaLeases[duidKey]
+		existingPD := p.pdLeases[duidKey]
+		p.mu.RUnlock()
+
+		alreadyReserved := true
+		if msg.Options.IANA != nil && pkt.Resolved.IANAAddress != nil {
+			if existingIANA == nil || existingIANA.SessionID != pkt.SessionID {
+				alreadyReserved = false
+			}
+		}
+		if msg.Options.IAPD != nil && pkt.Resolved.PDPrefix != nil {
+			if existingPD == nil || existingPD.SessionID != pkt.SessionID {
+				alreadyReserved = false
+			}
+		}
+
+		if alreadyReserved {
+			return p.buildSolicitResolvedResponse(pkt, msg, clientDUID)
+		}
+
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return p.handleSolicitResolved(pkt, msg, clientDUID, duidKey)
+	}
+
+	// Non-resolved: check for existing leases under single read lock (retry case).
+	p.mu.RLock()
+	if p.ianaLeases[duidKey] != nil || p.pdLeases[duidKey] != nil {
+		ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool := p.readExistingLeases(msg, duidKey)
+		p.mu.RUnlock()
+		response := p.buildAdvertise(msg, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, nil)
+		return &dhcp6msg.Packet{
+			SessionID: pkt.SessionID,
+			MAC:       pkt.MAC,
+			SVLAN:     pkt.SVLAN,
+			CVLAN:     pkt.CVLAN,
+			DUID:      clientDUID,
+			Raw:       response,
+		}, nil
+	}
+	p.mu.RUnlock()
+
+	// First allocation needs exclusive lock.
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if pkt.Resolved != nil {
-		return p.handleSolicitResolved(pkt, msg, clientDUID, duidKey)
+	// Re-check under write lock in case another goroutine allocated.
+	if p.ianaLeases[duidKey] != nil || p.pdLeases[duidKey] != nil {
+		ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool := p.readExistingLeases(msg, duidKey)
+		response := p.buildAdvertise(msg, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, nil)
+		return &dhcp6msg.Packet{
+			SessionID: pkt.SessionID,
+			MAC:       pkt.MAC,
+			SVLAN:     pkt.SVLAN,
+			CVLAN:     pkt.CVLAN,
+			DUID:      clientDUID,
+			Raw:       response,
+		}, nil
 	}
 
 	var ianaPoolName, pdPoolName string
@@ -236,22 +330,12 @@ func (p *Provider) handleSolicit(pkt *dhcp6msg.Packet, msg *dhcp6msg.Message) (*
 	var ianaPool *IANAPool
 	if msg.Options.IANA != nil {
 		ianaIAID = msg.Options.IANA.IAID
-		if lease, exists := p.ianaLeases[duidKey]; exists {
-			ianaAddr = lease.Address
-			for _, pool := range p.ianaPools {
-				if pool.Network.Contains(ianaAddr) {
-					ianaPool = pool
-					break
-				}
-			}
-		} else {
-			ianaPool = p.selectIANAPool(ianaPoolName)
-			if ianaPool != nil {
-				var err error
-				ianaAddr, err = p.allocateIANAAddress(ianaPool, clientDUID, ianaIAID, pkt.SessionID)
-				if err != nil {
-					return nil, fmt.Errorf("allocate iana: %w", err)
-				}
+		ianaPool = p.selectIANAPool(ianaPoolName)
+		if ianaPool != nil {
+			var err error
+			ianaAddr, err = p.allocateIANAAddress(ianaPool, clientDUID, ianaIAID, pkt.SessionID)
+			if err != nil {
+				return nil, fmt.Errorf("allocate iana: %w", err)
 			}
 		}
 	}
@@ -261,22 +345,12 @@ func (p *Provider) handleSolicit(pkt *dhcp6msg.Packet, msg *dhcp6msg.Message) (*
 	var pdPool *PDPool
 	if msg.Options.IAPD != nil {
 		pdIAID = msg.Options.IAPD.IAID
-		if lease, exists := p.pdLeases[duidKey]; exists {
-			pdPrefix = lease.Prefix
-			for _, pool := range p.pdPools {
-				if pool.Network.Contains(pdPrefix.IP) {
-					pdPool = pool
-					break
-				}
-			}
-		} else {
-			pdPool = p.selectPDPool(pdPoolName)
-			if pdPool != nil {
-				var err error
-				pdPrefix, err = p.allocatePDPrefix(pdPool, clientDUID, pdIAID, pkt.SessionID)
-				if err != nil {
-					return nil, fmt.Errorf("allocate pd: %w", err)
-				}
+		pdPool = p.selectPDPool(pdPoolName)
+		if pdPool != nil {
+			var err error
+			pdPrefix, err = p.allocatePDPrefix(pdPool, clientDUID, pdIAID, pkt.SessionID)
+			if err != nil {
+				return nil, fmt.Errorf("allocate pd: %w", err)
 			}
 		}
 	}
@@ -582,6 +656,42 @@ func (p *Provider) buildResponse(req *dhcp6msg.Message, msgType dhcp6msg.Message
 	}
 
 	return resp.Serialize()
+}
+
+func (p *Provider) buildSolicitResolvedResponse(pkt *dhcp6msg.Packet, msg *dhcp6msg.Message, clientDUID []byte) (*dhcp6msg.Packet, error) {
+	var ianaAddr net.IP
+	var ianaIAID uint32
+	var ianaPool *IANAPool
+	if msg.Options.IANA != nil && pkt.Resolved.IANAAddress != nil {
+		ianaIAID = msg.Options.IANA.IAID
+		ianaAddr = pkt.Resolved.IANAAddress
+		ianaPool = &IANAPool{
+			PreferredTime: pkt.Resolved.IANAPreferredTime,
+			ValidTime:     pkt.Resolved.IANAValidTime,
+		}
+	}
+
+	var pdPrefix *net.IPNet
+	var pdIAID uint32
+	var pdPool *PDPool
+	if msg.Options.IAPD != nil && pkt.Resolved.PDPrefix != nil {
+		pdIAID = msg.Options.IAPD.IAID
+		pdPrefix = pkt.Resolved.PDPrefix
+		pdPool = &PDPool{
+			PreferredTime: pkt.Resolved.PDPreferredTime,
+			ValidTime:     pkt.Resolved.PDValidTime,
+		}
+	}
+
+	response := p.buildAdvertise(msg, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, pkt.Resolved.DNS)
+	return &dhcp6msg.Packet{
+		SessionID: pkt.SessionID,
+		MAC:       pkt.MAC,
+		SVLAN:     pkt.SVLAN,
+		CVLAN:     pkt.CVLAN,
+		DUID:      clientDUID,
+		Raw:       response,
+	}, nil
 }
 
 func (p *Provider) handleSolicitResolved(pkt *dhcp6msg.Packet, msg *dhcp6msg.Message, clientDUID []byte, duidKey string) (*dhcp6msg.Packet, error) {

@@ -31,7 +31,7 @@ subscriber-groups:
             ipv4-profile: default
             ipv6-profile: default-v6
             vlans:
-                - svlan: "100-110"
+                - svlan: "100-120"
                   cvlan: any
                   interface: loop100
             aaa-policy: default-policy
@@ -39,7 +39,7 @@ subscriber-groups:
             access-type: pppoe
             ipv4-profile: default
             vlans:
-                - svlan: "200-210"
+                - svlan: "200-220"
                   cvlan: any
                   interface: loop100
             aaa-policy: default-policy

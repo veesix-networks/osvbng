@@ -63,7 +63,7 @@ func (h *SetUserPasswordHandler) Execute(ctx context.Context, req *oper.Request)
 		return nil, fmt.Errorf("failed to set password: %w", err)
 	}
 
-	h.logger.Info("User password updated", "user_id", userID)
+	h.logger.Debug("User password updated", "user_id", userID)
 
 	return &local.OperResponse{
 		Message: fmt.Sprintf("Password updated for user %d", userID),

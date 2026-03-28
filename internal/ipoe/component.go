@@ -468,7 +468,7 @@ func parseOption82(data []byte) (circuitID, remoteID []byte) {
 func (c *Component) unwrapDHCPv6Relay(rawDHCPv6 []byte) (*dhcp6.Message, *dhcp6.RelayInfo) {
 	msg, info := dhcp6.UnwrapRelay(rawDHCPv6)
 	if info != nil {
-		c.logger.Info("DHCPv6 relay message",
+		c.logger.WithGroup(logger.IPoEDHCP6).Debug("DHCPv6 relay message",
 			"hop_count", info.HopCount,
 			"link_addr", info.LinkAddr,
 			"peer_addr", info.PeerAddr,
@@ -476,7 +476,7 @@ func (c *Component) unwrapDHCPv6Relay(rawDHCPv6 []byte) (*dhcp6.Message, *dhcp6.
 			"remote_id", string(info.RemoteID))
 	}
 	if msg != nil {
-		c.logger.Info("Unwrapped inner DHCPv6 message",
+		c.logger.WithGroup(logger.IPoEDHCP6).Debug("Unwrapped inner DHCPv6 message",
 			"inner_type", msg.MsgType,
 			"xid", fmt.Sprintf("0x%x", msg.TransactionID))
 	}
@@ -493,7 +493,7 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 
 	if sess == nil {
 		if err := c.checkSessionLimit(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN); err != nil {
-			c.logger.WithGroup(logger.IPoEDHCP4).Info("DHCPDISCOVER rejected", "error", err)
+			c.logger.WithGroup(logger.IPoEDHCP4).Debug("DHCPDISCOVER rejected", "error", err)
 			return nil
 		}
 
@@ -544,10 +544,10 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 	sess.mu.Unlock()
 	c.xidIndex.Store(pkt.DHCPv4.Xid, sess)
 
-	c.logger.WithGroup(logger.IPoEDHCP4).Info("Session discovering", "session_id", sess.SessionID, "circuit_id", string(circuitID), "remote_id", string(remoteID))
+	c.logger.WithGroup(logger.IPoEDHCP4).Debug("Session discovering", "session_id", sess.SessionID, "circuit_id", string(circuitID), "remote_id", string(remoteID))
 
 	if alreadyApproved && ipoeCreated {
-		c.logger.WithGroup(logger.IPoEDHCP4).Info("Session already approved, forwarding DISCOVER to provider", "session_id", sess.SessionID)
+		c.logger.WithGroup(logger.IPoEDHCP4).Debug("Session already approved, forwarding DISCOVER to provider", "session_id", sess.SessionID)
 		v4Profile := c.resolveIPv4Profile(sess.AllocCtx)
 		var resolved *dhcp.ResolvedDHCPv4
 		if v4Profile == nil || v4Profile.GetMode() == "server" {
@@ -584,12 +584,12 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 	}
 
 	if alreadyApproved && !ipoeCreated {
-		c.logger.WithGroup(logger.IPoEDHCP4).Info("DHCP DISCOVER received, AAA approved but IPoE session pending", "session_id", sess.SessionID)
+		c.logger.WithGroup(logger.IPoEDHCP4).Debug("DHCP DISCOVER received, AAA approved but IPoE session pending", "session_id", sess.SessionID)
 		return nil
 	}
 
 	if v6AaaPending {
-		c.logger.WithGroup(logger.IPoEDHCP4).Info("DHCP DISCOVER received, waiting for v6 AAA response", "session_id", sess.SessionID)
+		c.logger.WithGroup(logger.IPoEDHCP4).Debug("DHCP DISCOVER received, waiting for v6 AAA response", "session_id", sess.SessionID)
 		return nil
 	}
 
@@ -616,13 +616,13 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 				Hostname:   hostname,
 			}
 			username = policy.ExpandFormat(ctx)
-			c.logger.WithGroup(logger.IPoEDHCP4).Info("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
+			c.logger.WithGroup(logger.IPoEDHCP4).Debug("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
 		}
 	}
 
 	sess.Username = username
 
-	c.logger.WithGroup(logger.IPoEDHCP4).Info("Publishing AAA request for DISCOVER", "session_id", sess.SessionID, "username", username)
+	c.logger.WithGroup(logger.IPoEDHCP4).Debug("Publishing AAA request for DISCOVER", "session_id", sess.SessionID, "username", username)
 	requestID := uuid.New().String()
 
 	aaaAttrs := make(map[string]string)
@@ -707,7 +707,7 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 	c.xidIndex.Store(pkt.DHCPv4.Xid, sess)
 
 	if alreadyApproved {
-		c.logger.WithGroup(logger.IPoEDHCP4).Info("Session already AAA approved, processing REQUEST with DHCP provider", "session_id", sess.SessionID)
+		c.logger.WithGroup(logger.IPoEDHCP4).Debug("Session already AAA approved, processing REQUEST with DHCP provider", "session_id", sess.SessionID)
 
 		buf := gopacket.NewSerializeBuffer()
 		opts := gopacket.SerializeOptions{
@@ -777,7 +777,7 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 		return nil
 	}
 
-	c.logger.WithGroup(logger.IPoEDHCP4).Info("Session requesting, waiting for AAA approval", "session_id", sess.SessionID)
+	c.logger.WithGroup(logger.IPoEDHCP4).Debug("Session requesting, waiting for AAA approval", "session_id", sess.SessionID)
 
 	hostname := string(getDHCPOption(pkt.DHCPv4.Options, layers.DHCPOptHostname))
 	circuitID, remoteID := parseOption82(getDHCPOption(pkt.DHCPv4.Options, 82))
@@ -805,13 +805,13 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 				Hostname:   hostname,
 			}
 			username = policy.ExpandFormat(ctx)
-			c.logger.WithGroup(logger.IPoEDHCP4).Info("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
+			c.logger.WithGroup(logger.IPoEDHCP4).Debug("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
 		}
 	}
 
 	sess.Username = username
 
-	c.logger.WithGroup(logger.IPoEDHCP4).Info("Publishing AAA request", "session_id", sess.SessionID, "username", username)
+	c.logger.WithGroup(logger.IPoEDHCP4).Debug("Publishing AAA request", "session_id", sess.SessionID, "username", username)
 	requestID := uuid.New().String()
 
 	aaaAttrs := make(map[string]string)
@@ -854,7 +854,7 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 
 	val, ok := c.sessions.Load(lookupKey)
 	if !ok {
-		c.logger.Info("Received DHCPRELEASE for unknown session", "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
+		c.logger.Debug("Received DHCPRELEASE for unknown session", "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
 		return nil
 	}
 	sess := val.(*SessionState)
@@ -907,7 +907,7 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 		c.sessions.Delete(lookupKey)
 	}
 
-	c.logger.Info("IPv4 released by client", "session_id", sessID, "delete_session", deleteSession)
+	c.logger.Debug("IPv4 released by client", "session_id", sessID, "delete_session", deleteSession)
 
 	if ipv4 != nil {
 		allocator.GetGlobalRegistry().ReleaseIP(ipv4)
@@ -956,7 +956,7 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 				if err != nil {
 					c.logger.Warn("Failed to delete IPoE session", "session_id", sessID, "error", err)
 				} else {
-					c.logger.Info("Deleted IPoE session from VPP", "session_id", sessID, "sw_if_index", ipoeSwIfIndex)
+					c.logger.Debug("Deleted IPoE session", "session_id", sessID, "sw_if_index", ipoeSwIfIndex)
 				}
 			})
 		}
@@ -996,7 +996,7 @@ func (c *Component) handleServerResponse(pkt *dataplane.ParsedPacket) error {
 	val, ok := c.xidIndex.Load(pkt.DHCPv4.Xid)
 	if !ok {
 		msgType := getDHCPMessageType(pkt.DHCPv4.Options)
-		c.logger.Info("Received DHCP response but no session found", "message_type", msgType.String(), "xid", fmt.Sprintf("0x%x", pkt.DHCPv4.Xid))
+		c.logger.Debug("Received DHCP response but no session found", "message_type", msgType.String(), "xid", fmt.Sprintf("0x%x", pkt.DHCPv4.Xid))
 		return nil
 	}
 	sess := val.(*SessionState)
@@ -1118,7 +1118,7 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 	snapshotIPv6Prefix := sess.IPv6Prefix
 	sess.mu.Unlock()
 
-	c.logger.WithGroup(logger.IPoEDHCP4).Info("Session bound", "session_id", sess.SessionID, "ipv4", sess.IPv4.String())
+	c.logger.WithGroup(logger.IPoEDHCP4).Debug("Session bound", "session_id", sess.SessionID, "ipv4", sess.IPv4.String())
 
 	if c.vpp != nil {
 		sessID := sess.SessionID
@@ -1133,7 +1133,7 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 					}
 					return
 				}
-				c.logger.WithGroup(logger.IPoEDHCP4).Info("Bound IPv4 to IPoE session", "session_id", sessID, "sw_if_index", ipoeSwIfIndex, "ipv4", ipv4.String())
+				c.logger.WithGroup(logger.IPoEDHCP4).Debug("Bound IPv4 to IPoE session", "session_id", sessID, "sw_if_index", ipoeSwIfIndex, "ipv4", ipv4.String())
 				c.publishSessionProgrammed(sess, ipoeSwIfIndex)
 			})
 		} else {
@@ -1158,7 +1158,7 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 
 	c.checkpointSession(sess)
 
-	c.logger.Info("Publishing session lifecycle event", "session_id", sess.SessionID, "sw_if_index", ipoeSwIfIndex, "ipv4", sess.IPv4.String())
+	c.logger.Debug("Publishing session lifecycle event", "session_id", sess.SessionID, "sw_if_index", ipoeSwIfIndex, "ipv4", sess.IPv4.String())
 
 	ipoeSess := &models.IPoESession{
 		SessionID:     sess.SessionID,
@@ -1226,7 +1226,7 @@ func (c *Component) handleAAAResponse(event events.Event) {
 	sess.mu.Unlock()
 
 	if !allowed {
-		c.logger.Info("Session AAA rejected, cleaning up session", "session_id", sessID)
+		c.logger.Debug("Session AAA rejected, cleaning up session", "session_id", sessID)
 		c.sessionIndex.Delete(sessID)
 		c.xidIndex.Delete(sess.XID)
 		lookupV4 := c.makeSessionKeyV4(mac, svlan, cvlan)
@@ -1250,7 +1250,7 @@ func (c *Component) handleAAAResponse(event events.Event) {
 			}
 		}
 	}
-	c.logger.Info("Session AAA approved",
+	c.logger.Debug("Session AAA approved",
 		"session_id", sessID,
 		"subscriber_group", subscriberGroup,
 		"ipv4_profile", ipv4Profile,
@@ -1263,7 +1263,7 @@ func (c *Component) handleAAAResponse(event events.Event) {
 	for _, attr := range resolved.LogAttrs() {
 		logArgs = append(logArgs, attr.Key, attr.Value.Any())
 	}
-	c.logger.Info("Resolved service group", logArgs...)
+	c.logger.Debug("Resolved service group", logArgs...)
 
 	var srgName string
 	if c.srgMgr != nil && subscriberGroup != "" {
@@ -1298,7 +1298,7 @@ func (c *Component) handleAAAResponse(event events.Event) {
 	}
 
 	allocCtx := c.buildAllocContext(sess, data.Response.Attributes)
-	c.logger.Info("Built allocator context",
+	c.logger.Debug("Built allocator context",
 		"session_id", sessID,
 		"profile", allocCtx.ProfileName,
 		"pool_override", allocCtx.PoolOverride,
@@ -1359,7 +1359,7 @@ func (c *Component) handleAAAResponse(event events.Event) {
 				sess.PendingDHCPRequest = nil
 				unnumberedLoopback := c.resolveUnnumberedLoopback(sess)
 				sess.mu.Unlock()
-				c.logger.Info("Created IPoE session in VPP", "session_id", sessID, "sw_if_index", swIfIndex)
+				c.logger.Debug("Created IPoE session in VPP", "session_id", sessID, "sw_if_index", swIfIndex)
 
 				c.setupSessionUnnumbered(sessID, swIfIndex, unnumberedLoopback)
 
@@ -1373,7 +1373,7 @@ func (c *Component) handleAAAResponse(event events.Event) {
 							}
 							return
 						}
-						c.logger.Info("Bound pending IPv4 to IPoE session", "session_id", sessID, "ipv4", pendingIPv4.String())
+						c.logger.Debug("Bound pending IPv4 to IPoE session", "session_id", sessID, "ipv4", pendingIPv4.String())
 						c.publishSessionProgrammed(sess, swIfIndex)
 					})
 				}
@@ -1387,7 +1387,7 @@ func (c *Component) handleAAAResponse(event events.Event) {
 							}
 							return
 						}
-						c.logger.Info("Bound pending IPv6 to IPoE session", "session_id", sessID, "ipv6", pendingIPv6.String())
+						c.logger.Debug("Bound pending IPv6 to IPoE session", "session_id", sessID, "ipv6", pendingIPv6.String())
 					})
 				}
 				if pendingPD != nil {
@@ -1404,7 +1404,7 @@ func (c *Component) handleAAAResponse(event events.Event) {
 							}
 							return
 						}
-						c.logger.Info("Bound pending delegated prefix", "session_id", sessID, "prefix", pendingPD.String())
+						c.logger.Debug("Bound pending delegated prefix", "session_id", sessID, "prefix", pendingPD.String())
 					})
 				}
 
@@ -1508,7 +1508,7 @@ func (c *Component) checkSessionLimit(mac net.HardwareAddr, svlan, cvlan uint16)
 			count, maxSessions, mac.String(), svlan, cvlan)
 	}
 
-	c.logger.Info("Session limit check passed", "current", count, "max", maxSessions, "mac", mac.String(), "svlan", svlan, "cvlan", cvlan)
+	c.logger.Debug("Session limit check passed", "current", count, "max", maxSessions, "mac", mac.String(), "svlan", svlan, "cvlan", cvlan)
 
 	return nil
 }
@@ -1614,7 +1614,7 @@ func (c *Component) cleanupSessions() {
 				return true
 			})
 			for _, item := range toDelete {
-				c.logger.Info("Cleaning up stale session", "session_id", item.sess.SessionID)
+				c.logger.Debug("Cleaning up stale session", "session_id", item.sess.SessionID)
 				c.xidIndex.Delete(item.sess.XID)
 				c.sessionIndex.Delete(item.sess.SessionID)
 				c.sessions.Delete(item.key)
@@ -1772,7 +1772,7 @@ func (c *Component) processDHCPv6Packet(pkt *dataplane.ParsedPacket) error {
 
 	rawDHCPv6 := append(pkt.DHCPv6.LayerContents(), pkt.DHCPv6.LayerPayload()...)
 
-	c.logger.Info("Received DHCPv6 packet",
+	c.logger.WithGroup(logger.IPoEDHCP6).Debug("Received DHCPv6 packet",
 		"message_type", pkt.DHCPv6.MsgType.String(),
 		"mac", pkt.MAC.String(),
 		"xid", fmt.Sprintf("0x%x", pkt.DHCPv6.TransactionID))
@@ -1857,11 +1857,11 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 
 	if len(circuitID) == 0 && len(relayInterfaceID) > 0 {
 		circuitID = relayInterfaceID
-		c.logger.Info("Using DHCPv6 relay interface-id as circuit-id", "interface_id", string(relayInterfaceID))
+		c.logger.WithGroup(logger.IPoEDHCP6).Debug("Using DHCPv6 relay interface-id as circuit-id", "interface_id", string(relayInterfaceID))
 	}
 	if len(remoteID) == 0 && len(relayRemoteID) > 0 {
 		remoteID = relayRemoteID
-		c.logger.Info("Using DHCPv6 relay remote-id as remote-id", "remote_id", string(relayRemoteID))
+		c.logger.WithGroup(logger.IPoEDHCP6).Debug("Using DHCPv6 relay remote-id as remote-id", "remote_id", string(relayRemoteID))
 	}
 
 	if alreadyApproved && ipoeCreated {
@@ -1869,16 +1869,16 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 	}
 
 	if alreadyApproved && !ipoeCreated {
-		c.logger.Info("DHCPv6 SOLICIT received, AAA approved but IPoE session pending", "session_id", sess.SessionID)
+		c.logger.WithGroup(logger.IPoEDHCP6).Debug("DHCPv6 SOLICIT received, AAA approved but IPoE session pending", "session_id", sess.SessionID)
 		return nil
 	}
 
 	if v4AaaPending {
-		c.logger.Info("DHCPv6 SOLICIT received, waiting for v4 AAA response", "session_id", sess.SessionID)
+		c.logger.WithGroup(logger.IPoEDHCP6).Debug("DHCPv6 SOLICIT received, waiting for v4 AAA response", "session_id", sess.SessionID)
 		return nil
 	}
 
-	c.logger.Info("DHCPv6 SOLICIT received, requesting AAA", "session_id", sess.SessionID)
+	c.logger.WithGroup(logger.IPoEDHCP6).Debug("DHCPv6 SOLICIT received, requesting AAA", "session_id", sess.SessionID)
 
 	cfg, _ := c.cfgMgr.GetRunning()
 	username := pkt.MAC.String()
@@ -1902,7 +1902,7 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 				CircuitID:  string(circuitID),
 			}
 			username = policy.ExpandFormat(ctx)
-			c.logger.Info("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
+			c.logger.WithGroup(logger.IPoEDHCP6).Debug("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
 		}
 	}
 
@@ -1930,7 +1930,7 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 		Attributes:    aaaAttrs,
 	}
 
-	c.logger.Info("Publishing AAA request for DHCPv6 SOLICIT", "session_id", sess.SessionID, "username", username)
+	c.logger.WithGroup(logger.IPoEDHCP6).Debug("Publishing AAA request for DHCPv6 SOLICIT", "session_id", sess.SessionID, "username", username)
 
 	c.eventBus.Publish(events.TopicAAARequest, events.Event{
 		Source: c.Name(),
@@ -1969,7 +1969,7 @@ func (c *Component) handleDHCPv6Request(pkt *dataplane.ParsedPacket, msg *dhcp6.
 		return c.forwardDHCPv6ToProvider(sess, pkt, msg.Raw)
 	}
 
-	c.logger.Info("DHCPv6 REQUEST received, session awaiting AAA", "session_id", sess.SessionID)
+	c.logger.WithGroup(logger.IPoEDHCP6).Debug("DHCPv6 REQUEST received, session awaiting AAA", "session_id", sess.SessionID)
 
 	return nil
 }
@@ -1979,7 +1979,7 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket, msg *dhcp6.
 
 	val, ok := c.sessions.Load(lookupKey)
 	if !ok {
-		c.logger.Info("Received DHCPv6 Release for unknown session", "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
+		c.logger.Debug("Received DHCPv6 Release for unknown session", "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
 		return nil
 	}
 	sess := val.(*SessionState)
@@ -2017,7 +2017,7 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket, msg *dhcp6.
 		c.sessions.Delete(lookupKey)
 	}
 
-	c.logger.Info("IPv6 released by client", "session_id", sessID, "delete_session", deleteSession)
+	c.logger.Debug("IPv6 released by client", "session_id", sessID, "delete_session", deleteSession)
 
 	if len(c.dhcp6Providers) > 0 {
 		v6Prof := c.resolveIPv6Profile(sess.AllocCtx)
@@ -2089,7 +2089,7 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket, msg *dhcp6.
 				if err != nil {
 					c.logger.Warn("Failed to delete IPoE session", "session_id", sessID, "error", err)
 				} else {
-					c.logger.Info("Deleted IPoE session from VPP", "session_id", sessID, "sw_if_index", ipoeSwIfIndex)
+					c.logger.Debug("Deleted IPoE session", "session_id", sessID, "sw_if_index", ipoeSwIfIndex)
 				}
 			})
 		}
@@ -2143,7 +2143,7 @@ func (c *Component) forwardPendingDHCPv4(sessID string, mac net.HardwareAddr, sv
 	}
 
 	if pendingDiscover != nil {
-		c.logger.Info("Forwarding pending DHCP DISCOVER", "session_id", sessID)
+		c.logger.Debug("Forwarding pending DHCP DISCOVER", "session_id", sessID)
 		var resolved *dhcp.ResolvedDHCPv4
 		if v4Profile == nil || v4Profile.GetMode() == "server" {
 			resolved = c.resolveDHCPv4(allocCtx)
@@ -2174,7 +2174,7 @@ func (c *Component) forwardPendingDHCPv4(sessID string, mac net.HardwareAddr, sv
 	}
 
 	if pendingRequest != nil {
-		c.logger.Info("Forwarding pending DHCP REQUEST", "session_id", sessID)
+		c.logger.Debug("Forwarding pending DHCP REQUEST", "session_id", sessID)
 		var resolved *dhcp.ResolvedDHCPv4
 		if v4Profile == nil || v4Profile.GetMode() == "server" {
 			resolved = c.resolveDHCPv4(allocCtx)
@@ -2207,7 +2207,7 @@ func (c *Component) forwardPendingDHCPv4(sessID string, mac net.HardwareAddr, sv
 
 func (c *Component) forwardPendingDHCPv6(sess *SessionState, sessID string, mac net.HardwareAddr, svlan, cvlan uint16, encapIfIndex uint32, accessIfName string, v6Profile *ip.IPv6Profile, v6Provider dhcp6.DHCPProvider, localMAC net.HardwareAddr, allocCtx *allocator.Context, dhcpv6DUID []byte, pendingSolicit, pendingRequest []byte) {
 	if pendingSolicit != nil {
-		c.logger.Info("Forwarding pending DHCPv6 SOLICIT", "session_id", sessID)
+		c.logger.WithGroup(logger.IPoEDHCP6).Debug("Forwarding pending DHCPv6 SOLICIT", "session_id", sessID)
 		var resolved *dhcp.ResolvedDHCPv6
 		if v6Profile == nil || v6Profile.GetMode() == "server" {
 			resolved = c.resolveDHCPv6(allocCtx)
@@ -2237,7 +2237,7 @@ func (c *Component) forwardPendingDHCPv6(sess *SessionState, sessID string, mac 
 	}
 
 	if pendingRequest != nil {
-		c.logger.Info("Forwarding pending DHCPv6 REQUEST", "session_id", sessID)
+		c.logger.WithGroup(logger.IPoEDHCP6).Debug("Forwarding pending DHCPv6 REQUEST", "session_id", sessID)
 		var resolved *dhcp.ResolvedDHCPv6
 		if v6Profile == nil || v6Profile.GetMode() == "server" {
 			resolved = c.resolveDHCPv6(allocCtx)
@@ -2282,7 +2282,7 @@ func (c *Component) forwardLatePendingPackets(sess *SessionState, sessID string,
 	localMAC := c.getLocalMAC(srgName, encapIfIndex)
 
 	if pendingV4Discover != nil {
-		c.logger.Info("Forwarding late-pending DHCP DISCOVER", "session_id", sessID)
+		c.logger.Debug("Forwarding late-pending DHCP DISCOVER", "session_id", sessID)
 		var resolved *dhcp.ResolvedDHCPv4
 		if v4Profile == nil || v4Profile.GetMode() == "server" {
 			resolved = c.resolveDHCPv4(allocCtx)
@@ -2313,7 +2313,7 @@ func (c *Component) forwardLatePendingPackets(sess *SessionState, sessID string,
 	}
 
 	if pendingV4Request != nil {
-		c.logger.Info("Forwarding late-pending DHCP REQUEST", "session_id", sessID)
+		c.logger.Debug("Forwarding late-pending DHCP REQUEST", "session_id", sessID)
 		var resolved *dhcp.ResolvedDHCPv4
 		if v4Profile == nil || v4Profile.GetMode() == "server" {
 			resolved = c.resolveDHCPv4(allocCtx)
@@ -2346,7 +2346,7 @@ func (c *Component) forwardLatePendingPackets(sess *SessionState, sessID string,
 	v6Provider := c.getDHCP6Provider(v6Profile)
 
 	if pendingV6Solicit != nil && v6Provider != nil {
-		c.logger.Info("Forwarding late-pending DHCPv6 SOLICIT", "session_id", sessID)
+		c.logger.WithGroup(logger.IPoEDHCP6).Debug("Forwarding late-pending DHCPv6 SOLICIT", "session_id", sessID)
 		var resolved *dhcp.ResolvedDHCPv6
 		if v6Profile == nil || v6Profile.GetMode() == "server" {
 			resolved = c.resolveDHCPv6(allocCtx)
@@ -2376,7 +2376,7 @@ func (c *Component) forwardLatePendingPackets(sess *SessionState, sessID string,
 	}
 
 	if pendingV6Request != nil && v6Provider != nil {
-		c.logger.Info("Forwarding late-pending DHCPv6 REQUEST", "session_id", sessID)
+		c.logger.WithGroup(logger.IPoEDHCP6).Debug("Forwarding late-pending DHCPv6 REQUEST", "session_id", sessID)
 		var resolved *dhcp.ResolvedDHCPv6
 		if v6Profile == nil || v6Profile.GetMode() == "server" {
 			resolved = c.resolveDHCPv6(allocCtx)
@@ -2485,7 +2485,7 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, msg *dhcp6.Message) er
 	snapshotLeaseTime := sess.LeaseTime
 	sess.mu.Unlock()
 
-	c.logger.Info("DHCPv6 session bound", "session_id", sess.SessionID, "ipv6", ianaAddr, "prefix", pdPrefix)
+	c.logger.WithGroup(logger.IPoEDHCP6).Debug("DHCPv6 session bound", "session_id", sess.SessionID, "ipv6", ianaAddr, "prefix", pdPrefix)
 
 	if c.vpp != nil {
 		sessID := sess.SessionID
@@ -2499,7 +2499,7 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, msg *dhcp6.Message) er
 							c.logger.Error("Failed to bind IPv6 to IPoE session", "session_id", sessID, "error", err)
 						}
 					} else {
-						c.logger.Info("Bound IPv6 to IPoE session", "session_id", sessID, "ipv6", ianaAddr.String())
+						c.logger.Debug("Bound IPv6 to IPoE session", "session_id", sessID, "ipv6", ianaAddr.String())
 					}
 				})
 			}
@@ -2517,7 +2517,7 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, msg *dhcp6.Message) er
 							c.logger.Error("Failed to set delegated prefix", "session_id", sessID, "error", err)
 						}
 					} else {
-						c.logger.Info("Set delegated prefix", "session_id", sessID, "prefix", pdPrefix.String())
+						c.logger.Debug("Set delegated prefix", "session_id", sessID, "prefix", pdPrefix.String())
 					}
 				})
 			}
@@ -3082,7 +3082,7 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 		}
 
 		if sess.IPoESwIfIndex != 0 && !validIfIndexes[sess.IPoESwIfIndex] {
-			c.logger.Info("VPP interface not found, recreating IPoE session",
+			c.logger.Debug("Interface not found, recreating IPoE session",
 				"session_id", sess.SessionID,
 				"stale_sw_if_index", sess.IPoESwIfIndex)
 
@@ -3101,7 +3101,7 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 					sess.IPoESwIfIndex = 0
 					sess.IPoESessionCreated = false
 				} else {
-					c.logger.Info("Recreated IPoE session in VPP", "session_id", sess.SessionID, "sw_if_index", swIfIndex)
+					c.logger.Debug("Recreated IPoE session", "session_id", sess.SessionID, "sw_if_index", swIfIndex)
 					sess.IPoESwIfIndex = swIfIndex
 					sess.IPoESessionCreated = true
 					c.setupSessionUnnumbered(sess.SessionID, swIfIndex, c.resolveUnnumberedLoopback(&sess))
@@ -3122,7 +3122,7 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 				c.opdb.Put(ctx, opdb.NamespaceIPoESessions, sess.SessionID, data)
 			}
 		} else if sess.AAAApproved && !sess.IPoESessionCreated {
-			c.logger.Info("Session approved but IPoE never created, resetting AAA state",
+			c.logger.Debug("Session approved but IPoE never created, resetting AAA state",
 				"session_id", sess.SessionID)
 			sess.AAAApproved = false
 			stale++
@@ -3161,7 +3161,7 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 		}
 	}
 
-	c.logger.Info("Restored sessions from OpDB", "count", count, "expired", expired, "stale_vpp", stale, "counters", len(sessionCounts))
+	c.logger.Debug("Restored sessions from OpDB", "count", count, "expired", expired, "stale_vpp", stale, "counters", len(sessionCounts))
 	return nil
 }
 
@@ -3260,11 +3260,11 @@ func (c *Component) RecoverSessions(ctx context.Context) error {
 	total := c.sessionCount()
 
 	if total == 0 {
-		c.logger.Info("No IPoE sessions to recover")
+		c.logger.Debug("No IPoE sessions to recover")
 		return nil
 	}
 
-	c.logger.Info("Recovering IPoE sessions from OpDB", "total_in_memory", total)
+	c.logger.Debug("Recovering IPoE sessions from OpDB", "total_in_memory", total)
 
 	if err := c.restoreSessions(ctx); err != nil {
 		return fmt.Errorf("recover ipoe sessions: %w", err)
@@ -3272,7 +3272,7 @@ func (c *Component) RecoverSessions(ctx context.Context) error {
 
 	recovered := c.sessionCount()
 
-	c.logger.Info("IPoE session recovery complete", "recovered", recovered)
+	c.logger.Debug("IPoE session recovery complete", "recovered", recovered)
 	return nil
 }
 
@@ -3287,7 +3287,7 @@ func (c *Component) handleHAStateChange(event events.Event) {
 	wasStandbyAlone := data.OldState == string(ha.SRGStateStandbyAlone)
 
 	if isActive && !wasActive && wasStandbyAlone {
-		c.logger.Info("SRG promoted from standby alone, restoring synced IPoE sessions", "srg", data.SRGName)
+		c.logger.Debug("SRG promoted from standby alone, restoring synced IPoE sessions", "srg", data.SRGName)
 		go c.restoreFromHASync(data.SRGName)
 	}
 }
@@ -3335,11 +3335,11 @@ func (c *Component) restoreFromHASync(srgName string) {
 	})
 
 	if len(checkpoints) == 0 {
-		c.logger.Info("No synced IPoE sessions to restore", "srg", srgName)
+		c.logger.Debug("No synced IPoE sessions to restore", "srg", srgName)
 		return
 	}
 
-	c.logger.Info("Restoring synced IPoE sessions", "srg", srgName, "count", len(checkpoints))
+	c.logger.Debug("Restoring synced IPoE sessions", "srg", srgName, "count", len(checkpoints))
 
 	var restored, failed int
 	now := time.Now()
@@ -3494,14 +3494,14 @@ func (c *Component) restoreFromHASync(srgName string) {
 		c.opdb.Delete(c.Ctx, opdb.NamespaceHASyncedIPoE, cp.SessionId)
 
 		restored++
-		c.logger.Info("Restored IPoE session from HA sync",
+		c.logger.Debug("Restored IPoE session from HA sync",
 			"session_id", cp.SessionId,
 			"mac", mac,
 			"ipv4", ipv4,
 			"sw_if_index", swIfIndex)
 	}
 
-	c.logger.Info("HA IPoE session restore complete",
+	c.logger.Debug("HA IPoE session restore complete",
 		"srg", srgName,
 		"restored", restored,
 		"failed", failed)

@@ -140,7 +140,7 @@ func (c *Component) readLoop() {
 			pktCount++
 			now := time.Now()
 			if now.Sub(lastLogTime) >= time.Second {
-				c.logger.Debug("Ingress throughput", "packets_per_sec", pktCount, "dhcp_chan_len", len(c.DHCPChan), "ppp_chan_len", len(c.PPPoEChan))
+				c.logger.Debug("Ingress throughput", "packets_per_sec", pktCount, "dhcp_chan_len", len(c.DHCPChan), "dhcp6_chan_len", len(c.DHCPv6Chan), "ppp_chan_len", len(c.PPPoEChan))
 				pktCount = 0
 				lastLogTime = now
 			}

@@ -227,7 +227,7 @@ func (p *Provider) Authenticate(ctx context.Context, req *auth.AuthRequest) (*au
 
 	if resp.Code == radius.CodeAccessReject {
 		p.radiusStats.IncrAuthReject(rc.addr)
-		p.logger.Info("authentication rejected",
+		p.logger.Debug("authentication rejected",
 			"username", req.Username,
 			"server", rc.addr)
 		return &auth.AuthResponse{Allowed: false}, nil
@@ -241,7 +241,7 @@ func (p *Provider) Authenticate(ctx context.Context, req *auth.AuthRequest) (*au
 	p.radiusStats.IncrAuthAccept(rc.addr)
 	attrs := p.extractAttributes(resp)
 
-	p.logger.Info("authentication accepted",
+	p.logger.Debug("authentication accepted",
 		"username", req.Username,
 		"server", rc.addr,
 		"attributes", len(attrs))

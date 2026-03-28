@@ -6,7 +6,7 @@
         "type": "ipoe",
 	      "vlan-mode": "1:1",
         "outer-vlan-min": 100,
-        "outer-vlan-max": 110,
+        "outer-vlan-max": 120,
         "inner-vlan-min": 2,
         "inner-vlan-max": 4092
       }
