@@ -115,6 +115,8 @@ type SessionState struct {
 	ServiceGroup svcgroup.ServiceGroup
 	SRGName      string
 	AllocCtx     *allocator.Context
+	Closing      bool
+	AAAInFlight  bool
 }
 
 func (c *Component) resolveServiceGroup(svlan uint16, aaaAttrs map[string]interface{}) svcgroup.ServiceGroup {
@@ -508,11 +510,12 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 			State:         "discovering",
 		}
 
+		c.sessionIndex.Store(sessID, newSess)
 		if actual, loaded := c.sessions.LoadOrStore(lookupKey, newSess); loaded {
+			c.sessionIndex.Delete(sessID)
 			sess = actual.(*SessionState)
 		} else {
 			sess = newSess
-			c.sessionIndex.Store(sessID, sess)
 		}
 	}
 
@@ -530,6 +533,10 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 	}
 
 	sess.mu.Lock()
+	if sess.Closing {
+		sess.mu.Unlock()
+		return nil
+	}
 	sess.XID = pkt.DHCPv4.Xid
 	sess.Hostname = hostname
 	sess.ClientID = clientID
@@ -540,7 +547,10 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 	sess.PendingDHCPDiscover = buf.Bytes()
 	alreadyApproved := sess.AAAApproved
 	ipoeCreated := sess.IPoESessionCreated
-	v6AaaPending := sess.PendingDHCPv6Solicit != nil || sess.PendingDHCPv6Request != nil
+	aaaInFlight := sess.AAAInFlight
+	if !alreadyApproved && !aaaInFlight {
+		sess.AAAInFlight = true
+	}
 	sess.mu.Unlock()
 	c.xidIndex.Store(pkt.DHCPv4.Xid, sess)
 
@@ -588,8 +598,8 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 		return nil
 	}
 
-	if v6AaaPending {
-		c.logger.WithGroup(logger.IPoEDHCP4).Debug("DHCP DISCOVER received, waiting for v6 AAA response", "session_id", sess.SessionID)
+	if aaaInFlight {
+		c.logger.WithGroup(logger.IPoEDHCP4).Debug("AAA already in flight, skipping duplicate request", "session_id", sess.SessionID)
 		return nil
 	}
 
@@ -678,11 +688,12 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 			EncapIfIndex:  pkt.SwIfIndex,
 			State:         "requesting",
 		}
+		c.sessionIndex.Store(sessID, newSess)
 		if actual, loaded := c.sessions.LoadOrStore(lookupKey, newSess); loaded {
+			c.sessionIndex.Delete(sessID)
 			sess = actual.(*SessionState)
 		} else {
 			sess = newSess
-			c.sessionIndex.Store(sessID, sess)
 		}
 	} else {
 		sess.mu.Lock()
@@ -699,10 +710,18 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 	}
 
 	sess.mu.Lock()
+	if sess.Closing {
+		sess.mu.Unlock()
+		return nil
+	}
 	sess.XID = pkt.DHCPv4.Xid
 	sess.LastSeen = time.Now()
 	sess.PendingDHCPRequest = buf.Bytes()
 	alreadyApproved := sess.AAAApproved
+	aaaInFlight := sess.AAAInFlight
+	if !alreadyApproved && !aaaInFlight {
+		sess.AAAInFlight = true
+	}
 	sess.mu.Unlock()
 	c.xidIndex.Store(pkt.DHCPv4.Xid, sess)
 
@@ -777,7 +796,10 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 		return nil
 	}
 
-	c.logger.WithGroup(logger.IPoEDHCP4).Debug("Session requesting, waiting for AAA approval", "session_id", sess.SessionID)
+	if aaaInFlight {
+		c.logger.WithGroup(logger.IPoEDHCP4).Debug("AAA already in flight, skipping duplicate request", "session_id", sess.SessionID)
+		return nil
+	}
 
 	hostname := string(getDHCPOption(pkt.DHCPv4.Options, layers.DHCPOptHostname))
 	circuitID, remoteID := parseOption82(getDHCPOption(pkt.DHCPv4.Options, 82))
@@ -897,14 +919,15 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 
 	if deleteSession {
 		sess.mu.Lock()
+		sess.Closing = true
 		sess.IPv6Bound = false
 		sess.IPv6Address = nil
 		sess.IPv6Prefix = nil
 		dhcpv6XID := sess.DHCPv6XID
 		sess.mu.Unlock()
 		c.xid6Index.Delete(dhcpv6XID)
-		c.sessionIndex.Delete(sessID)
 		c.sessions.Delete(lookupKey)
+		c.sessionIndex.Delete(sessID)
 	}
 
 	c.logger.Debug("IPv4 released by client", "session_id", sessID, "delete_session", deleteSession)
@@ -1214,6 +1237,10 @@ func (c *Component) handleAAAResponse(event events.Event) {
 
 	sess.mu.Lock()
 	sess.AAAApproved = allowed
+	sess.AAAInFlight = false
+	if !allowed {
+		sess.Closing = true
+	}
 	pendingDiscover := sess.PendingDHCPDiscover
 	pendingRequest := sess.PendingDHCPRequest
 	sess.PendingDHCPDiscover = nil
@@ -1227,12 +1254,12 @@ func (c *Component) handleAAAResponse(event events.Event) {
 
 	if !allowed {
 		c.logger.Debug("Session AAA rejected, cleaning up session", "session_id", sessID)
-		c.sessionIndex.Delete(sessID)
 		c.xidIndex.Delete(sess.XID)
 		lookupV4 := c.makeSessionKeyV4(mac, svlan, cvlan)
 		lookupV6 := c.makeSessionKeyV6(mac, svlan, cvlan)
 		c.sessions.Delete(lookupV4)
 		c.sessions.Delete(lookupV6)
+		c.sessionIndex.Delete(sessID)
 		return
 	}
 
@@ -1615,9 +1642,12 @@ func (c *Component) cleanupSessions() {
 			})
 			for _, item := range toDelete {
 				c.logger.Debug("Cleaning up stale session", "session_id", item.sess.SessionID)
+				item.sess.mu.Lock()
+				item.sess.Closing = true
+				item.sess.mu.Unlock()
 				c.xidIndex.Delete(item.sess.XID)
-				c.sessionIndex.Delete(item.sess.SessionID)
 				c.sessions.Delete(item.key)
+				c.sessionIndex.Delete(item.sess.SessionID)
 			}
 
 			for _, item := range toDelete {
@@ -1831,15 +1861,20 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 			State:         "soliciting",
 		}
 
+		c.sessionIndex.Store(sessID, newSess)
 		if actual, loaded := c.sessions.LoadOrStore(lookupKey, newSess); loaded {
+			c.sessionIndex.Delete(sessID)
 			sess = actual.(*SessionState)
 		} else {
 			sess = newSess
-			c.sessionIndex.Store(sessID, sess)
 		}
 	}
 
 	sess.mu.Lock()
+	if sess.Closing {
+		sess.mu.Unlock()
+		return nil
+	}
 	sess.DHCPv6XID = msg.TransactionID
 	sess.DHCPv6DUID = msg.Options.ClientID
 	sess.LastSeen = time.Now()
@@ -1851,7 +1886,10 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 	ipoeCreated := sess.IPoESessionCreated
 	circuitID := sess.CircuitID
 	remoteID := sess.RemoteID
-	v4AaaPending := sess.PendingDHCPDiscover != nil || sess.PendingDHCPRequest != nil
+	aaaInFlight := sess.AAAInFlight
+	if !alreadyApproved && !aaaInFlight {
+		sess.AAAInFlight = true
+	}
 	sess.mu.Unlock()
 	c.xid6Index.Store(msg.TransactionID, sess)
 
@@ -1873,8 +1911,8 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 		return nil
 	}
 
-	if v4AaaPending {
-		c.logger.WithGroup(logger.IPoEDHCP6).Debug("DHCPv6 SOLICIT received, waiting for v4 AAA response", "session_id", sess.SessionID)
+	if aaaInFlight {
+		c.logger.WithGroup(logger.IPoEDHCP6).Debug("AAA already in flight, skipping duplicate request", "session_id", sess.SessionID)
 		return nil
 	}
 
@@ -2009,12 +2047,13 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket, msg *dhcp6.
 	sess.IPv6Prefix = nil
 	if deleteSession {
 		sess.IPv4 = nil
+		sess.Closing = true
 	}
 	sess.mu.Unlock()
 	c.xid6Index.Delete(xid6)
 	if deleteSession {
-		c.sessionIndex.Delete(sessID)
 		c.sessions.Delete(lookupKey)
+		c.sessionIndex.Delete(sessID)
 	}
 
 	c.logger.Debug("IPv6 released by client", "session_id", sessID, "delete_session", deleteSession)
