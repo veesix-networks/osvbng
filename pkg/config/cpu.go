@@ -117,13 +117,14 @@ func ValidateCPU(r *ResolvedCPU) error {
 		return fmt.Errorf("invalid control-plane cores %q: %w", r.CPCores, err)
 	}
 
+	availableCores := getAvailableCoreIDs()
+
 	for core := range workerSet {
 		if mainSet[core] {
 			return fmt.Errorf("dataplane worker core %d overlaps with main core %d — check dataplane.workers in your config", core, r.MainCore)
 		}
-		if core >= r.TotalCores {
-			return fmt.Errorf("dataplane worker core %d requested but only %d cores available (0-%d) — remove dataplane.workers from your config to use auto-detection, or reduce the worker range to fit within the available cores",
-				core, r.TotalCores, r.TotalCores-1)
+		if availableCores != nil && !availableCores[core] {
+			return fmt.Errorf("dataplane worker core %d is not available in this CPU set — check your container cpuset or system topology", core)
 		}
 	}
 
@@ -131,12 +132,32 @@ func ValidateCPU(r *ResolvedCPU) error {
 		if workerSet[core] {
 			return fmt.Errorf("control-plane core %d overlaps with dataplane worker core — check OSVBNG_CP_CORES and dataplane.workers in your config", core)
 		}
-		if core >= r.TotalCores {
-			return fmt.Errorf("control-plane core %d requested but only %d cores available (0-%d) — reduce OSVBNG_CP_CORES or increase the available CPU allocation",
-				core, r.TotalCores, r.TotalCores-1)
+		if availableCores != nil && !availableCores[core] {
+			return fmt.Errorf("control-plane core %d is not available in this CPU set — check your container cpuset or system topology", core)
 		}
 	}
 
+	return nil
+}
+
+// getAvailableCoreIDs returns the set of CPU core IDs available to this process
+// from the cgroup cpuset. Returns nil if cpuset cannot be determined (fall back
+// to no core ID validation).
+func getAvailableCoreIDs() map[int]bool {
+	for _, path := range []string{
+		"/sys/fs/cgroup/cpuset.cpus.effective",
+		"/sys/fs/cgroup/cpuset/cpuset.cpus",
+	} {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		cores, err := parseCoreSet(strings.TrimSpace(string(data)))
+		if err != nil || len(cores) == 0 {
+			continue
+		}
+		return cores
+	}
 	return nil
 }
 
