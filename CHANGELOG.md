@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.7.0](https://github.com/veesix-networks/osvbng/compare/v0.6.1...v0.7.0) (2026-03-31)
+
+
+### Features
+
+* **component:** add readiness signaling for async plugin startup ([#221](https://github.com/veesix-networks/osvbng/issues/221)) ([920bee1](https://github.com/veesix-networks/osvbng/commit/920bee19f9e02d9b662975b13fbf9ef3eb83e8cf))
+* **dataplane:** cgroup-aware CPU detection with conservative defaults ([#237](https://github.com/veesix-networks/osvbng/issues/237)) ([5ab23e2](https://github.com/veesix-networks/osvbng/commit/5ab23e215c72aea57e745efcb709d70199b18c01))
+* **ha:** add GARP flood on SRG promotion with batching and rate limiting ([#225](https://github.com/veesix-networks/osvbng/issues/225)) ([f010a8b](https://github.com/veesix-networks/osvbng/commit/f010a8bc285a219c50b67ade0b2f1b5deb101205))
+* **logger:** async zerolog migration for non-blocking logging ([#217](https://github.com/veesix-networks/osvbng/issues/217)) ([000a879](https://github.com/veesix-networks/osvbng/commit/000a87976eb2a98a7b98105358a5f540603925f1))
+
+
+### Bug Fixes
+
+* **ci:** add topology cleanup and diagnostics to test workflows ([#234](https://github.com/veesix-networks/osvbng/issues/234)) ([bb71adf](https://github.com/veesix-networks/osvbng/commit/bb71adf824ff2f765c8f779e4ad05abf7f4d6638))
+* **ci:** handle non-zero exit codes in test setup version checks ([#235](https://github.com/veesix-networks/osvbng/issues/235)) ([00a2702](https://github.com/veesix-networks/osvbng/commit/00a2702709a0c42fe946284f9af1da73089d18b0))
+* **ci:** pre-create containerlab network to prevent parallel deploy race ([#236](https://github.com/veesix-networks/osvbng/issues/236)) ([2303393](https://github.com/veesix-networks/osvbng/commit/23033932034dc04439412b2dc93896bc1d143cd7))
+* **dataplane:** default to exactly 1 thread worker regardless of available cores ([#238](https://github.com/veesix-networks/osvbng/issues/238)) ([ed73678](https://github.com/veesix-networks/osvbng/commit/ed736780dd43677d9317d604307941d2fe72b1b8))
+* **dataplane:** default VPP heap to 1G and increase egress channel capacity for DPDK scale ([#250](https://github.com/veesix-networks/osvbng/issues/250)) ([8cc78e5](https://github.com/veesix-networks/osvbng/commit/8cc78e56a917937bcf926d3408e8b0b8f0b1a309))
+* **dhcpv6:** resolve session cache race between concurrent IPv4 and IPv6 lifecycle events ([#222](https://github.com/veesix-networks/osvbng/issues/222)) ([62c06a8](https://github.com/veesix-networks/osvbng/commit/62c06a89ad724836e26f0b006d64eed551b0ee55))
+* **ha:** prevent standby from responding to PPPoE discovery ([#227](https://github.com/veesix-networks/osvbng/issues/227)) ([4d7c570](https://github.com/veesix-networks/osvbng/commit/4d7c5702366c7d83958bbf985966461dfb538115))
+* **ha:** prevent standby from responding to subscriber ARP and IPv6 ND ([#226](https://github.com/veesix-networks/osvbng/issues/226)) ([89c84f4](https://github.com/veesix-networks/osvbng/commit/89c84f4f5086732a2776c93f94a4c8ba4a95e8d0))
+* **ha:** update GetVirtualMAC test to reflect active-state guard ([#229](https://github.com/veesix-networks/osvbng/issues/229)) ([01a5024](https://github.com/veesix-networks/osvbng/commit/01a50243fdd9617edee377922a8538951fe9fb71))
+* **ipoe:** eliminate session index race causing 1-in-48k stuck session ([#248](https://github.com/veesix-networks/osvbng/issues/248)) ([f79dd45](https://github.com/veesix-networks/osvbng/commit/f79dd45ec2b5ecda389c93fb8c84e2f1039a5b24))
+* **southbound:** replace FIFO async worker with stream pool and parameterize VPP memory config ([#246](https://github.com/veesix-networks/osvbng/issues/246)) ([b51a6be](https://github.com/veesix-networks/osvbng/commit/b51a6be721ee19ed3e36ea556105974f78b9cd2a))
+
+
+### Performance Improvements
+
+* **dhcp:** replace gopacket with binary parsers, fix dataplane config generation ([#216](https://github.com/veesix-networks/osvbng/issues/216)) ([c68e95a](https://github.com/veesix-networks/osvbng/commit/c68e95a8afd7d88e07c96643eb16ccd30c5228dd))
+* **dhcpv6:** revert IPoE mutex additions, use lightweight subscriber cache merge ([#224](https://github.com/veesix-networks/osvbng/issues/224)) ([5da7514](https://github.com/veesix-networks/osvbng/commit/5da751447ac8ad2bab37eabd4c1b688e0c7e983b))
+* **ipoe:** fix DHCPv6 scale bottleneck at 32k dual-stack subscribers ([#244](https://github.com/veesix-networks/osvbng/issues/244)) ([abf37ed](https://github.com/veesix-networks/osvbng/commit/abf37edeec1ceb5bfe03ad84043a0f4d91fe3b87))
+* **sessions:** improve IPoE session setup throughput ([#213](https://github.com/veesix-networks/osvbng/issues/213)) ([0a0b97d](https://github.com/veesix-networks/osvbng/commit/0a0b97d36686fdc5850f528f0d6022f2db190155))
+* **sessions:** profile-guided session setup optimizations ([#215](https://github.com/veesix-networks/osvbng/issues/215)) ([20fa869](https://github.com/veesix-networks/osvbng/commit/20fa8690b75e17eb3d95c356e96387b9521a34a1))
+
 ## [0.6.1](https://github.com/veesix-networks/osvbng/compare/v0.6.0...v0.6.1) (2026-03-22)
 
 
