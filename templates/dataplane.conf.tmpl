@@ -18,9 +18,11 @@ api-trace {
 {{ end }}}
 
 memory {
-  main-heap-size {{ .Memory.MainHeapSize }}
+{{ if .Memory }}  main-heap-size {{ .Memory.MainHeapSize }}
   main-heap-page-size {{ .Memory.MainHeapPageSize }}
-}
+{{ else }}  main-heap-size 1G
+  main-heap-page-size 4k
+{{ end }}}
 
 api-segment {
   gid osvbng
