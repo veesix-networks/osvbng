@@ -51,7 +51,7 @@ api-trace {
 }
 
 memory {
-  main-heap-size 512M
+  main-heap-size 1G
   main-heap-page-size 4k
 }
 
@@ -153,7 +153,7 @@ api-trace {
 }
 
 memory {
-  main-heap-size 512M
+  main-heap-size 1G
   main-heap-page-size 4k
 }
 
@@ -243,7 +243,7 @@ api-trace {
 }
 
 memory {
-  main-heap-size 512M
+  main-heap-size 1G
   main-heap-page-size 4k
 }
 

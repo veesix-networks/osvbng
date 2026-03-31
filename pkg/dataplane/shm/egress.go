@@ -26,7 +26,7 @@ func NewEgress(client *Client) *Egress {
 		client:    client,
 		writer:    NewEgressWriter(client),
 		logger:    logger.Get(logger.Dataplane),
-		txChan:    make(chan *dataplane.EgressPacket, 1000),
+		txChan:    make(chan *dataplane.EgressPacket, 4096),
 		closeChan: make(chan struct{}),
 	}
 
@@ -147,7 +147,7 @@ func (e *Egress) Reconnect(client *Client) error {
 
 	e.client = client
 	e.writer = NewEgressWriter(client)
-	e.txChan = make(chan *dataplane.EgressPacket, 1000)
+	e.txChan = make(chan *dataplane.EgressPacket, 4096)
 	e.closeChan = make(chan struct{})
 
 	e.wg.Add(1)

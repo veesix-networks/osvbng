@@ -57,12 +57,12 @@ func NewDataplaneTemplateData(cfg *Config, cpu *ResolvedCPU) (*DataplaneTemplate
 	memory := cfg.Dataplane.Memory
 	if memory == nil {
 		memory = &system.MemoryConfig{
-			MainHeapSize:     "512M",
+			MainHeapSize:     "1G",
 			MainHeapPageSize: "4k",
 		}
 	}
 	if memory.MainHeapSize == "" {
-		memory.MainHeapSize = "512M"
+		memory.MainHeapSize = "1G"
 	}
 	if memory.MainHeapPageSize == "" {
 		memory.MainHeapPageSize = "4k"
