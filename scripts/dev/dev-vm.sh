@@ -20,7 +20,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 VM_NAME="osvbng-dev"
-# VM_MEMORY is selected interactively below
+VM_MEMORY="${VM_MEMORY:-6144}"
 VM_VCPUS=4
 VM_DISK_SIZE="30G"
 LIBVIRT_URI="qemu:///system"
@@ -64,15 +64,6 @@ if virsh --connect "$LIBVIRT_URI" list --all --name 2>/dev/null | grep -qx "$VM_
     echo "  virsh destroy $VM_NAME; virsh undefine $VM_NAME --remove-all-storage"
     exit 1
 fi
-
-# Memory selection
-
-VM_MEMORY=$($TUI_TOOL --title "VM Memory" --radiolist \
-    "Select memory for the dev VM.\nVPP needs ~1GB hugepages, plus OS and Docker overhead." 14 60 3 \
-    "4096"  "4 GB  (minimal, hugepages may fall short)" OFF \
-    "6144"  "6 GB  (recommended)" ON \
-    "8192"  "8 GB  (comfortable)" OFF \
-    3>&1 1>&2 2>&3) || { echo "Cancelled."; exit 1; }
 
 # SSH Keys selection and copy
 
