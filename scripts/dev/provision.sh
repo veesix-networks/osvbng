@@ -142,6 +142,24 @@ else
     echo "  Enable nested virt on host: modprobe kvm_intel nested=1"
 fi
 
+# --- Kernel modules (VRF, MPLS) ---
+
+cat > /etc/modules-load.d/osvbng.conf <<EOF
+vrf
+mpls_router
+mpls_iptunnel
+dummy
+EOF
+
+cat > /etc/sysctl.d/99-mpls.conf <<EOF
+net.mpls.platform_labels=1048575
+EOF
+
+for mod in vrf mpls_router mpls_iptunnel dummy; do
+    modprobe "$mod" 2>/dev/null || true
+done
+sysctl -p /etc/sysctl.d/99-mpls.conf 2>/dev/null || true
+
 # --- Dev user setup ---
 
 if id dev &>/dev/null; then

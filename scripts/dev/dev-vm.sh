@@ -160,9 +160,7 @@ done
 echo "Provisioning..."
 . "$PROJECT_ROOT/versions.env"
 scp $SSH_OPTS "$SCRIPT_DIR/provision.sh" "dev@${IP}:/tmp/provision.sh"
-scp $SSH_OPTS "$PROJECT_ROOT/scripts/qemu/test-runner/packer/scripts/configure-kernel.sh" "dev@${IP}:/tmp/configure-kernel.sh"
 ssh $SSH_OPTS "dev@${IP}" "sudo env GOLANG_VERSION=${GOLANG_VERSION} DATAPLANE_VERSION=${DATAPLANE_VERSION} CONTAINERLAB_VERSION=${CONTAINERLAB_VERSION} bash /tmp/provision.sh"
-ssh $SSH_OPTS "dev@${IP}" "sudo bash /tmp/configure-kernel.sh"
 
 
 echo ""
