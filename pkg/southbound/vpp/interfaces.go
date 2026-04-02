@@ -10,6 +10,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/ifmgr"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/af_packet"
+	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/bond"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/ethernet_types"
 	vppinterfaces "github.com/veesix-networks/osvbng/pkg/vpp/binapi/interface"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/interface_types"
@@ -118,6 +119,19 @@ func (v *VPP) DeleteInterface(name string) error {
 
 	iface := v.ifMgr.GetByName(name)
 	if iface == nil {
+		return nil
+	}
+
+	if iface.DevType == "bond" {
+		req := &bond.BondDelete{
+			SwIfIndex: interface_types.InterfaceIndex(iface.SwIfIndex),
+		}
+		reply := &bond.BondDeleteReply{}
+		if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+			return fmt.Errorf("delete bond interface: %w", err)
+		}
+		v.ifMgr.Remove(iface.SwIfIndex)
+		v.logger.Debug("Deleted bond interface", "interface", name)
 		return nil
 	}
 
@@ -687,9 +701,12 @@ func (v *VPP) DumpUnnumbered() ([]southbound.UnnumberedInfo, error) {
 func (v *VPP) CreateInterface(cfg *interfaces.InterfaceConfig) error {
 	ifType := inferInterfaceType(cfg)
 
-	if ifType == "loopback" {
+	switch ifType {
+	case "bond":
+		return v.createBondInterface(cfg)
+	case "loopback":
 		return v.createLoopback(cfg)
-	} else if ifType == "physical" {
+	case "physical":
 		return v.createPhysicalInterface(cfg)
 	}
 
@@ -782,6 +799,169 @@ func (v *VPP) createPhysicalInterface(cfg *interfaces.InterfaceConfig) error {
 		}
 	}
 
+	return nil
+}
+
+func (v *VPP) createBondInterface(cfg *interfaces.InterfaceConfig) error {
+	if !v.useDPDK {
+		v.logger.Warn("Bond config ignored in AF_PACKET mode, host OS manages the bond", "interface", cfg.Name)
+		return v.createPhysicalInterface(cfg)
+	}
+
+	if err := cfg.Bond.Validate(); err != nil {
+		return fmt.Errorf("invalid bond config for %s: %w", cfg.Name, err)
+	}
+
+	for _, member := range cfg.Bond.Members {
+		iface := v.ifMgr.GetByName(member.Name)
+		if iface == nil {
+			return fmt.Errorf("bond member %q not found in VPP", member.Name)
+		}
+		if iface.Type == ifmgr.IfTypeSub {
+			return fmt.Errorf("bond member %q is a subinterface", member.Name)
+		}
+		if iface.SupSwIfIndex != iface.SwIfIndex {
+			return fmt.Errorf("bond member %q is a parented interface", member.Name)
+		}
+		if iface.DevType == "loopback" || iface.DevType == "host" {
+			return fmt.Errorf("bond member %q has unsupported device type %q", member.Name, iface.DevType)
+		}
+	}
+
+	mode := bond.BOND_API_MODE_LACP
+	switch cfg.Bond.Mode {
+	case "round-robin":
+		mode = bond.BOND_API_MODE_ROUND_ROBIN
+	case "active-backup":
+		mode = bond.BOND_API_MODE_ACTIVE_BACKUP
+	case "xor":
+		mode = bond.BOND_API_MODE_XOR
+	case "broadcast":
+		mode = bond.BOND_API_MODE_BROADCAST
+	case "lacp", "":
+		mode = bond.BOND_API_MODE_LACP
+	}
+
+	lb := bond.BOND_API_LB_ALGO_L2
+	switch cfg.Bond.LoadBalance {
+	case "l23":
+		lb = bond.BOND_API_LB_ALGO_L23
+	case "l34":
+		lb = bond.BOND_API_LB_ALGO_L34
+	case "l2", "":
+		lb = bond.BOND_API_LB_ALGO_L2
+	}
+
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	createReq := &bond.BondCreate2{
+		Mode:      mode,
+		Lb:        lb,
+		EnableGso: cfg.Bond.GSO,
+	}
+
+	if cfg.Bond.MACAddress != "" {
+		mac, _ := net.ParseMAC(cfg.Bond.MACAddress)
+		createReq.UseCustomMac = true
+		copy(createReq.MacAddress[:], mac)
+	}
+
+	createReply := &bond.BondCreate2Reply{}
+	if err := ch.SendRequest(createReq).ReceiveReply(createReply); err != nil {
+		return fmt.Errorf("create bond interface: %w", err)
+	}
+
+	bondSwIfIndex := createReply.SwIfIndex
+
+	rollback := func() {
+		delReq := &bond.BondDelete{SwIfIndex: bondSwIfIndex}
+		delReply := &bond.BondDeleteReply{}
+		if err := ch.SendRequest(delReq).ReceiveReply(delReply); err != nil {
+			v.logger.Error("Failed to rollback bond creation", "sw_if_index", bondSwIfIndex, "error", err)
+		} else {
+			v.logger.Info("Rolled back bond creation", "sw_if_index", bondSwIfIndex)
+		}
+	}
+
+	var addedMembers []interface_types.InterfaceIndex
+	for _, member := range cfg.Bond.Members {
+		memberIdx, _ := v.GetInterfaceIndex(member.Name)
+
+		addReq := &bond.BondAddMember{
+			SwIfIndex:     interface_types.InterfaceIndex(memberIdx),
+			BondSwIfIndex: bondSwIfIndex,
+			IsPassive:     member.Passive,
+			IsLongTimeout: member.LongTimeout,
+		}
+		addReply := &bond.BondAddMemberReply{}
+		if err := ch.SendRequest(addReq).ReceiveReply(addReply); err != nil {
+			for _, idx := range addedMembers {
+				detachReq := &bond.BondDetachMember{SwIfIndex: idx}
+				detachReply := &bond.BondDetachMemberReply{}
+				_ = ch.SendRequest(detachReq).ReceiveReply(detachReply)
+			}
+			rollback()
+			return fmt.Errorf("add bond member %s: %w", member.Name, err)
+		}
+		addedMembers = append(addedMembers, interface_types.InterfaceIndex(memberIdx))
+		v.logger.Debug("Added bond member", "member", member.Name, "bond_sw_if_index", bondSwIfIndex)
+	}
+
+	if err := v.LoadInterfaces(); err != nil {
+		v.logger.Warn("Failed to reload interfaces after bond creation", "error", err)
+	}
+
+	vppIfName := cfg.Name
+	if iface := v.ifMgr.Get(uint32(bondSwIfIndex)); iface != nil && iface.Name != cfg.Name {
+		if err := v.renameVPPInterface(iface.Name, cfg.Name); err != nil {
+			v.logger.Warn("Failed to rename bond interface, continuing with VPP name",
+				"vpp_name", iface.Name, "config_name", cfg.Name, "error", err)
+			vppIfName = iface.Name
+		}
+	}
+
+	if cfg.Enabled {
+		if err := v.setInterfaceState(vppIfName, true); err != nil {
+			for _, idx := range addedMembers {
+				detachReq := &bond.BondDetachMember{SwIfIndex: idx}
+				detachReply := &bond.BondDetachMemberReply{}
+				_ = ch.SendRequest(detachReq).ReceiveReply(detachReply)
+			}
+			rollback()
+			return fmt.Errorf("set bond interface up: %w", err)
+		}
+	}
+
+	if cfg.LCP {
+		if err := v.createLCPPair(vppIfName, cfg.Name, lcp.LCP_API_ITF_HOST_TAP); err != nil {
+			for _, idx := range addedMembers {
+				detachReq := &bond.BondDetachMember{SwIfIndex: idx}
+				detachReply := &bond.BondDetachMemberReply{}
+				_ = ch.SendRequest(detachReq).ReceiveReply(detachReply)
+			}
+			rollback()
+			return fmt.Errorf("create LCP pair for bond: %w", err)
+		}
+		if err := v.waitForLink(cfg.Name, 10*time.Second); err != nil {
+			return fmt.Errorf("wait for bond LCP interface: %w", err)
+		}
+	}
+
+	if cfg.Description != "" {
+		v.SetInterfaceDescription(cfg.Name, cfg.Description)
+	}
+
+	if cfg.VRF != "" {
+		if err := v.bindInterfaceToVRF(vppIfName, cfg.Name, cfg.VRF, cfg.LCP); err != nil {
+			return fmt.Errorf("bind bond to VRF: %w", err)
+		}
+	}
+
+	v.logger.Info("Created bond interface", "name", cfg.Name, "mode", cfg.Bond.Mode, "members", len(cfg.Bond.Members), "sw_if_index", bondSwIfIndex)
 	return nil
 }
 
@@ -1361,6 +1541,10 @@ func (v *VPP) setVPPInterfaceHWMtu(name string, mtu uint16) error {
 func inferInterfaceType(cfg *interfaces.InterfaceConfig) string {
 	if cfg.Type != "" {
 		return cfg.Type
+	}
+
+	if cfg.Bond != nil {
+		return "bond"
 	}
 
 	if len(cfg.Name) >= 4 && cfg.Name[:4] == "loop" {

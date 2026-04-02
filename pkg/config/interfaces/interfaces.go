@@ -1,5 +1,11 @@
 package interfaces
 
+import (
+	"encoding/json"
+	"fmt"
+	"net"
+)
+
 type InterfaceConfig struct {
 	Name        string         `json:"name" yaml:"name"`
 	Description string         `json:"description,omitempty" yaml:"description,omitempty"`
@@ -69,7 +75,72 @@ type AddressConfig struct {
 }
 
 type BondConfig struct {
-	Mode    string   `json:"mode" yaml:"mode"`
-	Members []string `json:"members" yaml:"members"`
-	MIIMon  int      `json:"miimon,omitempty" yaml:"miimon,omitempty"`
+	Mode        string       `json:"mode" yaml:"mode"`
+	Members     []BondMember `json:"members" yaml:"members"`
+	LoadBalance string       `json:"load-balance,omitempty" yaml:"load-balance,omitempty"`
+	GSO         bool         `json:"gso,omitempty" yaml:"gso,omitempty"`
+	MACAddress  string       `json:"mac-address,omitempty" yaml:"mac-address,omitempty"`
+}
+
+func (c *BondConfig) Validate() error {
+	switch c.Mode {
+	case "lacp", "round-robin", "active-backup", "xor", "broadcast", "":
+	default:
+		return fmt.Errorf("invalid bond mode %q", c.Mode)
+	}
+
+	if len(c.Members) == 0 {
+		return fmt.Errorf("bond requires at least one member")
+	}
+
+	if c.LoadBalance != "" {
+		switch c.LoadBalance {
+		case "l2", "l23", "l34":
+		default:
+			return fmt.Errorf("invalid load-balance %q (must be l2, l23, or l34)", c.LoadBalance)
+		}
+		mode := c.Mode
+		if mode == "" {
+			mode = "lacp"
+		}
+		if mode != "lacp" && mode != "xor" {
+			return fmt.Errorf("load-balance is only valid for lacp and xor modes")
+		}
+	}
+
+	if c.MACAddress != "" {
+		if _, err := net.ParseMAC(c.MACAddress); err != nil {
+			return fmt.Errorf("invalid mac-address %q: %w", c.MACAddress, err)
+		}
+	}
+
+	return nil
+}
+
+type BondMember struct {
+	Name        string `json:"name" yaml:"name"`
+	Passive     bool   `json:"passive,omitempty" yaml:"passive,omitempty"`
+	LongTimeout bool   `json:"long-timeout,omitempty" yaml:"long-timeout,omitempty"`
+}
+
+func (m *BondMember) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		m.Name = s
+		return nil
+	}
+
+	type plain BondMember
+	return json.Unmarshal(data, (*plain)(m))
+}
+
+func (m *BondMember) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var s string
+	if err := unmarshal(&s); err == nil {
+		m.Name = s
+		return nil
+	}
+
+	type plain BondMember
+	return unmarshal((*plain)(m))
 }
