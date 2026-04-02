@@ -11,6 +11,7 @@ Network interface configuration. Each key in the `interfaces` map is an interfac
 | `lcp` | bool | Create Linux Control Plane interface | `true` |
 | `bng_mode` | string | BNG role: `access` or `core` | `access` |
 | `unnumbered` | string | Borrow address from named interface | `loop100` |
+| `bond` | [Bond](#bond) | Bond interface configuration (DPDK only) | |
 | `address` | [Address](#address) | IP address configuration | |
 | `subinterfaces` | [Subinterface](#sub-interfaces) | Sub-interface configuration | |
 | `ipv6` | [IPv6](#ipv6) | IPv6 configuration | |
@@ -70,6 +71,43 @@ Each key in `subinterfaces` is a sub-interface name.
 |-------|------|-------------|---------|
 | `enabled` | bool | Enable ARP | `true` |
 
+## Bond
+
+Bond interface configuration for link aggregation. In DPDK deployments, bonds are created inside VPP. In AF_PACKET (Docker) deployments, bonds are managed by the host OS — configure the bond interface by name without a `bond` section.
+
+| Field | Type | Description | Example |
+|-------|------|-------------|---------|
+| `mode` | string | Bond mode | `lacp` |
+| `members` | array | Member interfaces (string or object) | |
+| `load-balance` | string | Load balancing algorithm (XOR/LACP only) | `l23` |
+| `gso` | bool | Enable Generic Segmentation Offload | `true` |
+| `mac-address` | string | Custom MAC address for the bond | `02:00:00:00:00:01` |
+
+**Bond modes:** `lacp` (default), `round-robin`, `active-backup`, `xor`, `broadcast`
+
+**Load balance algorithms:** `l2` (default), `l23`, `l34` — only valid for `lacp` and `xor` modes.
+
+### Bond Members
+
+Members can be specified as a simple string or as an object with per-member LACP settings:
+
+```yaml
+members:
+  - TenGigabitEthernet0/0/0                  # string shorthand (active, short timeout)
+  - name: TenGigabitEthernet0/0/1            # object with LACP settings
+    passive: false
+    long-timeout: false
+```
+
+| Field | Type | Description | Default |
+|-------|------|-------------|---------|
+| `name` | string | Member interface name | |
+| `passive` | bool | LACP passive mode (don't initiate) | `false` |
+| `long-timeout` | bool | 90 second timeout (vs 3 second default) | `false` |
+
+!!! info "AF_PACKET (Docker) deployments"
+    When running osvbng in Docker with AF_PACKET, bond interfaces are managed by the host operating system (e.g., Linux bonding). Simply reference the bond interface by name (e.g., `bond0`) in your configuration without a `bond` section — VPP will attach to it as a regular host interface.
+
 ## Example
 
 ```yaml
@@ -107,4 +145,46 @@ interfaces:
         managed: true
         other: true
         router-lifetime: 1800
+```
+
+### DPDK Bond Example
+
+```yaml
+interfaces:
+  TenGigabitEthernet0/0/0:
+    description: Core link 1
+    enabled: true
+  TenGigabitEthernet0/0/1:
+    description: Core link 2
+    enabled: true
+  bond0:
+    description: Core LACP bond
+    enabled: true
+    lcp: true
+    bond:
+      mode: lacp
+      load-balance: l23
+      gso: true
+      members:
+        - TenGigabitEthernet0/0/0
+        - TenGigabitEthernet0/0/1
+```
+
+### AF_PACKET Bond Example
+
+In Docker deployments, bonding is managed by the host OS. The `setup-interfaces.sh` script bridges the container's veth pair to the host bond interface. osvbng sees the container interface (e.g., `eth1`), and the `name` field can be used to reference it as `bond0` inside osvbng.
+
+```bash
+# Host side: bridge container eth1 to host bond0
+./setup-interfaces.sh osvbng eth0:br-mgmt eth1:bond0
+```
+
+```yaml
+# osvbng config — eth1 is bridged to host bond0, renamed to bond0 inside VPP
+interfaces:
+  eth1:
+    name: bond0
+    description: Core bond (managed by host OS)
+    enabled: true
+    lcp: true
 ```

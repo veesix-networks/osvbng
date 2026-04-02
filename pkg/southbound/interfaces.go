@@ -32,4 +32,9 @@ type Interfaces interface {
 	DelIPv4Address(ifName, address string) error
 	AddIPv6Address(ifName, address string) error
 	DelIPv6Address(ifName, address string) error
+
+	// Bond interface queries
+	DumpBondInterfaces() ([]BondInterfaceInfo, error)
+	DumpBondMembers(bondSwIfIndex uint32) ([]BondMemberInfo, error)
+	DumpLACPInterfaces() ([]LACPInterfaceInfo, error)
 }
