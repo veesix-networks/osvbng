@@ -714,6 +714,16 @@ func (cd *ConfigManager) LoadConfig(id conf.SessionID, config *config.Config) er
 				sess.changes = append(sess.changes, hctx)
 			}
 		}
+
+		for subID, subCfg := range iface.Subinterfaces {
+			sess.changes = append(sess.changes, &conf.HandlerContext{
+				SessionID: id,
+				Path:      fmt.Sprintf("interfaces.%s.subinterfaces.%s", name, subID),
+				OldValue:  nil,
+				NewValue:  subCfg,
+				Config:    config,
+			})
+		}
 	}
 
 	if config.Protocols.BGP != nil && config.Protocols.BGP.ASN != 0 {

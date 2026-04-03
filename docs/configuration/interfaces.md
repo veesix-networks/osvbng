@@ -26,12 +26,19 @@ Network interface configuration. Each key in the `interfaces` map is an interfac
 
 ## Sub-interfaces
 
-Each key in `subinterfaces` is a sub-interface name.
+Sub-interfaces are configured as a list under the parent interface. Each entry requires an `id` (the VPP sub-interface ID) and a `vlan` (the outer VLAN to match).
 
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
-| `vlan` | int | VLAN ID | `100` |
+| `id` | int | Sub-interface ID | `100` |
+| `vlan` | int | Outer VLAN ID (1-4094) | `100` |
+| `inner-vlan` | int | Inner VLAN ID for double-tag match (1-4094) | `200` |
+| `vlan-protocol` | string | VLAN protocol: `802.1q` (default) or `802.1ad` | `802.1q` |
 | `enabled` | bool | Enable the sub-interface | `true` |
+| `description` | string | Human-readable description | `Customer A` |
+| `mtu` | int | MTU override (auto-derived from parent if not set) | `1504` |
+| `lcp` | bool | Create Linux Control Plane interface (requires parent `lcp`) | `true` |
+| `vrf` | string | Bind to VRF | `CUSTOMER-A` |
 | `address` | [Address](#address) | IP address configuration | |
 | `ipv6` | [IPv6](#ipv6) | IPv6 configuration | |
 | `arp` | [ARP](#arp) | ARP configuration | |
@@ -40,6 +47,23 @@ Each key in `subinterfaces` is a sub-interface name.
 
 !!! info "Automatic sub-interface management"
     When using the BNG functionality of osvbng with subscriber groups, sub-interfaces are automatically deployed and managed based on the VLAN matching rules. You do not need to manually configure sub-interfaces in this section.
+
+!!! note "Automatic MTU"
+    If `mtu` is not set, the sub-interface MTU is automatically derived from the parent interface: parent MTU plus 4 bytes for single-tag (802.1q), or plus 8 bytes for double-tag (QinQ). Set `mtu` explicitly to override.
+
+!!! warning "VLAN matching flags are immutable"
+    VPP does not support modifying sub-interface VLAN matching flags after creation. Changing `vlan`, `inner-vlan`, or `vlan-protocol` on an existing sub-interface requires a restart to take effect.
+
+### VLAN Matching Modes
+
+The combination of `vlan-protocol` and `inner-vlan` determines how packets are matched:
+
+| Config | Matching | Use Case |
+|--------|----------|----------|
+| `vlan: 100` | Single 802.1q tag, exact match | VRF-lite on core interfaces |
+| `vlan: 100, inner-vlan: 200` | Double 802.1q tag, exact match | Double-tagged business customer |
+| `vlan: 100, vlan-protocol: 802.1ad` | S-VLAN match, any C-VLAN | Subscriber group pattern |
+| `vlan: 100, inner-vlan: 200, vlan-protocol: 802.1ad` | Exact QinQ match | Business customer on access |
 
 ### Sub-interface BNG
 
@@ -122,14 +146,17 @@ interfaces:
     name: eth2
     description: Core Interface
     enabled: true
-    bng_mode: core
     lcp: true
     subinterfaces:
-      eth2.100:
+      - id: 100
         vlan: 100
         enabled: true
-        bng:
-          mode: pppoe
+        lcp: true
+        vrf: CUSTOMER-A
+        address:
+          ipv4:
+            - 10.0.100.1/24
+        description: "Customer A VRF-lite"
 
   loop100:
     name: loop100

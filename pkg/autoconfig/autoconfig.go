@@ -72,6 +72,7 @@ func (a *Autoconfig) deriveSVLANConfig(group *subscriber.SubscriberGroup, vlanRa
 	changes = append(changes, Change{
 		Path: fmt.Sprintf("interfaces.%s.subinterfaces.%d", a.parentInterface, svlan),
 		Value: &interfaces.SubinterfaceConfig{
+			ID:         int(svlan),
 			VLAN:       int(svlan),
 			Enabled:    true,
 			Unnumbered: loopback,

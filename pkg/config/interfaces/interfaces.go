@@ -22,19 +22,48 @@ type InterfaceConfig struct {
 	BNGMode string      `json:"bng_mode,omitempty" yaml:"bng_mode,omitempty"`
 	CGNAT   string      `json:"cgnat,omitempty" yaml:"cgnat,omitempty"`
 
-	Subinterfaces map[string]*SubinterfaceConfig `json:"subinterfaces,omitempty" yaml:"subinterfaces,omitempty"`
+	Subinterfaces SubinterfaceMap `json:"subinterfaces,omitempty" yaml:"subinterfaces,omitempty"`
 	IPv6          *IPv6Config                    `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`
 	ARP           *ARPConfig                     `json:"arp,omitempty" yaml:"arp,omitempty"`
 	Unnumbered    string                         `json:"unnumbered,omitempty" yaml:"unnumbered,omitempty"`
 }
 
 type SubinterfaceConfig struct {
-	VLAN       int         `json:"vlan" yaml:"vlan"`
-	Enabled    bool        `json:"enabled,omitempty" yaml:"enabled,omitempty"`
-	IPv6       *IPv6Config `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`
-	ARP        *ARPConfig  `json:"arp,omitempty" yaml:"arp,omitempty"`
-	Unnumbered string      `json:"unnumbered,omitempty" yaml:"unnumbered,omitempty"`
-	BNG        *BNGConfig  `json:"bng,omitempty" yaml:"bng,omitempty"`
+	ID           int            `json:"id" yaml:"id"`
+	VLAN         int            `json:"vlan" yaml:"vlan"`
+	InnerVLAN    *int           `json:"inner-vlan,omitempty" yaml:"inner-vlan,omitempty"`
+	Enabled      bool           `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	Description  string         `json:"description,omitempty" yaml:"description,omitempty"`
+	MTU          int            `json:"mtu,omitempty" yaml:"mtu,omitempty"`
+	LCP          bool           `json:"lcp,omitempty" yaml:"lcp,omitempty"`
+	VRF          string         `json:"vrf,omitempty" yaml:"vrf,omitempty"`
+	Address      *AddressConfig `json:"address,omitempty" yaml:"address,omitempty"`
+	VLANProtocol string         `json:"vlan-protocol,omitempty" yaml:"vlan-protocol,omitempty"`
+	IPv6         *IPv6Config    `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`
+	ARP          *ARPConfig     `json:"arp,omitempty" yaml:"arp,omitempty"`
+	Unnumbered   string         `json:"unnumbered,omitempty" yaml:"unnumbered,omitempty"`
+	BNG          *BNGConfig     `json:"bng,omitempty" yaml:"bng,omitempty"`
+}
+
+type SubinterfaceMap map[string]*SubinterfaceConfig
+
+func (m *SubinterfaceMap) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var list []*SubinterfaceConfig
+	if err := unmarshal(&list); err == nil {
+		*m = make(SubinterfaceMap, len(list))
+		for _, sub := range list {
+			key := fmt.Sprintf("%d", sub.ID)
+			(*m)[key] = sub
+		}
+		return nil
+	}
+
+	var raw map[string]*SubinterfaceConfig
+	if err := unmarshal(&raw); err != nil {
+		return err
+	}
+	*m = SubinterfaceMap(raw)
+	return nil
 }
 
 type BNGMode string
