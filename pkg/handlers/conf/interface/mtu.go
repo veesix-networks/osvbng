@@ -65,8 +65,8 @@ func (h *MTUHandler) Validate(ctx context.Context, hctx *conf.HandlerContext) er
 		return fmt.Errorf("MTU must be an integer")
 	}
 
-	if mtu < 68 || mtu > 9000 {
-		return fmt.Errorf("MTU must be between 68 and 9000")
+	if mtu < 68 || mtu > 9714 {
+		return fmt.Errorf("MTU must be between 68 and 9714")
 	}
 
 	return nil
