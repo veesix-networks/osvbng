@@ -5,8 +5,24 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/ifmgr"
 )
 
+type SubinterfaceParams struct {
+	ParentIface  string
+	SubID        uint16
+	OuterVLAN    uint16
+	InnerVLAN    *uint16
+	VLANProtocol string
+	LCP          bool
+	VRF          string
+	Description  string
+	Enabled      bool
+	MTU          int
+	IPv4         []string
+	IPv6         []string
+}
+
 type Interfaces interface {
 	CreateSVLAN(parentIface string, vlan uint16, ipv4 []string, ipv6 []string) error
+	CreateSubinterface(params *SubinterfaceParams) error
 	DeleteInterface(name string) error
 
 	GetInterfaceIndex(name string) (int, error)

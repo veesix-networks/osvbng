@@ -30,14 +30,52 @@ func NewSubinterfaceHandler(d *deps.ConfDeps) conf.Handler {
 }
 
 func (h *SubinterfaceHandler) Validate(ctx context.Context, hctx *conf.HandlerContext) error {
-	_, ok := hctx.NewValue.(*interfaces.SubinterfaceConfig)
+	cfg, ok := hctx.NewValue.(*interfaces.SubinterfaceConfig)
 	if !ok {
 		return fmt.Errorf("expected *interfaces.SubinterfaceConfig, got %T", hctx.NewValue)
 	}
+
+	if cfg.VLAN < 1 || cfg.VLAN > 4094 {
+		return fmt.Errorf("sub-interface vlan must be between 1 and 4094")
+	}
+
+	if cfg.InnerVLAN != nil {
+		if *cfg.InnerVLAN < 1 || *cfg.InnerVLAN > 4094 {
+			return fmt.Errorf("sub-interface inner-vlan must be between 1 and 4094")
+		}
+	}
+
+	if cfg.LCP && hctx.Config != nil {
+		values, err := paths.InterfaceSubinterface.ExtractWildcards(hctx.Path, 2)
+		if err == nil && len(values) >= 1 {
+			parentName := values[0]
+			if parentCfg, exists := hctx.Config.Interfaces[parentName]; exists {
+				if !parentCfg.LCP {
+					return fmt.Errorf("sub-interface lcp requires parent interface lcp")
+				}
+			}
+		}
+	}
+
+	if hctx.Config != nil && hctx.Config.SubscriberGroups != nil {
+		values, err := paths.InterfaceSubinterface.ExtractWildcards(hctx.Path, 2)
+		if err == nil && len(values) >= 1 {
+			parentName := values[0]
+			if parentCfg, exists := hctx.Config.Interfaces[parentName]; exists && parentCfg.BNGMode == "access" {
+				groupName := hctx.Config.SubscriberGroups.FindGroupNameBySVLAN(uint16(cfg.VLAN))
+				if groupName != "" {
+					return fmt.Errorf("sub-interface vlan %d conflicts with subscriber group %s", cfg.VLAN, groupName)
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
 func (h *SubinterfaceHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error {
+	cfg := hctx.NewValue.(*interfaces.SubinterfaceConfig)
+
 	values, err := paths.InterfaceSubinterface.ExtractWildcards(hctx.Path, 2)
 	if err != nil {
 		return fmt.Errorf("extract values from path: %w", err)
@@ -54,7 +92,29 @@ func (h *SubinterfaceHandler) Apply(ctx context.Context, hctx *conf.HandlerConte
 		return nil
 	}
 
-	return h.southbound.CreateSVLAN(parentIf, uint16(subIfID), nil, nil)
+	params := &southbound.SubinterfaceParams{
+		ParentIface:  parentIf,
+		SubID:        uint16(subIfID),
+		OuterVLAN:    uint16(cfg.VLAN),
+		VLANProtocol: cfg.VLANProtocol,
+		LCP:          cfg.LCP,
+		VRF:          cfg.VRF,
+		Description:  cfg.Description,
+		Enabled:      cfg.Enabled,
+		MTU:          cfg.MTU,
+	}
+
+	if cfg.InnerVLAN != nil {
+		v := uint16(*cfg.InnerVLAN)
+		params.InnerVLAN = &v
+	}
+
+	if cfg.Address != nil {
+		params.IPv4 = cfg.Address.IPv4
+		params.IPv6 = cfg.Address.IPv6
+	}
+
+	return h.southbound.CreateSubinterface(params)
 }
 
 func (h *SubinterfaceHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) error {
