@@ -59,8 +59,8 @@ const (
 	SystemDataplaneNodes     Path = "system.dataplane.nodes"
 	SystemDataplaneErrors    Path = "system.dataplane.errors"
 	SystemDataplaneBuffers   Path = "system.dataplane.buffers"
-	SystemDataplaneBond     Path = "system.dataplane.bond"
-	SystemDataplaneLACP     Path = "system.dataplane.lacp"
+	Interfaces       Path = "interfaces"
+	InterfacesDetail Path = "interfaces.<*>"
 
 	SystemEvents   Path = "system.events"
 	SystemWatchdog Path = "system.watchdog"
