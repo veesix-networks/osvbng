@@ -1031,11 +1031,41 @@ func (v *VPP) SetInterfaceDescription(name, description string) error {
 }
 
 func (v *VPP) SetInterfaceMTU(name string, mtu int) error {
-	link, h, err := v.findLink(name)
-	if err != nil {
-		return fmt.Errorf("interface %s not found: %w", name, err)
+	idx, err := v.GetInterfaceIndex(name)
+	if err == nil {
+		ch, err := v.conn.NewAPIChannel()
+		if err != nil {
+			return fmt.Errorf("create API channel: %w", err)
+		}
+		defer ch.Close()
+
+		req := &vppinterfaces.SwInterfaceSetMtu{
+			SwIfIndex: interface_types.InterfaceIndex(idx),
+			Mtu:       []uint32{uint32(mtu), 0, 0, 0},
+		}
+
+		reply := &vppinterfaces.SwInterfaceSetMtuReply{}
+		if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+			return fmt.Errorf("set VPP interface MTU: %w", err)
+		}
+		if reply.Retval != 0 {
+			return fmt.Errorf("set VPP interface MTU failed: retval=%d", reply.Retval)
+		}
+
+		if iface := v.ifMgr.GetByName(name); iface != nil {
+			iface.MTU = uint32(mtu)
+		}
+
+		v.logger.Info("Set interface MTU", "interface", name, "mtu", mtu)
 	}
 
+	link, h, linkErr := v.findLink(name)
+	if linkErr != nil {
+		if err != nil {
+			return fmt.Errorf("interface %s not found in VPP or Linux: %w", name, linkErr)
+		}
+		return nil
+	}
 	if h != nil {
 		return h.LinkSetMTU(link, mtu)
 	}
