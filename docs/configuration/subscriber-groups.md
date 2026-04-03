@@ -20,7 +20,7 @@ Defines how subscribers are grouped and configured based on VLAN. Each group bin
 
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
-| `svlan` | string | S-VLAN match: single, range, or `any` | `100-199` |
+| `svlan` | string | S-VLAN match: single ID or range | `100-199` |
 | `cvlan` | string | C-VLAN match: single, range, or `any` | `any` |
 | `interface` | string | Gateway interface for matched subscribers | `loop100` |
 | `aaa.policy` | string | AAA policy override for this VLAN range | `custom-policy` |
