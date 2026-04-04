@@ -266,11 +266,17 @@ func (v *VPP) computeSubIfFlags(params *southbound.SubinterfaceParams) interface
 
 	isDot1ad := protocol == "802.1ad"
 
-	if params.InnerVLAN == nil && isDot1ad {
+	if params.InnerVLANAny && isDot1ad {
 		return interface_types.SUB_IF_API_FLAG_ONE_TAG |
 			interface_types.SUB_IF_API_FLAG_TWO_TAGS |
 			interface_types.SUB_IF_API_FLAG_INNER_VLAN_ID_ANY |
 			interface_types.SUB_IF_API_FLAG_DOT1AD
+	}
+
+	if params.InnerVLANAny {
+		return interface_types.SUB_IF_API_FLAG_ONE_TAG |
+			interface_types.SUB_IF_API_FLAG_TWO_TAGS |
+			interface_types.SUB_IF_API_FLAG_INNER_VLAN_ID_ANY
 	}
 
 	if params.InnerVLAN != nil && isDot1ad {
@@ -282,6 +288,12 @@ func (v *VPP) computeSubIfFlags(params *southbound.SubinterfaceParams) interface
 	if params.InnerVLAN != nil {
 		return interface_types.SUB_IF_API_FLAG_TWO_TAGS |
 			interface_types.SUB_IF_API_FLAG_EXACT_MATCH
+	}
+
+	if isDot1ad {
+		return interface_types.SUB_IF_API_FLAG_ONE_TAG |
+			interface_types.SUB_IF_API_FLAG_EXACT_MATCH |
+			interface_types.SUB_IF_API_FLAG_DOT1AD
 	}
 
 	return interface_types.SUB_IF_API_FLAG_ONE_TAG |
