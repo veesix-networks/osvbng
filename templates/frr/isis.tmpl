@@ -44,16 +44,16 @@ router isis osvbng-isis
 {{ end }}
 {{ if .Protocols.ISIS.Redistribute }}
 {{ if .Protocols.ISIS.Redistribute.IPv4Connected }}
- redistribute ipv4 connected level-2
+ redistribute ipv4 connected level-2{{ if .Protocols.ISIS.Redistribute.RoutePolicy }} route-map {{ .Protocols.ISIS.Redistribute.RoutePolicy }}{{ end }}
 {{ end }}
 {{ if .Protocols.ISIS.Redistribute.IPv4Static }}
- redistribute ipv4 static level-2
+ redistribute ipv4 static level-2{{ if .Protocols.ISIS.Redistribute.RoutePolicy }} route-map {{ .Protocols.ISIS.Redistribute.RoutePolicy }}{{ end }}
 {{ end }}
 {{ if .Protocols.ISIS.Redistribute.IPv6Connected }}
- redistribute ipv6 connected level-2
+ redistribute ipv6 connected level-2{{ if .Protocols.ISIS.Redistribute.RoutePolicy }} route-map {{ .Protocols.ISIS.Redistribute.RoutePolicy }}{{ end }}
 {{ end }}
 {{ if .Protocols.ISIS.Redistribute.IPv6Static }}
- redistribute ipv6 static level-2
+ redistribute ipv6 static level-2{{ if .Protocols.ISIS.Redistribute.RoutePolicy }} route-map {{ .Protocols.ISIS.Redistribute.RoutePolicy }}{{ end }}
 {{ end }}
 {{ end }}
 {{ if .Protocols.ISIS.DefaultInformation }}

@@ -57,7 +57,7 @@ func (cm *ConfigManager) processBGPForGroup(sessionID conf.SessionID, cfg *confi
 				if pool.VRF != "" {
 					poolVRF = pool.VRF
 				}
-				if err := cm.addBGPNetwork(sessionID, pool.Network, poolVRF); err != nil {
+				if err := cm.addBGPNetwork(sessionID, pool.Network, poolVRF, group.BGP.NetworkRoutePolicy); err != nil {
 					return fmt.Errorf("pool %s: %w", pool.Name, err)
 				}
 				addPoolBlackholeRoute(cfg, pool.Network)
@@ -66,7 +66,7 @@ func (cm *ConfigManager) processBGPForGroup(sessionID conf.SessionID, cfg *confi
 	}
 
 	if group.BGP.RedistributeConnected {
-		if err := cm.enableBGPRedistribute(sessionID, "connected", vrf); err != nil {
+		if err := cm.enableBGPRedistribute(sessionID, "connected", vrf, group.BGP.RedistributeRoutePolicy); err != nil {
 			return err
 		}
 	}
@@ -74,7 +74,7 @@ func (cm *ConfigManager) processBGPForGroup(sessionID conf.SessionID, cfg *confi
 	return nil
 }
 
-func (cm *ConfigManager) addBGPNetwork(sessionID conf.SessionID, network, vrf string) error {
+func (cm *ConfigManager) addBGPNetwork(sessionID conf.SessionID, network, vrf, routePolicy string) error {
 	if network == "" {
 		return fmt.Errorf("network cannot be empty")
 	}
@@ -103,7 +103,7 @@ func (cm *ConfigManager) addBGPNetwork(sessionID conf.SessionID, network, vrf st
 		return fmt.Errorf("failed to build path: %w", err)
 	}
 
-	return cm.Set(sessionID, path, &protocols.BGPNetwork{})
+	return cm.Set(sessionID, path, &protocols.BGPNetwork{RoutePolicy: routePolicy})
 }
 
 func addPoolBlackholeRoute(cfg *config.Config, network string) {
@@ -148,7 +148,7 @@ func (cm *ConfigManager) ProcessCGNATPools(sessionID conf.SessionID, cfg *config
 			// We currently do not support active/active, if we wanted to advertise subscriber
 			// reachability as /32s at some point, then we need to change this logic...
 			if !haEnabled {
-				if err := cm.addBGPNetwork(sessionID, addr, ""); err != nil {
+				if err := cm.addBGPNetwork(sessionID, addr, "", pool.NetworkRoutePolicy); err != nil {
 					return fmt.Errorf("CGNAT outside address %s: %w", addr, err)
 				}
 			}
@@ -158,7 +158,7 @@ func (cm *ConfigManager) ProcessCGNATPools(sessionID conf.SessionID, cfg *config
 	return nil
 }
 
-func (cm *ConfigManager) enableBGPRedistribute(sessionID conf.SessionID, proto, vrf string) error {
+func (cm *ConfigManager) enableBGPRedistribute(sessionID conf.SessionID, proto, vrf, routePolicy string) error {
 	var path string
 	var err error
 
@@ -172,7 +172,9 @@ func (cm *ConfigManager) enableBGPRedistribute(sessionID conf.SessionID, proto, 
 		return fmt.Errorf("failed to build path: %w", err)
 	}
 
-	redistConfig := &protocols.BGPRedistribute{}
+	redistConfig := &protocols.BGPRedistribute{
+		RoutePolicy: routePolicy,
+	}
 
 	switch proto {
 	case "connected":

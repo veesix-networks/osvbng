@@ -1,0 +1,95 @@
+{{ define "routing_policy" }}
+{{ if .RoutingPolicies }}
+{{ range $name, $ps := .RoutingPolicies.PrefixSets }}
+{{ range $i, $entry := $ps }}
+ip prefix-list {{ $name }} seq {{ if $entry.Sequence }}{{ $entry.Sequence }}{{ else }}{{ seq $i }}{{ end }} {{ $entry.Action }} {{ $entry.Prefix }}{{ if $entry.Le }} le {{ $entry.Le }}{{ end }}{{ if $entry.Ge }} ge {{ $entry.Ge }}{{ end }}
+{{ end }}
+{{ end }}
+{{ range $name, $ps := .RoutingPolicies.PrefixSetsV6 }}
+{{ range $i, $entry := $ps }}
+ipv6 prefix-list {{ $name }} seq {{ if $entry.Sequence }}{{ $entry.Sequence }}{{ else }}{{ seq $i }}{{ end }} {{ $entry.Action }} {{ $entry.Prefix }}{{ if $entry.Le }} le {{ $entry.Le }}{{ end }}{{ if $entry.Ge }} ge {{ $entry.Ge }}{{ end }}
+{{ end }}
+{{ end }}
+!
+{{ range $name, $cs := .RoutingPolicies.CommunitySets }}
+{{ range $member := $cs }}
+bgp community-list standard {{ $name }} permit {{ $member }}
+{{ end }}
+{{ end }}
+!
+{{ range $name, $ecs := .RoutingPolicies.ExtCommunitySets }}
+{{ range $member := $ecs }}
+bgp extcommunity-list standard {{ $name }} permit {{ $member }}
+{{ end }}
+{{ end }}
+!
+{{ range $name, $lcs := .RoutingPolicies.LargeCommunitySets }}
+{{ range $member := $lcs }}
+bgp large-community-list standard {{ $name }} permit {{ $member }}
+{{ end }}
+{{ end }}
+!
+{{ range $name, $as := .RoutingPolicies.ASPathSets }}
+{{ range $entry := $as }}
+bgp as-path access-list {{ $name }} {{ $entry.Action }} {{ $entry.Regex }}
+{{ end }}
+{{ end }}
+!
+{{ range $name, $rp := .RoutingPolicies.RoutePolicies }}
+{{ range $entry := $rp }}
+route-map {{ $name }} {{ $entry.Action }} {{ $entry.Sequence }}
+{{ if $entry.Match }}
+{{ if $entry.Match.PrefixSet }} match ip address prefix-list {{ $entry.Match.PrefixSet }}
+{{ end }}
+{{ if $entry.Match.PrefixSetV6 }} match ipv6 address prefix-list {{ $entry.Match.PrefixSetV6 }}
+{{ end }}
+{{ if $entry.Match.CommunitySet }} match community {{ $entry.Match.CommunitySet }}
+{{ end }}
+{{ if $entry.Match.ExtCommunitySet }} match extcommunity {{ $entry.Match.ExtCommunitySet }}
+{{ end }}
+{{ if $entry.Match.LargeCommunitySet }} match large-community {{ $entry.Match.LargeCommunitySet }}
+{{ end }}
+{{ if $entry.Match.ASPathSet }} match as-path {{ $entry.Match.ASPathSet }}
+{{ end }}
+{{ if $entry.Match.Metric }} match metric {{ $entry.Match.Metric }}
+{{ end }}
+{{ if $entry.Match.Tag }} match tag {{ $entry.Match.Tag }}
+{{ end }}
+{{ end }}
+{{ if $entry.Set }}
+{{ if $entry.Set.LocalPreference }} set local-preference {{ $entry.Set.LocalPreference }}
+{{ end }}
+{{ if $entry.Set.Metric }} set metric {{ $entry.Set.Metric }}
+{{ end }}
+{{ if $entry.Set.Weight }} set weight {{ $entry.Set.Weight }}
+{{ end }}
+{{ if $entry.Set.Community }} set community {{ $entry.Set.Community }}{{ if $entry.Set.CommunityAdditive }} additive{{ end }}
+{{ end }}
+{{ if $entry.Set.CommunityDelete }} set comm-list {{ $entry.Set.CommunityDelete }} delete
+{{ end }}
+{{ if $entry.Set.LargeCommunity }} set large-community {{ $entry.Set.LargeCommunity }}{{ if $entry.Set.LargeCommunityAdditive }} additive{{ end }}
+{{ end }}
+{{ if $entry.Set.ExtCommunityRT }} set extcommunity rt {{ $entry.Set.ExtCommunityRT }}
+{{ end }}
+{{ if $entry.Set.ExtCommunitySoO }} set extcommunity soo {{ $entry.Set.ExtCommunitySoO }}
+{{ end }}
+{{ if $entry.Set.ASPathPrepend }} set as-path prepend {{ $entry.Set.ASPathPrepend }}
+{{ end }}
+{{ if $entry.Set.Origin }} set origin {{ $entry.Set.Origin }}
+{{ end }}
+{{ if $entry.Set.Tag }} set tag {{ $entry.Set.Tag }}
+{{ end }}
+{{ if $entry.Set.NextHopIPv4 }} set ip next-hop {{ $entry.Set.NextHopIPv4 }}
+{{ end }}
+{{ if $entry.Set.NextHopIPv6 }} set ipv6 next-hop global {{ $entry.Set.NextHopIPv6 }}
+{{ end }}
+{{ end }}
+{{ if $entry.Call }} call {{ $entry.Call }}
+{{ end }}
+{{ if $entry.OnMatch }} on-match {{ $entry.OnMatch }}
+{{ end }}
+{{ end }}
+!
+{{ end }}
+{{ end }}
+{{ end }}

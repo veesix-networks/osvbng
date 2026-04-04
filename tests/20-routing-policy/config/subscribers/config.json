@@ -1,0 +1,24 @@
+{
+    "interfaces": {
+        "network": {
+            "interface": "eth1",
+            "address": "100.0.0.1",
+            "gateway": "100.0.0.2"
+        },
+        "access": [
+            {
+                "interface": "eth1",
+                "type": "ipoe",
+                "outer-vlan-min": 100,
+                "outer-vlan-max": 100,
+                "inner-vlan": 7
+            }
+        ]
+    },
+    "dhcp": {
+        "enable": true
+    },
+    "sessions": {
+        "count": 1
+    }
+}

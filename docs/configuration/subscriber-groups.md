@@ -46,8 +46,10 @@ Defines how subscribers are grouped and configured based on VLAN. Each group bin
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
 | `enabled` | bool | Enable BGP for this group | `true` |
-| `advertise-pools` | bool | Advertise address pools via BGP | `true` |
-| `redistribute-connected` | bool | Redistribute connected routes | `false` |
+| `advertise-pools` | bool | Automatically create BGP network statements for address pools. If disabled, configure networks manually under `protocols.bgp` | `true` |
+| `redistribute-connected` | bool | Redistribute connected routes into BGP | `false` |
+| `network-route-policy` | string | [Route-policy](routing-policies.md) applied to BGP network statements for this group's pools | `POOL-EXPORT` |
+| `redistribute-route-policy` | string | [Route-policy](routing-policies.md) applied to BGP redistribute for this group | `REDIST-FILTER` |
 | `vrf` | string | VRF name for BGP advertisements | `customers` |
 
 ## Example
@@ -107,4 +109,5 @@ subscriber-groups:
       bgp:
         enabled: true
         advertise-pools: true
+        network-route-policy: POOL-EXPORT
 ```

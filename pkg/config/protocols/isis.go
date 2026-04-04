@@ -83,7 +83,8 @@ type ISISRedistribute struct {
 	IPv4Connected bool `json:"ipv4-connected,omitempty" yaml:"ipv4-connected,omitempty"`
 	IPv4Static    bool `json:"ipv4-static,omitempty" yaml:"ipv4-static,omitempty"`
 	IPv6Connected bool `json:"ipv6-connected,omitempty" yaml:"ipv6-connected,omitempty"`
-	IPv6Static    bool `json:"ipv6-static,omitempty" yaml:"ipv6-static,omitempty"`
+	IPv6Static    bool   `json:"ipv6-static,omitempty" yaml:"ipv6-static,omitempty"`
+	RoutePolicy   string `json:"route-policy,omitempty" yaml:"route-policy,omitempty"`
 }
 
 type ISISDefaultInfo struct {

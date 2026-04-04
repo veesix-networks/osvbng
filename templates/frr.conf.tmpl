@@ -3,6 +3,7 @@ service integrated-vtysh-config
 ip forwarding
 ipv6 forwarding
 !
+{{ template "routing_policy" . }}
 {{ template "vrf" . }}
 {{ template "mpls" . }}
 {{ template "bgp" . }}

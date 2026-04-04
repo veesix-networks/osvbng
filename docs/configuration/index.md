@@ -24,6 +24,7 @@ osvbngd config > /etc/osvbng/osvbng.yaml
 - [Service Groups](service-groups.md) - Named per-subscriber attribute bundles (VRF, ACL, QoS)
 - [Subscriber Provisioning](provisioning.md) - AAA attribute resolution, override priority, and scenarios
 - [VRFs](vrfs.md) - Virtual Routing and Forwarding instances
+- [Routing Policies](routing-policies.md) - Prefix-sets, community-sets, AS-path-sets, route-policies
 - [Protocols](protocols.md) - BGP, OSPF, OSPFv3, IS-IS, static routes
 - [MPLS](mpls.md) - LDP, Segment Routing, SRv6 (in development)
 - [System](system.md) - System-level settings and control plane protection

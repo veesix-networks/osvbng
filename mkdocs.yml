@@ -53,6 +53,7 @@ nav:
     - Service Groups: configuration/service-groups.md
     - Subscriber Provisioning: configuration/provisioning.md
     - VRFs: configuration/vrfs.md
+    - Routing Policies: configuration/routing-policies.md
     - Protocols: configuration/protocols.md
     - MPLS: configuration/mpls.md
     - High Availability: configuration/ha.md
@@ -66,6 +67,12 @@ nav:
       - exporter.prometheus: configuration/plugins/exporter-prometheus.md
       - northbound.api: configuration/plugins/northbound-api.md
       - example.hello: configuration/plugins/example-hello.md
+  - Examples:
+    - Overview: examples/index.md
+    - IPoE BNG: examples/ipoe-bng.md
+    - PPPoE BNG: examples/pppoe-bng.md
+    - IPoE + PPPoE BNG: examples/ipoe-pppoe-bng.md
+    - Routing Policies: examples/routing-policies.md
   - Architecture:
     - High Level: architecture/HIGH_LEVEL.md
     - Low Level:
