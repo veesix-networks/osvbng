@@ -35,12 +35,13 @@ type BGPAddressFamily struct {
 }
 
 type BGPNetwork struct {
-	RouteMap string `json:"route-map,omitempty" yaml:"route-map,omitempty"`
+	RoutePolicy string `json:"route-policy,omitempty" yaml:"route-policy,omitempty"`
 }
 
 type BGPRedistribute struct {
-	Connected bool `json:"connected,omitempty" yaml:"connected,omitempty"`
-	Static    bool `json:"static,omitempty" yaml:"static,omitempty"`
+	Connected   bool   `json:"connected,omitempty" yaml:"connected,omitempty"`
+	Static      bool   `json:"static,omitempty" yaml:"static,omitempty"`
+	RoutePolicy string `json:"route-policy,omitempty" yaml:"route-policy,omitempty"`
 }
 
 type BGPVRFConfig struct {
@@ -74,8 +75,8 @@ type BGPNeighbor struct {
 }
 
 type BGPNeighborAFIConfig struct {
-	NextHopSelf   bool             `json:"next-hop-self,omitempty" yaml:"next-hop-self,omitempty"`
-	SendCommunity BGPSendCommunity `json:"send-community,omitempty" yaml:"send-community,omitempty"`
-	RouteMapOut   string           `json:"route-map-out,omitempty" yaml:"route-map-out,omitempty"`
-	RouteMapIn    string           `json:"route-map-in,omitempty" yaml:"route-map-in,omitempty"`
+	NextHopSelf    bool             `json:"next-hop-self,omitempty" yaml:"next-hop-self,omitempty"`
+	SendCommunity  BGPSendCommunity `json:"send-community,omitempty" yaml:"send-community,omitempty"`
+	RoutePolicyOut string           `json:"route-policy-out,omitempty" yaml:"route-policy-out,omitempty"`
+	RoutePolicyIn  string           `json:"route-policy-in,omitempty" yaml:"route-policy-in,omitempty"`
 }

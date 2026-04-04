@@ -44,11 +44,11 @@ router bgp {{ .Protocols.BGP.ASN }}
 {{ if $peerGroup.IPv4Unicast.SendCommunity }}
   neighbor {{ $name }} send-community {{ $peerGroup.IPv4Unicast.SendCommunity }}
 {{ end }}
-{{ if $peerGroup.IPv4Unicast.RouteMapIn }}
-  neighbor {{ $name }} route-map {{ $peerGroup.IPv4Unicast.RouteMapIn }} in
+{{ if $peerGroup.IPv4Unicast.RoutePolicyIn }}
+  neighbor {{ $name }} route-map {{ $peerGroup.IPv4Unicast.RoutePolicyIn }} in
 {{ end }}
-{{ if $peerGroup.IPv4Unicast.RouteMapOut }}
-  neighbor {{ $name }} route-map {{ $peerGroup.IPv4Unicast.RouteMapOut }} out
+{{ if $peerGroup.IPv4Unicast.RoutePolicyOut }}
+  neighbor {{ $name }} route-map {{ $peerGroup.IPv4Unicast.RoutePolicyOut }} out
 {{ end }}
 {{ end }}
 {{ end }}
@@ -61,23 +61,23 @@ router bgp {{ .Protocols.BGP.ASN }}
 {{ if $neighbor.IPv4Unicast.SendCommunity }}
   neighbor {{ $addr }} send-community {{ $neighbor.IPv4Unicast.SendCommunity }}
 {{ end }}
-{{ if $neighbor.IPv4Unicast.RouteMapIn }}
-  neighbor {{ $addr }} route-map {{ $neighbor.IPv4Unicast.RouteMapIn }} in
+{{ if $neighbor.IPv4Unicast.RoutePolicyIn }}
+  neighbor {{ $addr }} route-map {{ $neighbor.IPv4Unicast.RoutePolicyIn }} in
 {{ end }}
-{{ if $neighbor.IPv4Unicast.RouteMapOut }}
-  neighbor {{ $addr }} route-map {{ $neighbor.IPv4Unicast.RouteMapOut }} out
+{{ if $neighbor.IPv4Unicast.RoutePolicyOut }}
+  neighbor {{ $addr }} route-map {{ $neighbor.IPv4Unicast.RoutePolicyOut }} out
 {{ end }}
 {{ end }}
 {{ end }}
 {{ range $network, $config := .Protocols.BGP.IPv4Unicast.Networks }}
-  network {{ $network }}{{ if $config.RouteMap }} route-map {{ $config.RouteMap }}{{ end }}
+  network {{ $network }}{{ if $config.RoutePolicy }} route-map {{ $config.RoutePolicy }}{{ end }}
 {{ end }}
 {{ if .Protocols.BGP.IPv4Unicast.Redistribute }}
 {{ if .Protocols.BGP.IPv4Unicast.Redistribute.Connected }}
-  redistribute connected
+  redistribute connected{{ if .Protocols.BGP.IPv4Unicast.Redistribute.RoutePolicy }} route-map {{ .Protocols.BGP.IPv4Unicast.Redistribute.RoutePolicy }}{{ end }}
 {{ end }}
 {{ if .Protocols.BGP.IPv4Unicast.Redistribute.Static }}
-  redistribute static
+  redistribute static{{ if .Protocols.BGP.IPv4Unicast.Redistribute.RoutePolicy }} route-map {{ .Protocols.BGP.IPv4Unicast.Redistribute.RoutePolicy }}{{ end }}
 {{ end }}
 {{ end }}
  exit-address-family
@@ -94,11 +94,11 @@ router bgp {{ .Protocols.BGP.ASN }}
 {{ if $peerGroup.IPv6Unicast.SendCommunity }}
   neighbor {{ $name }} send-community {{ $peerGroup.IPv6Unicast.SendCommunity }}
 {{ end }}
-{{ if $peerGroup.IPv6Unicast.RouteMapIn }}
-  neighbor {{ $name }} route-map {{ $peerGroup.IPv6Unicast.RouteMapIn }} in
+{{ if $peerGroup.IPv6Unicast.RoutePolicyIn }}
+  neighbor {{ $name }} route-map {{ $peerGroup.IPv6Unicast.RoutePolicyIn }} in
 {{ end }}
-{{ if $peerGroup.IPv6Unicast.RouteMapOut }}
-  neighbor {{ $name }} route-map {{ $peerGroup.IPv6Unicast.RouteMapOut }} out
+{{ if $peerGroup.IPv6Unicast.RoutePolicyOut }}
+  neighbor {{ $name }} route-map {{ $peerGroup.IPv6Unicast.RoutePolicyOut }} out
 {{ end }}
 {{ end }}
 {{ end }}
@@ -111,23 +111,23 @@ router bgp {{ .Protocols.BGP.ASN }}
 {{ if $neighbor.IPv6Unicast.SendCommunity }}
   neighbor {{ $addr }} send-community {{ $neighbor.IPv6Unicast.SendCommunity }}
 {{ end }}
-{{ if $neighbor.IPv6Unicast.RouteMapIn }}
-  neighbor {{ $addr }} route-map {{ $neighbor.IPv6Unicast.RouteMapIn }} in
+{{ if $neighbor.IPv6Unicast.RoutePolicyIn }}
+  neighbor {{ $addr }} route-map {{ $neighbor.IPv6Unicast.RoutePolicyIn }} in
 {{ end }}
-{{ if $neighbor.IPv6Unicast.RouteMapOut }}
-  neighbor {{ $addr }} route-map {{ $neighbor.IPv6Unicast.RouteMapOut }} out
+{{ if $neighbor.IPv6Unicast.RoutePolicyOut }}
+  neighbor {{ $addr }} route-map {{ $neighbor.IPv6Unicast.RoutePolicyOut }} out
 {{ end }}
 {{ end }}
 {{ end }}
 {{ range $network, $config := .Protocols.BGP.IPv6Unicast.Networks }}
-  network {{ $network }}{{ if $config.RouteMap }} route-map {{ $config.RouteMap }}{{ end }}
+  network {{ $network }}{{ if $config.RoutePolicy }} route-map {{ $config.RoutePolicy }}{{ end }}
 {{ end }}
 {{ if .Protocols.BGP.IPv6Unicast.Redistribute }}
 {{ if .Protocols.BGP.IPv6Unicast.Redistribute.Connected }}
-  redistribute connected
+  redistribute connected{{ if .Protocols.BGP.IPv6Unicast.Redistribute.RoutePolicy }} route-map {{ .Protocols.BGP.IPv6Unicast.Redistribute.RoutePolicy }}{{ end }}
 {{ end }}
 {{ if .Protocols.BGP.IPv6Unicast.Redistribute.Static }}
-  redistribute static
+  redistribute static{{ if .Protocols.BGP.IPv6Unicast.Redistribute.RoutePolicy }} route-map {{ .Protocols.BGP.IPv6Unicast.Redistribute.RoutePolicy }}{{ end }}
 {{ end }}
 {{ end }}
  exit-address-family
@@ -145,11 +145,11 @@ router bgp {{ .Protocols.BGP.ASN }}
 {{ if $nCfg.SendCommunity }}
   neighbor {{ $addr }} send-community {{ $nCfg.SendCommunity }}
 {{ end }}
-{{ if $nCfg.RouteMapIn }}
-  neighbor {{ $addr }} route-map {{ $nCfg.RouteMapIn }} in
+{{ if $nCfg.RoutePolicyIn }}
+  neighbor {{ $addr }} route-map {{ $nCfg.RoutePolicyIn }} in
 {{ end }}
-{{ if $nCfg.RouteMapOut }}
-  neighbor {{ $addr }} route-map {{ $nCfg.RouteMapOut }} out
+{{ if $nCfg.RoutePolicyOut }}
+  neighbor {{ $addr }} route-map {{ $nCfg.RoutePolicyOut }} out
 {{ end }}
 {{ end }}
 {{ end }}
@@ -177,11 +177,11 @@ router bgp {{ .Protocols.BGP.ASN }}
 {{ if $nCfg.SendCommunity }}
   neighbor {{ $addr }} send-community {{ $nCfg.SendCommunity }}
 {{ end }}
-{{ if $nCfg.RouteMapIn }}
-  neighbor {{ $addr }} route-map {{ $nCfg.RouteMapIn }} in
+{{ if $nCfg.RoutePolicyIn }}
+  neighbor {{ $addr }} route-map {{ $nCfg.RoutePolicyIn }} in
 {{ end }}
-{{ if $nCfg.RouteMapOut }}
-  neighbor {{ $addr }} route-map {{ $nCfg.RouteMapOut }} out
+{{ if $nCfg.RoutePolicyOut }}
+  neighbor {{ $addr }} route-map {{ $nCfg.RoutePolicyOut }} out
 {{ end }}
 {{ end }}
 {{ end }}
@@ -214,14 +214,14 @@ router bgp {{ $.Protocols.BGP.ASN }} vrf {{ $vrfName }}
 {{ end }}
 {{ end }}
 {{ range $network, $config := $vrfConfig.IPv4Unicast.Networks }}
-  network {{ $network }}{{ if $config.RouteMap }} route-map {{ $config.RouteMap }}{{ end }}
+  network {{ $network }}{{ if $config.RoutePolicy }} route-map {{ $config.RoutePolicy }}{{ end }}
 {{ end }}
 {{ if $vrfConfig.IPv4Unicast.Redistribute }}
 {{ if $vrfConfig.IPv4Unicast.Redistribute.Connected }}
-  redistribute connected
+  redistribute connected{{ if $vrfConfig.IPv4Unicast.Redistribute.RoutePolicy }} route-map {{ $vrfConfig.IPv4Unicast.Redistribute.RoutePolicy }}{{ end }}
 {{ end }}
 {{ if $vrfConfig.IPv4Unicast.Redistribute.Static }}
-  redistribute static
+  redistribute static{{ if $vrfConfig.IPv4Unicast.Redistribute.RoutePolicy }} route-map {{ $vrfConfig.IPv4Unicast.Redistribute.RoutePolicy }}{{ end }}
 {{ end }}
 {{ end }}
 {{ $vrf := index $.VRFS $vrfName }}
@@ -257,14 +257,14 @@ router bgp {{ $.Protocols.BGP.ASN }} vrf {{ $vrfName }}
 {{ end }}
 {{ end }}
 {{ range $network, $config := $vrfConfig.IPv6Unicast.Networks }}
-  network {{ $network }}{{ if $config.RouteMap }} route-map {{ $config.RouteMap }}{{ end }}
+  network {{ $network }}{{ if $config.RoutePolicy }} route-map {{ $config.RoutePolicy }}{{ end }}
 {{ end }}
 {{ if $vrfConfig.IPv6Unicast.Redistribute }}
 {{ if $vrfConfig.IPv6Unicast.Redistribute.Connected }}
-  redistribute connected
+  redistribute connected{{ if $vrfConfig.IPv6Unicast.Redistribute.RoutePolicy }} route-map {{ $vrfConfig.IPv6Unicast.Redistribute.RoutePolicy }}{{ end }}
 {{ end }}
 {{ if $vrfConfig.IPv6Unicast.Redistribute.Static }}
-  redistribute static
+  redistribute static{{ if $vrfConfig.IPv6Unicast.Redistribute.RoutePolicy }} route-map {{ $vrfConfig.IPv6Unicast.Redistribute.RoutePolicy }}{{ end }}
 {{ end }}
 {{ end }}
 {{ $vrf := index $.VRFS $vrfName }}
