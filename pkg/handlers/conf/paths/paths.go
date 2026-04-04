@@ -145,6 +145,14 @@ const (
 	InternalUnnumbered      Path = "_internal.unnumbered.<*>"
 	InternalDisableARPReply Path = "_internal.disable-arp-reply.<*>"
 
+	RoutingPolicyPrefixSet         Path = "routing-policies.prefix-sets.<*>"
+	RoutingPolicyPrefixSetV6       Path = "routing-policies.prefix-sets-v6.<*>"
+	RoutingPolicyCommunitySet      Path = "routing-policies.community-sets.<*>"
+	RoutingPolicyExtCommunitySet   Path = "routing-policies.ext-community-sets.<*>"
+	RoutingPolicyLargeCommunitySet Path = "routing-policies.large-community-sets.<*>"
+	RoutingPolicyASPathSet         Path = "routing-policies.as-path-sets.<*>"
+	RoutingPolicyRoutePolicy       Path = "routing-policies.route-policies.<*>"
+
 	SystemCPPMDataplanePolicer    Path = "system.cppm.dataplane.policer.<*>"
 	SystemCPPMControlplanePolicer Path = "system.cppm.controlplane.policer.<*>"
 )

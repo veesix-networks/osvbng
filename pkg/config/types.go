@@ -13,6 +13,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/config/ip"
 	"github.com/veesix-networks/osvbng/pkg/config/protocols"
 	"github.com/veesix-networks/osvbng/pkg/config/qos"
+	routing_policy "github.com/veesix-networks/osvbng/pkg/config/routing_policy"
 	"github.com/veesix-networks/osvbng/pkg/config/servicegroup"
 	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/config/system"
@@ -37,6 +38,7 @@ type Config struct {
 	Watchdog         system.WatchdogConfig                  `json:"watchdog,omitempty" yaml:"watchdog,omitempty"`
 	CGNAT            *cgnat.Config                          `json:"cgnat,omitempty" yaml:"cgnat,omitempty"`
 	HA               HAConfig                               `json:"ha,omitempty" yaml:"ha,omitempty"`
+	RoutingPolicies  *routing_policy.RoutingPolicyConfig     `json:"routing-policies,omitempty" yaml:"routing-policies,omitempty"`
 	System           *SystemConfig                          `json:"system,omitempty" yaml:"system,omitempty"`
 	Plugins          map[string]interface{}                 `json:"plugins,omitempty" yaml:"plugins,omitempty"`
 }
