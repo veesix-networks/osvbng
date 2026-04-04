@@ -6,18 +6,19 @@ import (
 )
 
 type SubinterfaceParams struct {
-	ParentIface  string
-	SubID        uint16
-	OuterVLAN    uint16
-	InnerVLAN    *uint16
-	VLANProtocol string
-	LCP          bool
-	VRF          string
-	Description  string
-	Enabled      bool
-	MTU          int
-	IPv4         []string
-	IPv6         []string
+	ParentIface   string
+	SubID         uint16
+	OuterVLAN     uint16
+	InnerVLAN     *uint16
+	InnerVLANAny  bool
+	VLANProtocol  string
+	LCP           bool
+	VRF           string
+	Description   string
+	Enabled       bool
+	MTU           int
+	IPv4          []string
+	IPv6          []string
 }
 
 type Interfaces interface {

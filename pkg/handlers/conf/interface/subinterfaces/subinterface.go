@@ -45,18 +45,6 @@ func (h *SubinterfaceHandler) Validate(ctx context.Context, hctx *conf.HandlerCo
 		}
 	}
 
-	if cfg.LCP && hctx.Config != nil {
-		values, err := paths.InterfaceSubinterface.ExtractWildcards(hctx.Path, 2)
-		if err == nil && len(values) >= 1 {
-			parentName := values[0]
-			if parentCfg, exists := hctx.Config.Interfaces[parentName]; exists {
-				if !parentCfg.LCP {
-					return fmt.Errorf("sub-interface lcp requires parent interface lcp")
-				}
-			}
-		}
-	}
-
 	if hctx.Config != nil && hctx.Config.SubscriberGroups != nil {
 		values, err := paths.InterfaceSubinterface.ExtractWildcards(hctx.Path, 2)
 		if err == nil && len(values) >= 1 {
@@ -96,6 +84,7 @@ func (h *SubinterfaceHandler) Apply(ctx context.Context, hctx *conf.HandlerConte
 		ParentIface:  parentIf,
 		SubID:        uint16(subIfID),
 		OuterVLAN:    uint16(cfg.VLAN),
+		InnerVLANAny: cfg.BNG != nil,
 		VLANProtocol: cfg.VLANProtocol,
 		LCP:          cfg.LCP,
 		VRF:          cfg.VRF,
