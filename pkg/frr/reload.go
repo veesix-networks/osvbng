@@ -43,7 +43,11 @@ func (c *Config) GenerateConfig(config *config.Config) (string, error) {
 		return "", fmt.Errorf("read master template: %w", err)
 	}
 
-	tmpl, err := template.New("frr.conf.tmpl").ParseGlob(subTemplates)
+	funcMap := template.FuncMap{
+		"seq": func(i int) int { return (i + 1) * 10 },
+	}
+
+	tmpl, err := template.New("frr.conf.tmpl").Funcs(funcMap).ParseGlob(subTemplates)
 	if err != nil {
 		return "", fmt.Errorf("parse sub-templates: %w", err)
 	}
