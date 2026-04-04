@@ -664,6 +664,65 @@ func (cd *ConfigManager) LoadConfig(id conf.SessionID, config *config.Config) er
 
 	sess.changes = make([]*conf.HandlerContext, 0)
 
+	if config.RoutingPolicies != nil {
+		for name, ps := range config.RoutingPolicies.PrefixSets {
+			sess.changes = append(sess.changes, &conf.HandlerContext{
+				SessionID: id,
+				Path:      fmt.Sprintf("routing-policies.prefix-sets.%s", name),
+				NewValue:  ps,
+				Config:    config,
+			})
+		}
+		for name, ps := range config.RoutingPolicies.PrefixSetsV6 {
+			sess.changes = append(sess.changes, &conf.HandlerContext{
+				SessionID: id,
+				Path:      fmt.Sprintf("routing-policies.prefix-sets-v6.%s", name),
+				NewValue:  ps,
+				Config:    config,
+			})
+		}
+		for name, cs := range config.RoutingPolicies.CommunitySets {
+			sess.changes = append(sess.changes, &conf.HandlerContext{
+				SessionID: id,
+				Path:      fmt.Sprintf("routing-policies.community-sets.%s", name),
+				NewValue:  cs,
+				Config:    config,
+			})
+		}
+		for name, ecs := range config.RoutingPolicies.ExtCommunitySets {
+			sess.changes = append(sess.changes, &conf.HandlerContext{
+				SessionID: id,
+				Path:      fmt.Sprintf("routing-policies.ext-community-sets.%s", name),
+				NewValue:  ecs,
+				Config:    config,
+			})
+		}
+		for name, lcs := range config.RoutingPolicies.LargeCommunitySets {
+			sess.changes = append(sess.changes, &conf.HandlerContext{
+				SessionID: id,
+				Path:      fmt.Sprintf("routing-policies.large-community-sets.%s", name),
+				NewValue:  lcs,
+				Config:    config,
+			})
+		}
+		for name, as := range config.RoutingPolicies.ASPathSets {
+			sess.changes = append(sess.changes, &conf.HandlerContext{
+				SessionID: id,
+				Path:      fmt.Sprintf("routing-policies.as-path-sets.%s", name),
+				NewValue:  as,
+				Config:    config,
+			})
+		}
+		for name, rp := range config.RoutingPolicies.RoutePolicies {
+			sess.changes = append(sess.changes, &conf.HandlerContext{
+				SessionID: id,
+				Path:      fmt.Sprintf("routing-policies.route-policies.%s", name),
+				NewValue:  rp,
+				Config:    config,
+			})
+		}
+	}
+
 	for name, vrfCfg := range config.VRFS {
 		hctx := &conf.HandlerContext{
 			SessionID: id,
