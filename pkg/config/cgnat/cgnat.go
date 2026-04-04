@@ -29,6 +29,7 @@ type Pool struct {
 	Filtering                string         `json:"filtering,omitempty" yaml:"filtering,omitempty"`
 	ExcludedAddresses        []string       `json:"excluded-addresses,omitempty" yaml:"excluded-addresses,omitempty"`
 	BlacklistMode            string         `json:"blacklist-mode,omitempty" yaml:"blacklist-mode,omitempty"`
+	NetworkRoutePolicy       string         `json:"network-route-policy,omitempty" yaml:"network-route-policy,omitempty"`
 	ALG                      *ALGConfig     `json:"alg,omitempty" yaml:"alg,omitempty"`
 	Timeouts                 *TimeoutConfig `json:"timeouts,omitempty" yaml:"timeouts,omitempty"`
 }

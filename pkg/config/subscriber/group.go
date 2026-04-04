@@ -44,18 +44,18 @@ const (
 )
 
 type SubscriberGroup struct {
-	AccessType          string                  `json:"access-type,omitempty" yaml:"access-type,omitempty"` // ipoe, pppoe, lac, lns
-	VLANs               []VLANRange             `json:"vlans,omitempty" yaml:"vlans,omitempty"`
-	SessionMode         SessionMode             `json:"session-mode,omitempty" yaml:"session-mode,omitempty"`
-	VLANProtocol        string                  `json:"vlan-protocol,omitempty" yaml:"vlan-protocol,omitempty"`
-	IPv4Profile         string                  `json:"ipv4-profile,omitempty" yaml:"ipv4-profile,omitempty"`
-	IPv6Profile         string                  `json:"ipv6-profile,omitempty" yaml:"ipv6-profile,omitempty"`
-	IPv6                *SubscriberIPv6         `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`
-	BGP                 *SubscriberBGP          `json:"bgp,omitempty" yaml:"bgp,omitempty"`
-	VRF                 string                  `json:"vrf,omitempty" yaml:"vrf,omitempty"`
-	DefaultServiceGroup string                  `json:"default-service-group,omitempty" yaml:"default-service-group,omitempty"`
-	AAAPolicy           string                  `json:"aaa-policy,omitempty" yaml:"aaa-policy,omitempty"`
-	CGNAT               *SubscriberCGNATConfig  `json:"cgnat,omitempty" yaml:"cgnat,omitempty"`
+	AccessType          string                 `json:"access-type,omitempty" yaml:"access-type,omitempty"` // ipoe, pppoe, lac, lns
+	VLANs               []VLANRange            `json:"vlans,omitempty" yaml:"vlans,omitempty"`
+	SessionMode         SessionMode            `json:"session-mode,omitempty" yaml:"session-mode,omitempty"`
+	VLANProtocol        string                 `json:"vlan-protocol,omitempty" yaml:"vlan-protocol,omitempty"`
+	IPv4Profile         string                 `json:"ipv4-profile,omitempty" yaml:"ipv4-profile,omitempty"`
+	IPv6Profile         string                 `json:"ipv6-profile,omitempty" yaml:"ipv6-profile,omitempty"`
+	IPv6                *SubscriberIPv6        `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`
+	BGP                 *SubscriberBGP         `json:"bgp,omitempty" yaml:"bgp,omitempty"`
+	VRF                 string                 `json:"vrf,omitempty" yaml:"vrf,omitempty"`
+	DefaultServiceGroup string                 `json:"default-service-group,omitempty" yaml:"default-service-group,omitempty"`
+	AAAPolicy           string                 `json:"aaa-policy,omitempty" yaml:"aaa-policy,omitempty"`
+	CGNAT               *SubscriberCGNATConfig `json:"cgnat,omitempty" yaml:"cgnat,omitempty"`
 }
 
 type SubscriberCGNATConfig struct {
@@ -89,12 +89,13 @@ type SubscriberIPv6RA struct {
 	MinInterval    uint32 `json:"min_interval,omitempty" yaml:"min_interval,omitempty"`
 }
 
-
 type SubscriberBGP struct {
-	Enabled              bool   `json:"enabled" yaml:"enabled"`
-	AdvertisePools       bool   `json:"advertise-pools" yaml:"advertise-pools"`
-	RedistributeConnected bool   `json:"redistribute-connected" yaml:"redistribute-connected"`
-	VRF                  string `json:"vrf,omitempty" yaml:"vrf,omitempty"`
+	Enabled                 bool   `json:"enabled" yaml:"enabled"`
+	AdvertisePools          bool   `json:"advertise-pools" yaml:"advertise-pools"`
+	RedistributeConnected   bool   `json:"redistribute-connected" yaml:"redistribute-connected"`
+	NetworkRoutePolicy      string `json:"network-route-policy,omitempty" yaml:"network-route-policy,omitempty"`
+	RedistributeRoutePolicy string `json:"redistribute-route-policy,omitempty" yaml:"redistribute-route-policy,omitempty"`
+	VRF                     string `json:"vrf,omitempty" yaml:"vrf,omitempty"`
 }
 
 func (sg *SubscriberGroup) FindGatewayForSVLAN(svlan uint16) string {
