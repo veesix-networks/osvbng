@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.8.0](https://github.com/veesix-networks/osvbng/compare/v0.7.0...v0.8.0) (2026-04-04)
+
+
+### Features
+
+* **dataplane:** support bond/LACP interfaces ([#32](https://github.com/veesix-networks/osvbng/issues/32)) ([#252](https://github.com/veesix-networks/osvbng/issues/252)) ([ba91745](https://github.com/veesix-networks/osvbng/commit/ba91745b4b0c0a1722afe15becbb5fe1a7bad7e5))
+* **routing:** add routing policy framework with prefix-sets, community-sets, AS-path-sets, and route-policies ([#263](https://github.com/veesix-networks/osvbng/issues/263)) ([65708f5](https://github.com/veesix-networks/osvbng/commit/65708f55a17363946685b13127ff1fa73f671fc3))
+* **show:** add show interfaces framework ([#254](https://github.com/veesix-networks/osvbng/issues/254)) ([ca5fa64](https://github.com/veesix-networks/osvbng/commit/ca5fa64eb5f176c07884cb97c618440a8c3568a8))
+* **southbound:** add explicit sub-interface support ([#259](https://github.com/veesix-networks/osvbng/issues/259)) ([3a4dbc1](https://github.com/veesix-networks/osvbng/commit/3a4dbc132f4d9945982a75d431aea9bf5ab560ab))
+
+
+### Bug Fixes
+
+* **southbound:** call VPP SwInterfaceSetMtu API in SetInterfaceMTU ([#258](https://github.com/veesix-networks/osvbng/issues/258)) ([9b22c91](https://github.com/veesix-networks/osvbng/commit/9b22c91380c0deba9eed2a080e75a19b17a6f95f))
+* **southbound:** use correct VPP sub-interface flags for BNG SVLANs ([#264](https://github.com/veesix-networks/osvbng/issues/264)) ([d86235c](https://github.com/veesix-networks/osvbng/commit/d86235c9dc248619bb4513fb83b916e63bb6cb63))
+
 ## [0.7.0](https://github.com/veesix-networks/osvbng/compare/v0.6.1...v0.7.0) (2026-03-31)
 
 
