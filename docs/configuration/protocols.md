@@ -43,8 +43,8 @@ Applies to neighbor and peer-group `ipv4-unicast` / `ipv6-unicast`.
 |-------|------|-------------|---------|
 | `next-hop-self` | bool | Set this router as the next-hop for routes advertised to this neighbor; commonly used on iBGP peers | `true` |
 | `send-community` | string | Send community attributes: `standard`, `extended`, `both`, or `all` | `both` |
-| `route-map-in` | string | Apply a route-map to incoming route updates from this neighbor | `ALLOW-ALL` |
-| `route-map-out` | string | Apply a route-map to outgoing route updates to this neighbor | `EXPORT-ROUTES` |
+| `route-policy-in` | string | Apply a route-policy to incoming route updates from this neighbor | `CUSTOMER-IN` |
+| `route-policy-out` | string | Apply a route-policy to outgoing route updates to this neighbor | `CUSTOMER-OUT` |
 
 ### BGP Address Family
 
@@ -60,7 +60,7 @@ Applies to top-level `ipv4-unicast` / `ipv6-unicast`.
 
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
-| `route-map` | string | Apply a route-map when originating this network | `ADVERTISE` |
+| `route-policy` | string | Apply a route-policy when originating this network | `ADVERTISE` |
 
 ### BGP Redistribute
 
@@ -68,6 +68,7 @@ Applies to top-level `ipv4-unicast` / `ipv6-unicast`.
 |-------|------|-------------|---------|
 | `connected` | bool | Redistribute directly connected routes into BGP | `true` |
 | `static` | bool | Redistribute static routes into BGP | `false` |
+| `route-policy` | string | Apply a route-policy to redistributed routes | `REDIST-FILTER` |
 
 ### BGP VRF
 
@@ -151,6 +152,7 @@ Most OSPF fields follow [FRR OSPFv2 conventions](https://docs.frrouting.org/en/l
 | `connected` | bool | Redistribute directly connected routes into OSPF as external LSAs | `true` |
 | `static` | bool | Redistribute static routes into OSPF as external LSAs | `false` |
 | `bgp` | bool | Redistribute BGP routes into OSPF as external LSAs | `false` |
+| `route-policy` | string | Apply a route-policy to redistributed routes | `REDIST-FILTER` |
 
 ### OSPF Default Information
 
@@ -300,6 +302,7 @@ Most IS-IS fields follow [FRR IS-IS conventions](https://docs.frrouting.org/en/l
 | `ipv4-static` | bool | Redistribute IPv4 static routes into IS-IS Level-2 | `false` |
 | `ipv6-connected` | bool | Redistribute IPv6 connected routes into IS-IS Level-2 | `true` |
 | `ipv6-static` | bool | Redistribute IPv6 static routes into IS-IS Level-2 | `false` |
+| `route-policy` | string | Apply a route-policy to redistributed routes | `ISIS-REDIST-FILTER` |
 
 ### IS-IS Default Information
 

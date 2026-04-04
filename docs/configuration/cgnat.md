@@ -27,6 +27,7 @@ Pools define the translation parameters: which subscriber address ranges to tran
 | `port-reuse-timeout` | uint16 | `120` | Seconds before a freed port can be reused |
 | `excluded-addresses` | list | - | Outside addresses to exclude from allocation |
 | `ports-per-subscriber` | uint16 | - | Fixed port count per subscriber (deterministic mode) |
+| `network-route-policy` | string | - | [Route-policy](routing-policies.md) applied when advertising outside addresses into BGP |
 | `timeouts` | object | see below | Per-protocol session timeouts |
 
 ### Inside prefixes
