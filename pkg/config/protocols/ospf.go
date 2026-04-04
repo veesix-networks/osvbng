@@ -62,9 +62,10 @@ type OSPFInterfaceConfig struct {
 }
 
 type OSPFRedistribute struct {
-	Connected bool `json:"connected,omitempty" yaml:"connected,omitempty"`
-	Static    bool `json:"static,omitempty" yaml:"static,omitempty"`
-	BGP       bool `json:"bgp,omitempty" yaml:"bgp,omitempty"`
+	Connected   bool   `json:"connected,omitempty" yaml:"connected,omitempty"`
+	Static      bool   `json:"static,omitempty" yaml:"static,omitempty"`
+	BGP         bool   `json:"bgp,omitempty" yaml:"bgp,omitempty"`
+	RoutePolicy string `json:"route-policy,omitempty" yaml:"route-policy,omitempty"`
 }
 
 type OSPFDefaultInfo struct {

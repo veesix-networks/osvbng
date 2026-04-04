@@ -28,13 +28,13 @@ router ospf
 {{ end }}
 {{ if .Protocols.OSPF.Redistribute }}
 {{ if .Protocols.OSPF.Redistribute.Connected }}
- redistribute connected
+ redistribute connected{{ if .Protocols.OSPF.Redistribute.RoutePolicy }} route-map {{ .Protocols.OSPF.Redistribute.RoutePolicy }}{{ end }}
 {{ end }}
 {{ if .Protocols.OSPF.Redistribute.Static }}
- redistribute static
+ redistribute static{{ if .Protocols.OSPF.Redistribute.RoutePolicy }} route-map {{ .Protocols.OSPF.Redistribute.RoutePolicy }}{{ end }}
 {{ end }}
 {{ if .Protocols.OSPF.Redistribute.BGP }}
- redistribute bgp
+ redistribute bgp{{ if .Protocols.OSPF.Redistribute.RoutePolicy }} route-map {{ .Protocols.OSPF.Redistribute.RoutePolicy }}{{ end }}
 {{ end }}
 {{ end }}
 {{ if .Protocols.OSPF.DefaultInformation }}
