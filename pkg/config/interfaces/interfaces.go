@@ -33,7 +33,7 @@ type SubinterfaceConfig struct {
 	ID           int    `json:"id" yaml:"id"`
 	VLAN         int    `json:"vlan" yaml:"vlan"`
 	InnerVLAN    *int   `json:"inner-vlan,omitempty" yaml:"inner-vlan,omitempty"`
-	VLANProtocol string `json:"vlan-protocol,omitempty" yaml:"vlan-protocol,omitempty"`
+	VLANTpid     string `json:"vlan-tpid,omitempty" yaml:"vlan-tpid,omitempty"`
 
 	// Per-property fields (walked in struct order by confmgr)
 	LCP         bool           `json:"lcp,omitempty" yaml:"lcp,omitempty"`

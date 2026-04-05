@@ -47,7 +47,7 @@ type SubscriberGroup struct {
 	AccessType          string                 `json:"access-type,omitempty" yaml:"access-type,omitempty"` // ipoe, pppoe, lac, lns
 	VLANs               []VLANRange            `json:"vlans,omitempty" yaml:"vlans,omitempty"`
 	SessionMode         SessionMode            `json:"session-mode,omitempty" yaml:"session-mode,omitempty"`
-	VLANProtocol        string                 `json:"vlan-protocol,omitempty" yaml:"vlan-protocol,omitempty"`
+	VLANTpid            string                 `json:"vlan-tpid,omitempty" yaml:"vlan-tpid,omitempty"`
 	IPv4Profile         string                 `json:"ipv4-profile,omitempty" yaml:"ipv4-profile,omitempty"`
 	IPv6Profile         string                 `json:"ipv6-profile,omitempty" yaml:"ipv6-profile,omitempty"`
 	IPv6                *SubscriberIPv6        `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`
@@ -62,9 +62,16 @@ type SubscriberCGNATConfig struct {
 	Policy string `json:"policy,omitempty" yaml:"policy,omitempty"`
 }
 
+// GetOuterTPID returns the outer TPID for subscriber traffic. Subscriber groups
+// are always double-tagged (S-VLAN + C-VLAN any) per IEEE 802.1ad, so dot1ad
+// (0x88A8) is the default. Invalid values should be rejected by config validation
+// before reaching this path.
 func (sg *SubscriberGroup) GetOuterTPID() uint16 {
-	if sg.VLANProtocol == "802.1q" {
+	switch sg.VLANTpid {
+	case "dot1q":
 		return 0x8100
+	case "dot1ad", "":
+		return 0x88A8
 	}
 	return 0x88A8
 }
