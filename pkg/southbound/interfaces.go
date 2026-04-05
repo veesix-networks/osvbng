@@ -6,25 +6,21 @@ import (
 )
 
 type SubinterfaceParams struct {
-	ParentIface   string
-	SubID         uint16
-	OuterVLAN     uint16
-	InnerVLAN     *uint16
-	InnerVLANAny  bool
-	VLANProtocol  string
-	LCP           bool
-	VRF           string
-	Description   string
-	Enabled       bool
-	MTU           int
-	IPv4          []string
-	IPv6          []string
+	ParentIface  string
+	SubID        uint16
+	OuterVLAN    uint16
+	InnerVLAN    *uint16
+	InnerVLANAny bool
+	VLANProtocol string
 }
 
 type Interfaces interface {
-	CreateSVLAN(parentIface string, vlan uint16, ipv4 []string, ipv6 []string) error
 	CreateSubinterface(params *SubinterfaceParams) error
 	DeleteInterface(name string) error
+
+	CreateLCPPair(ifName string) error
+	HasLCPPair(ifName string) bool
+	BindInterfaceToVRF(vppIfName, vrfName string, hasLCP bool) error
 
 	GetInterfaceIndex(name string) (int, error)
 	SetInterfacePromiscuous(ifaceName string, on bool) error

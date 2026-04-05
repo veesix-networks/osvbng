@@ -86,21 +86,11 @@ func (h *SubinterfaceHandler) Apply(ctx context.Context, hctx *conf.HandlerConte
 		OuterVLAN:    uint16(cfg.VLAN),
 		InnerVLANAny: cfg.BNG != nil,
 		VLANProtocol: cfg.VLANProtocol,
-		LCP:          cfg.LCP,
-		VRF:          cfg.VRF,
-		Description:  cfg.Description,
-		Enabled:      cfg.Enabled,
-		MTU:          cfg.MTU,
 	}
 
 	if cfg.InnerVLAN != nil {
 		v := uint16(*cfg.InnerVLAN)
 		params.InnerVLAN = &v
-	}
-
-	if cfg.Address != nil {
-		params.IPv4 = cfg.Address.IPv4
-		params.IPv6 = cfg.Address.IPv6
 	}
 
 	return h.southbound.CreateSubinterface(params)

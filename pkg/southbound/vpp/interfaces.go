@@ -32,84 +32,6 @@ func (v *VPP) resolveRxMode() interface_types.RxMode {
 	}
 }
 
-func (v *VPP) CreateSVLAN(parentIface string, vlan uint16, ipv4 []string, ipv6 []string) error {
-	ch, err := v.conn.NewAPIChannel()
-	if err != nil {
-		return err
-	}
-	defer ch.Close()
-
-	subIfName := fmt.Sprintf("%s.%d", parentIface, vlan)
-
-	if iface := v.ifMgr.GetByName(subIfName); iface != nil {
-		v.logger.Debug("S-VLAN sub-interface already exists", "interface", subIfName, "sw_if_index", iface.SwIfIndex)
-		return nil
-	}
-
-	parentIdx, err := v.GetInterfaceIndex(parentIface)
-	if err != nil {
-		return fmt.Errorf("parent interface %s not found: %w", parentIface, err)
-	}
-
-	req := &vppinterfaces.CreateSubif{
-		SwIfIndex:   interface_types.InterfaceIndex(parentIdx),
-		SubID:       uint32(vlan),
-		SubIfFlags:  interface_types.SUB_IF_API_FLAG_ONE_TAG | interface_types.SUB_IF_API_FLAG_TWO_TAGS | interface_types.SUB_IF_API_FLAG_INNER_VLAN_ID_ANY,
-		OuterVlanID: vlan,
-	}
-
-	reply := &vppinterfaces.CreateSubifReply{}
-	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
-		if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "-56") {
-			v.logger.Debug("S-VLAN sub-interface already exists in VPP", "interface", subIfName)
-			if err := v.LoadInterfaces(); err != nil {
-				return fmt.Errorf("reload interfaces: %w", err)
-			}
-			return nil
-		}
-		return fmt.Errorf("create vlan sub-interface: %w", err)
-	}
-
-	setUpReq := &vppinterfaces.SwInterfaceSetFlags{
-		SwIfIndex: reply.SwIfIndex,
-		Flags:     interface_types.IF_STATUS_API_FLAG_ADMIN_UP,
-	}
-	setUpReply := &vppinterfaces.SwInterfaceSetFlagsReply{}
-	if err := ch.SendRequest(setUpReq).ReceiveReply(setUpReply); err != nil {
-		return fmt.Errorf("set interface up: %w", err)
-	}
-
-	for _, cidr := range ipv4 {
-		if err := v.addIPAddress(ch, reply.SwIfIndex, cidr, false); err != nil {
-			return fmt.Errorf("add ipv4 address %s: %w", cidr, err)
-		}
-	}
-
-	for _, cidr := range ipv6 {
-		if err := v.addIPAddress(ch, reply.SwIfIndex, cidr, true); err != nil {
-			v.logger.Warn("Failed to add IPv6 address", "address", cidr, "error", err)
-		}
-	}
-
-	var parentMAC []byte
-	if parent := v.ifMgr.Get(uint32(parentIdx)); parent != nil {
-		parentMAC = parent.MAC
-	}
-
-	v.ifMgr.Add(&ifmgr.Interface{
-		SwIfIndex:    uint32(reply.SwIfIndex),
-		SupSwIfIndex: uint32(parentIdx),
-		Name:         subIfName,
-		Type:         ifmgr.IfTypeSub,
-		AdminUp:      true,
-		OuterVlanID:  vlan,
-		MAC:          parentMAC,
-	})
-
-	v.logger.Debug("Created S-VLAN sub-interface", "interface", subIfName, "sw_if_index", reply.SwIfIndex)
-	return nil
-}
-
 func (v *VPP) CreateSubinterface(params *southbound.SubinterfaceParams) error {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
@@ -153,29 +75,6 @@ func (v *VPP) CreateSubinterface(params *southbound.SubinterfaceParams) error {
 		return fmt.Errorf("create sub-interface: %w", err)
 	}
 
-	if params.Enabled {
-		setUpReq := &vppinterfaces.SwInterfaceSetFlags{
-			SwIfIndex: reply.SwIfIndex,
-			Flags:     interface_types.IF_STATUS_API_FLAG_ADMIN_UP,
-		}
-		setUpReply := &vppinterfaces.SwInterfaceSetFlagsReply{}
-		if err := ch.SendRequest(setUpReq).ReceiveReply(setUpReply); err != nil {
-			return fmt.Errorf("set interface up: %w", err)
-		}
-	}
-
-	if params.Description != "" {
-		tagReq := &vppinterfaces.SwInterfaceTagAddDel{
-			IsAdd:     true,
-			SwIfIndex: reply.SwIfIndex,
-			Tag:       params.Description,
-		}
-		tagReply := &vppinterfaces.SwInterfaceTagAddDelReply{}
-		if err := ch.SendRequest(tagReq).ReceiveReply(tagReply); err != nil {
-			v.logger.Warn("Failed to set VPP interface tag", "interface", subIfName, "error", err)
-		}
-	}
-
 	var parentMAC []byte
 	var parentMTU uint32
 	if parent := v.ifMgr.Get(uint32(parentIdx)); parent != nil {
@@ -183,7 +82,7 @@ func (v *VPP) CreateSubinterface(params *southbound.SubinterfaceParams) error {
 		parentMTU = parent.MTU
 	}
 
-	if params.MTU == 0 && parentMTU > 0 {
+	if parentMTU > 0 {
 		tagOverhead := uint32(4)
 		if params.InnerVLAN != nil {
 			tagOverhead = 8
@@ -196,17 +95,6 @@ func (v *VPP) CreateSubinterface(params *southbound.SubinterfaceParams) error {
 		mtuReply := &vppinterfaces.SwInterfaceSetMtuReply{}
 		if err := ch.SendRequest(mtuReq).ReceiveReply(mtuReply); err != nil {
 			v.logger.Warn("Failed to set sub-interface MTU", "interface", subIfName, "mtu", mtu, "error", err)
-		} else {
-			v.logger.Debug("Set sub-interface MTU from parent", "interface", subIfName, "parent_mtu", parentMTU, "mtu", mtu)
-		}
-	} else if params.MTU > 0 {
-		mtuReq := &vppinterfaces.SwInterfaceSetMtu{
-			SwIfIndex: reply.SwIfIndex,
-			Mtu:       []uint32{uint32(params.MTU), 0, 0, 0},
-		}
-		mtuReply := &vppinterfaces.SwInterfaceSetMtuReply{}
-		if err := ch.SendRequest(mtuReq).ReceiveReply(mtuReply); err != nil {
-			v.logger.Warn("Failed to set sub-interface MTU", "interface", subIfName, "mtu", params.MTU, "error", err)
 		}
 	}
 
@@ -215,10 +103,8 @@ func (v *VPP) CreateSubinterface(params *southbound.SubinterfaceParams) error {
 		SupSwIfIndex: uint32(parentIdx),
 		Name:         subIfName,
 		Type:         ifmgr.IfTypeSub,
-		AdminUp:      params.Enabled,
 		OuterVlanID:  params.OuterVLAN,
 		MAC:          parentMAC,
-		Tag:          params.Description,
 	}
 	if params.InnerVLAN != nil {
 		ifEntry.InnerVlanID = *params.InnerVLAN
@@ -228,34 +114,27 @@ func (v *VPP) CreateSubinterface(params *southbound.SubinterfaceParams) error {
 	}
 	v.ifMgr.Add(ifEntry)
 
-	if params.LCP {
-		if err := v.createLCPPair(subIfName, subIfName, lcp.LCP_API_ITF_HOST_TAP); err != nil {
-			v.logger.Warn("Failed to create LCP pair for sub-interface", "interface", subIfName, "error", err)
-		} else if err := v.waitForLink(subIfName, 10*time.Second); err != nil {
-			v.logger.Warn("Failed to wait for LCP sub-interface link", "interface", subIfName, "error", err)
-		}
-	}
-
-	if params.VRF != "" {
-		if err := v.bindInterfaceToVRF(subIfName, subIfName, params.VRF, params.LCP); err != nil {
-			return fmt.Errorf("bind sub-interface to VRF: %w", err)
-		}
-	}
-
-	for _, cidr := range params.IPv4 {
-		if err := v.addIPAddress(ch, reply.SwIfIndex, cidr, false); err != nil {
-			return fmt.Errorf("add ipv4 address %s: %w", cidr, err)
-		}
-	}
-
-	for _, cidr := range params.IPv6 {
-		if err := v.addIPAddress(ch, reply.SwIfIndex, cidr, true); err != nil {
-			v.logger.Warn("Failed to add IPv6 address", "address", cidr, "error", err)
-		}
-	}
-
 	v.logger.Info("Created sub-interface", "interface", subIfName, "sw_if_index", reply.SwIfIndex, "flags", flags)
 	return nil
+}
+
+func (v *VPP) CreateLCPPair(ifName string) error {
+	if err := v.createLCPPair(ifName, ifName, lcp.LCP_API_ITF_HOST_TAP); err != nil {
+		return fmt.Errorf("create LCP pair for %s: %w", ifName, err)
+	}
+	if err := v.waitForLink(ifName, 10*time.Second); err != nil {
+		return fmt.Errorf("wait for LCP link %s: %w", ifName, err)
+	}
+	return nil
+}
+
+func (v *VPP) HasLCPPair(ifName string) bool {
+	_, _, err := v.findLink(ifName)
+	return err == nil
+}
+
+func (v *VPP) BindInterfaceToVRF(vppIfName, vrfName string, hasLCP bool) error {
+	return v.bindInterfaceToVRF(vppIfName, vppIfName, vrfName, hasLCP)
 }
 
 func (v *VPP) computeSubIfFlags(params *southbound.SubinterfaceParams) interface_types.SubIfFlags {
@@ -548,56 +427,6 @@ func (v *VPP) getInterfaceAddresses(swIfIndex interface_types.InterfaceIndex) (m
 	return addrs, nil
 }
 
-func (v *VPP) addIPAddress(ch api.Channel, swIfIndex interface_types.InterfaceIndex, cidr string, isIPv6 bool) error {
-	addr, ipNet, err := net.ParseCIDR(cidr)
-	if err != nil {
-		return fmt.Errorf("parse CIDR: %w", err)
-	}
-
-	prefixLen, _ := ipNet.Mask.Size()
-
-	var ipPrefix ip_types.AddressWithPrefix
-	if !isIPv6 {
-		ipPrefix = ip_types.AddressWithPrefix{
-			Address: ip_types.Address{
-				Af: ip_types.ADDRESS_IP4,
-				Un: ip_types.AddressUnionIP4(ip_types.IP4Address{
-					addr.To4()[0], addr.To4()[1], addr.To4()[2], addr.To4()[3],
-				}),
-			},
-			Len: uint8(prefixLen),
-		}
-	} else {
-		var ip6 ip_types.IP6Address
-		copy(ip6[:], addr.To16())
-		ipPrefix = ip_types.AddressWithPrefix{
-			Address: ip_types.Address{
-				Af: ip_types.ADDRESS_IP6,
-				Un: ip_types.AddressUnionIP6(ip6),
-			},
-			Len: uint8(prefixLen),
-		}
-	}
-
-	req := &vppinterfaces.SwInterfaceAddDelAddress{
-		SwIfIndex: swIfIndex,
-		IsAdd:     true,
-		Prefix:    ipPrefix,
-	}
-
-	reply := &vppinterfaces.SwInterfaceAddDelAddressReply{}
-	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
-		return err
-	}
-
-	if isIPv6 {
-		v.ifMgr.AddIPv6Address(uint32(swIfIndex), addr)
-	} else {
-		v.ifMgr.AddIPv4Address(uint32(swIfIndex), addr)
-	}
-
-	return nil
-}
 
 func (v *VPP) DumpInterfaces() ([]southbound.InterfaceInfo, error) {
 	ch, err := v.conn.NewAPIChannel()
@@ -1209,9 +1038,30 @@ func (v *VPP) createLoopback(cfg *interfaces.InterfaceConfig) error {
 }
 
 func (v *VPP) SetInterfaceDescription(name, description string) error {
+	idx, err := v.GetInterfaceIndex(name)
+	if err == nil {
+		ch, chErr := v.conn.NewAPIChannel()
+		if chErr == nil {
+			tagReq := &vppinterfaces.SwInterfaceTagAddDel{
+				IsAdd:     true,
+				SwIfIndex: interface_types.InterfaceIndex(idx),
+				Tag:       description,
+			}
+			tagReply := &vppinterfaces.SwInterfaceTagAddDelReply{}
+			if tagErr := ch.SendRequest(tagReq).ReceiveReply(tagReply); tagErr != nil {
+				v.logger.Warn("Failed to set VPP interface tag", "interface", name, "error", tagErr)
+			}
+			if iface := v.ifMgr.GetByName(name); iface != nil {
+				iface.Tag = description
+			}
+			ch.Close()
+		}
+	}
+
 	link, h, err := v.findLink(name)
 	if err != nil {
-		return fmt.Errorf("LCP interface %s not found: %w", name, err)
+		v.logger.Debug("No LCP link for description alias", "interface", name)
+		return nil
 	}
 
 	if h != nil {

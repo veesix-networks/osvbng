@@ -20,27 +20,32 @@ import (
 )
 
 type Config struct {
-	Logging          system.LoggingConfig                   `json:"logging,omitempty" yaml:"logging,omitempty"`
-	Dataplane        system.DataplaneConfig                 `json:"dataplane,omitempty" yaml:"dataplane,omitempty"`
-	SubscriberGroups *subscriber.SubscriberGroupsConfig     `json:"subscriber-groups,omitempty" yaml:"subscriber-groups,omitempty"`
-	IPv4Profiles     map[string]*ip.IPv4Profile             `json:"ipv4-profiles,omitempty" yaml:"ipv4-profiles,omitempty"`
-	IPv6Profiles     map[string]*ip.IPv6Profile             `json:"ipv6-profiles,omitempty" yaml:"ipv6-profiles,omitempty"`
-	DHCP             ip.DHCPConfig                          `json:"dhcp,omitempty" yaml:"dhcp,omitempty"`
-	DHCPv6           ip.DHCPv6Config                        `json:"dhcpv6,omitempty" yaml:"dhcpv6,omitempty"`
-	Monitoring       system.MonitoringConfig                `json:"monitoring,omitempty" yaml:"monitoring,omitempty"`
-	API              system.APIConfig                       `json:"api,omitempty" yaml:"api,omitempty"`
-	Interfaces       map[string]*interfaces.InterfaceConfig `json:"interfaces,omitempty" yaml:"interfaces,omitempty"`
-	Protocols        protocols.ProtocolConfig               `json:"protocols,omitempty" yaml:"protocols,omitempty"`
-	AAA              aaa.AAAConfig                          `json:"aaa,omitempty" yaml:"aaa,omitempty"`
-	QoSPolicies      map[string]*qos.Policy                     `json:"qos-policies,omitempty" yaml:"qos-policies,omitempty"`
-	ServiceGroups    map[string]*servicegroup.Config           `json:"service-groups,omitempty" yaml:"service-groups,omitempty"`
-	VRFS             map[string]*ip.VRFSConfig               `json:"vrfs,omitempty" yaml:"vrfs,omitempty"`
-	Watchdog         system.WatchdogConfig                  `json:"watchdog,omitempty" yaml:"watchdog,omitempty"`
-	CGNAT            *cgnat.Config                          `json:"cgnat,omitempty" yaml:"cgnat,omitempty"`
-	HA               HAConfig                               `json:"ha,omitempty" yaml:"ha,omitempty"`
-	RoutingPolicies  *routing_policy.RoutingPolicyConfig     `json:"routing-policies,omitempty" yaml:"routing-policies,omitempty"`
-	System           *SystemConfig                          `json:"system,omitempty" yaml:"system,omitempty"`
-	Plugins          map[string]interface{}                 `json:"plugins,omitempty" yaml:"plugins,omitempty"`
+	// No handlers (skipped by walker)
+	Logging          system.LoggingConfig               `json:"logging,omitempty" yaml:"logging,omitempty"`
+	Dataplane        system.DataplaneConfig             `json:"dataplane,omitempty" yaml:"dataplane,omitempty"`
+	SubscriberGroups *subscriber.SubscriberGroupsConfig `json:"subscriber-groups,omitempty" yaml:"subscriber-groups,omitempty"`
+	IPv4Profiles     map[string]*ip.IPv4Profile         `json:"ipv4-profiles,omitempty" yaml:"ipv4-profiles,omitempty"`
+	IPv6Profiles     map[string]*ip.IPv6Profile         `json:"ipv6-profiles,omitempty" yaml:"ipv6-profiles,omitempty"`
+	DHCP             ip.DHCPConfig                      `json:"dhcp,omitempty" yaml:"dhcp,omitempty"`
+	DHCPv6           ip.DHCPv6Config                    `json:"dhcpv6,omitempty" yaml:"dhcpv6,omitempty"`
+	Monitoring       system.MonitoringConfig            `json:"monitoring,omitempty" yaml:"monitoring,omitempty"`
+	API              system.APIConfig                   `json:"api,omitempty" yaml:"api,omitempty"`
+	Watchdog         system.WatchdogConfig              `json:"watchdog,omitempty" yaml:"watchdog,omitempty"`
+	CGNAT            *cgnat.Config                      `json:"cgnat,omitempty" yaml:"cgnat,omitempty"`
+	HA               HAConfig                           `json:"ha,omitempty" yaml:"ha,omitempty"`
+
+	// Walked in struct order — dependency order matters
+	System          *SystemConfig                          `json:"system,omitempty" yaml:"system,omitempty"`
+	RoutingPolicies *routing_policy.RoutingPolicyConfig     `json:"routing-policies,omitempty" yaml:"routing-policies,omitempty"`
+	VRFS            map[string]*ip.VRFSConfig               `json:"vrfs,omitempty" yaml:"vrfs,omitempty"`
+	QoSPolicies     map[string]*qos.Policy                  `json:"qos-policies,omitempty" yaml:"qos-policies,omitempty"`
+	ServiceGroups   map[string]*servicegroup.Config          `json:"service-groups,omitempty" yaml:"service-groups,omitempty"`
+	Interfaces      map[string]*interfaces.InterfaceConfig   `json:"interfaces,omitempty" yaml:"interfaces,omitempty"`
+	Protocols       protocols.ProtocolConfig                 `json:"protocols,omitempty" yaml:"protocols,omitempty"`
+	AAA             aaa.AAAConfig                            `json:"aaa,omitempty" yaml:"aaa,omitempty"`
+
+	// Plugin configs (handled separately)
+	Plugins map[string]interface{} `json:"plugins,omitempty" yaml:"plugins,omitempty"`
 }
 
 type SystemConfig struct {
