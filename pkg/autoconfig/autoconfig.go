@@ -74,6 +74,7 @@ func (a *Autoconfig) deriveSVLANConfig(group *subscriber.SubscriberGroup, vlanRa
 		Value: &interfaces.SubinterfaceConfig{
 			ID:         int(svlan),
 			VLAN:       int(svlan),
+			VLANTpid:   group.VLANTpid,
 			Enabled:    true,
 			Unnumbered: loopback,
 			BNG: &interfaces.BNGConfig{
