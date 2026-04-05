@@ -29,20 +29,23 @@ type InterfaceConfig struct {
 }
 
 type SubinterfaceConfig struct {
-	ID           int            `json:"id" yaml:"id"`
-	VLAN         int            `json:"vlan" yaml:"vlan"`
-	InnerVLAN    *int           `json:"inner-vlan,omitempty" yaml:"inner-vlan,omitempty"`
-	Enabled      bool           `json:"enabled,omitempty" yaml:"enabled,omitempty"`
-	Description  string         `json:"description,omitempty" yaml:"description,omitempty"`
-	MTU          int            `json:"mtu,omitempty" yaml:"mtu,omitempty"`
-	LCP          bool           `json:"lcp,omitempty" yaml:"lcp,omitempty"`
-	VRF          string         `json:"vrf,omitempty" yaml:"vrf,omitempty"`
-	Address      *AddressConfig `json:"address,omitempty" yaml:"address,omitempty"`
-	VLANProtocol string         `json:"vlan-protocol,omitempty" yaml:"vlan-protocol,omitempty"`
-	IPv6         *IPv6Config    `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`
-	ARP          *ARPConfig     `json:"arp,omitempty" yaml:"arp,omitempty"`
-	Unnumbered   string         `json:"unnumbered,omitempty" yaml:"unnumbered,omitempty"`
-	BNG          *BNGConfig     `json:"bng,omitempty" yaml:"bng,omitempty"`
+	// Creation fields (handled by SubinterfaceHandler, not walked)
+	ID           int    `json:"id" yaml:"id"`
+	VLAN         int    `json:"vlan" yaml:"vlan"`
+	InnerVLAN    *int   `json:"inner-vlan,omitempty" yaml:"inner-vlan,omitempty"`
+	VLANProtocol string `json:"vlan-protocol,omitempty" yaml:"vlan-protocol,omitempty"`
+
+	// Per-property fields (walked in struct order by confmgr)
+	LCP         bool           `json:"lcp,omitempty" yaml:"lcp,omitempty"`
+	VRF         string         `json:"vrf,omitempty" yaml:"vrf,omitempty"`
+	MTU         int            `json:"mtu,omitempty" yaml:"mtu,omitempty"`
+	Description string         `json:"description,omitempty" yaml:"description,omitempty"`
+	Address     *AddressConfig `json:"address,omitempty" yaml:"address,omitempty"`
+	IPv6        *IPv6Config    `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`
+	ARP         *ARPConfig     `json:"arp,omitempty" yaml:"arp,omitempty"`
+	Unnumbered  string         `json:"unnumbered,omitempty" yaml:"unnumbered,omitempty"`
+	BNG         *BNGConfig     `json:"bng,omitempty" yaml:"bng,omitempty"`
+	Enabled     bool           `json:"enabled,omitempty" yaml:"enabled,omitempty"`
 }
 
 type SubinterfaceMap map[string]*SubinterfaceConfig
