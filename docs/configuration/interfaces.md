@@ -37,7 +37,7 @@ Sub-interfaces are configured as a list under the parent interface. Each entry r
 | `enabled` | bool | Enable the sub-interface | `true` |
 | `description` | string | Human-readable description | `Customer A` |
 | `mtu` | int | MTU override (auto-derived from parent if not set) | `1504` |
-| `lcp` | bool | Create Linux Control Plane interface (requires parent `lcp`) | `true` |
+| `lcp` | bool | Create Linux Control Plane interface (only needed for addressless interfaces, e.g. unnumbered core interfaces for FRR routing) | `true` |
 | `vrf` | string | Bind to VRF | `CUSTOMER-A` |
 | `address` | [Address](#address) | IP address configuration | |
 | `ipv6` | [IPv6](#ipv6) | IPv6 configuration | |
@@ -50,6 +50,9 @@ Sub-interfaces are configured as a list under the parent interface. Each entry r
 
 !!! note "Automatic MTU"
     If `mtu` is not set, the sub-interface MTU is automatically derived from the parent interface: parent MTU plus 4 bytes for single-tag (802.1q), or plus 8 bytes for double-tag (QinQ). Set `mtu` explicitly to override.
+
+!!! note "Automatic LCP"
+    When an IPv4 or IPv6 address is configured on a sub-interface, an LCP (Linux Control Plane) pair is automatically created. You only need to set `lcp: true` explicitly for addressless sub-interfaces that need Linux visibility (e.g., unnumbered core interfaces for FRR routing protocols).
 
 !!! warning "VLAN matching flags are immutable"
     VPP does not support modifying sub-interface VLAN matching flags after creation. Changing `vlan`, `inner-vlan`, or `vlan-protocol` on an existing sub-interface requires a restart to take effect.
