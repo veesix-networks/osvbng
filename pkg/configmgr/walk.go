@@ -95,10 +95,14 @@ func (cd *ConfigManager) walkSlice(sess *session, basePath string, v reflect.Val
 		elem := v.Index(i)
 
 		if _, err := cd.registry.GetHandler(entryPath); err == nil {
+			val := elem
+			if val.Kind() == reflect.Struct && val.CanAddr() {
+				val = val.Addr()
+			}
 			sess.changes = append(sess.changes, &conf.HandlerContext{
 				SessionID: sess.id,
 				Path:      entryPath,
-				NewValue:  elem.Interface(),
+				NewValue:  val.Interface(),
 				Config:    cfg,
 			})
 			continue
