@@ -152,7 +152,6 @@ interfaces:
         address:
             ipv4:
                 - 10.254.0.1/32
-        lcp: true
     eth1:
         description: Access Interface
         enabled: true
@@ -160,7 +159,6 @@ interfaces:
     eth2:
         description: Core Link (corerouter1)
         enabled: true
-        lcp: true
         address:
             ipv4:
                 - 10.0.0.1/30
@@ -174,14 +172,12 @@ interfaces:
                 - 10.255.0.1/32
             ipv6:
                 - 2001:db8:0:1::1/128
-        lcp: true
     loop101:
         description: CUSTOMER-A Gateway
         enabled: true
         address:
             ipv4:
                 - 192.168.123.1/32
-        lcp: true
         vrf: CUSTOMER-A
 
 protocols:

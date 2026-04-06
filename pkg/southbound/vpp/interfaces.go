@@ -746,7 +746,7 @@ func (v *VPP) createPhysicalInterface(cfg *interfaces.InterfaceConfig) error {
 			}
 		}
 
-		if cfg.LCP {
+		if cfg.NeedsLCP() {
 			if err := v.createLCPPair(cfg.Name, cfg.Name, lcp.LCP_API_ITF_HOST_TAP); err != nil {
 				return fmt.Errorf("create LCP pair: %w", err)
 			}
@@ -760,7 +760,7 @@ func (v *VPP) createPhysicalInterface(cfg *interfaces.InterfaceConfig) error {
 		}
 
 		if cfg.VRF != "" {
-			if err := v.bindInterfaceToVRF(cfg.Name, cfg.Name, cfg.VRF, cfg.LCP); err != nil {
+			if err := v.bindInterfaceToVRF(cfg.Name, cfg.Name, cfg.VRF, cfg.NeedsLCP()); err != nil {
 				return fmt.Errorf("bind to VRF: %w", err)
 			}
 		}
@@ -803,7 +803,7 @@ func (v *VPP) createPhysicalInterface(cfg *interfaces.InterfaceConfig) error {
 		}
 	}
 
-	if cfg.LCP {
+	if cfg.NeedsLCP() {
 		if err := v.createLCPPair(vppIfName, cfg.Name, lcp.LCP_API_ITF_HOST_TAP); err != nil {
 			return fmt.Errorf("create LCP pair: %w", err)
 		}
@@ -817,7 +817,7 @@ func (v *VPP) createPhysicalInterface(cfg *interfaces.InterfaceConfig) error {
 	}
 
 	if cfg.VRF != "" {
-		if err := v.bindInterfaceToVRF(vppIfName, cfg.Name, cfg.VRF, cfg.LCP); err != nil {
+		if err := v.bindInterfaceToVRF(vppIfName, cfg.Name, cfg.VRF, cfg.NeedsLCP()); err != nil {
 			return fmt.Errorf("bind to VRF: %w", err)
 		}
 	}
@@ -959,7 +959,7 @@ func (v *VPP) createBondInterface(cfg *interfaces.InterfaceConfig) error {
 		}
 	}
 
-	if cfg.LCP {
+	if cfg.NeedsLCP() {
 		if err := v.createLCPPair(vppIfName, cfg.Name, lcp.LCP_API_ITF_HOST_TAP); err != nil {
 			for _, idx := range addedMembers {
 				detachReq := &bond.BondDetachMember{SwIfIndex: idx}
@@ -979,7 +979,7 @@ func (v *VPP) createBondInterface(cfg *interfaces.InterfaceConfig) error {
 	}
 
 	if cfg.VRF != "" {
-		if err := v.bindInterfaceToVRF(vppIfName, cfg.Name, cfg.VRF, cfg.LCP); err != nil {
+		if err := v.bindInterfaceToVRF(vppIfName, cfg.Name, cfg.VRF, cfg.NeedsLCP()); err != nil {
 			return fmt.Errorf("bind bond to VRF: %w", err)
 		}
 	}
@@ -1013,7 +1013,7 @@ func (v *VPP) createLoopback(cfg *interfaces.InterfaceConfig) error {
 		Type:         ifmgr.IfTypeHardware,
 	})
 
-	if cfg.LCP {
+	if cfg.NeedsLCP() {
 		if err := v.createLCPPair(vppIfName, cfg.Name, lcp.LCP_API_ITF_HOST_TAP); err != nil {
 			return fmt.Errorf("create LCP pair: %w", err)
 		}
@@ -1027,7 +1027,7 @@ func (v *VPP) createLoopback(cfg *interfaces.InterfaceConfig) error {
 	}
 
 	if cfg.VRF != "" {
-		if err := v.bindInterfaceToVRF(vppIfName, cfg.Name, cfg.VRF, cfg.LCP); err != nil {
+		if err := v.bindInterfaceToVRF(vppIfName, cfg.Name, cfg.VRF, cfg.NeedsLCP()); err != nil {
 			return fmt.Errorf("bind to VRF: %w", err)
 		}
 	}

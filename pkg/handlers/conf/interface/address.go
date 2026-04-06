@@ -122,6 +122,12 @@ func (h *AddressHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) e
 		}
 	}
 
+	if !h.southbound.HasLCPPair(ifName) {
+		if err := h.southbound.CreateLCPPair(ifName); err != nil {
+			return fmt.Errorf("create LCP pair for %s: %w", ifName, err)
+		}
+	}
+
 	if h.isIPv6 {
 		return h.southbound.AddIPv6Address(ifName, addr)
 	}
