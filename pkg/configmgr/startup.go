@@ -17,13 +17,11 @@ func ensureManagementInterface(cfg *config.Config) {
 	if existing, ok := cfg.Interfaces[managementInterface]; ok {
 		existing.Name = managementInterface
 		existing.Enabled = true
-		existing.LCP = true
 	} else {
 		cfg.Interfaces[managementInterface] = &interfaces.InterfaceConfig{
 			Name:        managementInterface,
 			Description: "Management Interface",
 			Enabled:     true,
-			LCP:         true,
 		}
 	}
 }

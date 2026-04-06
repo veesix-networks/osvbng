@@ -17,7 +17,7 @@ type InterfaceConfig struct {
 	Parent  string      `json:"parent,omitempty" yaml:"parent,omitempty"`
 	VLANID  int         `json:"vlan-id,omitempty" yaml:"vlan-id,omitempty"`
 	Bond    *BondConfig `json:"bond,omitempty" yaml:"bond,omitempty"`
-	LCP     bool        `json:"lcp,omitempty" yaml:"lcp,omitempty"`
+	LCP     bool        `json:"-" yaml:"-"`
 	VRF     string      `json:"vrf,omitempty" yaml:"vrf,omitempty"`
 	BNGMode string      `json:"bng_mode,omitempty" yaml:"bng_mode,omitempty"`
 	CGNAT   string      `json:"cgnat,omitempty" yaml:"cgnat,omitempty"`
@@ -36,7 +36,7 @@ type SubinterfaceConfig struct {
 	VLANTpid     string `json:"vlan-tpid,omitempty" yaml:"vlan-tpid,omitempty"`
 
 	// Per-property fields (walked in struct order by confmgr)
-	LCP         bool           `json:"lcp,omitempty" yaml:"lcp,omitempty"`
+	LCP         bool           `json:"-" yaml:"-"`
 	VRF         string         `json:"vrf,omitempty" yaml:"vrf,omitempty"`
 	MTU         int            `json:"mtu,omitempty" yaml:"mtu,omitempty"`
 	Description string         `json:"description,omitempty" yaml:"description,omitempty"`
@@ -46,6 +46,18 @@ type SubinterfaceConfig struct {
 	Unnumbered  string         `json:"unnumbered,omitempty" yaml:"unnumbered,omitempty"`
 	BNG         *BNGConfig     `json:"bng,omitempty" yaml:"bng,omitempty"`
 	Enabled     bool           `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+}
+
+func (c *InterfaceConfig) NeedsLCP() bool {
+	// Reserved in case we need to build more complicated logic
+	// to automatically determine LCP being auto-enabled
+	// 99% of scenarios, most operators will want routing/arp/nd on
+	// all core interfaces
+	return true
+}
+
+func (c *SubinterfaceConfig) NeedsLCP() bool {
+	return c.BNG == nil
 }
 
 type SubinterfaceMap map[string]*SubinterfaceConfig
