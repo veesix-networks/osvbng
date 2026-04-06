@@ -84,7 +84,7 @@ func (v *VPP) CreateSubinterface(params *southbound.SubinterfaceParams) error {
 
 	if parentMTU > 0 {
 		tagOverhead := uint32(4)
-		if params.InnerVLAN != nil {
+		if params.InnerVLAN != nil || params.InnerVLANAny {
 			tagOverhead = 8
 		}
 		mtu := parentMTU + tagOverhead
@@ -1077,6 +1077,11 @@ func (v *VPP) SetInterfaceDescription(name, description string) error {
 func (v *VPP) SetInterfaceMTU(name string, mtu int) error {
 	idx, err := v.GetInterfaceIndex(name)
 	if err == nil {
+		// Set HW MTU first (ceiling), then SW MTU. SW MTU cannot exceed HW MTU.
+		if err := v.setVPPInterfaceHWMtu(name, uint16(mtu)); err != nil {
+			v.logger.Warn("Failed to set HW MTU", "interface", name, "mtu", mtu, "error", err)
+		}
+
 		ch, err := v.conn.NewAPIChannel()
 		if err != nil {
 			return fmt.Errorf("create API channel: %w", err)
@@ -1087,13 +1092,12 @@ func (v *VPP) SetInterfaceMTU(name string, mtu int) error {
 			SwIfIndex: interface_types.InterfaceIndex(idx),
 			Mtu:       []uint32{uint32(mtu), 0, 0, 0},
 		}
-
 		reply := &vppinterfaces.SwInterfaceSetMtuReply{}
 		if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
-			return fmt.Errorf("set VPP interface MTU: %w", err)
+			return fmt.Errorf("set VPP SW MTU: %w", err)
 		}
 		if reply.Retval != 0 {
-			return fmt.Errorf("set VPP interface MTU failed: retval=%d", reply.Retval)
+			return fmt.Errorf("set VPP SW MTU failed: retval=%d", reply.Retval)
 		}
 
 		if iface := v.ifMgr.GetByName(name); iface != nil {
@@ -1103,6 +1107,7 @@ func (v *VPP) SetInterfaceMTU(name string, mtu int) error {
 		v.logger.Info("Set interface MTU", "interface", name, "mtu", mtu)
 	}
 
+	// Set MTU on LCP tap (dataplane ns) and host interface (default ns)
 	link, h, linkErr := v.findLink(name)
 	if linkErr != nil {
 		if err != nil {
@@ -1111,7 +1116,15 @@ func (v *VPP) SetInterfaceMTU(name string, mtu int) error {
 		return nil
 	}
 	if h != nil {
-		return h.LinkSetMTU(link, mtu)
+		if err := h.LinkSetMTU(link, mtu); err != nil {
+			return fmt.Errorf("set LCP interface MTU: %w", err)
+		}
+		if hostLink, hostErr := netlink.LinkByName(name); hostErr == nil {
+			if err := netlink.LinkSetMTU(hostLink, mtu); err != nil {
+				v.logger.Warn("Failed to set host interface MTU", "interface", name, "mtu", mtu, "error", err)
+			}
+		}
+		return nil
 	}
 	return netlink.LinkSetMTU(link, mtu)
 }
