@@ -42,7 +42,9 @@ For maximum performance with DPDK and PCI passthrough. Requires a dedicated serv
 **Quick Install:**
 
 ```bash
-curl -sL https://v6n.io/osvbng | sudo bash
+curl -sL https://v6n.io/osvbng -o deploy-vm.sh
+chmod +x deploy-vm.sh
+sudo ./deploy-vm.sh
 ```
 
 **Install Dependencies (Debian/Ubuntu):**
