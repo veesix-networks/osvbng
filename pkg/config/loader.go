@@ -62,13 +62,38 @@ func (c *Config) applyDefaults() {
 	}
 }
 
+func validateVLANTpid(value string) error {
+	switch value {
+	case "", "dot1q", "dot1ad":
+		return nil
+	}
+	return fmt.Errorf("invalid vlan-tpid %q: use \"dot1q\" or \"dot1ad\" (renamed from vlan-protocol: 802.1q/802.1ad)", value)
+}
+
 func (c *Config) Validate() error {
 	if _, err := c.GetAccessInterface(); err != nil {
 		return fmt.Errorf("access interface validation: %w", err)
 	}
 
+	for ifName, iface := range c.Interfaces {
+		if iface == nil {
+			continue
+		}
+		for subID, sub := range iface.Subinterfaces {
+			if sub == nil {
+				continue
+			}
+			if err := validateVLANTpid(sub.VLANTpid); err != nil {
+				return fmt.Errorf("interfaces.%s.subinterfaces.%s: %w", ifName, subID, err)
+			}
+		}
+	}
+
 	if c.SubscriberGroups != nil {
 		for groupName, group := range c.SubscriberGroups.Groups {
+			if err := validateVLANTpid(group.VLANTpid); err != nil {
+				return fmt.Errorf("subscriber_groups.%s: %w", groupName, err)
+			}
 			for i, vlanRange := range group.VLANs {
 				if _, err := vlanRange.GetSVLANs(); err != nil {
 					return fmt.Errorf("subscriber_groups.%s.vlans[%d].svlan: %w", groupName, i, err)

@@ -29,18 +29,22 @@ func ensureManagementInterface(cfg *config.Config) {
 }
 
 func (cd *ConfigManager) LoadStartupConfig(path string) (*config.Config, error) {
-	config, err := LoadYAML(path)
+	cfg, err := LoadYAML(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load startup config: %w", err)
 	}
 
-	ensureManagementInterface(config)
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("startup config validation failed: %w", err)
+	}
+
+	ensureManagementInterface(cfg)
 
 	cd.mu.Lock()
-	cd.startupConfig = cd.deepCopyConfig(config)
+	cd.startupConfig = cd.deepCopyConfig(cfg)
 	cd.mu.Unlock()
 
-	return config, nil
+	return cfg, nil
 }
 
 func (cd *ConfigManager) ApplyLoadedConfig() error {

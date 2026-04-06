@@ -33,7 +33,7 @@ Sub-interfaces are configured as a list under the parent interface. Each entry r
 | `id` | int | Sub-interface ID | `100` |
 | `vlan` | int | Outer VLAN ID (1-4094) | `100` |
 | `inner-vlan` | int | Inner VLAN ID for double-tag match (1-4094) | `200` |
-| `vlan-protocol` | string | VLAN protocol: `802.1q` (default) or `802.1ad` | `802.1q` |
+| `vlan-tpid` | string | Outer VLAN TPID: `dot1q` or `dot1ad`. Defaults to `dot1ad` for double-tagged sub-interfaces (IEEE 802.1ad), `dot1q` for single-tagged | `dot1ad` |
 | `enabled` | bool | Enable the sub-interface | `true` |
 | `description` | string | Human-readable description | `Customer A` |
 | `mtu` | int | MTU override (auto-derived from parent if not set) | `1504` |
@@ -55,18 +55,16 @@ Sub-interfaces are configured as a list under the parent interface. Each entry r
     When an IPv4 or IPv6 address is configured on a sub-interface, an LCP (Linux Control Plane) pair is automatically created. You only need to set `lcp: true` explicitly for addressless sub-interfaces that need Linux visibility (e.g., unnumbered core interfaces for FRR routing protocols).
 
 !!! warning "VLAN matching flags are immutable"
-    VPP does not support modifying sub-interface VLAN matching flags after creation. Changing `vlan`, `inner-vlan`, or `vlan-protocol` on an existing sub-interface requires a restart to take effect.
+    VPP does not support modifying sub-interface VLAN matching flags after creation. Changing `vlan`, `inner-vlan`, or `vlan-tpid` on an existing sub-interface requires a restart to take effect.
 
 ### VLAN Matching Modes
 
-The combination of `vlan-protocol` and `inner-vlan` determines how packets are matched:
-
-| Config | Matching | Use Case |
-|--------|----------|----------|
-| `vlan: 100` | Single 802.1q tag, exact match | VRF-lite on core interfaces |
-| `vlan: 100, inner-vlan: 200` | Double 802.1q tag, exact match | Double-tagged business customer |
-| `vlan: 100, vlan-protocol: 802.1ad` | S-VLAN match, any C-VLAN | Subscriber group pattern |
-| `vlan: 100, inner-vlan: 200, vlan-protocol: 802.1ad` | Exact QinQ match | Business customer on access |
+| Config | Matching |
+|--------|----------|
+| `vlan: 100` | Single tag, outer dot1q |
+| `vlan: 100, inner-vlan: 200` | Double tag exact match, outer dot1ad |
+| `vlan: 100, inner-vlan: 200, vlan-tpid: dot1q` | Double tag exact match, outer dot1q |
+| BNG subscriber sub-interface | Outer S-VLAN match, any inner C-VLAN, outer dot1ad |
 
 ### Sub-interface BNG
 

@@ -138,12 +138,16 @@ func (v *VPP) BindInterfaceToVRF(vppIfName, vrfName string, hasLCP bool) error {
 }
 
 func (v *VPP) computeSubIfFlags(params *southbound.SubinterfaceParams) interface_types.SubIfFlags {
-	protocol := params.VLANProtocol
-	if protocol == "" {
-		protocol = "802.1q"
+	tpid := params.VLANTpid
+	if tpid == "" {
+		if params.InnerVLAN != nil || params.InnerVLANAny {
+			tpid = "dot1ad"
+		} else {
+			tpid = "dot1q"
+		}
 	}
 
-	isDot1ad := protocol == "802.1ad"
+	isDot1ad := tpid == "dot1ad"
 
 	if params.InnerVLANAny && isDot1ad {
 		return interface_types.SUB_IF_API_FLAG_ONE_TAG |

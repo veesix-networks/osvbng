@@ -85,7 +85,7 @@ func (h *SubinterfaceHandler) Apply(ctx context.Context, hctx *conf.HandlerConte
 		SubID:        uint16(subIfID),
 		OuterVLAN:    uint16(cfg.VLAN),
 		InnerVLANAny: cfg.BNG != nil,
-		VLANProtocol: cfg.VLANProtocol,
+		VLANTpid:     cfg.VLANTpid,
 	}
 
 	if cfg.InnerVLAN != nil {

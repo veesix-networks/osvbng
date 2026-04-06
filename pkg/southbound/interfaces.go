@@ -11,7 +11,7 @@ type SubinterfaceParams struct {
 	OuterVLAN    uint16
 	InnerVLAN    *uint16
 	InnerVLANAny bool
-	VLANProtocol string
+	VLANTpid     string
 }
 
 type Interfaces interface {
