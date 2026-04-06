@@ -25,6 +25,7 @@ subscriber-groups:
     groups:
         pppoe:
             access-type: pppoe
+            vlan-tpid: dot1q
             ipv4-profile: default
             ipv6-profile: default-v6
             vlans:
