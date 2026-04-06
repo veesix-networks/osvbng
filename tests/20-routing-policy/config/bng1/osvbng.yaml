@@ -79,7 +79,6 @@ interfaces:
         address:
             ipv4:
                 - 10.254.0.1/32
-        lcp: true
     eth1:
         description: Access Interface
         enabled: true
@@ -87,7 +86,6 @@ interfaces:
     eth2:
         description: Core Link
         enabled: true
-        lcp: true
         address:
             ipv4:
                 - 10.0.0.1/30
@@ -97,7 +95,6 @@ interfaces:
         address:
             ipv4:
                 - 192.0.2.1/32
-        lcp: true
 
 subscriber-groups:
     groups:

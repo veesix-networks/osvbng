@@ -80,7 +80,6 @@ interfaces:
         address:
             ipv4:
                 - 10.254.0.1/32
-        lcp: true
     eth1:
         description: Access Interface
         enabled: true
@@ -89,7 +88,6 @@ interfaces:
         description: Core Link
         enabled: true
         bng_mode: core
-        lcp: true
         address:
             ipv4:
                 - 10.0.0.1/30
@@ -101,7 +99,6 @@ interfaces:
                 - 100.64.0.1/32
             ipv6:
                 - 2001:db8:0:1::1/128
-        lcp: true
 
 protocols:
     bgp:
