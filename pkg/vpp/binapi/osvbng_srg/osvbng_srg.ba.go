@@ -31,6 +31,7 @@ const (
 	VersionCrc = 0xf23daeb0
 )
 
+// OsvbngSrgCounters defines type 'osvbng_srg_counters'.
 type OsvbngSrgCounters struct {
 	SrgName    string `binapi:"string[64],name=srg_name" json:"srg_name,omitempty"`
 	GarpSent   uint64 `binapi:"u64,name=garp_sent" json:"garp_sent,omitempty"`
@@ -39,12 +40,20 @@ type OsvbngSrgCounters struct {
 	MacRemoves uint64 `binapi:"u64,name=mac_removes" json:"mac_removes,omitempty"`
 }
 
+// OsvbngSrgGarpEntry defines type 'osvbng_srg_garp_entry'.
 type OsvbngSrgGarpEntry struct {
 	SwIfIndex interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
 	IPAddress ip_types.Address               `binapi:"address,name=ip_address" json:"ip_address,omitempty"`
 }
 
-
+// Register or deregister an SRG with virtual MAC and sub-interface list
+//   - is_add - add SRG if true, delete if false
+//   - srg_name - unique SRG name (up to 63 chars)
+//   - virtual_mac - virtual MAC address for this SRG
+//   - sw_if_count - number of sub-interfaces
+//   - sw_if_indices - sub-interface indices belonging to this SRG
+//
+// OsvbngSrgAddDel defines message 'osvbng_srg_add_del'.
 type OsvbngSrgAddDel struct {
 	IsAdd       bool                             `binapi:"bool,name=is_add" json:"is_add,omitempty"`
 	SrgName     string                           `binapi:"string[64],name=srg_name" json:"srg_name,omitempty"`
@@ -88,7 +97,7 @@ func (m *OsvbngSrgAddDel) Marshal(b []byte) ([]byte, error) {
 	buf.EncodeBytes(m.VirtualMac[:], 6)
 	buf.EncodeUint32(uint32(len(m.SwIfIndices)))
 	for j0 := 0; j0 < len(m.SwIfIndices); j0++ {
-		var v0 interface_types.InterfaceIndex
+		var v0 interface_types.InterfaceIndex // SwIfIndices
 		if j0 < len(m.SwIfIndices) {
 			v0 = m.SwIfIndices[j0]
 		}
@@ -109,6 +118,7 @@ func (m *OsvbngSrgAddDel) Unmarshal(b []byte) error {
 	return nil
 }
 
+// OsvbngSrgAddDelReply defines message 'osvbng_srg_add_del_reply'.
 type OsvbngSrgAddDelReply struct {
 	Retval int32 `binapi:"i32,name=retval" json:"retval,omitempty"`
 }
@@ -141,6 +151,10 @@ func (m *OsvbngSrgAddDelReply) Unmarshal(b []byte) error {
 	return nil
 }
 
+// Per-SRG counter details
+//   - counters - counter values for one SRG
+//
+// OsvbngSrgCounterDetails defines message 'osvbng_srg_counter_details'.
 type OsvbngSrgCounterDetails struct {
 	Counters OsvbngSrgCounters `binapi:"osvbng_srg_counters,name=counters" json:"counters,omitempty"`
 }
@@ -157,10 +171,10 @@ func (m *OsvbngSrgCounterDetails) Size() (size int) {
 		return 0
 	}
 	size += 64 // m.Counters.SrgName
-	size += 8 
-	size += 8
-	size += 8
-	size += 8
+	size += 8  // m.Counters.GarpSent
+	size += 8  // m.Counters.NaSent
+	size += 8  // m.Counters.MacAdds
+	size += 8  // m.Counters.MacRemoves
 	return size
 }
 func (m *OsvbngSrgCounterDetails) Marshal(b []byte) ([]byte, error) {
@@ -185,6 +199,10 @@ func (m *OsvbngSrgCounterDetails) Unmarshal(b []byte) error {
 	return nil
 }
 
+// Dump per-SRG counters
+//   - srg_name - specific SRG name (empty string for all)
+//
+// OsvbngSrgCounterDump defines message 'osvbng_srg_counter_dump'.
 type OsvbngSrgCounterDump struct {
 	SrgName string `binapi:"string[64],name=srg_name" json:"srg_name,omitempty"`
 }
@@ -217,6 +235,12 @@ func (m *OsvbngSrgCounterDump) Unmarshal(b []byte) error {
 	return nil
 }
 
+// Batch send GARP (IPv4) and unsolicited NA (IPv6) packets
+//   - srg_name - SRG name (for counter attribution)
+//   - count - number of entries
+//   - entries - array of (sw_if_index, ip_address) pairs
+//
+// OsvbngSrgSendGarp defines message 'osvbng_srg_send_garp'.
 type OsvbngSrgSendGarp struct {
 	SrgName string               `binapi:"string[64],name=srg_name" json:"srg_name,omitempty"`
 	Count   uint32               `binapi:"u32,name=count" json:"-"`
@@ -234,17 +258,17 @@ func (m *OsvbngSrgSendGarp) Size() (size int) {
 	if m == nil {
 		return 0
 	}
-	size += 64
-	size += 4 
+	size += 64 // m.SrgName
+	size += 4  // m.Count
 	for j1 := 0; j1 < len(m.Entries); j1++ {
 		var s1 OsvbngSrgGarpEntry
 		_ = s1
 		if j1 < len(m.Entries) {
 			s1 = m.Entries[j1]
 		}
-		size += 4 
-		size += 1
-		size += 1 * 16
+		size += 4      // s1.SwIfIndex
+		size += 1      // s1.IPAddress.Af
+		size += 1 * 16 // s1.IPAddress.Un
 	}
 	return size
 }
@@ -279,6 +303,7 @@ func (m *OsvbngSrgSendGarp) Unmarshal(b []byte) error {
 	return nil
 }
 
+// OsvbngSrgSendGarpReply defines message 'osvbng_srg_send_garp_reply'.
 type OsvbngSrgSendGarpReply struct {
 	Retval int32 `binapi:"i32,name=retval" json:"retval,omitempty"`
 }
@@ -294,7 +319,7 @@ func (m *OsvbngSrgSendGarpReply) Size() (size int) {
 	if m == nil {
 		return 0
 	}
-	size += 4
+	size += 4 // m.Retval
 	return size
 }
 func (m *OsvbngSrgSendGarpReply) Marshal(b []byte) ([]byte, error) {
@@ -311,6 +336,11 @@ func (m *OsvbngSrgSendGarpReply) Unmarshal(b []byte) error {
 	return nil
 }
 
+// Set SRG state to ACTIVE or STANDBY
+//   - srg_name - SRG name
+//   - is_active - true for ACTIVE (add vMAC), false for STANDBY (remove vMAC)
+//
+// OsvbngSrgSetState defines message 'osvbng_srg_set_state'.
 type OsvbngSrgSetState struct {
 	SrgName  string `binapi:"string[64],name=srg_name" json:"srg_name,omitempty"`
 	IsActive bool   `binapi:"bool,name=is_active" json:"is_active,omitempty"`
@@ -347,6 +377,7 @@ func (m *OsvbngSrgSetState) Unmarshal(b []byte) error {
 	return nil
 }
 
+// OsvbngSrgSetStateReply defines message 'osvbng_srg_set_state_reply'.
 type OsvbngSrgSetStateReply struct {
 	Retval int32 `binapi:"i32,name=retval" json:"retval,omitempty"`
 }
@@ -391,6 +422,7 @@ func file_osvbng_srg_binapi_init() {
 	api.RegisterMessage((*OsvbngSrgSetStateReply)(nil), "osvbng_srg_set_state_reply_e8d4e804")
 }
 
+// Messages returns list of all messages in this module.
 func AllMessages() []api.Message {
 	return []api.Message{
 		(*OsvbngSrgAddDel)(nil),

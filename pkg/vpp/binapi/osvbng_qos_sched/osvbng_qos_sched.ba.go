@@ -8,7 +8,7 @@
 //
 // Contents:
 // -  3 enums
-// -  6 messages
+// - 12 messages
 package osvbng_qos_sched
 
 import (
@@ -27,8 +27,8 @@ const _ = api.GoVppAPIPackageIsVersion2
 
 const (
 	APIFile    = "osvbng_qos_sched"
-	APIVersion = "1.0.0"
-	VersionCrc = 0x5b1aa9e6
+	APIVersion = "2.0.0"
+	VersionCrc = 0xd5a840c2
 )
 
 // OsvbngCakeAtmMode defines enum 'osvbng_cake_atm_mode'.
@@ -146,22 +146,260 @@ func (x OsvbngCakeTinMode) String() string {
 	return "OsvbngCakeTinMode(" + strconv.Itoa(int(x)) + ")"
 }
 
-// Per-subscriber scheduler details (response to dump)
-//   - sw_if_index - subscriber interface
-//   - rate_bytes_per_sec - configured shaping rate
-//   - tin_mode - active tin mode
-//   - tin_cnt - number of active tins
-//   - buffer_usage - current bytes queued across all tins
-//   - buffer_limit - maximum buffer bytes
-//   - tin_packets - per-tin packet counters (up to 8)
-//   - tin_bytes - per-tin byte counters
-//   - tin_drops - per-tin AQM + overflow drop counters
-//   - tin_ecn_marks - per-tin ECN CE mark counters
-//   - tin_peak_delay_us - per-tin peak sojourn time (microseconds)
-//   - tin_avg_delay_us - per-tin average sojourn time (microseconds)
-//   - tin_sparse_flows - per-tin count of flows in sparse state
-//   - tin_bulk_flows - per-tin count of flows in bulk state
+// Create per-port aggregate shaper
+//   - sw_if_index - physical or bond interface
+//   - rate_bytes_per_sec - aggregate shaping rate (bytes/sec)
+//   - buffer_limit - max aggregate buffered bytes (0 = auto)
 //
+// OsvbngCakeAggregateCreate defines message 'osvbng_cake_aggregate_create'.
+type OsvbngCakeAggregateCreate struct {
+	SwIfIndex       interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
+	RateBytesPerSec uint64                         `binapi:"u64,name=rate_bytes_per_sec" json:"rate_bytes_per_sec,omitempty"`
+	BufferLimit     uint32                         `binapi:"u32,name=buffer_limit" json:"buffer_limit,omitempty"`
+}
+
+func (m *OsvbngCakeAggregateCreate) Reset()               { *m = OsvbngCakeAggregateCreate{} }
+func (*OsvbngCakeAggregateCreate) GetMessageName() string { return "osvbng_cake_aggregate_create" }
+func (*OsvbngCakeAggregateCreate) GetCrcString() string   { return "acf4b6d8" }
+func (*OsvbngCakeAggregateCreate) GetMessageType() api.MessageType {
+	return api.RequestMessage
+}
+
+func (m *OsvbngCakeAggregateCreate) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.SwIfIndex
+	size += 8 // m.RateBytesPerSec
+	size += 4 // m.BufferLimit
+	return size
+}
+func (m *OsvbngCakeAggregateCreate) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeUint32(uint32(m.SwIfIndex))
+	buf.EncodeUint64(m.RateBytesPerSec)
+	buf.EncodeUint32(m.BufferLimit)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngCakeAggregateCreate) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.SwIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
+	m.RateBytesPerSec = buf.DecodeUint64()
+	m.BufferLimit = buf.DecodeUint32()
+	return nil
+}
+
+// OsvbngCakeAggregateCreateReply defines message 'osvbng_cake_aggregate_create_reply'.
+type OsvbngCakeAggregateCreateReply struct {
+	Retval int32 `binapi:"i32,name=retval" json:"retval,omitempty"`
+}
+
+func (m *OsvbngCakeAggregateCreateReply) Reset() { *m = OsvbngCakeAggregateCreateReply{} }
+func (*OsvbngCakeAggregateCreateReply) GetMessageName() string {
+	return "osvbng_cake_aggregate_create_reply"
+}
+func (*OsvbngCakeAggregateCreateReply) GetCrcString() string { return "e8d4e804" }
+func (*OsvbngCakeAggregateCreateReply) GetMessageType() api.MessageType {
+	return api.ReplyMessage
+}
+
+func (m *OsvbngCakeAggregateCreateReply) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.Retval
+	return size
+}
+func (m *OsvbngCakeAggregateCreateReply) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeInt32(m.Retval)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngCakeAggregateCreateReply) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.Retval = buf.DecodeInt32()
+	return nil
+}
+
+// Delete per-port aggregate shaper
+//   - sw_if_index - physical or bond interface
+//
+// OsvbngCakeAggregateDelete defines message 'osvbng_cake_aggregate_delete'.
+type OsvbngCakeAggregateDelete struct {
+	SwIfIndex interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
+}
+
+func (m *OsvbngCakeAggregateDelete) Reset()               { *m = OsvbngCakeAggregateDelete{} }
+func (*OsvbngCakeAggregateDelete) GetMessageName() string { return "osvbng_cake_aggregate_delete" }
+func (*OsvbngCakeAggregateDelete) GetCrcString() string   { return "f9e6675e" }
+func (*OsvbngCakeAggregateDelete) GetMessageType() api.MessageType {
+	return api.RequestMessage
+}
+
+func (m *OsvbngCakeAggregateDelete) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.SwIfIndex
+	return size
+}
+func (m *OsvbngCakeAggregateDelete) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeUint32(uint32(m.SwIfIndex))
+	return buf.Bytes(), nil
+}
+func (m *OsvbngCakeAggregateDelete) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.SwIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
+	return nil
+}
+
+// OsvbngCakeAggregateDeleteReply defines message 'osvbng_cake_aggregate_delete_reply'.
+type OsvbngCakeAggregateDeleteReply struct {
+	Retval int32 `binapi:"i32,name=retval" json:"retval,omitempty"`
+}
+
+func (m *OsvbngCakeAggregateDeleteReply) Reset() { *m = OsvbngCakeAggregateDeleteReply{} }
+func (*OsvbngCakeAggregateDeleteReply) GetMessageName() string {
+	return "osvbng_cake_aggregate_delete_reply"
+}
+func (*OsvbngCakeAggregateDeleteReply) GetCrcString() string { return "e8d4e804" }
+func (*OsvbngCakeAggregateDeleteReply) GetMessageType() api.MessageType {
+	return api.ReplyMessage
+}
+
+func (m *OsvbngCakeAggregateDeleteReply) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.Retval
+	return size
+}
+func (m *OsvbngCakeAggregateDeleteReply) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeInt32(m.Retval)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngCakeAggregateDeleteReply) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.Retval = buf.DecodeInt32()
+	return nil
+}
+
+// Aggregate shaper details (response to dump)
+//   - sw_if_index - physical or bond interface
+//   - rate_bytes_per_sec - configured aggregate rate
+//   - buffer_usage - current aggregate bytes queued
+//   - buffer_limit - maximum aggregate buffer bytes
+//   - shaped_pkts - total packets shaped through aggregate
+//   - shaped_bytes - total bytes shaped through aggregate
+//   - backpressure_events - aggregate buffer overflow drops
+//
+// OsvbngCakeAggregateDetails defines message 'osvbng_cake_aggregate_details'.
+type OsvbngCakeAggregateDetails struct {
+	SwIfIndex          interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
+	RateBytesPerSec    uint64                         `binapi:"u64,name=rate_bytes_per_sec" json:"rate_bytes_per_sec,omitempty"`
+	BufferUsage        uint32                         `binapi:"u32,name=buffer_usage" json:"buffer_usage,omitempty"`
+	BufferLimit        uint32                         `binapi:"u32,name=buffer_limit" json:"buffer_limit,omitempty"`
+	ShapedPkts         uint64                         `binapi:"u64,name=shaped_pkts" json:"shaped_pkts,omitempty"`
+	ShapedBytes        uint64                         `binapi:"u64,name=shaped_bytes" json:"shaped_bytes,omitempty"`
+	BackpressureEvents uint64                         `binapi:"u64,name=backpressure_events" json:"backpressure_events,omitempty"`
+}
+
+func (m *OsvbngCakeAggregateDetails) Reset()               { *m = OsvbngCakeAggregateDetails{} }
+func (*OsvbngCakeAggregateDetails) GetMessageName() string { return "osvbng_cake_aggregate_details" }
+func (*OsvbngCakeAggregateDetails) GetCrcString() string   { return "ed4f36ec" }
+func (*OsvbngCakeAggregateDetails) GetMessageType() api.MessageType {
+	return api.ReplyMessage
+}
+
+func (m *OsvbngCakeAggregateDetails) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.SwIfIndex
+	size += 8 // m.RateBytesPerSec
+	size += 4 // m.BufferUsage
+	size += 4 // m.BufferLimit
+	size += 8 // m.ShapedPkts
+	size += 8 // m.ShapedBytes
+	size += 8 // m.BackpressureEvents
+	return size
+}
+func (m *OsvbngCakeAggregateDetails) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeUint32(uint32(m.SwIfIndex))
+	buf.EncodeUint64(m.RateBytesPerSec)
+	buf.EncodeUint32(m.BufferUsage)
+	buf.EncodeUint32(m.BufferLimit)
+	buf.EncodeUint64(m.ShapedPkts)
+	buf.EncodeUint64(m.ShapedBytes)
+	buf.EncodeUint64(m.BackpressureEvents)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngCakeAggregateDetails) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.SwIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
+	m.RateBytesPerSec = buf.DecodeUint64()
+	m.BufferUsage = buf.DecodeUint32()
+	m.BufferLimit = buf.DecodeUint32()
+	m.ShapedPkts = buf.DecodeUint64()
+	m.ShapedBytes = buf.DecodeUint64()
+	m.BackpressureEvents = buf.DecodeUint64()
+	return nil
+}
+
+// Dump aggregate shaper state
+//   - sw_if_index - physical or bond interface (~0 for all)
+//
+// OsvbngCakeAggregateDump defines message 'osvbng_cake_aggregate_dump'.
+type OsvbngCakeAggregateDump struct {
+	SwIfIndex interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
+}
+
+func (m *OsvbngCakeAggregateDump) Reset()               { *m = OsvbngCakeAggregateDump{} }
+func (*OsvbngCakeAggregateDump) GetMessageName() string { return "osvbng_cake_aggregate_dump" }
+func (*OsvbngCakeAggregateDump) GetCrcString() string   { return "f9e6675e" }
+func (*OsvbngCakeAggregateDump) GetMessageType() api.MessageType {
+	return api.RequestMessage
+}
+
+func (m *OsvbngCakeAggregateDump) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.SwIfIndex
+	return size
+}
+func (m *OsvbngCakeAggregateDump) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeUint32(uint32(m.SwIfIndex))
+	return buf.Bytes(), nil
+}
+func (m *OsvbngCakeAggregateDump) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.SwIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
+	return nil
+}
+
 // OsvbngCakeSchedDetails defines message 'osvbng_cake_sched_details'.
 type OsvbngCakeSchedDetails struct {
 	SwIfIndex       interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
@@ -319,9 +557,6 @@ func (m *OsvbngCakeSchedDetails) Unmarshal(b []byte) error {
 	return nil
 }
 
-// Dump per-subscriber scheduler state
-//   - sw_if_index - subscriber interface (~0 for all)
-//
 // OsvbngCakeSchedDump defines message 'osvbng_cake_sched_dump'.
 type OsvbngCakeSchedDump struct {
 	SwIfIndex interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
@@ -355,18 +590,12 @@ func (m *OsvbngCakeSchedDump) Unmarshal(b []byte) error {
 	return nil
 }
 
-// Enable or disable per-subscriber CAKE scheduler
-//   - sw_if_index - subscriber interface
-//   - is_enable - enable if true, disable if false
-//   - rate_bytes_per_sec - shaping rate (bytes/sec). 0 on disable.
-//   - tin_mode - DiffServ tin mode (besteffort, diffserv3, diffserv4, diffserv8)
-//   - overhead_bytes - per-packet overhead adjustment (signed, for link-layer framing)
-//   - atm_mode - ATM cell rounding mode (none, ATM, PTM)
-//   - mpu - minimum packet unit (bytes, e.g. 64 for Ethernet)
-//   - buffer_limit - max queued bytes (0 = auto-calculate from rate * RTT)
-//   - target_us - CoDel AQM target (microseconds, 0 = 5000)
-//   - interval_us - CoDel AQM interval (microseconds, 0 = 100000)
-//   - flags - behavior flags (wash DSCP, ACK filter, split GSO)
+// /* Copyright 2026 Veesix Networks Ltd
+//   - Licensed under the GNU General Public License v3.0 or later.
+//   - SPDX-License-Identifier: GPL-3.0-or-later
+//     *
+//   - osvbng QoS Scheduler Plugin API
+//   - CAKE-equivalent per-subscriber traffic scheduling.
 //
 // OsvbngCakeSchedEnableDisable defines message 'osvbng_cake_sched_enable_disable'.
 type OsvbngCakeSchedEnableDisable struct {
@@ -478,9 +707,6 @@ func (m *OsvbngCakeSchedEnableDisableReply) Unmarshal(b []byte) error {
 	return nil
 }
 
-// Reset scheduler statistics for a subscriber
-//   - sw_if_index - subscriber interface
-//
 // OsvbngCakeSchedResetStats defines message 'osvbng_cake_sched_reset_stats'.
 type OsvbngCakeSchedResetStats struct {
 	SwIfIndex interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
@@ -551,6 +777,12 @@ func (m *OsvbngCakeSchedResetStatsReply) Unmarshal(b []byte) error {
 
 func init() { file_osvbng_qos_sched_binapi_init() }
 func file_osvbng_qos_sched_binapi_init() {
+	api.RegisterMessage((*OsvbngCakeAggregateCreate)(nil), "osvbng_cake_aggregate_create_acf4b6d8")
+	api.RegisterMessage((*OsvbngCakeAggregateCreateReply)(nil), "osvbng_cake_aggregate_create_reply_e8d4e804")
+	api.RegisterMessage((*OsvbngCakeAggregateDelete)(nil), "osvbng_cake_aggregate_delete_f9e6675e")
+	api.RegisterMessage((*OsvbngCakeAggregateDeleteReply)(nil), "osvbng_cake_aggregate_delete_reply_e8d4e804")
+	api.RegisterMessage((*OsvbngCakeAggregateDetails)(nil), "osvbng_cake_aggregate_details_ed4f36ec")
+	api.RegisterMessage((*OsvbngCakeAggregateDump)(nil), "osvbng_cake_aggregate_dump_f9e6675e")
 	api.RegisterMessage((*OsvbngCakeSchedDetails)(nil), "osvbng_cake_sched_details_9939f302")
 	api.RegisterMessage((*OsvbngCakeSchedDump)(nil), "osvbng_cake_sched_dump_f9e6675e")
 	api.RegisterMessage((*OsvbngCakeSchedEnableDisable)(nil), "osvbng_cake_sched_enable_disable_911be194")
@@ -562,6 +794,12 @@ func file_osvbng_qos_sched_binapi_init() {
 // Messages returns list of all messages in this module.
 func AllMessages() []api.Message {
 	return []api.Message{
+		(*OsvbngCakeAggregateCreate)(nil),
+		(*OsvbngCakeAggregateCreateReply)(nil),
+		(*OsvbngCakeAggregateDelete)(nil),
+		(*OsvbngCakeAggregateDeleteReply)(nil),
+		(*OsvbngCakeAggregateDetails)(nil),
+		(*OsvbngCakeAggregateDump)(nil),
 		(*OsvbngCakeSchedDetails)(nil),
 		(*OsvbngCakeSchedDump)(nil),
 		(*OsvbngCakeSchedEnableDisable)(nil),
