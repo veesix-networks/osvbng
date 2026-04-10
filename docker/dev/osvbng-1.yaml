@@ -18,6 +18,85 @@ vrfs:
       ipv4-unicast: {}
       ipv6-unicast: {}
 
+routing-policies:
+  prefix-sets:
+    BOGONS-V4:
+      - prefix: "10.0.0.0/8"
+        action: permit
+      - prefix: "172.16.0.0/12"
+        action: permit
+    OWN-PREFIXES-V4:
+      - prefix: "203.0.113.0/24"
+        action: permit
+    REDIST-ALLOWED-V4:
+      - prefix: "203.0.113.0/24"
+        le: 24
+        action: permit
+
+  prefix-sets-v6:
+    OWN-PREFIXES-V6:
+      - prefix: "2001:db8::/32"
+        action: permit
+
+  community-sets:
+    BLACKHOLE:
+      - "64500:666"
+    PEER-TAGGED:
+      - "64500:100"
+    INTERNAL-COMMS:
+      - "64500:999"
+
+  ext-community-sets:
+    RT-CUSTOMER-A:
+      - "rt 65000:100"
+
+  large-community-sets:
+    LC-PEER-TAGGED:
+      - "64500:100:200"
+
+  as-path-sets:
+    PRIVATE-ASN:
+      - regex: "_64512_"
+        action: permit
+
+  route-policies:
+    PEER-IN:
+      - sequence: 10
+        action: deny
+        match:
+          prefix-set: BOGONS-V4
+      - sequence: 20
+        action: deny
+        match:
+          community-set: BLACKHOLE
+      - sequence: 30
+        action: deny
+        match:
+          as-path-set: PRIVATE-ASN
+      - sequence: 100
+        action: permit
+        set:
+          local-preference: 150
+          community: "64500:100"
+          community-additive: true
+          large-community: "64500:100:200"
+          large-community-additive: true
+
+    PEER-OUT:
+      - sequence: 10
+        action: permit
+        match:
+          prefix-set: OWN-PREFIXES-V4
+        set:
+          as-path-prepend: "64500 64500"
+          community-delete: INTERNAL-COMMS
+
+    REDIST-FILTER:
+      - sequence: 10
+        action: permit
+        match:
+          prefix-set: REDIST-ALLOWED-V4
+
 service-groups:
     customer-a:
         vrf: CUSTOMER-A

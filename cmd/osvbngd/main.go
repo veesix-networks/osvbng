@@ -523,6 +523,7 @@ func main() {
 		DHCPv4Providers:  dhcp4Providers,
 		DHCPv6Providers:  dhcp6Providers,
 		CGNAT:            cgnat,
+		RunningConfig:    configd,
 	})
 
 	operRegistry.AutoRegisterAll(&deps.OperDeps{
