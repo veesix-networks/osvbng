@@ -58,3 +58,15 @@ func (h *BGPNeighborRemoteASHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *BGPNeighborRemoteASHandler) Summary() string {
+	return "BGP neighbor remote AS"
+}
+
+func (h *BGPNeighborRemoteASHandler) Description() string {
+	return "Set the remote AS number for a BGP neighbor."
+}
+
+func (h *BGPNeighborRemoteASHandler) ValueType() interface{} {
+	return uint32(0)
+}

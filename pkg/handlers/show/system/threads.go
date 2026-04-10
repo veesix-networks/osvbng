@@ -29,3 +29,11 @@ func (h *SystemThreadsHandler) PathPattern() paths.Path {
 func (h *SystemThreadsHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *SystemThreadsHandler) Summary() string {
+	return "Show VPP worker threads"
+}
+
+func (h *SystemThreadsHandler) Description() string {
+	return "Display VPP worker thread assignments and CPU pinning."
+}

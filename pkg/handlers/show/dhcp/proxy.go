@@ -64,3 +64,11 @@ func (h *ProxyHandler) PathPattern() paths.Path {
 func (h *ProxyHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *ProxyHandler) Summary() string {
+	return "Show DHCP proxy binding counts"
+}
+
+func (h *ProxyHandler) Description() string {
+	return "Display the number of active DHCPv4 and DHCPv6 proxy bindings."
+}

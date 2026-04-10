@@ -48,3 +48,11 @@ func (h *RelayHandler) PathPattern() paths.Path {
 func (h *RelayHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *RelayHandler) Summary() string {
+	return "Show DHCP relay stats and servers"
+}
+
+func (h *RelayHandler) Description() string {
+	return "Display DHCP relay client statistics and the reachability status of configured relay servers."
+}

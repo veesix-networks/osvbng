@@ -58,3 +58,15 @@ func (h *ISISMetricStyleHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *ISISMetricStyleHandler) Summary() string {
+	return "IS-IS metric style"
+}
+
+func (h *ISISMetricStyleHandler) Description() string {
+	return "Set the IS-IS metric style to narrow, wide, or transition."
+}
+
+func (h *ISISMetricStyleHandler) ValueType() interface{} {
+	return ""
+}

@@ -57,3 +57,15 @@ func (h *ISISMaxLSPLifetimeHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *ISISMaxLSPLifetimeHandler) Summary() string {
+	return "IS-IS maximum LSP lifetime"
+}
+
+func (h *ISISMaxLSPLifetimeHandler) Description() string {
+	return "Set the maximum lifetime for IS-IS LSPs before expiry."
+}
+
+func (h *ISISMaxLSPLifetimeHandler) ValueType() interface{} {
+	return uint32(0)
+}

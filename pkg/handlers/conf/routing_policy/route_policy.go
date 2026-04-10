@@ -223,3 +223,15 @@ func (h *RoutePolicyHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *RoutePolicyHandler) Summary() string {
+	return "Route policy (route-map)"
+}
+
+func (h *RoutePolicyHandler) Description() string {
+	return "Configure a route policy with match and set clauses."
+}
+
+func (h *RoutePolicyHandler) ValueType() interface{} {
+	return rp.RoutePolicy{}
+}

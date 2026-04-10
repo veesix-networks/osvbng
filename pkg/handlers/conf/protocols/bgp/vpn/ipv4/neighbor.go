@@ -51,3 +51,15 @@ func (h *IPv4VPNNeighborHandler) Dependencies() []paths.Path {
 func (h *IPv4VPNNeighborHandler) Callbacks() *conf.Callbacks {
 	return h.callbacks
 }
+
+func (h *IPv4VPNNeighborHandler) Summary() string {
+	return "BGP VPNv4 neighbor"
+}
+
+func (h *IPv4VPNNeighborHandler) Description() string {
+	return "Configure a BGP VPNv4 neighbor with send-community settings."
+}
+
+func (h *IPv4VPNNeighborHandler) ValueType() interface{} {
+	return false
+}

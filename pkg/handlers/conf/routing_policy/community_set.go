@@ -80,3 +80,15 @@ func (h *CommunitySetHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *CommunitySetHandler) Summary() string {
+	return "BGP community list"
+}
+
+func (h *CommunitySetHandler) Description() string {
+	return "Configure a BGP community list for route matching."
+}
+
+func (h *CommunitySetHandler) ValueType() interface{} {
+	return rp.CommunitySet{}
+}

@@ -58,3 +58,15 @@ func (h *ISISIsTypeHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *ISISIsTypeHandler) Summary() string {
+	return "IS-IS router type"
+}
+
+func (h *ISISIsTypeHandler) Description() string {
+	return "Set the IS-IS router type to level-1, level-2, or level-1-2."
+}
+
+func (h *ISISIsTypeHandler) ValueType() interface{} {
+	return ""
+}

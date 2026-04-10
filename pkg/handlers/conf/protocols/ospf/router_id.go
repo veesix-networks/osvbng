@@ -58,3 +58,15 @@ func (h *OSPFRouterIDHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *OSPFRouterIDHandler) Summary() string {
+	return "OSPF router ID"
+}
+
+func (h *OSPFRouterIDHandler) Description() string {
+	return "Set the OSPF router identifier."
+}
+
+func (h *OSPFRouterIDHandler) ValueType() interface{} {
+	return ""
+}

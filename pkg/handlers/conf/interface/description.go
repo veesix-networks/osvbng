@@ -95,3 +95,15 @@ func (h *DescriptionHandler) Dependencies() []paths.Path {
 func (h *DescriptionHandler) Callbacks() *conf.Callbacks {
 	return nil
 }
+
+func (h *DescriptionHandler) Summary() string {
+	return "Interface description"
+}
+
+func (h *DescriptionHandler) Description() string {
+	return "Set a human-readable description on an interface."
+}
+
+func (h *DescriptionHandler) ValueType() interface{} {
+	return ""
+}

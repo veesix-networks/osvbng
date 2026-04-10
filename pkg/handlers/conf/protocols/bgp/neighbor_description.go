@@ -51,3 +51,15 @@ func (h *BGPNeighborDescriptionHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *BGPNeighborDescriptionHandler) Summary() string {
+	return "BGP neighbor description"
+}
+
+func (h *BGPNeighborDescriptionHandler) Description() string {
+	return "Set a description for a BGP neighbor."
+}
+
+func (h *BGPNeighborDescriptionHandler) ValueType() interface{} {
+	return ""
+}

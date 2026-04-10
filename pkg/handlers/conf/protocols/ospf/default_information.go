@@ -58,3 +58,15 @@ func (h *OSPFDefaultInformationHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *OSPFDefaultInformationHandler) Summary() string {
+	return "OSPF default route origination"
+}
+
+func (h *OSPFDefaultInformationHandler) Description() string {
+	return "Configure OSPF default route origination settings."
+}
+
+func (h *OSPFDefaultInformationHandler) ValueType() interface{} {
+	return &protocols.OSPFDefaultInfo{}
+}

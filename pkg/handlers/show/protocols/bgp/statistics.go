@@ -69,3 +69,11 @@ func (h *BGPIPv6StatisticsHandler) PathPattern() paths.Path {
 func (h *BGPIPv6StatisticsHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *BGPStatisticsHandler) Summary() string {
+	return "Show BGP statistics"
+}
+
+func (h *BGPStatisticsHandler) Description() string {
+	return "Display BGP protocol statistics from FRR."
+}

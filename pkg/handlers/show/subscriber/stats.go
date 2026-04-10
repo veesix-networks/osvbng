@@ -38,3 +38,11 @@ func (h *StatsHandler) PathPattern() paths.Path {
 func (h *StatsHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *StatsHandler) Summary() string {
+	return "Show subscriber statistics"
+}
+
+func (h *StatsHandler) Description() string {
+	return "Return aggregate subscriber statistics including session counts and protocol breakdowns."
+}

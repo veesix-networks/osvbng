@@ -52,3 +52,15 @@ func (h *OSPFAutoCostRefBandwidthHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *OSPFAutoCostRefBandwidthHandler) Summary() string {
+	return "OSPF auto-cost reference bandwidth"
+}
+
+func (h *OSPFAutoCostRefBandwidthHandler) Description() string {
+	return "Set the reference bandwidth for OSPF auto-cost calculation."
+}
+
+func (h *OSPFAutoCostRefBandwidthHandler) ValueType() interface{} {
+	return uint32(0)
+}

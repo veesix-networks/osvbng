@@ -74,3 +74,11 @@ func (h *CPPMDataplaneHandler) PathPattern() paths.Path {
 func (h *CPPMDataplaneHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *CPPMDataplaneHandler) Summary() string {
+	return "Show dataplane policer stats"
+}
+
+func (h *CPPMDataplaneHandler) Description() string {
+	return "Display per-protocol packet counters for the dataplane protection policers."
+}

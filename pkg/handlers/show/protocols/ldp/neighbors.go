@@ -39,3 +39,11 @@ func (h *LDPNeighborsHandler) PathPattern() paths.Path {
 func (h *LDPNeighborsHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *LDPNeighborsHandler) Summary() string {
+	return "Show LDP neighbors"
+}
+
+func (h *LDPNeighborsHandler) Description() string {
+	return "Display LDP neighbor sessions with their transport addresses and state."
+}

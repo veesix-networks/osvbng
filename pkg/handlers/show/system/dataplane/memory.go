@@ -35,3 +35,11 @@ func (h *MemoryHandler) PathPattern() paths.Path {
 func (h *MemoryHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *MemoryHandler) Summary() string {
+	return "Show VPP memory usage"
+}
+
+func (h *MemoryHandler) Description() string {
+	return "Display VPP heap memory statistics from the stats segment."
+}

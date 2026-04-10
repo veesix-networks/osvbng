@@ -177,3 +177,11 @@ func (h *DetailHandler) PathPattern() paths.Path {
 func (h *DetailHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *DetailHandler) Summary() string {
+	return "Show interface details"
+}
+
+func (h *DetailHandler) Description() string {
+	return "Display detailed configuration and state for a specific interface by name."
+}

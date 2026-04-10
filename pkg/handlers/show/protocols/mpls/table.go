@@ -39,3 +39,11 @@ func (h *MPLSTableHandler) PathPattern() paths.Path {
 func (h *MPLSTableHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *MPLSTableHandler) Summary() string {
+	return "Show MPLS label table"
+}
+
+func (h *MPLSTableHandler) Description() string {
+	return "Display the MPLS forwarding table from FRR."
+}

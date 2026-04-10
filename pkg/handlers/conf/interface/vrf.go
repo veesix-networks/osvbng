@@ -97,3 +97,15 @@ func (h *VRFHandler) Dependencies() []paths.Path {
 func (h *VRFHandler) Callbacks() *conf.Callbacks {
 	return nil
 }
+
+func (h *VRFHandler) Summary() string {
+	return "Interface VRF assignment"
+}
+
+func (h *VRFHandler) Description() string {
+	return "Assign an interface to a VRF."
+}
+
+func (h *VRFHandler) ValueType() interface{} {
+	return ""
+}

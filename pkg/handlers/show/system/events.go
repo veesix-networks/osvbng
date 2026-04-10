@@ -39,3 +39,11 @@ func (h *EventsHandler) OutputType() interface{} {
 }
 
 var _ show.ShowHandler = (*EventsHandler)(nil)
+
+func (h *EventsHandler) Summary() string {
+	return "Show event bus topics"
+}
+
+func (h *EventsHandler) Description() string {
+	return "List all event bus topics with their subscriber counts."
+}

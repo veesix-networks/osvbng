@@ -48,6 +48,21 @@ type Handler interface {
 	Callbacks() *Callbacks
 }
 
+type ValueTypeHandler interface {
+	Handler
+	ValueType() interface{}
+}
+
+type SummaryHandler interface {
+	Handler
+	Summary() string
+}
+
+type DescriptionHandler interface {
+	Handler
+	Description() string
+}
+
 type HandlerFactory func(deps *deps.ConfDeps) Handler
 
 var factories []HandlerFactory

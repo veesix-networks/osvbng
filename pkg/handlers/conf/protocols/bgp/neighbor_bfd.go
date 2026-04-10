@@ -60,3 +60,15 @@ func (h *BGPNeighborBFDHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *BGPNeighborBFDHandler) Summary() string {
+	return "BGP neighbor BFD"
+}
+
+func (h *BGPNeighborBFDHandler) Description() string {
+	return "Enable or disable BFD for a BGP neighbor."
+}
+
+func (h *BGPNeighborBFDHandler) ValueType() interface{} {
+	return false
+}

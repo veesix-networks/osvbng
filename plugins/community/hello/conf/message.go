@@ -89,3 +89,15 @@ func (h *MessageHandler) Dependencies() []paths.Path {
 func (h *MessageHandler) Callbacks() *conf.Callbacks {
 	return nil
 }
+
+func (h *MessageHandler) Summary() string {
+	return "Hello plugin message"
+}
+
+func (h *MessageHandler) Description() string {
+	return "Set the greeting message for the hello community plugin."
+}
+
+func (h *MessageHandler) ValueType() interface{} {
+	return ""
+}

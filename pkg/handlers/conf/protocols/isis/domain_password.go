@@ -51,3 +51,15 @@ func (h *ISISDomainPasswordHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *ISISDomainPasswordHandler) Summary() string {
+	return "IS-IS domain password"
+}
+
+func (h *ISISDomainPasswordHandler) Description() string {
+	return "Set the IS-IS domain authentication password for Level-2 LSPs."
+}
+
+func (h *ISISDomainPasswordHandler) ValueType() interface{} {
+	return ""
+}

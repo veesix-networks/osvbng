@@ -35,3 +35,11 @@ func (h *InterfacesHandler) PathPattern() paths.Path {
 func (h *InterfacesHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *InterfacesHandler) Summary() string {
+	return "Show VPP interface counters"
+}
+
+func (h *InterfacesHandler) Description() string {
+	return "Display per-interface packet and byte counters from the VPP stats segment."
+}

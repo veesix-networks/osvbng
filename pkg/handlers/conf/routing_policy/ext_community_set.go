@@ -82,3 +82,15 @@ func (h *ExtCommunitySetHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *ExtCommunitySetHandler) Summary() string {
+	return "BGP extended community list"
+}
+
+func (h *ExtCommunitySetHandler) Description() string {
+	return "Configure a BGP extended community list for route matching."
+}
+
+func (h *ExtCommunitySetHandler) ValueType() interface{} {
+	return rp.ExtCommunitySet{}
+}

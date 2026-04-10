@@ -111,3 +111,15 @@ func (h *SubinterfaceHandler) Dependencies() []paths.Path {
 func (h *SubinterfaceHandler) Callbacks() *conf.Callbacks {
 	return nil
 }
+
+func (h *SubinterfaceHandler) Summary() string {
+	return "Sub-interface configuration"
+}
+
+func (h *SubinterfaceHandler) Description() string {
+	return "Create a VLAN sub-interface with outer and optional inner VLAN tags."
+}
+
+func (h *SubinterfaceHandler) ValueType() interface{} {
+	return &interfaces.SubinterfaceConfig{}
+}

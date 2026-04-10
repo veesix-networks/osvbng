@@ -70,3 +70,19 @@ func (h *CreateServiceHandler) PathPattern() operpaths.Path {
 func (h *CreateServiceHandler) Dependencies() []operpaths.Path {
 	return nil
 }
+
+func (h *CreateServiceHandler) Summary() string {
+	return "Create a local auth service"
+}
+
+func (h *CreateServiceHandler) Description() string {
+	return "Create a new local authentication service profile."
+}
+
+func (h *CreateServiceHandler) InputType() interface{} {
+	return &local.CreateServiceRequest{}
+}
+
+func (h *CreateServiceHandler) OutputType() interface{} {
+	return &local.CreateServiceResponse{}
+}

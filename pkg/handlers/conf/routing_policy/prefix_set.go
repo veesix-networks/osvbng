@@ -152,3 +152,27 @@ func validatePrefixEntry(entry rp.PrefixSetEntry, ipv6 bool) error {
 
 	return nil
 }
+
+func (h *PrefixSetHandler) Summary() string {
+	return "IPv4 prefix list"
+}
+
+func (h *PrefixSetHandler) Description() string {
+	return "Configure an IPv4 prefix list for route filtering."
+}
+
+func (h *PrefixSetHandler) ValueType() interface{} {
+	return rp.PrefixSet{}
+}
+
+func (h *PrefixSetV6Handler) Summary() string {
+	return "IPv6 prefix list"
+}
+
+func (h *PrefixSetV6Handler) Description() string {
+	return "Configure an IPv6 prefix list for route filtering."
+}
+
+func (h *PrefixSetV6Handler) ValueType() interface{} {
+	return rp.PrefixSet{}
+}

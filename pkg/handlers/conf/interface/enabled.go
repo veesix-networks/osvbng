@@ -102,3 +102,15 @@ func (h *EnabledHandler) Dependencies() []paths.Path {
 func (h *EnabledHandler) Callbacks() *conf.Callbacks {
 	return nil
 }
+
+func (h *EnabledHandler) Summary() string {
+	return "Interface enabled state"
+}
+
+func (h *EnabledHandler) Description() string {
+	return "Enable or disable an interface in the dataplane."
+}
+
+func (h *EnabledHandler) ValueType() interface{} {
+	return false
+}

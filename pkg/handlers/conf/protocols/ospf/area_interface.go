@@ -70,3 +70,15 @@ func (h *OSPFAreaInterfaceHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *OSPFAreaInterfaceHandler) Summary() string {
+	return "OSPF area interface"
+}
+
+func (h *OSPFAreaInterfaceHandler) Description() string {
+	return "Configure OSPF per-interface settings within an area."
+}
+
+func (h *OSPFAreaInterfaceHandler) ValueType() interface{} {
+	return &protocols.OSPFInterfaceConfig{}
+}

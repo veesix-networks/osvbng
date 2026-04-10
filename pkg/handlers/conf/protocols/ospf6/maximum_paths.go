@@ -52,3 +52,15 @@ func (h *OSPF6MaximumPathsHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *OSPF6MaximumPathsHandler) Summary() string {
+	return "OSPFv3 maximum ECMP paths"
+}
+
+func (h *OSPF6MaximumPathsHandler) Description() string {
+	return "Set the maximum number of equal-cost multipath routes for OSPFv3."
+}
+
+func (h *OSPF6MaximumPathsHandler) ValueType() interface{} {
+	return uint32(0)
+}

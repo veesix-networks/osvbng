@@ -208,32 +208,99 @@ func (a *Adapter) GetStartupConfig(ctx context.Context) (*config.Config, error) 
 	return a.configMgr.GetStartup()
 }
 
-func (a *Adapter) SetAndCommit(ctx context.Context, path string, value interface{}) error {
-	a.logger.Debug("SetAndCommit starting", "path", path)
+func (a *Adapter) GetConfigHistory(ctx context.Context) ([]configmgr.ConfigVersion, error) {
+	return a.configMgr.ListVersions()
+}
 
-	sessionID, err := a.configMgr.CreateCandidateSession()
-	if err != nil {
-		a.logger.Error("Failed to create candidate session", "error", err)
-		return fmt.Errorf("failed to create candidate session: %w", err)
-	}
+func (a *Adapter) GetConfigVersion(ctx context.Context, version int) (*configmgr.ConfigVersion, error) {
+	return a.configMgr.GetVersion(version)
+}
 
-	pathValues, err := a.flattenValue(path, value)
+func (a *Adapter) CreateCandidateSession(ctx context.Context) (conf.SessionID, error) {
+	return a.configMgr.CreateCandidateSession()
+}
+
+func (a *Adapter) SetCandidate(ctx context.Context, sessionID conf.SessionID, path string, value interface{}) error {
+	a.logger.Debug("SetCandidate starting", "session_id", sessionID, "path", path)
+
+	pathValues, err := a.resolvePathValues(path, value)
 	if err != nil {
-		a.logger.Error("Failed to flatten value", "path", path, "error", err)
-		return fmt.Errorf("failed to flatten value: %w", err)
+		a.logger.Error("Failed to resolve candidate path values", "session_id", sessionID, "path", path, "error", err)
+		return err
 	}
 
 	for _, pv := range pathValues {
 		if err := a.configMgr.Set(sessionID, pv.path, pv.value); err != nil {
-			a.logger.Error("Failed to set config value", "session_id", sessionID, "path", pv.path, "error", err)
+			a.logger.Error("Failed to set candidate config value", "session_id", sessionID, "path", pv.path, "error", err)
 			return fmt.Errorf("failed to set %s: %w", pv.path, err)
 		}
 	}
 
+	return nil
+}
+
+func (a *Adapter) CommitCandidate(ctx context.Context, sessionID conf.SessionID) (int, error) {
 	if err := a.configMgr.Commit(sessionID); err != nil {
-		a.logger.Error("Failed to commit", "session_id", sessionID, "error", err)
-		return fmt.Errorf("failed to commit: %w", err)
+		a.logger.Error("Failed to commit candidate session", "session_id", sessionID, "error", err)
+		return 0, fmt.Errorf("failed to commit: %w", err)
 	}
+
+	versions, err := a.configMgr.ListVersions()
+	if err != nil {
+		return 0, fmt.Errorf("failed to list config versions: %w", err)
+	}
+	if len(versions) == 0 {
+		return 0, nil
+	}
+
+	return versions[len(versions)-1].Version, nil
+}
+
+func (a *Adapter) DiscardCandidate(ctx context.Context, sessionID conf.SessionID) error {
+	if err := a.configMgr.CloseCandidateSession(sessionID); err != nil {
+		a.logger.Error("Failed to discard candidate session", "session_id", sessionID, "error", err)
+		return fmt.Errorf("failed to discard candidate session: %w", err)
+	}
+
+	return nil
+}
+
+func (a *Adapter) DiffCandidate(ctx context.Context, sessionID conf.SessionID) (*configmgr.DiffResult, error) {
+	diff, err := a.configMgr.DryRun(sessionID)
+	if err != nil {
+		a.logger.Error("Failed to diff candidate session", "session_id", sessionID, "error", err)
+		return nil, fmt.Errorf("failed to get candidate diff: %w", err)
+	}
+
+	return diff, nil
+}
+
+func (a *Adapter) SetAndCommit(ctx context.Context, path string, value interface{}) error {
+	a.logger.Debug("SetAndCommit starting", "path", path)
+
+	sessionID, err := a.CreateCandidateSession(ctx)
+	if err != nil {
+		a.logger.Error("Failed to create candidate session", "error", err)
+		return fmt.Errorf("failed to create candidate session: %w", err)
+	}
+	cleanupSession := true
+	defer func() {
+		if !cleanupSession {
+			return
+		}
+		if err := a.configMgr.CloseCandidateSession(sessionID); err != nil {
+			a.logger.Debug("Failed to cleanup candidate session", "session_id", sessionID, "error", err)
+		}
+	}()
+
+	if err := a.SetCandidate(ctx, sessionID, path, value); err != nil {
+		return err
+	}
+
+	if _, err := a.CommitCandidate(ctx, sessionID); err != nil {
+		return err
+	}
+	cleanupSession = false
 
 	a.logger.Info("SetAndCommit completed", "session_id", sessionID, "path", path)
 	return nil
@@ -261,6 +328,22 @@ func (a *Adapter) flattenValue(basePath string, value interface{}) ([]pathValue,
 
 	result = append(result, pathValue{path: basePath, value: value})
 	return result, nil
+}
+
+func (a *Adapter) resolvePathValues(path string, value interface{}) ([]pathValue, error) {
+	normalizedPath, err := a.NormalizePath(path, a.configMgr.GetAllConfPaths())
+	if err != nil {
+		a.logger.Error("Failed to normalize config path", "path", path, "error", err)
+		return nil, fmt.Errorf("failed to normalize path: %w", err)
+	}
+
+	pathValues, err := a.flattenValue(normalizedPath, value)
+	if err != nil {
+		a.logger.Error("Failed to flatten config value", "path", normalizedPath, "error", err)
+		return nil, fmt.Errorf("failed to flatten value: %w", err)
+	}
+
+	return pathValues, nil
 }
 
 func (a *Adapter) valueToString(value interface{}) (string, error) {

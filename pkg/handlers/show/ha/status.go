@@ -78,3 +78,11 @@ func (h *StatusHandler) PathPattern() paths.Path {
 func (h *StatusHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *StatusHandler) Summary() string {
+	return "Show HA subsystem overview"
+}
+
+func (h *StatusHandler) Description() string {
+	return "Display a high-level overview of the HA subsystem including node ID, peer connectivity, and SRG states."
+}

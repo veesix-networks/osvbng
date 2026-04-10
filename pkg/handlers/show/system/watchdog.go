@@ -87,3 +87,11 @@ func (h *WatchdogHandler) OutputType() interface{} {
 
 var _ show.ShowHandler = (*WatchdogHandler)(nil)
 var _ watchdog.StateProvider = (*watchdog.Watchdog)(nil)
+
+func (h *WatchdogHandler) Summary() string {
+	return "Show watchdog status"
+}
+
+func (h *WatchdogHandler) Description() string {
+	return "Display the watchdog health check status for monitored components."
+}

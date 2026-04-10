@@ -40,3 +40,11 @@ func (h *SyncHandler) PathPattern() paths.Path {
 func (h *SyncHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *SyncHandler) Summary() string {
+	return "Show HA session sync status"
+}
+
+func (h *SyncHandler) Description() string {
+	return "Display the current session synchronization status between HA peers."
+}

@@ -53,3 +53,11 @@ func (h *BGPNeighborsHandler) PathPattern() paths.Path {
 func (h *BGPNeighborsHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *BGPNeighborsHandler) Summary() string {
+	return "Show BGP neighbors"
+}
+
+func (h *BGPNeighborsHandler) Description() string {
+	return "Display BGP neighbor sessions with their state, uptime, and prefix counts."
+}

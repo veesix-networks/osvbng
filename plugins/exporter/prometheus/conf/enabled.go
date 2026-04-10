@@ -41,3 +41,15 @@ func (h *EnabledHandler) Dependencies() []paths.Path {
 func (h *EnabledHandler) Callbacks() *conf.Callbacks {
 	return nil
 }
+
+func (h *EnabledHandler) Summary() string {
+	return "Prometheus exporter enabled"
+}
+
+func (h *EnabledHandler) Description() string {
+	return "Enable or disable the Prometheus metrics exporter."
+}
+
+func (h *EnabledHandler) ValueType() interface{} {
+	return false
+}

@@ -51,3 +51,15 @@ func (h *ISISLogAdjacencyChangesHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *ISISLogAdjacencyChangesHandler) Summary() string {
+	return "IS-IS log adjacency changes"
+}
+
+func (h *ISISLogAdjacencyChangesHandler) Description() string {
+	return "Enable or disable logging of IS-IS adjacency state changes."
+}
+
+func (h *ISISLogAdjacencyChangesHandler) ValueType() interface{} {
+	return false
+}

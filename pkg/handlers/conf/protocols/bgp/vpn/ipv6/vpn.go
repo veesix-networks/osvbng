@@ -51,3 +51,15 @@ func (h *IPv6VPNHandler) Dependencies() []paths.Path {
 func (h *IPv6VPNHandler) Callbacks() *conf.Callbacks {
 	return h.callbacks
 }
+
+func (h *IPv6VPNHandler) Summary() string {
+	return "BGP VPNv6 address family"
+}
+
+func (h *IPv6VPNHandler) Description() string {
+	return "Enable the BGP VPNv6 unicast address family."
+}
+
+func (h *IPv6VPNHandler) ValueType() interface{} {
+	return false
+}

@@ -51,3 +51,15 @@ func (h *ISISDynamicHostnameHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *ISISDynamicHostnameHandler) Summary() string {
+	return "IS-IS dynamic hostname"
+}
+
+func (h *ISISDynamicHostnameHandler) Description() string {
+	return "Enable or disable IS-IS dynamic hostname resolution."
+}
+
+func (h *ISISDynamicHostnameHandler) ValueType() interface{} {
+	return false
+}

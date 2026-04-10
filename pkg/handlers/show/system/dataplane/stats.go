@@ -32,3 +32,11 @@ func (h *StatsHandler) PathPattern() paths.Path {
 func (h *StatsHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *StatsHandler) Summary() string {
+	return "Show VPP system statistics"
+}
+
+func (h *StatsHandler) Description() string {
+	return "Display aggregate VPP system statistics including vector rates."
+}

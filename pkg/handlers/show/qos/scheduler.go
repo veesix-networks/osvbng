@@ -42,3 +42,11 @@ func (h *SchedulerHandler) PathPattern() paths.Path {
 func (h *SchedulerHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *SchedulerHandler) Summary() string {
+	return "Show QoS scheduler policies"
+}
+
+func (h *SchedulerHandler) Description() string {
+	return "Display all QoS scheduler policies configured in the dataplane."
+}

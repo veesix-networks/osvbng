@@ -52,3 +52,15 @@ func (h *OSPFDefaultMetricHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *OSPFDefaultMetricHandler) Summary() string {
+	return "OSPF default metric"
+}
+
+func (h *OSPFDefaultMetricHandler) Description() string {
+	return "Set the default metric for redistributed routes."
+}
+
+func (h *OSPFDefaultMetricHandler) ValueType() interface{} {
+	return uint32(0)
+}

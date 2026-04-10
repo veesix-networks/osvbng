@@ -130,3 +130,15 @@ func (h *IPv6Handler) Dependencies() []paths.Path {
 func (h *IPv6Handler) Callbacks() *conf.Callbacks {
 	return nil
 }
+
+func (h *IPv6Handler) Summary() string {
+	return "Interface IPv6 settings"
+}
+
+func (h *IPv6Handler) Description() string {
+	return "Configure IPv6 settings including router advertisements and DHCPv6."
+}
+
+func (h *IPv6Handler) ValueType() interface{} {
+	return &interfaces.IPv6Config{}
+}

@@ -62,3 +62,15 @@ func (h *InterfaceHandler) Dependencies() []paths.Path {
 func (h *InterfaceHandler) Callbacks() *conf.Callbacks {
 	return nil
 }
+
+func (h *InterfaceHandler) Summary() string {
+	return "Interface configuration"
+}
+
+func (h *InterfaceHandler) Description() string {
+	return "Create or configure a top-level network interface."
+}
+
+func (h *InterfaceHandler) ValueType() interface{} {
+	return &interfaces.InterfaceConfig{}
+}

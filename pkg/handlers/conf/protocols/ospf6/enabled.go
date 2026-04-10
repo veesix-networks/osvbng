@@ -73,3 +73,15 @@ func (h *OSPF6EnabledHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *OSPF6EnabledHandler) Summary() string {
+	return "OSPFv3 protocol enabled"
+}
+
+func (h *OSPF6EnabledHandler) Description() string {
+	return "Enable or disable the OSPFv3 routing protocol."
+}
+
+func (h *OSPF6EnabledHandler) ValueType() interface{} {
+	return false
+}

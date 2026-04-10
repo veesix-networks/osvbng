@@ -73,3 +73,19 @@ func (h *OpDBSessionsHandler) PathPattern() paths.Path {
 func (h *OpDBSessionsHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *OpDBSessionsHandler) Summary() string {
+	return "Show OpDB sessions"
+}
+
+func (h *OpDBSessionsHandler) Description() string {
+	return "List sessions stored in the operational database with optional filtering."
+}
+
+type OpDBSessionsOptions struct {
+	Namespace string `query:"namespace" description:"Filter by namespace"`
+}
+
+func (h *OpDBSessionsHandler) OptionsType() interface{} {
+	return &OpDBSessionsOptions{}
+}

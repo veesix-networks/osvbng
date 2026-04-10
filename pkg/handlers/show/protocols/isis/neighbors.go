@@ -43,3 +43,11 @@ func (h *ISISNeighborsHandler) PathPattern() paths.Path {
 func (h *ISISNeighborsHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *ISISNeighborsHandler) Summary() string {
+	return "Show IS-IS neighbors"
+}
+
+func (h *ISISNeighborsHandler) Description() string {
+	return "Display IS-IS adjacencies with their state and interface."
+}

@@ -49,3 +49,21 @@ func (h *SessionsHandler) PathPattern() paths.Path {
 func (h *SessionsHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *SessionsHandler) Summary() string {
+	return "Show all subscriber sessions"
+}
+
+func (h *SessionsHandler) Description() string {
+	return "List all active subscriber sessions with optional filtering by access type, protocol, or outer VLAN."
+}
+
+type SessionsOptions struct {
+	AccessType string `query:"access_type" description:"Filter by access type" enum:"ipoe,pppoe"`
+	Protocol   string `query:"protocol" description:"Filter by protocol" enum:"dhcp,dhcpv6,pppoe"`
+	SVLAN      string `query:"svlan" description:"Filter by outer VLAN"`
+}
+
+func (h *SessionsHandler) OptionsType() interface{} {
+	return &SessionsOptions{}
+}

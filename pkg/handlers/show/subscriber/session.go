@@ -35,3 +35,19 @@ func (h *SessionHandler) PathPattern() paths.Path {
 func (h *SessionHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *SessionHandler) Summary() string {
+	return "Show a single subscriber session"
+}
+
+func (h *SessionHandler) Description() string {
+	return "Retrieve a specific subscriber session by its session ID."
+}
+
+type SessionOptions struct {
+	SessionID string `query:"session_id" description:"Subscriber session identifier"`
+}
+
+func (h *SessionHandler) OptionsType() interface{} {
+	return &SessionOptions{}
+}

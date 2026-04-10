@@ -35,3 +35,11 @@ func (h *ErrorsHandler) PathPattern() paths.Path {
 func (h *ErrorsHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *ErrorsHandler) Summary() string {
+	return "Show VPP error counters"
+}
+
+func (h *ErrorsHandler) Description() string {
+	return "Display non-zero VPP node error counters from the stats segment."
+}

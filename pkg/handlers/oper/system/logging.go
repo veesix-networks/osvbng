@@ -74,3 +74,11 @@ func (h *SetLoggingLevelHandler) InputType() interface{} {
 func (h *SetLoggingLevelHandler) OutputType() interface{} {
 	return &SetLoggingLevelResponse{}
 }
+
+func (h *SetLoggingLevelHandler) Summary() string {
+	return "Set component logging level"
+}
+
+func (h *SetLoggingLevelHandler) Description() string {
+	return "Change the runtime log level of a named component."
+}

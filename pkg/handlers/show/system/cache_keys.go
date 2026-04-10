@@ -54,3 +54,19 @@ func (h *CacheKeysHandler) PathPattern() paths.Path {
 func (h *CacheKeysHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *CacheKeysHandler) Summary() string {
+	return "List all cache keys"
+}
+
+func (h *CacheKeysHandler) Description() string {
+	return "Return all keys in the state cache with optional prefix filtering."
+}
+
+type CacheKeysOptions struct {
+	Pattern string `query:"pattern" description:"Optional prefix pattern filter"`
+}
+
+func (h *CacheKeysHandler) OptionsType() interface{} {
+	return &CacheKeysOptions{}
+}

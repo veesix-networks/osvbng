@@ -75,3 +75,15 @@ func (h *RouteHandler) Dependencies() []paths.Path {
 func (h *RouteHandler) Callbacks() *conf.Callbacks {
 	return h.callbacks
 }
+
+func (h *RouteHandler) Summary() string {
+	return "Static route"
+}
+
+func (h *RouteHandler) Description() string {
+	return "Configure a static route with next-hop and optional VRF."
+}
+
+func (h *RouteHandler) ValueType() interface{} {
+	return &protocols.StaticRoute{}
+}

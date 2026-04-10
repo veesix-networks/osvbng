@@ -75,3 +75,19 @@ func (h *SetServiceAttributeHandler) PathPattern() operpaths.Path {
 func (h *SetServiceAttributeHandler) Dependencies() []operpaths.Path {
 	return nil
 }
+
+func (h *SetServiceAttributeHandler) Summary() string {
+	return "Set attribute on local auth service"
+}
+
+func (h *SetServiceAttributeHandler) Description() string {
+	return "Add or update a RADIUS attribute override on a local auth service profile."
+}
+
+func (h *SetServiceAttributeHandler) InputType() interface{} {
+	return &local.SetServiceAttributeRequest{}
+}
+
+func (h *SetServiceAttributeHandler) OutputType() interface{} {
+	return &local.OperResponse{}
+}

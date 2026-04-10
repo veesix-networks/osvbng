@@ -69,3 +69,11 @@ func (h *SRGHandler) PathPattern() paths.Path {
 func (h *SRGHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *SRGHandler) Summary() string {
+	return "Show HA SRG state and priority"
+}
+
+func (h *SRGHandler) Description() string {
+	return "Display each SRG with its current state, priority, preempt setting, virtual MAC, and tracked interface status."
+}

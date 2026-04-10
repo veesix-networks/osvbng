@@ -57,3 +57,15 @@ func (h *ISISSPFIntervalHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *ISISSPFIntervalHandler) Summary() string {
+	return "IS-IS SPF computation interval"
+}
+
+func (h *ISISSPFIntervalHandler) Description() string {
+	return "Set the minimum interval between IS-IS SPF computations."
+}
+
+func (h *ISISSPFIntervalHandler) ValueType() interface{} {
+	return uint32(0)
+}

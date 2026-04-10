@@ -99,3 +99,15 @@ func (h *ServiceGroupHandler) Dependencies() []paths.Path {
 func (h *ServiceGroupHandler) Callbacks() *conf.Callbacks {
 	return nil
 }
+
+func (h *ServiceGroupHandler) Summary() string {
+	return "Service group configuration"
+}
+
+func (h *ServiceGroupHandler) Description() string {
+	return "Configure a subscriber service group with pool and VRF bindings."
+}
+
+func (h *ServiceGroupHandler) ValueType() interface{} {
+	return &servicegroup.Config{}
+}

@@ -58,3 +58,15 @@ func (h *OSPF6RouterIDHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *OSPF6RouterIDHandler) Summary() string {
+	return "OSPFv3 router ID"
+}
+
+func (h *OSPF6RouterIDHandler) Description() string {
+	return "Set the OSPFv3 router identifier."
+}
+
+func (h *OSPF6RouterIDHandler) ValueType() interface{} {
+	return ""
+}

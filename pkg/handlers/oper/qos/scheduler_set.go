@@ -89,3 +89,19 @@ func (h *SchedulerSetHandler) PathPattern() paths.Path {
 func (h *SchedulerSetHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *SchedulerSetHandler) Summary() string {
+	return "Set QoS scheduler on an interface"
+}
+
+func (h *SchedulerSetHandler) Description() string {
+	return "Apply or disable a QoS scheduling policy on a dataplane interface."
+}
+
+func (h *SchedulerSetHandler) InputType() interface{} {
+	return &SchedulerSetRequest{}
+}
+
+func (h *SchedulerSetHandler) OutputType() interface{} {
+	return &SchedulerSetResponse{}
+}

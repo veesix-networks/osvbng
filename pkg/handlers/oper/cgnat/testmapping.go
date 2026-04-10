@@ -159,3 +159,19 @@ func ipToU32(ip net.IP) uint32 {
 func u32ToIP(v uint32) net.IP {
 	return net.IPv4(byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 }
+
+func (h *TestMappingHandler) Summary() string {
+	return "Test deterministic CGNAT mapping"
+}
+
+func (h *TestMappingHandler) Description() string {
+	return "Compute the forward or reverse deterministic NAT mapping for a given pool."
+}
+
+func (h *TestMappingHandler) InputType() interface{} {
+	return &TestMappingRequest{}
+}
+
+func (h *TestMappingHandler) OutputType() interface{} {
+	return &TestMappingResponse{}
+}

@@ -35,3 +35,11 @@ func (h *NodesHandler) PathPattern() paths.Path {
 func (h *NodesHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *NodesHandler) Summary() string {
+	return "Show VPP node counters"
+}
+
+func (h *NodesHandler) Description() string {
+	return "Display per-node packet counters from the VPP stats segment."
+}

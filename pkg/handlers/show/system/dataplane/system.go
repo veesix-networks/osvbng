@@ -35,3 +35,11 @@ func (h *SystemHandler) PathPattern() paths.Path {
 func (h *SystemHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *SystemHandler) Summary() string {
+	return "Show VPP system info"
+}
+
+func (h *SystemHandler) Description() string {
+	return "Display VPP version, uptime, and runtime information from the stats segment."
+}

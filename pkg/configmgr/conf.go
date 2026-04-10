@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/config"
-	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/frr"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
@@ -29,6 +28,8 @@ type ConfigManager struct {
 	dataplaneState *DataplaneState
 	sessions       map[conf.SessionID]*session
 	versions       []ConfigVersion
+	nextSessionID  uint64
+	lockOwner      conf.SessionID
 
 	versionDir        string
 	startupConfigPath string
@@ -38,10 +39,13 @@ type ConfigManager struct {
 }
 
 type session struct {
-	id      conf.SessionID
-	config  *config.Config
-	changes []*conf.HandlerContext
+	id           conf.SessionID
+	config       *config.Config
+	changes      []*conf.HandlerContext
+	lastActivity time.Time
 }
+
+var candidateSessionIdleTimeout = 15 * time.Minute
 
 func NewConfigManager() *ConfigManager {
 	return &ConfigManager{
@@ -80,15 +84,19 @@ func (cd *ConfigManager) CreateCandidateSession() (conf.SessionID, error) {
 	cd.mu.Lock()
 	defer cd.mu.Unlock()
 
-	id := conf.SessionID(fmt.Sprintf("session-%d", len(cd.sessions)+1))
+	now := time.Now()
+	cd.expireIdleSessionsUnlocked(now)
 
-	candidateConfig := cd.deepCopyConfig(cd.runningConfig)
-
-	cd.sessions[id] = &session{
-		id:     id,
-		config: candidateConfig,
+	if cd.lockOwner != "" {
+		return "", fmt.Errorf("configuration is locked by session %s", cd.lockOwner)
 	}
 
+	id, err := cd.createSessionUnlocked(now)
+	if err != nil {
+		return "", err
+	}
+
+	cd.lockOwner = id
 	return id, nil
 }
 
@@ -96,11 +104,16 @@ func (cd *ConfigManager) CloseCandidateSession(id conf.SessionID) error {
 	cd.mu.Lock()
 	defer cd.mu.Unlock()
 
+	cd.expireIdleSessionsUnlocked(time.Now())
+
 	if _, exists := cd.sessions[id]; !exists {
 		return fmt.Errorf("session %s not found", id)
 	}
 
 	delete(cd.sessions, id)
+	if cd.lockOwner == id {
+		cd.lockOwner = ""
+	}
 	return nil
 }
 
@@ -108,10 +121,13 @@ func (cd *ConfigManager) Set(id conf.SessionID, path string, value interface{}) 
 	cd.mu.Lock()
 	defer cd.mu.Unlock()
 
+	cd.expireIdleSessionsUnlocked(time.Now())
+
 	sess, exists := cd.sessions[id]
 	if !exists {
 		return fmt.Errorf("session %s not found", id)
 	}
+	cd.touchSessionUnlocked(sess, time.Now())
 
 	handler, err := cd.registry.GetHandler(path)
 	if err != nil {
@@ -147,10 +163,13 @@ func (cd *ConfigManager) Delete(id conf.SessionID, path string) error {
 	cd.mu.Lock()
 	defer cd.mu.Unlock()
 
+	cd.expireIdleSessionsUnlocked(time.Now())
+
 	sess, exists := cd.sessions[id]
 	if !exists {
 		return fmt.Errorf("session %s not found", id)
 	}
+	cd.touchSessionUnlocked(sess, time.Now())
 
 	_ = sess
 
@@ -161,10 +180,13 @@ func (cd *ConfigManager) Modify(id conf.SessionID, path string, value interface{
 	cd.mu.Lock()
 	defer cd.mu.Unlock()
 
+	cd.expireIdleSessionsUnlocked(time.Now())
+
 	sess, exists := cd.sessions[id]
 	if !exists {
 		return fmt.Errorf("session %s not found", id)
 	}
+	cd.touchSessionUnlocked(sess, time.Now())
 
 	_ = sess
 
@@ -172,13 +194,16 @@ func (cd *ConfigManager) Modify(id conf.SessionID, path string, value interface{
 }
 
 func (cd *ConfigManager) Verify(id conf.SessionID) ([]ValidationError, error) {
-	cd.mu.RLock()
-	defer cd.mu.RUnlock()
+	cd.mu.Lock()
+	defer cd.mu.Unlock()
+
+	cd.expireIdleSessionsUnlocked(time.Now())
 
 	sess, exists := cd.sessions[id]
 	if !exists {
 		return nil, fmt.Errorf("session %s not found", id)
 	}
+	cd.touchSessionUnlocked(sess, time.Now())
 
 	var allErrors []ValidationError
 
@@ -204,13 +229,16 @@ func (cd *ConfigManager) Verify(id conf.SessionID) ([]ValidationError, error) {
 }
 
 func (cd *ConfigManager) DryRun(id conf.SessionID) (*DiffResult, error) {
-	cd.mu.RLock()
-	defer cd.mu.RUnlock()
+	cd.mu.Lock()
+	defer cd.mu.Unlock()
+
+	cd.expireIdleSessionsUnlocked(time.Now())
 
 	sess, exists := cd.sessions[id]
 	if !exists {
 		return nil, fmt.Errorf("session %s not found", id)
 	}
+	cd.touchSessionUnlocked(sess, time.Now())
 
 	return FormatChanges(sess.changes), nil
 }
@@ -219,10 +247,13 @@ func (cd *ConfigManager) Commit(id conf.SessionID) error {
 	cd.mu.Lock()
 	defer cd.mu.Unlock()
 
+	cd.expireIdleSessionsUnlocked(time.Now())
+
 	sess, exists := cd.sessions[id]
 	if !exists {
 		return fmt.Errorf("session %s not found", id)
 	}
+	cd.touchSessionUnlocked(sess, time.Now())
 
 	sortedChanges, err := cd.sortChangesByDependencies(sess.changes)
 	if err != nil {
@@ -303,6 +334,11 @@ func (cd *ConfigManager) Commit(id conf.SessionID) error {
 	cd.startupConfig = cd.deepCopyConfig(cd.runningConfig)
 	if err := SaveYAML(cd.startupConfigPath, cd.startupConfig); err != nil {
 		return fmt.Errorf("failed to save startup config: %w", err)
+	}
+
+	delete(cd.sessions, id)
+	if cd.lockOwner == id {
+		cd.lockOwner = ""
 	}
 
 	cd.logger.Info("Configuration committed successfully", "version", version.Version, "added", len(diff.Added), "modified", len(diff.Modified), "deleted", len(diff.Deleted))
@@ -440,13 +476,15 @@ func (cd *ConfigManager) Rollback(toVersion int) error {
 	cd.mu.Lock()
 	defer cd.mu.Unlock()
 
+	cd.expireIdleSessionsUnlocked(time.Now())
+
 	if toVersion < 1 || toVersion > len(cd.versions) {
 		return fmt.Errorf("invalid version: %d", toVersion)
 	}
 
 	targetVersion := cd.versions[toVersion-1]
 
-	sessionID, err := cd.createSessionUnlocked()
+	sessionID, err := cd.createSessionUnlocked(time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to create rollback session: %w", err)
 	}
@@ -523,29 +561,22 @@ func (cd *ConfigManager) Rollback(toVersion int) error {
 	return nil
 }
 
-func (cd *ConfigManager) createSessionUnlocked() (conf.SessionID, error) {
-	id := conf.SessionID(fmt.Sprintf("session-%d", len(cd.sessions)+1))
+func (cd *ConfigManager) createSessionUnlocked(now time.Time) (conf.SessionID, error) {
+	for {
+		cd.nextSessionID++
+		id := conf.SessionID(fmt.Sprintf("session-%d", cd.nextSessionID))
+		if _, exists := cd.sessions[id]; exists {
+			continue
+		}
 
-	candidateConfig := &config.Config{
-		Interfaces: make(map[string]*interfaces.InterfaceConfig),
-		Plugins:    make(map[string]interface{}),
+		cd.sessions[id] = &session{
+			id:           id,
+			config:       cd.deepCopyConfig(cd.runningConfig),
+			lastActivity: now,
+		}
+
+		return id, nil
 	}
-
-	for k, v := range cd.runningConfig.Interfaces {
-		ifCopy := *v
-		candidateConfig.Interfaces[k] = &ifCopy
-	}
-
-	for k, v := range cd.runningConfig.Plugins {
-		candidateConfig.Plugins[k] = v
-	}
-
-	cd.sessions[id] = &session{
-		id:     id,
-		config: candidateConfig,
-	}
-
-	return id, nil
 }
 
 func (cd *ConfigManager) verifyUnlocked(id conf.SessionID) ([]ValidationError, error) {
@@ -609,6 +640,7 @@ func (cd *ConfigManager) ResetForRecovery() {
 		cd.dataplaneState = NewDataplaneState()
 	}
 	cd.sessions = make(map[conf.SessionID]*session)
+	cd.lockOwner = ""
 	cd.logger.Info("Config manager reset for recovery")
 }
 
@@ -657,10 +689,13 @@ func (cd *ConfigManager) LoadConfig(id conf.SessionID, config *config.Config) er
 	cd.mu.Lock()
 	defer cd.mu.Unlock()
 
+	cd.expireIdleSessionsUnlocked(time.Now())
+
 	sess, exists := cd.sessions[id]
 	if !exists {
 		return fmt.Errorf("session %s not found", id)
 	}
+	cd.touchSessionUnlocked(sess, time.Now())
 
 	sess.changes = make([]*conf.HandlerContext, 0)
 
@@ -679,4 +714,28 @@ func (cd *ConfigManager) LoadConfig(id conf.SessionID, config *config.Config) er
 
 	sess.config = config
 	return nil
+}
+
+func (cd *ConfigManager) touchSessionUnlocked(sess *session, now time.Time) {
+	if sess == nil {
+		return
+	}
+	sess.lastActivity = now
+}
+
+func (cd *ConfigManager) expireIdleSessionsUnlocked(now time.Time) {
+	for id, sess := range cd.sessions {
+		if sess == nil || sess.lastActivity.IsZero() {
+			continue
+		}
+		if now.Sub(sess.lastActivity) <= candidateSessionIdleTimeout {
+			continue
+		}
+
+		delete(cd.sessions, id)
+		if cd.lockOwner == id {
+			cd.lockOwner = ""
+		}
+		cd.logger.Info("Expired candidate session", "session", id, "idle_timeout", candidateSessionIdleTimeout)
+	}
 }

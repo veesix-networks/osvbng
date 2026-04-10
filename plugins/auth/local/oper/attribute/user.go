@@ -77,3 +77,19 @@ func (h *SetUserAttributeHandler) PathPattern() operpaths.Path {
 func (h *SetUserAttributeHandler) Dependencies() []operpaths.Path {
 	return nil
 }
+
+func (h *SetUserAttributeHandler) Summary() string {
+	return "Set attribute on local auth user"
+}
+
+func (h *SetUserAttributeHandler) Description() string {
+	return "Add or update a RADIUS attribute override on a local auth user."
+}
+
+func (h *SetUserAttributeHandler) InputType() interface{} {
+	return &local.SetUserAttributeRequest{}
+}
+
+func (h *SetUserAttributeHandler) OutputType() interface{} {
+	return &local.OperResponse{}
+}

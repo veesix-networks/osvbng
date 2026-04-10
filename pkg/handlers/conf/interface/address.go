@@ -158,3 +158,15 @@ func (h *AddressHandler) Dependencies() []paths.Path {
 func (h *AddressHandler) Callbacks() *conf.Callbacks {
 	return nil
 }
+
+func (h *AddressHandler) Summary() string {
+	return "Interface IP address"
+}
+
+func (h *AddressHandler) Description() string {
+	return "Configure an IPv4 or IPv6 address in CIDR notation on an interface."
+}
+
+func (h *AddressHandler) ValueType() interface{} {
+	return ""
+}

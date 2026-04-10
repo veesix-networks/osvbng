@@ -39,3 +39,11 @@ func (h *LDPBindingsHandler) PathPattern() paths.Path {
 func (h *LDPBindingsHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *LDPBindingsHandler) Summary() string {
+	return "Show LDP label bindings"
+}
+
+func (h *LDPBindingsHandler) Description() string {
+	return "Display LDP label-to-prefix bindings from FRR."
+}

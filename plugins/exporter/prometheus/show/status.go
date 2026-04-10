@@ -63,3 +63,11 @@ func (h *StatusHandler) Collect(ctx context.Context, req *show.Request) (interfa
 func (h *StatusHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *StatusHandler) Summary() string {
+	return "Show Prometheus exporter status"
+}
+
+func (h *StatusHandler) Description() string {
+	return "Display the Prometheus exporter state, listen address, and handler count."
+}
