@@ -118,3 +118,15 @@ func (h *BNGHandler) Dependencies() []paths.Path {
 func (h *BNGHandler) Callbacks() *conf.Callbacks {
 	return nil
 }
+
+func (h *BNGHandler) Summary() string {
+	return "BNG mode configuration"
+}
+
+func (h *BNGHandler) Description() string {
+	return "Configure BNG access or network mode on a sub-interface."
+}
+
+func (h *BNGHandler) ValueType() interface{} {
+	return &interfaces.BNGConfig{}
+}

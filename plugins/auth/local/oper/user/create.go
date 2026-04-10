@@ -71,3 +71,19 @@ func (h *CreateUserHandler) PathPattern() operpaths.Path {
 func (h *CreateUserHandler) Dependencies() []operpaths.Path {
 	return nil
 }
+
+func (h *CreateUserHandler) Summary() string {
+	return "Create a local auth user"
+}
+
+func (h *CreateUserHandler) Description() string {
+	return "Create a new local authentication user with optional password and enabled state."
+}
+
+func (h *CreateUserHandler) InputType() interface{} {
+	return &local.CreateUserRequest{}
+}
+
+func (h *CreateUserHandler) OutputType() interface{} {
+	return &local.CreateUserResponse{}
+}

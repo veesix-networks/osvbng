@@ -74,3 +74,19 @@ func (h *SwitchoverHandler) PathPattern() paths.Path {
 func (h *SwitchoverHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *SwitchoverHandler) Summary() string {
+	return "Trigger HA SRG switchover"
+}
+
+func (h *SwitchoverHandler) Description() string {
+	return "Request an HA switchover for one or more SRGs, optionally forcing the transition."
+}
+
+func (h *SwitchoverHandler) InputType() interface{} {
+	return &SwitchoverRequest{}
+}
+
+func (h *SwitchoverHandler) OutputType() interface{} {
+	return &SwitchoverResponse{}
+}

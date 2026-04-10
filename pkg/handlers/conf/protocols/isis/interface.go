@@ -74,3 +74,15 @@ func (h *ISISInterfaceHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *ISISInterfaceHandler) Summary() string {
+	return "IS-IS interface configuration"
+}
+
+func (h *ISISInterfaceHandler) Description() string {
+	return "Configure IS-IS per-interface settings including network type and hello parameters."
+}
+
+func (h *ISISInterfaceHandler) ValueType() interface{} {
+	return &protocols.ISISInterfaceConfig{}
+}

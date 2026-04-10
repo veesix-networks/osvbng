@@ -116,3 +116,15 @@ func (h *PuntHandler) Dependencies() []paths.Path {
 func (h *PuntHandler) Callbacks() *conf.Callbacks {
 	return nil
 }
+
+func (h *PuntHandler) Summary() string {
+	return "Punt configuration"
+}
+
+func (h *PuntHandler) Description() string {
+	return "Configure packet punt registrations for the control plane."
+}
+
+func (h *PuntHandler) ValueType() interface{} {
+	return &operations.PuntConfig{}
+}

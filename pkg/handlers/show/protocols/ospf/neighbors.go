@@ -43,3 +43,11 @@ func (h *OSPFNeighborsHandler) PathPattern() paths.Path {
 func (h *OSPFNeighborsHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *OSPFNeighborsHandler) Summary() string {
+	return "Show OSPF neighbors"
+}
+
+func (h *OSPFNeighborsHandler) Description() string {
+	return "Display OSPFv2 neighbor adjacencies with their state and DR election."
+}

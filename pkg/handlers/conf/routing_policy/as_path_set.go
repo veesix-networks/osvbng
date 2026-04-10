@@ -71,3 +71,15 @@ func (h *ASPathSetHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *ASPathSetHandler) Summary() string {
+	return "AS path access list"
+}
+
+func (h *ASPathSetHandler) Description() string {
+	return "Configure a BGP AS path access list for route filtering."
+}
+
+func (h *ASPathSetHandler) ValueType() interface{} {
+	return rp.ASPathSet{}
+}

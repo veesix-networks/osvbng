@@ -39,3 +39,11 @@ func (h *BGPVPNIPv6Handler) PathPattern() paths.Path {
 func (h *BGPVPNIPv6Handler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *BGPVPNIPv6Handler) Summary() string {
+	return "Show BGP VPNv6 routes"
+}
+
+func (h *BGPVPNIPv6Handler) Description() string {
+	return "Display the BGP VPNv6 unicast routing table."
+}

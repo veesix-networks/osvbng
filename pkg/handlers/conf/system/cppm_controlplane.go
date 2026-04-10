@@ -91,3 +91,15 @@ func (h *CPPMControlplanePolicerHandler) Dependencies() []paths.Path {
 func (h *CPPMControlplanePolicerHandler) Callbacks() *conf.Callbacks {
 	return nil
 }
+
+func (h *CPPMControlplanePolicerHandler) Summary() string {
+	return "Control-plane policer"
+}
+
+func (h *CPPMControlplanePolicerHandler) Description() string {
+	return "Configure per-protocol rate limiting for control-plane packet processing."
+}
+
+func (h *CPPMControlplanePolicerHandler) ValueType() interface{} {
+	return &syscfg.CPPMPolicerConfig{}
+}

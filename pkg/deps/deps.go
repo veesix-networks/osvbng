@@ -12,6 +12,7 @@ import (
 	"github.com/veesix-networks/osvbng/internal/watchdog"
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
+	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/cppm"
 	"github.com/veesix-networks/osvbng/pkg/dhcp4"
 	"github.com/veesix-networks/osvbng/pkg/dhcp6"
@@ -23,6 +24,10 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
 )
+
+type RunningConfigReader interface {
+	GetRunning() (*config.Config, error)
+}
 
 type ShowDeps struct {
 	Subscriber       *subscriber.Component
@@ -40,6 +45,7 @@ type ShowDeps struct {
 	DHCPv4Providers  map[string]dhcp4.DHCPProvider
 	DHCPv6Providers  map[string]dhcp6.DHCPProvider
 	CGNAT            *cgnatcomp.Component
+	RunningConfig    RunningConfigReader
 }
 
 type OperDeps struct {

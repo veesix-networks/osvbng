@@ -70,3 +70,15 @@ func (h *LargeCommunitySetHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *LargeCommunitySetHandler) Summary() string {
+	return "BGP large community list"
+}
+
+func (h *LargeCommunitySetHandler) Description() string {
+	return "Configure a BGP large community list for route matching."
+}
+
+func (h *LargeCommunitySetHandler) ValueType() interface{} {
+	return rp.LargeCommunitySet{}
+}

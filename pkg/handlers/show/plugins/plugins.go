@@ -71,3 +71,11 @@ func (h *PluginsInfoHandler) Dependencies() []paths.Path {
 func (h *PluginsInfoHandler) OutputType() interface{} {
 	return &PluginsInfo{}
 }
+
+func (h *PluginsInfoHandler) Summary() string {
+	return "Show loaded plugins"
+}
+
+func (h *PluginsInfoHandler) Description() string {
+	return "List all loaded plugins with their namespace, status, and configuration."
+}

@@ -57,3 +57,15 @@ func (h *ISISLSPGenIntervalHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *ISISLSPGenIntervalHandler) Summary() string {
+	return "IS-IS LSP generation interval"
+}
+
+func (h *ISISLSPGenIntervalHandler) Description() string {
+	return "Set the minimum interval between IS-IS LSP generation events."
+}
+
+func (h *ISISLSPGenIntervalHandler) ValueType() interface{} {
+	return uint32(0)
+}

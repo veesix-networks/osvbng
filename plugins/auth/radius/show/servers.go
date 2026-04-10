@@ -42,3 +42,11 @@ func (h *ServersHandler) PathPattern() paths.Path {
 func (h *ServersHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *ServersHandler) Summary() string {
+	return "Show RADIUS server statistics"
+}
+
+func (h *ServersHandler) Description() string {
+	return "Display statistics for all configured RADIUS servers including request and response counters."
+}

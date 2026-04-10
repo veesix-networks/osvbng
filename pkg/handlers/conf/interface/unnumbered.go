@@ -96,3 +96,15 @@ func (h *UnnumberedHandler) Dependencies() []paths.Path {
 func (h *UnnumberedHandler) Callbacks() *conf.Callbacks {
 	return nil
 }
+
+func (h *UnnumberedHandler) Summary() string {
+	return "Unnumbered interface"
+}
+
+func (h *UnnumberedHandler) Description() string {
+	return "Configure an interface as unnumbered, borrowing its IP address from a loopback."
+}
+
+func (h *UnnumberedHandler) ValueType() interface{} {
+	return ""
+}

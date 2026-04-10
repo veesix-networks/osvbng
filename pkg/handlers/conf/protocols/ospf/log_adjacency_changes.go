@@ -51,3 +51,15 @@ func (h *OSPFLogAdjacencyChangesHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *OSPFLogAdjacencyChangesHandler) Summary() string {
+	return "OSPF log adjacency changes"
+}
+
+func (h *OSPFLogAdjacencyChangesHandler) Description() string {
+	return "Enable or disable logging of OSPF adjacency state changes."
+}
+
+func (h *OSPFLogAdjacencyChangesHandler) ValueType() interface{} {
+	return false
+}

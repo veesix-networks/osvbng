@@ -53,3 +53,15 @@ func (h *ISISRedistributeHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *ISISRedistributeHandler) Summary() string {
+	return "IS-IS route redistribution"
+}
+
+func (h *ISISRedistributeHandler) Description() string {
+	return "Configure redistribution of routes from other protocols into IS-IS."
+}
+
+func (h *ISISRedistributeHandler) ValueType() interface{} {
+	return &protocols.ISISRedistribute{}
+}

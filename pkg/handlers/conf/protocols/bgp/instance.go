@@ -65,3 +65,15 @@ func (h *BGPInstanceHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *BGPInstanceHandler) Summary() string {
+	return "BGP instance configuration"
+}
+
+func (h *BGPInstanceHandler) Description() string {
+	return "Configure the BGP routing protocol instance."
+}
+
+func (h *BGPInstanceHandler) ValueType() interface{} {
+	return &protocols.BGPConfig{}
+}

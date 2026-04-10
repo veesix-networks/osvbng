@@ -60,3 +60,15 @@ func (h *ISISNETHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *ISISNETHandler) Summary() string {
+	return "IS-IS NET address"
+}
+
+func (h *ISISNETHandler) Description() string {
+	return "Set the IS-IS Network Entity Title in ISO format."
+}
+
+func (h *ISISNETHandler) ValueType() interface{} {
+	return ""
+}

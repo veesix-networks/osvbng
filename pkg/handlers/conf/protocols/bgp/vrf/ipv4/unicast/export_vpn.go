@@ -51,3 +51,15 @@ func (h *IPv4VPNExportHandler) Dependencies() []paths.Path {
 func (h *IPv4VPNExportHandler) Callbacks() *conf.Callbacks {
 	return h.callbacks
 }
+
+func (h *IPv4VPNExportHandler) Summary() string {
+	return "BGP VRF IPv4 VPN export"
+}
+
+func (h *IPv4VPNExportHandler) Description() string {
+	return "Enable VPN route export for a VRF IPv4 unicast address family."
+}
+
+func (h *IPv4VPNExportHandler) ValueType() interface{} {
+	return false
+}

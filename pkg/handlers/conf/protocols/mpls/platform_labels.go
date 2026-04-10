@@ -51,3 +51,15 @@ func (h *PlatformLabelsHandler) Dependencies() []paths.Path {
 func (h *PlatformLabelsHandler) Callbacks() *conf.Callbacks {
 	return nil
 }
+
+func (h *PlatformLabelsHandler) Summary() string {
+	return "MPLS platform label range"
+}
+
+func (h *PlatformLabelsHandler) Description() string {
+	return "Set the maximum MPLS platform label value."
+}
+
+func (h *PlatformLabelsHandler) ValueType() interface{} {
+	return uint32(0)
+}

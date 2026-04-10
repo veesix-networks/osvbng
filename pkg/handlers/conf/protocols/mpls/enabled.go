@@ -93,3 +93,15 @@ func setPlatformLabels(labels uint32) {
 	path := "/proc/sys/net/mpls/platform_labels"
 	os.WriteFile(path, []byte(strconv.FormatUint(uint64(labels), 10)), 0644)
 }
+
+func (h *MPLSEnabledHandler) Summary() string {
+	return "MPLS forwarding enabled"
+}
+
+func (h *MPLSEnabledHandler) Description() string {
+	return "Enable or disable MPLS forwarding in the dataplane."
+}
+
+func (h *MPLSEnabledHandler) ValueType() interface{} {
+	return false
+}

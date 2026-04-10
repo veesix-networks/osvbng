@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io/fs"
 	"net"
@@ -29,6 +28,7 @@ type Component struct {
 	mu       sync.RWMutex
 	running  bool
 	specJSON []byte
+	specETag string
 }
 
 func NewComponent(deps component.Dependencies) (component.Component, error) {
@@ -67,6 +67,19 @@ func (c *Component) SetHealthEndpoints(wd *watchdog.Watchdog) {
 }
 
 func (c *Component) Start(ctx context.Context) error {
+	if c.adapter == nil {
+		return fmt.Errorf("northbound adapter not configured")
+	}
+
+	specData, err := northbound.GenerateOpenAPISpec(c.adapter)
+	if err != nil {
+		return fmt.Errorf("generate OpenAPI spec: %w", err)
+	}
+
+	c.specJSON = specData.JSON
+	c.specETag = specData.ETag
+	c.logger.Info("OpenAPI spec generated", "paths", specData.Spec.Paths.Len(), "etag", c.specETag)
+
 	c.StartContext(ctx)
 	c.logger.Info("Starting API server", "addr", c.addr)
 
@@ -111,19 +124,45 @@ func (c *Component) GetStatus() *Status {
 }
 
 func (c *Component) startServer() {
-	spec := buildOpenAPISpec(c.adapter)
-	specData, err := json.MarshalIndent(spec, "", "  ")
-	if err != nil {
-		c.logger.Error("Failed to marshal OpenAPI spec", "error", err)
-	} else {
-		c.specJSON = specData
-		c.logger.Info("OpenAPI spec generated", "paths", spec.Paths.Len())
+	c.server = &http.Server{
+		Addr:    c.addr,
+		Handler: c.newMux(),
 	}
 
+	ln, err := net.Listen("tcp", c.addr)
+	if err != nil {
+		c.logger.Error("Failed to bind API server", "addr", c.addr, "error", err)
+		return
+	}
+
+	c.mu.Lock()
+	c.running = true
+	c.mu.Unlock()
+
+	c.logger.Info("API server listening", "addr", c.addr)
+	c.SignalReady()
+	if err := c.server.Serve(ln); err != nil && err != http.ErrServerClosed {
+		c.logger.Error("API server error", "error", err)
+		c.mu.Lock()
+		c.running = false
+		c.mu.Unlock()
+	}
+}
+
+func (c *Component) newMux() *http.ServeMux {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/running-config", c.handleRunningConfig)
 	mux.HandleFunc("GET /api/startup-config", c.handleStartupConfig)
+	mux.HandleFunc("GET /api/show/running-config", c.handleShowRunningConfig)
+	mux.HandleFunc("GET /api/show/startup-config", c.handleShowStartupConfig)
+	mux.HandleFunc("GET /api/show/config/history", c.handleShowConfigHistory)
+	mux.HandleFunc("GET /api/show/config/version/{version}", c.handleShowConfigVersion)
+	mux.HandleFunc("POST /api/config/session", c.handleConfigSessionCreate)
+	mux.HandleFunc("POST /api/config/session/{session_id}/set/{path...}", c.handleConfigSessionSet)
+	mux.HandleFunc("POST /api/config/session/{session_id}/commit", c.handleConfigSessionCommit)
+	mux.HandleFunc("POST /api/config/session/{session_id}/discard", c.handleConfigSessionDiscard)
+	mux.HandleFunc("GET /api/config/session/{session_id}/diff", c.handleConfigSessionDiff)
 	mux.HandleFunc("GET /api/show/{path...}", c.handleShow)
 	mux.HandleFunc("POST /api/set/{path...}", c.handleSet)
 	mux.HandleFunc("POST /api/exec/{path...}", c.handleExec)
@@ -152,27 +191,5 @@ func (c *Component) startServer() {
 		mux.HandleFunc("GET /readyz", watchdog.ReadyzHandler(c.watchdog))
 	}
 
-	c.server = &http.Server{
-		Addr:    c.addr,
-		Handler: mux,
-	}
-
-	ln, err := net.Listen("tcp", c.addr)
-	if err != nil {
-		c.logger.Error("Failed to bind API server", "addr", c.addr, "error", err)
-		return
-	}
-
-	c.mu.Lock()
-	c.running = true
-	c.mu.Unlock()
-
-	c.logger.Info("API server listening", "addr", c.addr)
-	c.SignalReady()
-	if err := c.server.Serve(ln); err != nil && err != http.ErrServerClosed {
-		c.logger.Error("API server error", "error", err)
-		c.mu.Lock()
-		c.running = false
-		c.mu.Unlock()
-	}
+	return mux
 }

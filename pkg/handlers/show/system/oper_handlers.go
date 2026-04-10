@@ -39,3 +39,11 @@ func (h *OperHandlersHandler) PathPattern() showpaths.Path {
 func (h *OperHandlersHandler) Dependencies() []showpaths.Path {
 	return nil
 }
+
+func (h *OperHandlersHandler) Summary() string {
+	return "List oper handler paths"
+}
+
+func (h *OperHandlersHandler) Description() string {
+	return "Return all registered operational handler path patterns."
+}

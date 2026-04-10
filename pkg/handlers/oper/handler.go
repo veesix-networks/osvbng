@@ -35,6 +35,31 @@ type TypedOperHandler interface {
 	OutputType() interface{}
 }
 
+type OperInputHandler interface {
+	OperHandler
+	InputType() interface{}
+}
+
+type OperOutputHandler interface {
+	OperHandler
+	OutputType() interface{}
+}
+
+type OperOptionsHandler interface {
+	OperHandler
+	OptionsType() interface{}
+}
+
+type OperSummaryHandler interface {
+	OperHandler
+	Summary() string
+}
+
+type OperDescriptionHandler interface {
+	OperHandler
+	Description() string
+}
+
 type HandlerFactory func(deps *deps.OperDeps) OperHandler
 
 var factories []HandlerFactory

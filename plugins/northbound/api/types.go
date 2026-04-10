@@ -1,5 +1,7 @@
 package api
 
+import "time"
+
 type Status struct {
 	State         string `json:"state"`
 	ListenAddress string `json:"listen_address"`
@@ -19,6 +21,44 @@ type ShowResponse struct {
 
 type ConfigRequest struct {
 	Value interface{} `json:"value"`
+}
+
+type OperationResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message,omitempty"`
+	Version int    `json:"version,omitempty"`
+}
+
+type ConfigSessionCreateResponse struct {
+	SessionID string `json:"session_id"`
+}
+
+type ConfigHistoryResponse struct {
+	Versions []ConfigVersionResponse `json:"versions"`
+}
+
+type ConfigVersionResponse struct {
+	Version   int                    `json:"version"`
+	Timestamp time.Time              `json:"timestamp"`
+	CommitMsg string                 `json:"commit_msg,omitempty"`
+	Changes   []ConfigChangeResponse `json:"changes,omitempty"`
+}
+
+type ConfigChangeResponse struct {
+	Type  string `json:"type"`
+	Path  string `json:"path"`
+	Value string `json:"value,omitempty"`
+}
+
+type DiffResponse struct {
+	Added    []DiffLineResponse `json:"added,omitempty"`
+	Deleted  []DiffLineResponse `json:"deleted,omitempty"`
+	Modified []DiffLineResponse `json:"modified,omitempty"`
+}
+
+type DiffLineResponse struct {
+	Path  string `json:"path"`
+	Value string `json:"value,omitempty"`
 }
 
 type ErrorResponse struct {

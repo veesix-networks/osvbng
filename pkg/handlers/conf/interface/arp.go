@@ -87,3 +87,15 @@ func (h *ARPHandler) Dependencies() []paths.Path {
 func (h *ARPHandler) Callbacks() *conf.Callbacks {
 	return nil
 }
+
+func (h *ARPHandler) Summary() string {
+	return "Interface ARP settings"
+}
+
+func (h *ARPHandler) Description() string {
+	return "Configure ARP behavior on an interface."
+}
+
+func (h *ARPHandler) ValueType() interface{} {
+	return &interfaces.ARPConfig{}
+}

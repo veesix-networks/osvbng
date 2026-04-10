@@ -51,3 +51,15 @@ func (h *IPv4VPNLabelHandler) Dependencies() []paths.Path {
 func (h *IPv4VPNLabelHandler) Callbacks() *conf.Callbacks {
 	return h.callbacks
 }
+
+func (h *IPv4VPNLabelHandler) Summary() string {
+	return "BGP VRF IPv4 VPN label mode"
+}
+
+func (h *IPv4VPNLabelHandler) Description() string {
+	return "Set the VPN label allocation mode for a VRF IPv4 unicast address family."
+}
+
+func (h *IPv4VPNLabelHandler) ValueType() interface{} {
+	return ""
+}

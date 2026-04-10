@@ -55,3 +55,11 @@ func (h *PoolsHandler) PathPattern() paths.Path {
 func (h *PoolsHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *PoolsHandler) Summary() string {
+	return "Show CGNAT pool statistics"
+}
+
+func (h *PoolsHandler) Description() string {
+	return "Display utilization and allocation statistics for each configured CGNAT address pool."
+}

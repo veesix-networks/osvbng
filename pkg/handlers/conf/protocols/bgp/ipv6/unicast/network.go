@@ -51,3 +51,15 @@ func (h *NetworkHandler) Dependencies() []paths.Path {
 func (h *NetworkHandler) Callbacks() *conf.Callbacks {
 	return h.callbacks
 }
+
+func (h *NetworkHandler) Summary() string {
+	return "BGP IPv6 unicast network"
+}
+
+func (h *NetworkHandler) Description() string {
+	return "Advertise an IPv6 prefix into BGP."
+}
+
+func (h *NetworkHandler) ValueType() interface{} {
+	return ""
+}

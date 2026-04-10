@@ -38,3 +38,11 @@ func (h *ShowHandlersHandler) PathPattern() paths.Path {
 func (h *ShowHandlersHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *ShowHandlersHandler) Summary() string {
+	return "List show handler paths"
+}
+
+func (h *ShowHandlersHandler) Description() string {
+	return "Return all registered show handler path patterns."
+}

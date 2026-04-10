@@ -58,3 +58,15 @@ func (h *RedistributeHandler) Dependencies() []paths.Path {
 func (h *RedistributeHandler) Callbacks() *conf.Callbacks {
 	return h.callbacks
 }
+
+func (h *RedistributeHandler) Summary() string {
+	return "BGP VRF IPv4 unicast redistribution"
+}
+
+func (h *RedistributeHandler) Description() string {
+	return "Configure redistribution of routes into a VRF BGP IPv4 unicast."
+}
+
+func (h *RedistributeHandler) ValueType() interface{} {
+	return &protocols.BGPRedistribute{}
+}

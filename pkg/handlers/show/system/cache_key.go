@@ -85,3 +85,19 @@ func (h *CacheKeyHandler) PathPattern() paths.Path {
 func (h *CacheKeyHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *CacheKeyHandler) Summary() string {
+	return "Show a single cache entry"
+}
+
+func (h *CacheKeyHandler) Description() string {
+	return "Look up a specific cache entry by key name."
+}
+
+type CacheKeyOptions struct {
+	Key string `query:"key" description:"Cache key to look up"`
+}
+
+func (h *CacheKeyHandler) OptionsType() interface{} {
+	return &CacheKeyOptions{}
+}

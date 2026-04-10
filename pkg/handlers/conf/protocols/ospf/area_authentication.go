@@ -58,3 +58,15 @@ func (h *OSPFAreaAuthenticationHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *OSPFAreaAuthenticationHandler) Summary() string {
+	return "OSPF area authentication"
+}
+
+func (h *OSPFAreaAuthenticationHandler) Description() string {
+	return "Set the authentication mode for an OSPF area."
+}
+
+func (h *OSPFAreaAuthenticationHandler) ValueType() interface{} {
+	return ""
+}

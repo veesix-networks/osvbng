@@ -51,3 +51,15 @@ func (h *VRFNetworkHandler) Dependencies() []paths.Path {
 func (h *VRFNetworkHandler) Callbacks() *conf.Callbacks {
 	return h.callbacks
 }
+
+func (h *VRFNetworkHandler) Summary() string {
+	return "BGP VRF IPv4 unicast network"
+}
+
+func (h *VRFNetworkHandler) Description() string {
+	return "Advertise an IPv4 prefix into a VRF BGP instance."
+}
+
+func (h *VRFNetworkHandler) ValueType() interface{} {
+	return ""
+}

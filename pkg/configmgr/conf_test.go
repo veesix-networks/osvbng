@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
@@ -26,6 +27,7 @@ func (h *noopHandler) Callbacks() *conf.Callbacks                               
 func newTestConfigManager(t *testing.T) *ConfigManager {
 	cd := NewConfigManager()
 	cd.registry.MustRegister(&noopHandler{path: "interfaces.<*>"})
+	cd.registry.MustRegister(&noopHandler{path: "interfaces.<*>.enabled"})
 	cd.startupConfigPath = filepath.Join(t.TempDir(), "startup-config.yaml")
 	return cd
 }
@@ -131,6 +133,10 @@ func TestCommit(t *testing.T) {
 	if !exists {
 		t.Fatal("eth0 should exist in running config after commit")
 	}
+
+	if _, exists := cd.sessions[sessionID]; exists {
+		t.Fatal("candidate session should be closed after successful commit")
+	}
 }
 
 func TestVersionHistory(t *testing.T) {
@@ -171,7 +177,7 @@ func TestVersionHistory(t *testing.T) {
 	}
 }
 
-func TestMultipleSessions(t *testing.T) {
+func TestConfigLockPreventsMultipleSessions(t *testing.T) {
 	cd := newTestConfigManager(t)
 
 	sessionID1, err := cd.CreateCandidateSession()
@@ -179,17 +185,12 @@ func TestMultipleSessions(t *testing.T) {
 		t.Fatalf("CreateCandidateSession 1 failed: %v", err)
 	}
 
-	sessionID2, err := cd.CreateCandidateSession()
-	if err != nil {
-		t.Fatalf("CreateCandidateSession 2 failed: %v", err)
+	_, err = cd.CreateCandidateSession()
+	if err == nil {
+		t.Fatal("expected second CreateCandidateSession to fail while lock is held")
 	}
-
-	if sessionID1 == sessionID2 {
-		t.Fatal("Session IDs should be unique")
-	}
-
-	if len(cd.sessions) != 2 {
-		t.Fatalf("Expected 2 sessions, got %d", len(cd.sessions))
+	if got := err.Error(); got != "configuration is locked by session "+string(sessionID1) {
+		t.Fatalf("second session error = %q, want lock error", got)
 	}
 }
 
@@ -401,5 +402,31 @@ func TestDryRun(t *testing.T) {
 
 	if len(cd.runningConfig.Interfaces) != 0 {
 		t.Fatal("Running config should still be empty after DryRun")
+	}
+}
+
+func TestExpiredCandidateSessionRejectedOnUse(t *testing.T) {
+	cd := newTestConfigManager(t)
+
+	sessionID, err := cd.CreateCandidateSession()
+	if err != nil {
+		t.Fatalf("CreateCandidateSession failed: %v", err)
+	}
+
+	sess := cd.sessions[sessionID]
+	if sess == nil {
+		t.Fatal("session should exist")
+	}
+	sess.lastActivity = time.Now().Add(-candidateSessionIdleTimeout - time.Second)
+
+	err = cd.Set(sessionID, "interfaces.eth0.enabled", true)
+	if err == nil {
+		t.Fatal("expected expired session set to fail")
+	}
+	if got := err.Error(); got != "session "+string(sessionID)+" not found" {
+		t.Fatalf("expired session error = %q, want not found", got)
+	}
+	if _, exists := cd.sessions[sessionID]; exists {
+		t.Fatal("expired session should be removed during use")
 	}
 }

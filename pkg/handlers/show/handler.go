@@ -34,6 +34,21 @@ type TypedShowHandler interface {
 	OutputType() interface{}
 }
 
+type ShowOptionsHandler interface {
+	ShowHandler
+	OptionsType() interface{}
+}
+
+type ShowSummaryHandler interface {
+	ShowHandler
+	Summary() string
+}
+
+type ShowDescriptionHandler interface {
+	ShowHandler
+	Description() string
+}
+
 type HandlerFactory func(deps *deps.ShowDeps) ShowHandler
 
 var factories []HandlerFactory

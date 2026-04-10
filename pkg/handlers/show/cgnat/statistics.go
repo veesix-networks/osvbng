@@ -59,3 +59,11 @@ func (h *StatisticsHandler) PathPattern() paths.Path {
 func (h *StatisticsHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *StatisticsHandler) Summary() string {
+	return "Show CGNAT aggregate statistics"
+}
+
+func (h *StatisticsHandler) Description() string {
+	return "Display aggregate CGNAT statistics across all configured pools."
+}

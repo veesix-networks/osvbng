@@ -51,3 +51,15 @@ func (h *ISISEnabledHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *ISISEnabledHandler) Summary() string {
+	return "IS-IS protocol enabled"
+}
+
+func (h *ISISEnabledHandler) Description() string {
+	return "Enable or disable the IS-IS routing protocol."
+}
+
+func (h *ISISEnabledHandler) ValueType() interface{} {
+	return false
+}

@@ -70,3 +70,15 @@ func (h *OSPF6AreaInterfaceHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *OSPF6AreaInterfaceHandler) Summary() string {
+	return "OSPFv3 area interface"
+}
+
+func (h *OSPF6AreaInterfaceHandler) Description() string {
+	return "Configure OSPFv3 per-interface settings within an area."
+}
+
+func (h *OSPF6AreaInterfaceHandler) ValueType() interface{} {
+	return &protocols.OSPF6InterfaceConfig{}
+}

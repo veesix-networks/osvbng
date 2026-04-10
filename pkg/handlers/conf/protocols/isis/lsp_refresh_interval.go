@@ -57,3 +57,15 @@ func (h *ISISLSPRefreshIntervalHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *ISISLSPRefreshIntervalHandler) Summary() string {
+	return "IS-IS LSP refresh interval"
+}
+
+func (h *ISISLSPRefreshIntervalHandler) Description() string {
+	return "Set the interval for periodic IS-IS LSP refreshes."
+}
+
+func (h *ISISLSPRefreshIntervalHandler) ValueType() interface{} {
+	return uint32(0)
+}

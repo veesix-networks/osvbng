@@ -39,3 +39,11 @@ func (h *MPLSInterfacesHandler) PathPattern() paths.Path {
 func (h *MPLSInterfacesHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *MPLSInterfacesHandler) Summary() string {
+	return "Show MPLS-enabled interfaces"
+}
+
+func (h *MPLSInterfacesHandler) Description() string {
+	return "Display interfaces with MPLS forwarding enabled."
+}

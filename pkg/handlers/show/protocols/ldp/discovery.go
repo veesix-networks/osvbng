@@ -39,3 +39,11 @@ func (h *LDPDiscoveryHandler) PathPattern() paths.Path {
 func (h *LDPDiscoveryHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *LDPDiscoveryHandler) Summary() string {
+	return "Show LDP discovery"
+}
+
+func (h *LDPDiscoveryHandler) Description() string {
+	return "Display LDP discovery hello adjacencies."
+}

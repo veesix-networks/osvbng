@@ -155,3 +155,19 @@ func (h *UserHandler) PathPattern() paths.Path {
 func (h *UserHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *UsersHandler) Summary() string {
+	return "List local auth users"
+}
+
+func (h *UsersHandler) Description() string {
+	return "Display all locally configured authentication users."
+}
+
+func (h *UserHandler) Summary() string {
+	return "Show local auth user details"
+}
+
+func (h *UserHandler) Description() string {
+	return "Display a single local authentication user by ID including assigned services and attributes."
+}

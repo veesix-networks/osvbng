@@ -96,3 +96,19 @@ func (h *SummaryHandler) PathPattern() paths.Path {
 func (h *SummaryHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *SummaryHandler) Summary() string {
+	return "Show all interfaces"
+}
+
+func (h *SummaryHandler) Description() string {
+	return "List all interfaces with their operational state, addresses, and VPP interface index."
+}
+
+type SummaryOptions struct {
+	All bool `query:"all" description:"Include point-to-point interfaces"`
+}
+
+func (h *SummaryHandler) OptionsType() interface{} {
+	return &SummaryOptions{}
+}

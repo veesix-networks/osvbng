@@ -51,3 +51,15 @@ func (h *ISISAreaPasswordHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *ISISAreaPasswordHandler) Summary() string {
+	return "IS-IS area password"
+}
+
+func (h *ISISAreaPasswordHandler) Description() string {
+	return "Set the IS-IS area authentication password for Level-1 LSPs."
+}
+
+func (h *ISISAreaPasswordHandler) ValueType() interface{} {
+	return ""
+}

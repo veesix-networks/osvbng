@@ -59,3 +59,11 @@ func (h *CacheStatisticsHandler) PathPattern() paths.Path {
 func (h *CacheStatisticsHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *CacheStatisticsHandler) Summary() string {
+	return "Show cache statistics"
+}
+
+func (h *CacheStatisticsHandler) Description() string {
+	return "Display hit/miss counters and entry counts for the state cache."
+}

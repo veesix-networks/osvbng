@@ -115,3 +115,19 @@ func (h *ClearSessionHandler) PathPattern() paths.Path {
 func (h *ClearSessionHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *ClearSessionHandler) Summary() string {
+	return "Clear a subscriber session"
+}
+
+func (h *ClearSessionHandler) Description() string {
+	return "Terminate a subscriber session by session ID, MAC, IPv4, IPv6, or username."
+}
+
+func (h *ClearSessionHandler) InputType() interface{} {
+	return &ClearSessionRequest{}
+}
+
+func (h *ClearSessionHandler) OutputType() interface{} {
+	return &ClearSessionResponse{}
+}

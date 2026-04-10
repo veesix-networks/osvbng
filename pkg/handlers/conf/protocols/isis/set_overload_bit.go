@@ -51,3 +51,15 @@ func (h *ISISSetOverloadBitHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *ISISSetOverloadBitHandler) Summary() string {
+	return "IS-IS overload bit"
+}
+
+func (h *ISISSetOverloadBitHandler) Description() string {
+	return "Enable or disable the IS-IS overload bit."
+}
+
+func (h *ISISSetOverloadBitHandler) ValueType() interface{} {
+	return false
+}

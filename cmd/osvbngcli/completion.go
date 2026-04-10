@@ -1,23 +1,30 @@
 package main
 
-import (
-	"github.com/chzyer/readline"
-)
+import "github.com/chzyer/readline"
 
 func (c *CLI) buildCompleter() readline.AutoCompleter {
-	return &treeCompleter{tree: c.tree, cli: c}
+	return &cliCompleter{cli: c}
 }
 
-type treeCompleter struct {
-	tree *CommandTree
-	cli  *CLI
+type cliCompleter struct {
+	cli *CLI
 }
 
-func (tc *treeCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
+func (cc *cliCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
 	input := string(line[:pos])
-	completions := tc.tree.GetCompletions(input, tc.cli.devMode)
+	suggestions := cc.cli.suggestionsForInput(input, false)
+	if len(suggestions) == 0 {
+		return nil, 0
+	}
 
-	if len(completions) == 0 {
+	texts := make([]string, 0, len(suggestions))
+	for _, suggestion := range suggestions {
+		if suggestion.Text == "" || suggestion.Text == "|" {
+			continue
+		}
+		texts = append(texts, suggestion.Text)
+	}
+	if len(texts) == 0 {
 		return nil, 0
 	}
 
@@ -36,13 +43,12 @@ func (tc *treeCompleter) Do(line []rune, pos int) (newLine [][]rune, length int)
 		partialWord = string(line[:pos])
 	}
 
-	result := make([][]rune, len(completions))
-	for i, c := range completions {
-		if len(partialWord) > 0 && len(c) >= len(partialWord) {
-			suffix := c[len(partialWord):]
-			result[i] = []rune(suffix)
+	result := make([][]rune, len(texts))
+	for i, suggestion := range texts {
+		if len(partialWord) > 0 && len(suggestion) >= len(partialWord) {
+			result[i] = []rune(suggestion[len(partialWord):])
 		} else {
-			result[i] = []rune(c)
+			result[i] = []rune(suggestion)
 		}
 	}
 

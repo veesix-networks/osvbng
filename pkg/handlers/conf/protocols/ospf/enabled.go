@@ -73,3 +73,15 @@ func (h *OSPFEnabledHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *OSPFEnabledHandler) Summary() string {
+	return "OSPF protocol enabled"
+}
+
+func (h *OSPFEnabledHandler) Description() string {
+	return "Enable or disable the OSPFv2 routing protocol."
+}
+
+func (h *OSPFEnabledHandler) ValueType() interface{} {
+	return false
+}

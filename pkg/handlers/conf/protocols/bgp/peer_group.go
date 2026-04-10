@@ -58,3 +58,15 @@ func (h *PeerGroupHandler) Dependencies() []paths.Path {
 func (h *PeerGroupHandler) Callbacks() *conf.Callbacks {
 	return h.callbacks
 }
+
+func (h *PeerGroupHandler) Summary() string {
+	return "BGP peer group"
+}
+
+func (h *PeerGroupHandler) Description() string {
+	return "Configure a BGP peer group."
+}
+
+func (h *PeerGroupHandler) ValueType() interface{} {
+	return &protocols.BGPPeerGroup{}
+}

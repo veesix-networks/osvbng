@@ -119,3 +119,15 @@ func (h *VRFHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *VRFHandler) Summary() string {
+	return "VRF configuration"
+}
+
+func (h *VRFHandler) Description() string {
+	return "Create or configure a VRF with address families and optional L3VPN settings."
+}
+
+func (h *VRFHandler) ValueType() interface{} {
+	return &ip.VRFSConfig{}
+}

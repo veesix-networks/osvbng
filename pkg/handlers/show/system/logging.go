@@ -49,3 +49,11 @@ func (h *LoggingHandler) Dependencies() []paths.Path {
 func (h *LoggingHandler) OutputType() interface{} {
 	return &LoggingInfo{}
 }
+
+func (h *LoggingHandler) Summary() string {
+	return "Show logging configuration"
+}
+
+func (h *LoggingHandler) Description() string {
+	return "Display the current log level for each component."
+}

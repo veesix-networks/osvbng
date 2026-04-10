@@ -63,3 +63,15 @@ func (h *BGPASNHandler) Dependencies() []paths.Path {
 func (h *BGPASNHandler) Callbacks() *conf.Callbacks {
 	return h.callbacks
 }
+
+func (h *BGPASNHandler) Summary() string {
+	return "BGP autonomous system number"
+}
+
+func (h *BGPASNHandler) Description() string {
+	return "Set the BGP autonomous system number."
+}
+
+func (h *BGPASNHandler) ValueType() interface{} {
+	return uint32(0)
+}

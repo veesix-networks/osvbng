@@ -35,3 +35,11 @@ func (h *BuffersHandler) PathPattern() paths.Path {
 func (h *BuffersHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *BuffersHandler) Summary() string {
+	return "Show VPP buffer pools"
+}
+
+func (h *BuffersHandler) Description() string {
+	return "Display VPP buffer pool statistics from the stats segment."
+}

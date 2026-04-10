@@ -56,3 +56,11 @@ func (h *OpDBStatisticsHandler) PathPattern() paths.Path {
 func (h *OpDBStatisticsHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *OpDBStatisticsHandler) Summary() string {
+	return "Show OpDB statistics"
+}
+
+func (h *OpDBStatisticsHandler) Description() string {
+	return "Display operational database entry counts and storage statistics."
+}

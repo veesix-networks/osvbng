@@ -53,3 +53,15 @@ func (h *ISISDefaultInformationHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *ISISDefaultInformationHandler) Summary() string {
+	return "IS-IS default route origination"
+}
+
+func (h *ISISDefaultInformationHandler) Description() string {
+	return "Configure IS-IS default route origination settings."
+}
+
+func (h *ISISDefaultInformationHandler) ValueType() interface{} {
+	return &protocols.ISISDefaultInfo{}
+}

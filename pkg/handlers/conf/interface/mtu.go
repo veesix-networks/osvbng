@@ -132,3 +132,15 @@ func (h *MTUHandler) Dependencies() []paths.Path {
 func (h *MTUHandler) Callbacks() *conf.Callbacks {
 	return nil
 }
+
+func (h *MTUHandler) Summary() string {
+	return "Interface MTU"
+}
+
+func (h *MTUHandler) Description() string {
+	return "Set the maximum transmission unit on an interface."
+}
+
+func (h *MTUHandler) ValueType() interface{} {
+	return 0
+}

@@ -58,3 +58,19 @@ func (h *DeleteServiceHandler) PathPattern() operpaths.Path {
 func (h *DeleteServiceHandler) Dependencies() []operpaths.Path {
 	return nil
 }
+
+func (h *DeleteServiceHandler) Summary() string {
+	return "Delete a local auth service"
+}
+
+func (h *DeleteServiceHandler) Description() string {
+	return "Remove a local authentication service profile by ID."
+}
+
+func (h *DeleteServiceHandler) InputType() interface{} {
+	return &struct{}{}
+}
+
+func (h *DeleteServiceHandler) OutputType() interface{} {
+	return &local.OperResponse{}
+}

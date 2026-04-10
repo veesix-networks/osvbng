@@ -70,3 +70,11 @@ func (h *SRGCountersHandler) PathPattern() paths.Path {
 func (h *SRGCountersHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *SRGCountersHandler) Summary() string {
+	return "Show HA SRG dataplane counters"
+}
+
+func (h *SRGCountersHandler) Description() string {
+	return "Display per-SRG dataplane counters including GARP, NA, and MAC add/remove operations."
+}

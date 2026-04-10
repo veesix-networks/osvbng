@@ -49,3 +49,11 @@ func (h *TableHandler) Collect(ctx context.Context, req *show.Request) (interfac
 
 	return tables, nil
 }
+
+func (h *TableHandler) Summary() string {
+	return "Show IP routing table"
+}
+
+func (h *TableHandler) Description() string {
+	return "Display the IP FIB entries from the dataplane."
+}

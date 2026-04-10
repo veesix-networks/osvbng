@@ -62,3 +62,11 @@ func (h *EventsDebugHandler) InputType() interface{} {
 func (h *EventsDebugHandler) OutputType() interface{} {
 	return &EventsDebugResponse{}
 }
+
+func (h *EventsDebugHandler) Summary() string {
+	return "Set event bus debug topics"
+}
+
+func (h *EventsDebugHandler) Description() string {
+	return "Enable debug-level logging for a set of event bus topics."
+}

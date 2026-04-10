@@ -77,3 +77,19 @@ func (h *SetUserPasswordHandler) PathPattern() operpaths.Path {
 func (h *SetUserPasswordHandler) Dependencies() []operpaths.Path {
 	return nil
 }
+
+func (h *SetUserPasswordHandler) Summary() string {
+	return "Set local auth user password"
+}
+
+func (h *SetUserPasswordHandler) Description() string {
+	return "Change the password for a local authentication user."
+}
+
+func (h *SetUserPasswordHandler) InputType() interface{} {
+	return &local.SetUserPasswordRequest{}
+}
+
+func (h *SetUserPasswordHandler) OutputType() interface{} {
+	return &local.OperResponse{}
+}

@@ -4,7 +4,11 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+
+	"github.com/veesix-networks/osvbng/pkg/configmgr"
+	confhandler "github.com/veesix-networks/osvbng/pkg/handlers/conf"
 )
 
 func (c *Component) handlePaths(w http.ResponseWriter, r *http.Request) {
@@ -83,29 +87,21 @@ func (c *Component) handleSet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	path = strings.ReplaceAll(path, "/", ".")
-
-	normalizedPath, err := c.adapter.NormalizePath(path, c.adapter.GetAllConfPaths())
+	value, err := decodeJSONBody(r)
 	if err != nil {
-		c.writeError(w, http.StatusBadRequest, "failed to normalize path: "+err.Error())
-		return
-	}
-
-	var value interface{}
-	decoder := json.NewDecoder(r.Body)
-	if err := decoder.Decode(&value); err != nil {
 		c.writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 
-	if err := c.adapter.SetAndCommit(r.Context(), normalizedPath, value); err != nil {
-		c.logger.Error("config set and commit failed", "path", normalizedPath, "error", err)
-		c.writeError(w, http.StatusInternalServerError, err.Error())
+	if err := c.adapter.SetAndCommit(r.Context(), path, value); err != nil {
+		c.logger.Error("config set and commit failed", "path", path, "error", err)
+		c.writeError(w, statusCodeForConfigError(err), err.Error())
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	c.writeJSON(w, map[string]string{"status": "ok"})
+	c.writeJSON(w, OperationResponse{Status: "ok"})
 }
 
 func (c *Component) handleExec(w http.ResponseWriter, r *http.Request) {
@@ -184,6 +180,133 @@ func (c *Component) handleStartupConfig(w http.ResponseWriter, r *http.Request) 
 	c.writeJSON(w, cfg)
 }
 
+func (c *Component) handleShowRunningConfig(w http.ResponseWriter, r *http.Request) {
+	cfg, err := c.adapter.GetRunningConfig(r.Context())
+	if err != nil {
+		c.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	c.writeShowResponse(w, "running-config", cfg)
+}
+
+func (c *Component) handleShowStartupConfig(w http.ResponseWriter, r *http.Request) {
+	cfg, err := c.adapter.GetStartupConfig(r.Context())
+	if err != nil {
+		c.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	c.writeShowResponse(w, "startup-config", cfg)
+}
+
+func (c *Component) handleShowConfigHistory(w http.ResponseWriter, r *http.Request) {
+	versions, err := c.adapter.GetConfigHistory(r.Context())
+	if err != nil {
+		c.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	c.writeShowResponse(w, "config.history", ConfigHistoryResponse{
+		Versions: convertConfigVersions(versions),
+	})
+}
+
+func (c *Component) handleShowConfigVersion(w http.ResponseWriter, r *http.Request) {
+	versionStr := r.PathValue("version")
+	version, err := strconv.Atoi(versionStr)
+	if err != nil {
+		c.writeError(w, http.StatusBadRequest, "version must be an integer")
+		return
+	}
+
+	cfgVersion, err := c.adapter.GetConfigVersion(r.Context(), version)
+	if err != nil {
+		c.writeError(w, statusCodeForConfigError(err), err.Error())
+		return
+	}
+
+	c.writeShowResponse(w, "config.version", convertConfigVersion(cfgVersion))
+}
+
+func (c *Component) handleConfigSessionCreate(w http.ResponseWriter, r *http.Request) {
+	sessionID, err := c.adapter.CreateCandidateSession(r.Context())
+	if err != nil {
+		c.writeError(w, statusCodeForConfigError(err), err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	c.writeJSON(w, ConfigSessionCreateResponse{SessionID: string(sessionID)})
+}
+
+func (c *Component) handleConfigSessionSet(w http.ResponseWriter, r *http.Request) {
+	sessionID := confhandler.SessionID(r.PathValue("session_id"))
+	path := r.PathValue("path")
+	if path == "" {
+		c.writeError(w, http.StatusBadRequest, "path required")
+		return
+	}
+
+	value, err := decodeJSONBody(r)
+	if err != nil {
+		c.writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	path = strings.ReplaceAll(path, "/", ".")
+	if err := c.adapter.SetCandidate(r.Context(), sessionID, path, value); err != nil {
+		c.writeError(w, statusCodeForConfigError(err), err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	c.writeJSON(w, OperationResponse{Status: "ok"})
+}
+
+func (c *Component) handleConfigSessionCommit(w http.ResponseWriter, r *http.Request) {
+	sessionID := confhandler.SessionID(r.PathValue("session_id"))
+
+	version, err := c.adapter.CommitCandidate(r.Context(), sessionID)
+	if err != nil {
+		c.writeError(w, statusCodeForConfigError(err), err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	c.writeJSON(w, OperationResponse{
+		Status:  "ok",
+		Message: "Configuration committed successfully",
+		Version: version,
+	})
+}
+
+func (c *Component) handleConfigSessionDiscard(w http.ResponseWriter, r *http.Request) {
+	sessionID := confhandler.SessionID(r.PathValue("session_id"))
+
+	if err := c.adapter.DiscardCandidate(r.Context(), sessionID); err != nil {
+		c.writeError(w, statusCodeForConfigError(err), err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	c.writeJSON(w, OperationResponse{Status: "ok"})
+}
+
+func (c *Component) handleConfigSessionDiff(w http.ResponseWriter, r *http.Request) {
+	sessionID := confhandler.SessionID(r.PathValue("session_id"))
+
+	diff, err := c.adapter.DiffCandidate(r.Context(), sessionID)
+	if err != nil {
+		c.writeError(w, statusCodeForConfigError(err), err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	c.writeJSON(w, convertDiffResult(diff))
+}
+
 func (c *Component) handleOpenAPISpec(w http.ResponseWriter, r *http.Request) {
 	if c.specJSON == nil {
 		c.writeError(w, http.StatusInternalServerError, "OpenAPI spec not available")
@@ -192,9 +315,125 @@ func (c *Component) handleOpenAPISpec(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
+	if c.specETag != "" {
+		w.Header().Set("ETag", c.specETag)
+		if r.Header.Get("If-None-Match") == c.specETag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+	}
 	w.Write(c.specJSON)
 }
 
 func (c *Component) handleDocsRedirect(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/api/docs/", http.StatusMovedPermanently)
+}
+
+func (c *Component) writeShowResponse(w http.ResponseWriter, path string, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	c.writeJSON(w, ShowResponse{
+		Path: path,
+		Data: data,
+	})
+}
+
+func decodeJSONBody(r *http.Request) (interface{}, error) {
+	var value interface{}
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(&value); err != nil {
+		return nil, err
+	}
+
+	return value, nil
+}
+
+func statusCodeForConfigError(err error) int {
+	if err == nil {
+		return http.StatusOK
+	}
+
+	switch {
+	case strings.Contains(err.Error(), "configuration is locked by session"):
+		return http.StatusConflict
+	case strings.Contains(err.Error(), "session ") && strings.Contains(err.Error(), "not found"):
+		return http.StatusNotFound
+	case strings.Contains(err.Error(), "invalid version"):
+		return http.StatusNotFound
+	case strings.Contains(err.Error(), "failed to normalize path"):
+		return http.StatusBadRequest
+	case strings.Contains(err.Error(), "no changes to commit"):
+		return http.StatusBadRequest
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
+func convertConfigVersions(versions []configmgr.ConfigVersion) []ConfigVersionResponse {
+	result := make([]ConfigVersionResponse, 0, len(versions))
+	for _, version := range versions {
+		v := version
+		result = append(result, convertConfigVersion(&v))
+	}
+
+	return result
+}
+
+func convertConfigVersion(version *configmgr.ConfigVersion) ConfigVersionResponse {
+	if version == nil {
+		return ConfigVersionResponse{}
+	}
+
+	result := ConfigVersionResponse{
+		Version:   version.Version,
+		Timestamp: version.Timestamp,
+		CommitMsg: version.CommitMsg,
+		Changes:   make([]ConfigChangeResponse, 0, len(version.Changes)),
+	}
+
+	for _, change := range version.Changes {
+		result.Changes = append(result.Changes, ConfigChangeResponse{
+			Type:  change.Type,
+			Path:  change.Path,
+			Value: stringifyChangeValue(change.Value),
+		})
+	}
+
+	return result
+}
+
+func convertDiffResult(diff *configmgr.DiffResult) DiffResponse {
+	if diff == nil {
+		return DiffResponse{}
+	}
+
+	return DiffResponse{
+		Added:    convertDiffLines(diff.Added),
+		Deleted:  convertDiffLines(diff.Deleted),
+		Modified: convertDiffLines(diff.Modified),
+	}
+}
+
+func convertDiffLines(lines []configmgr.ConfigLine) []DiffLineResponse {
+	result := make([]DiffLineResponse, 0, len(lines))
+	for _, line := range lines {
+		result = append(result, DiffLineResponse{
+			Path:  line.Path,
+			Value: line.Value,
+		})
+	}
+
+	return result
+}
+
+func stringifyChangeValue(value interface{}) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	default:
+		data, err := json.Marshal(v)
+		if err != nil {
+			return ""
+		}
+		return string(data)
+	}
 }

@@ -39,3 +39,11 @@ func (h *BGPVPNIPv6SummaryHandler) PathPattern() paths.Path {
 func (h *BGPVPNIPv6SummaryHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *BGPVPNIPv6SummaryHandler) Summary() string {
+	return "Show BGP VPNv6 summary"
+}
+
+func (h *BGPVPNIPv6SummaryHandler) Description() string {
+	return "Display a summary of BGP VPNv6 unicast neighbor sessions."
+}

@@ -64,3 +64,11 @@ func (h *VersionHandler) Dependencies() []paths.Path {
 func (h *VersionHandler) OutputType() interface{} {
 	return &VersionInfo{}
 }
+
+func (h *VersionHandler) Summary() string {
+	return "Show system version"
+}
+
+func (h *VersionHandler) Description() string {
+	return "Display the osvbng version, build commit, and build date."
+}

@@ -41,3 +41,15 @@ func (h *ListenAddressHandler) Dependencies() []paths.Path {
 func (h *ListenAddressHandler) Callbacks() *conf.Callbacks {
 	return nil
 }
+
+func (h *ListenAddressHandler) Summary() string {
+	return "Prometheus exporter listen address"
+}
+
+func (h *ListenAddressHandler) Description() string {
+	return "Set the listen address for the Prometheus metrics HTTP endpoint."
+}
+
+func (h *ListenAddressHandler) ValueType() interface{} {
+	return ""
+}

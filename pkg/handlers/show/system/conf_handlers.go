@@ -39,3 +39,11 @@ func (h *ConfHandlersHandler) PathPattern() paths.Path {
 func (h *ConfHandlersHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *ConfHandlersHandler) Summary() string {
+	return "List config handler paths"
+}
+
+func (h *ConfHandlersHandler) Description() string {
+	return "Return all registered configuration handler path patterns."
+}

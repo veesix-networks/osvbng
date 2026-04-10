@@ -58,3 +58,11 @@ func (h *PeerHandler) PathPattern() paths.Path {
 func (h *PeerHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *PeerHandler) Summary() string {
+	return "Show HA peer connection details"
+}
+
+func (h *PeerHandler) Description() string {
+	return "Display the HA peer connectivity state, heartbeat timing, RTT, and clock skew."
+}

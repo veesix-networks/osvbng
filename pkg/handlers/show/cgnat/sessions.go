@@ -38,3 +38,11 @@ func (h *SessionsHandler) PathPattern() paths.Path {
 func (h *SessionsHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *SessionsHandler) Summary() string {
+	return "List active CGNAT mappings"
+}
+
+func (h *SessionsHandler) Description() string {
+	return "Return every active CGNAT mapping including inside and outside address and port-block pairs."
+}

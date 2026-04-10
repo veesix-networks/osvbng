@@ -74,3 +74,19 @@ func (h *SetUserServiceHandler) PathPattern() operpaths.Path {
 func (h *SetUserServiceHandler) Dependencies() []operpaths.Path {
 	return nil
 }
+
+func (h *SetUserServiceHandler) Summary() string {
+	return "Assign service to local auth user"
+}
+
+func (h *SetUserServiceHandler) Description() string {
+	return "Associate an existing local auth service profile with a user."
+}
+
+func (h *SetUserServiceHandler) InputType() interface{} {
+	return &local.SetUserServiceRequest{}
+}
+
+func (h *SetUserServiceHandler) OutputType() interface{} {
+	return &local.OperResponse{}
+}

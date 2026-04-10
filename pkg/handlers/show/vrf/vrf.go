@@ -30,3 +30,11 @@ func (h *VRFHandler) Dependencies() []paths.Path {
 func (h *VRFHandler) Collect(ctx context.Context, req *show.Request) (interface{}, error) {
 	return h.vrfMgr.GetVRFs(), nil
 }
+
+func (h *VRFHandler) Summary() string {
+	return "Show all VRFs"
+}
+
+func (h *VRFHandler) Description() string {
+	return "Return all VRFs managed by the VRF manager including their VPP table IDs and Linux device mappings."
+}

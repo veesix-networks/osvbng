@@ -118,3 +118,27 @@ func (h *ServiceHandler) PathPattern() paths.Path {
 func (h *ServiceHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *ServicesHandler) Summary() string {
+	return "List local auth services"
+}
+
+func (h *ServicesHandler) Description() string {
+	return "Display all locally configured authentication services."
+}
+
+func (h *ServiceHandler) Summary() string {
+	return "Show local auth service details"
+}
+
+func (h *ServiceHandler) Description() string {
+	return "Display a single local authentication service by name including its response attributes."
+}
+
+type ServicesOptions struct {
+	Name string `query:"name" description:"Filter by service name"`
+}
+
+func (h *ServicesHandler) OptionsType() interface{} {
+	return &ServicesOptions{}
+}

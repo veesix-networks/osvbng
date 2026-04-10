@@ -62,3 +62,20 @@ func (h *LookupHandler) PathPattern() paths.Path {
 func (h *LookupHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *LookupHandler) Summary() string {
+	return "Reverse-lookup a CGNAT outside address"
+}
+
+func (h *LookupHandler) Description() string {
+	return "Look up the inside subscriber address and port range for a given outside IP and port."
+}
+
+type LookupOptions struct {
+	IP   string `query:"ip" description:"Outside IP address to reverse-lookup" format:"ip-address"`
+	Port uint16 `query:"port" description:"Outside port to reverse-lookup"`
+}
+
+func (h *LookupHandler) OptionsType() interface{} {
+	return &LookupOptions{}
+}

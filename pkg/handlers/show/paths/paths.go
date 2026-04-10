@@ -80,6 +80,21 @@ const (
 	CGNATLookup     Path = "cgnat.lookup"
 
 	QoSScheduler Path = "qos.scheduler"
+
+	RoutingPolicyPrefixSets         Path = "routing-policies.prefix-sets"
+	RoutingPolicyPrefixSet          Path = "routing-policies.prefix-sets.<*>"
+	RoutingPolicyPrefixSetsV6       Path = "routing-policies.prefix-sets-v6"
+	RoutingPolicyPrefixSetV6        Path = "routing-policies.prefix-sets-v6.<*>"
+	RoutingPolicyCommunitySets      Path = "routing-policies.community-sets"
+	RoutingPolicyCommunitySet       Path = "routing-policies.community-sets.<*>"
+	RoutingPolicyExtCommunitySets   Path = "routing-policies.ext-community-sets"
+	RoutingPolicyExtCommunitySet    Path = "routing-policies.ext-community-sets.<*>"
+	RoutingPolicyLargeCommunitySets Path = "routing-policies.large-community-sets"
+	RoutingPolicyLargeCommunitySet  Path = "routing-policies.large-community-sets.<*>"
+	RoutingPolicyASPathSets         Path = "routing-policies.as-path-sets"
+	RoutingPolicyASPathSet          Path = "routing-policies.as-path-sets.<*>"
+	RoutingPolicyRoutePolicies      Path = "routing-policies.route-policies"
+	RoutingPolicyRoutePolicy        Path = "routing-policies.route-policies.<*>"
 )
 
 func (p Path) String() string {

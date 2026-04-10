@@ -53,3 +53,15 @@ func (h *OSPF6RedistributeHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *OSPF6RedistributeHandler) Summary() string {
+	return "OSPFv3 route redistribution"
+}
+
+func (h *OSPF6RedistributeHandler) Description() string {
+	return "Configure redistribution of routes from other protocols into OSPFv3."
+}
+
+func (h *OSPF6RedistributeHandler) ValueType() interface{} {
+	return &protocols.OSPF6Redistribute{}
+}

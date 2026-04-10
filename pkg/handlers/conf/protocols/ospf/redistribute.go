@@ -53,3 +53,15 @@ func (h *OSPFRedistributeHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *OSPFRedistributeHandler) Summary() string {
+	return "OSPF route redistribution"
+}
+
+func (h *OSPFRedistributeHandler) Description() string {
+	return "Configure redistribution of routes from other protocols into OSPF."
+}
+
+func (h *OSPFRedistributeHandler) ValueType() interface{} {
+	return &protocols.OSPFRedistribute{}
+}

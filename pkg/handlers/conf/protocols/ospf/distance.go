@@ -57,3 +57,15 @@ func (h *OSPFDistanceHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *OSPFDistanceHandler) Summary() string {
+	return "OSPF administrative distance"
+}
+
+func (h *OSPFDistanceHandler) Description() string {
+	return "Set the OSPF administrative distance."
+}
+
+func (h *OSPFDistanceHandler) ValueType() interface{} {
+	return uint32(0)
+}

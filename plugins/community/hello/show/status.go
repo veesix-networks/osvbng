@@ -56,3 +56,11 @@ func (h *StatusHandler) PathPattern() paths.Path {
 func (h *StatusHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *StatusHandler) Summary() string {
+	return "Show hello plugin status"
+}
+
+func (h *StatusHandler) Description() string {
+	return "Display the hello community plugin status including its configured message."
+}

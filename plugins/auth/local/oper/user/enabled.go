@@ -73,3 +73,19 @@ func (h *SetUserEnabledHandler) PathPattern() operpaths.Path {
 func (h *SetUserEnabledHandler) Dependencies() []operpaths.Path {
 	return nil
 }
+
+func (h *SetUserEnabledHandler) Summary() string {
+	return "Enable or disable local auth user"
+}
+
+func (h *SetUserEnabledHandler) Description() string {
+	return "Set the enabled state of a local authentication user."
+}
+
+func (h *SetUserEnabledHandler) InputType() interface{} {
+	return &local.SetUserEnabledRequest{}
+}
+
+func (h *SetUserEnabledHandler) OutputType() interface{} {
+	return &local.OperResponse{}
+}

@@ -30,3 +30,11 @@ func (h *ServiceGroupsHandler) PathPattern() paths.Path {
 func (h *ServiceGroupsHandler) Dependencies() []paths.Path {
 	return nil
 }
+
+func (h *ServiceGroupsHandler) Summary() string {
+	return "Show all service groups"
+}
+
+func (h *ServiceGroupsHandler) Description() string {
+	return "Return all configured service groups from the service group resolver."
+}

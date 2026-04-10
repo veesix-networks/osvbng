@@ -57,3 +57,15 @@ func (h *ISISLSPMTUHandler) Callbacks() *conf.Callbacks {
 		},
 	}
 }
+
+func (h *ISISLSPMTUHandler) Summary() string {
+	return "IS-IS LSP MTU"
+}
+
+func (h *ISISLSPMTUHandler) Description() string {
+	return "Set the maximum transmission unit size for IS-IS LSPs."
+}
+
+func (h *ISISLSPMTUHandler) ValueType() interface{} {
+	return uint32(0)
+}
