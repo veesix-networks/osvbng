@@ -693,29 +693,39 @@ func (s *SessionState) checkOpen() {
 				"pppoe_session_id", s.PPPoESessionID,
 				"ipv4", s.IPv4Address)
 
+			pppMTU, policy := s.component.resolveMSSClampPolicy(s)
+			s.NegotiatedPPPMTU = pppMTU
+			if policy.Enabled {
+				s.IPv4MSS = policy.IPv4MSS
+				s.IPv6MSS = policy.IPv6MSS
+			}
+
 			s.component.checkpointSession(s)
 
 			s.component.publishSessionLifecycle(&models.PPPSession{
-				SessionID:    s.SessionID,
-				State:        models.SessionStateActive,
-				AccessType:   string(models.AccessTypePPPoE),
-				Protocol:     string(models.ProtocolPPPoESession),
-				PPPSessionID: s.PPPoESessionID,
-				MAC:          s.MAC,
-				OuterVLAN:    s.OuterVLAN,
-				InnerVLAN:    s.InnerVLAN,
-				IfIndex:      s.SwIfIndex,
-				VRF:          s.VRF,
-				ServiceGroup: s.ServiceGroup.Name,
-				SRGName:      s.SRGName,
-				IPv4Address:  s.IPv4Address,
-				IPv6Address:  s.IPv6Address,
-				Username:     s.Username,
-				AAASessionID: s.AcctSessionID,
-				ActivatedAt:  time.Now(),
-				IPv4Pool:     s.allocatedPool,
-				IANAPool:     s.allocatedIANAPool,
-				OuterTPID:    s.OuterTPID,
+				SessionID:        s.SessionID,
+				State:            models.SessionStateActive,
+				AccessType:       string(models.AccessTypePPPoE),
+				Protocol:         string(models.ProtocolPPPoESession),
+				PPPSessionID:     s.PPPoESessionID,
+				MAC:              s.MAC,
+				OuterVLAN:        s.OuterVLAN,
+				InnerVLAN:        s.InnerVLAN,
+				IfIndex:          s.SwIfIndex,
+				VRF:              s.VRF,
+				ServiceGroup:     s.ServiceGroup.Name,
+				SRGName:          s.SRGName,
+				IPv4Address:      s.IPv4Address,
+				IPv6Address:      s.IPv6Address,
+				Username:         s.Username,
+				AAASessionID:     s.AcctSessionID,
+				ActivatedAt:      time.Now(),
+				IPv4Pool:         s.allocatedPool,
+				IANAPool:         s.allocatedIANAPool,
+				OuterTPID:        s.OuterTPID,
+				NegotiatedPPPMTU: s.NegotiatedPPPMTU,
+				IPv4MSS:          s.IPv4MSS,
+				IPv6MSS:          s.IPv6MSS,
 			})
 
 			if s.component.vpp != nil && s.IPv4Address != nil {
@@ -745,12 +755,6 @@ func (s *SessionState) checkOpen() {
 					decapVrfID = tableID
 				}
 
-				pppMTU, policy := s.component.resolveMSSClampPolicy(s)
-				s.NegotiatedPPPMTU = pppMTU
-				if policy.Enabled {
-					s.IPv4MSS = policy.IPv4MSS
-					s.IPv6MSS = policy.IPv6MSS
-				}
 				s.component.vpp.AddPPPoESessionAsync(
 					s.PPPoESessionID,
 					s.IPv4Address,
