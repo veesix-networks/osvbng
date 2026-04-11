@@ -264,6 +264,10 @@ func (cd *ConfigManager) Commit(id conf.SessionID) error {
 		return fmt.Errorf("no changes to commit")
 	}
 
+	if err := config.ValidateMSSClampParentMTU(sess.config); err != nil {
+		return fmt.Errorf("pre-commit validation failed: %w", err)
+	}
+
 	cd.logger.Info("Committing configuration", "session", id, "changes", len(sortedChanges))
 
 	appliedChanges := make([]*conf.HandlerContext, 0)
