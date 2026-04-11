@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.9.0](https://github.com/veesix-networks/osvbng/compare/v0.8.0...v0.9.0) (2026-04-10)
+
+
+### Features
+
+* **api:** complete typed metadata for all show, oper, and conf handlers ([#275](https://github.com/veesix-networks/osvbng/issues/275)) ([127d80a](https://github.com/veesix-networks/osvbng/commit/127d80ab4ce4fe1756052d4dd18ba308e7551a2c))
+* **config:** rename vlan-protocol to vlan-tpid with dot1ad default for QinQ ([#266](https://github.com/veesix-networks/osvbng/issues/266)) ([2aebf7d](https://github.com/veesix-networks/osvbng/commit/2aebf7deb8c15f3ae5f7592823f30ac6ca3ed160))
+
+
+### Bug Fixes
+
+* **southbound:** auto-create LCP pairs, remove lcp config option ([#271](https://github.com/veesix-networks/osvbng/issues/271)) ([2ec4c85](https://github.com/veesix-networks/osvbng/commit/2ec4c8597d475d82b7f28db8ce4e9addbcfd0024))
+* **southbound:** set HW MTU, host interface MTU, and QinQ sub-interface tag overhead ([#269](https://github.com/veesix-networks/osvbng/issues/269)) ([16e0071](https://github.com/veesix-networks/osvbng/commit/16e007163ca8f459524b98206c26e904eb5cc793))
+
 ## [0.8.0](https://github.com/veesix-networks/osvbng/compare/v0.7.0...v0.8.0) (2026-04-04)
 
 
