@@ -94,7 +94,26 @@ func (v *VPP) CreateSubinterface(params *southbound.SubinterfaceParams) error {
 		}
 		mtuReply := &vppinterfaces.SwInterfaceSetMtuReply{}
 		if err := ch.SendRequest(mtuReq).ReceiveReply(mtuReply); err != nil {
+			if params.MSSClamp != nil {
+				v.deleteSubinterfaceOnFailure(reply.SwIfIndex, subIfName)
+				return fmt.Errorf("set sub-interface MTU %s: %w", subIfName, err)
+			}
 			v.logger.Warn("Failed to set sub-interface MTU", "interface", subIfName, "mtu", mtu, "error", err)
+		} else if mtuReply.Retval != 0 && params.MSSClamp != nil {
+			v.deleteSubinterfaceOnFailure(reply.SwIfIndex, subIfName)
+			return fmt.Errorf("set sub-interface MTU %s: retval=%d", subIfName, mtuReply.Retval)
+		}
+	}
+
+	if params.MSSClamp != nil && params.MSSClamp.Enabled {
+		policy := southbound.MSSClampPolicy{
+			Enabled: true,
+			IPv4MSS: params.MSSClamp.IPv4MSS,
+			IPv6MSS: params.MSSClamp.IPv6MSS,
+		}
+		if err := v.EnableMSSClamp(uint32(reply.SwIfIndex), policy); err != nil {
+			v.deleteSubinterfaceOnFailure(reply.SwIfIndex, subIfName)
+			return fmt.Errorf("enable mss clamp on %s: %w", subIfName, err)
 		}
 	}
 
@@ -181,6 +200,30 @@ func (v *VPP) computeSubIfFlags(params *southbound.SubinterfaceParams) interface
 
 	return interface_types.SUB_IF_API_FLAG_ONE_TAG |
 		interface_types.SUB_IF_API_FLAG_EXACT_MATCH
+}
+
+// deleteSubinterfaceOnFailure is used during a failed CreateSubinterface to
+// delete a sub-interface that was created in VPP but never added to ifMgr,
+// so the caller can return an error without leaving an orphan.
+func (v *VPP) deleteSubinterfaceOnFailure(swIfIndex interface_types.InterfaceIndex, name string) {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		v.logger.Error("Failed to open channel for sub-interface rollback", "interface", name, "sw_if_index", swIfIndex, "error", err)
+		return
+	}
+	defer ch.Close()
+
+	req := &vppinterfaces.DeleteSubif{SwIfIndex: swIfIndex}
+	reply := &vppinterfaces.DeleteSubifReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		v.logger.Error("Sub-interface rollback delete failed", "interface", name, "sw_if_index", swIfIndex, "error", err)
+		return
+	}
+	if reply.Retval != 0 {
+		v.logger.Error("Sub-interface rollback delete returned non-zero", "interface", name, "sw_if_index", swIfIndex, "retval", reply.Retval)
+		return
+	}
+	v.logger.Info("Rolled back partially-created sub-interface", "interface", name, "sw_if_index", swIfIndex)
 }
 
 func (v *VPP) DeleteInterface(name string) error {

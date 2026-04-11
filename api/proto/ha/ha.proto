@@ -108,6 +108,10 @@ message SessionCheckpoint {
   uint32 outer_tpid = 35;
   uint32 lcp_magic = 36;
   map<string, string> aaa_attributes = 37;
+
+  uint32 negotiated_ppp_mtu = 38;
+  uint32 ipv4_mss = 39;
+  uint32 ipv6_mss = 40;
 }
 
 message SyncSessionRequest {

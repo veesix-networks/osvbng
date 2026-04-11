@@ -45,7 +45,14 @@ type SubinterfaceConfig struct {
 	ARP         *ARPConfig     `json:"arp,omitempty" yaml:"arp,omitempty"`
 	Unnumbered  string         `json:"unnumbered,omitempty" yaml:"unnumbered,omitempty"`
 	BNG         *BNGConfig     `json:"bng,omitempty" yaml:"bng,omitempty"`
+	MSSClamp    *MSSClampSpec  `json:"-" yaml:"-"`
 	Enabled     bool           `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+}
+
+type MSSClampSpec struct {
+	Enabled bool
+	IPv4MSS uint16
+	IPv6MSS uint16
 }
 
 func (c *InterfaceConfig) NeedsLCP() bool {

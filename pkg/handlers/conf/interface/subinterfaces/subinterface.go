@@ -93,6 +93,14 @@ func (h *SubinterfaceHandler) Apply(ctx context.Context, hctx *conf.HandlerConte
 		params.InnerVLAN = &v
 	}
 
+	if cfg.MSSClamp != nil {
+		params.MSSClamp = &southbound.MSSClampPolicy{
+			Enabled: cfg.MSSClamp.Enabled,
+			IPv4MSS: cfg.MSSClamp.IPv4MSS,
+			IPv6MSS: cfg.MSSClamp.IPv6MSS,
+		}
+	}
+
 	return h.southbound.CreateSubinterface(params)
 }
 

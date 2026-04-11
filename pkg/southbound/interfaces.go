@@ -12,6 +12,7 @@ type SubinterfaceParams struct {
 	InnerVLAN    *uint16
 	InnerVLANAny bool
 	VLANTpid     string
+	MSSClamp     *MSSClampPolicy
 }
 
 type Interfaces interface {

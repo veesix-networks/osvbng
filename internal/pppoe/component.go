@@ -19,6 +19,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
+	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/ha"
@@ -128,6 +129,10 @@ type SessionState struct {
 	VRF          string
 	ServiceGroup svcgroup.ServiceGroup
 	SRGName      string
+
+	NegotiatedPPPMTU uint16
+	IPv4MSS          uint16
+	IPv6MSS          uint16
 
 	AllocCtx          *allocator.Context
 	allocatedPool     string
@@ -316,7 +321,8 @@ func (c *Component) handlePADI(pkt *dataplane.ParsedPacket) error {
 		"svlan", pkt.OuterVLAN,
 		"cvlan", pkt.InnerVLAN,
 		"service_name", tags.ServiceName,
-		"host_uniq_len", len(tags.HostUniq))
+		"host_uniq_len", len(tags.HostUniq),
+		"client_ppp_max_payload", tags.PPPMaxPayload)
 
 	cookie := c.cookieMgr.Generate(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN)
 
@@ -418,6 +424,177 @@ func (c *Component) handlePADT(pkt *dataplane.ParsedPacket) error {
 	return nil
 }
 
+// resolveBabyGiantsMRU returns the configured PPP MRU for a subscriber on
+// the given S-VLAN, but only when the matching group has opted into baby
+// giants (mru > 1492). Returns 0 otherwise so the BNG omits the
+// PPP-Max-Payload tag from PADO/PADS per RFC 4638 §3.
+func (c *Component) resolveBabyGiantsMRU(svlan uint16) uint16 {
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+		return 0
+	}
+	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(svlan)
+	if group == nil || group.PPPoE == nil || !group.PPPoE.IsBabyGiants() {
+		return 0
+	}
+	return group.PPPoE.GetMRU()
+}
+
+// resolveMSSClampPolicy returns the per-session PPP MTU and the MSS clamp
+// policy for a PPPoE session, derived from the matching subscriber group's
+// mss-clamp config and the per-session negotiated PPP MTU. PPPoE always uses
+// the per-session negotiated MTU as the auto-derive input, NOT the
+// subscriber-group's subscriber-path-mtu (which is the IPoE-only fallback).
+//
+// Falls back to MTU=1492 (RFC 2516) and an enabled clamp with auto-derived
+// MSS values if no subscriber group can be matched, so legacy PPPoE
+// deployments still get clamping by default.
+func (c *Component) resolveMSSClampPolicy(sess *SessionState) (uint16, southbound.MSSClampPolicy) {
+	pppMTU := sess.NegotiatedPPPMTU
+	if pppMTU == 0 {
+		pppMTU = subscriber.DefaultPPPMRU
+	}
+
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+		return pppMTU, defaultMSSClampPolicyForMTU(pppMTU)
+	}
+	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(sess.OuterVLAN)
+	if group == nil {
+		return pppMTU, defaultMSSClampPolicyForMTU(pppMTU)
+	}
+	if !group.MSSClamp.IsEnabled() {
+		return pppMTU, southbound.MSSClampPolicy{Enabled: false}
+	}
+	return pppMTU, southbound.MSSClampPolicy{
+		Enabled: true,
+		IPv4MSS: group.MSSClamp.IPv4MSSOrAuto(pppMTU),
+		IPv6MSS: group.MSSClamp.IPv6MSSOrAuto(pppMTU),
+	}
+}
+
+func defaultMSSClampPolicyForMTU(mtu uint16) southbound.MSSClampPolicy {
+	policy := southbound.MSSClampPolicy{Enabled: true}
+	if mtu >= 40 {
+		policy.IPv4MSS = mtu - 40
+	}
+	if mtu >= 60 {
+		policy.IPv6MSS = mtu - 60
+	}
+	return policy
+}
+
+// sessionTeardownSnapshot is an immutable copy of the SessionState fields
+// needed by tearDownSessionAfterVPPFailure. The snapshot is taken under s.mu
+// in the caller (onVPPSessionCreated) and then passed to the teardown so the
+// teardown does NOT race with concurrent PPP handlers, AND does not need to
+// hold s.mu for the bulk of its work - terminate() grabs it fresh at the end
+// for the final release sequence.
+type sessionTeardownSnapshot struct {
+	SessionID      string
+	PPPSessionID   uint16
+	MAC            net.HardwareAddr
+	OuterVLAN      uint16
+	InnerVLAN      uint16
+	VRF            string
+	ServiceGroup   string
+	SRGName        string
+	IPv4Address    net.IP
+	IPv6Address    net.IP
+	Username       string
+	AAASessionID   string
+}
+
+// tearDownSessionAfterVPPFailure releases all in-process state for a PPPoE
+// session whose VPP programming failed after the session lifecycle event was
+// already published as Active. Mirrors the handlePADT teardown sequence:
+// remove from session maps, publish a released lifecycle event, send PADT to
+// the CPE, delete the OpDB checkpoint, and run the existing terminate() to
+// release IPs and kill the PPP FSMs.
+//
+// Lock contract: caller must NOT be holding sess.mu when invoking this. The
+// session-map removal acquires c.sessionMu briefly (matches handlePADT). The
+// final terminate() call grabs sess.mu fresh. None of the unlocked work
+// reads from sess directly - it uses the immutable snapshot taken by the
+// caller under sess.mu so there is no race against concurrent PPP frame
+// handlers that might still be inside handlePPP().
+func (c *Component) tearDownSessionAfterVPPFailure(sess *SessionState, snap sessionTeardownSnapshot, originalErr error) {
+	c.sessionMu.Lock()
+	key := c.sessionKey(snap.MAC, snap.OuterVLAN, snap.InnerVLAN)
+	delete(c.sessions, key)
+	delete(c.sidIndex, snap.PPPSessionID)
+	c.sessionMu.Unlock()
+
+	c.publishSessionLifecycle(&models.PPPSession{
+		SessionID:    snap.SessionID,
+		State:        models.SessionStateReleased,
+		AccessType:   string(models.AccessTypePPPoE),
+		Protocol:     string(models.ProtocolPPPoESession),
+		PPPSessionID: snap.PPPSessionID,
+		MAC:          snap.MAC,
+		OuterVLAN:    snap.OuterVLAN,
+		InnerVLAN:    snap.InnerVLAN,
+		VRF:          snap.VRF,
+		ServiceGroup: snap.ServiceGroup,
+		SRGName:      snap.SRGName,
+		IPv4Address:  snap.IPv4Address,
+		IPv6Address:  snap.IPv6Address,
+		Username:     snap.Username,
+		AAASessionID: snap.AAASessionID,
+	})
+
+	padtPkt := &dataplane.ParsedPacket{
+		MAC:       snap.MAC,
+		OuterVLAN: snap.OuterVLAN,
+		InnerVLAN: snap.InnerVLAN,
+	}
+	if err := c.sendDiscoveryPacket(padtPkt, layers.PPPoECodePADT, snap.PPPSessionID, pppoe.NewTagBuilder().Build()); err != nil {
+		c.logger.Warn("Failed to send PADT during VPP failure teardown",
+			"session_id", snap.SessionID,
+			"error", err)
+	}
+
+	c.deleteSessionCheckpoint(snap.SessionID)
+
+	sess.terminate()
+
+	c.logger.Info("PPPoE session torn down after VPP failure",
+		"session_id", snap.SessionID,
+		"pppoe_session_id", snap.PPPSessionID,
+		"original_error", originalErr)
+}
+
+// negotiatePADOMaxPayload returns the BNG's PADO PPP-Max-Payload value:
+// 0 if either side declines (RFC 4638 §3 forbids the BNG from including
+// the tag unless the client did first), otherwise min(client PADI, group
+// configured MRU).
+func (c *Component) negotiatePADOMaxPayload(clientPADIPayload uint16, svlan uint16) uint16 {
+	if clientPADIPayload == 0 {
+		return 0
+	}
+	server := c.resolveBabyGiantsMRU(svlan)
+	if server == 0 {
+		return 0
+	}
+	if clientPADIPayload < server {
+		return clientPADIPayload
+	}
+	return server
+}
+
+// negotiatePADSMaxPayload implements RFC 4638 §3: the PADS value is the
+// PADO value unless the client lowered it in PADR, in which case it is
+// the PADR value. Returns 0 if either side dropped the tag.
+func negotiatePADSMaxPayload(padoValue, padrValue uint16) uint16 {
+	if padoValue == 0 || padrValue == 0 {
+		return 0
+	}
+	if padrValue < padoValue {
+		return padrValue
+	}
+	return padoValue
+}
+
 func (c *Component) sendPADO(pkt *dataplane.ParsedPacket, reqTags *pppoe.Tags, cookie []byte) error {
 	tagBuilder := pppoe.NewTagBuilder().
 		AddServiceName(reqTags.ServiceName).
@@ -429,6 +606,15 @@ func (c *Component) sendPADO(pkt *dataplane.ParsedPacket, reqTags *pppoe.Tags, c
 	}
 	if len(reqTags.RelaySessionID) > 0 {
 		tagBuilder.AddRelaySessionID(reqTags.RelaySessionID)
+	}
+
+	if echo := c.negotiatePADOMaxPayload(reqTags.PPPMaxPayload, pkt.OuterVLAN); echo != 0 {
+		tagBuilder.AddPPPMaxPayload(echo)
+		c.logger.Debug("PADO echoes PPP-Max-Payload",
+			"mac", pkt.MAC.String(),
+			"svlan", pkt.OuterVLAN,
+			"client_value", reqTags.PPPMaxPayload,
+			"echo_value", echo)
 	}
 
 	payload := tagBuilder.Build()
@@ -445,6 +631,23 @@ func (c *Component) sendPADS(pkt *dataplane.ParsedPacket, reqTags *pppoe.Tags, s
 	}
 	if len(reqTags.RelaySessionID) > 0 {
 		tagBuilder.AddRelaySessionID(reqTags.RelaySessionID)
+	}
+
+	padoValue := c.negotiatePADOMaxPayload(reqTags.PPPMaxPayload, pkt.OuterVLAN)
+	padsValue := negotiatePADSMaxPayload(padoValue, reqTags.PPPMaxPayload)
+
+	if padsValue != 0 {
+		tagBuilder.AddPPPMaxPayload(padsValue)
+		sess.NegotiatedPPPMTU = padsValue
+		c.logger.Debug("PADS echoes PPP-Max-Payload",
+			"session_id", sess.SessionID,
+			"value", padsValue)
+	} else {
+		sess.NegotiatedPPPMTU = subscriber.DefaultPPPMRU
+	}
+
+	if sess.lcp != nil {
+		sess.lcp.SetMRU(sess.NegotiatedPPPMTU)
 	}
 
 	payload := tagBuilder.Build()
@@ -797,6 +1000,9 @@ func (c *Component) restoreSessionToCache(ctx context.Context, sess *SessionStat
 		IPv6Address:  sess.IPv6Address,
 		AAASessionID: sess.AcctSessionID,
 		ActivatedAt:  sess.BoundAt,
+		NegotiatedPPPMTU: sess.NegotiatedPPPMTU,
+		IPv4MSS:          sess.IPv4MSS,
+		IPv6MSS:          sess.IPv6MSS,
 	}
 
 	data, err := json.Marshal(pppSess)
@@ -954,7 +1160,27 @@ func (c *Component) restoreFromHASync(srgName string) {
 			continue
 		}
 
-		swIfIndex, err := c.vpp.AddPPPoESession(pppoeSessionID, ipv4, mac, localMAC, encapIfIndex, outerVLAN, innerVLAN, decapVrfID)
+		restorePPPMTU := uint16(cp.NegotiatedPppMtu)
+		if restorePPPMTU == 0 {
+			restorePPPMTU = subscriber.DefaultPPPMRU
+		}
+		restorePolicy := southbound.MSSClampPolicy{Enabled: true}
+		if cfg, cfgErr := c.cfgMgr.GetRunning(); cfgErr == nil && cfg != nil && cfg.SubscriberGroups != nil {
+			if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(outerVLAN); group != nil {
+				if !group.MSSClamp.IsEnabled() {
+					restorePolicy.Enabled = false
+				} else {
+					restorePolicy.IPv4MSS = group.MSSClamp.IPv4MSSOrAuto(restorePPPMTU)
+					restorePolicy.IPv6MSS = group.MSSClamp.IPv6MSSOrAuto(restorePPPMTU)
+				}
+			} else {
+				restorePolicy = defaultMSSClampPolicyForMTU(restorePPPMTU)
+			}
+		} else {
+			restorePolicy = defaultMSSClampPolicyForMTU(restorePPPMTU)
+		}
+
+		swIfIndex, err := c.vpp.AddPPPoESession(pppoeSessionID, ipv4, mac, localMAC, encapIfIndex, outerVLAN, innerVLAN, decapVrfID, restorePPPMTU, restorePolicy)
 		if err != nil {
 			c.logger.Error("Failed to create PPPoE session from HA sync",
 				"session_id", cp.SessionId, "error", err)
@@ -1001,6 +1227,9 @@ func (c *Component) restoreFromHASync(srgName string) {
 			BoundAt:        boundAt,
 			LastSeen:       now,
 			LCPMagic:       cp.LcpMagic,
+			NegotiatedPPPMTU: uint16(cp.NegotiatedPppMtu),
+			IPv4MSS:          uint16(cp.Ipv4Mss),
+			IPv6MSS:          uint16(cp.Ipv6Mss),
 			component:      c,
 		}
 
@@ -1114,6 +1343,9 @@ func (c *Component) ForEachSession(fn func(models.SubscriberSession) bool) {
 			OuterTPID:    sess.OuterTPID,
 			LCPMagic:     sess.LCPMagic,
 			Attributes:   sess.Attributes,
+			NegotiatedPPPMTU: sess.NegotiatedPPPMTU,
+			IPv4MSS:          sess.IPv4MSS,
+			IPv6MSS:          sess.IPv6MSS,
 		}
 		if sess.IPv6Prefix != nil {
 			snapshot.IPv6Prefix = sess.IPv6Prefix.String()

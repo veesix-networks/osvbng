@@ -177,6 +177,10 @@ type PPPSession struct {
 	OuterTPID  uint16
 	LCPMagic   uint32
 	Attributes map[string]string
+
+	NegotiatedPPPMTU uint16
+	IPv4MSS          uint16
+	IPv6MSS          uint16
 }
 
 func (s *PPPSession) GetSessionID() string      { return s.SessionID }
