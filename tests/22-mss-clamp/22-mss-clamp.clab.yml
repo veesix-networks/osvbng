@@ -38,7 +38,7 @@ topology:
       kind: linux
       image: veesixnetworks/bngblaster:0.9.30
       binds:
-        - config/subscribers/config.json:/config/config.json:ro
+        - config/subscribers/config-pppoe.json:/config/config.json:ro
 
   links:
     - endpoints: [bng1:eth1, subscribers:eth1]
