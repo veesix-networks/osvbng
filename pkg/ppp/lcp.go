@@ -45,6 +45,10 @@ func (l *LCP) SetMagic(magic uint32) {
 	l.local.Magic = magic
 }
 
+func (l *LCP) SetMRU(mru uint16) {
+	l.local.MRU = mru
+}
+
 func (l *LCP) SetAuthProto(proto uint16, algo uint8) {
 	l.local.AuthProto = proto
 	l.local.AuthAlgo = algo
