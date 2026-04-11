@@ -265,6 +265,37 @@ func TestMagicOption(t *testing.T) {
 	}
 }
 
+func TestLCPSetMRUDefault(t *testing.T) {
+	lcp := NewLCP(Callbacks{})
+	opts := lcp.BuildConfReq()
+
+	for _, o := range opts {
+		if o.Type == LCPOptMRU {
+			if got := ParseMRU(o); got != DefaultPPPoEMRU {
+				t.Errorf("default ConfReq MRU = %d, want %d", got, DefaultPPPoEMRU)
+			}
+			return
+		}
+	}
+	t.Fatal("ConfReq missing MRU option")
+}
+
+func TestLCPSetMRUOverride(t *testing.T) {
+	lcp := NewLCP(Callbacks{})
+	lcp.SetMRU(1500)
+	opts := lcp.BuildConfReq()
+
+	for _, o := range opts {
+		if o.Type == LCPOptMRU {
+			if got := ParseMRU(o); got != 1500 {
+				t.Errorf("ConfReq MRU after SetMRU(1500) = %d, want 1500", got)
+			}
+			return
+		}
+	}
+	t.Fatal("ConfReq missing MRU option")
+}
+
 func TestAuthOptionCHAP(t *testing.T) {
 	opt := AuthOption(ProtoCHAP, CHAPMD5)
 	if opt.Type != LCPOptAuthProto {

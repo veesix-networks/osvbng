@@ -693,29 +693,39 @@ func (s *SessionState) checkOpen() {
 				"pppoe_session_id", s.PPPoESessionID,
 				"ipv4", s.IPv4Address)
 
+			pppMTU, policy := s.component.resolveMSSClampPolicy(s)
+			s.NegotiatedPPPMTU = pppMTU
+			if policy.Enabled {
+				s.IPv4MSS = policy.IPv4MSS
+				s.IPv6MSS = policy.IPv6MSS
+			}
+
 			s.component.checkpointSession(s)
 
 			s.component.publishSessionLifecycle(&models.PPPSession{
-				SessionID:    s.SessionID,
-				State:        models.SessionStateActive,
-				AccessType:   string(models.AccessTypePPPoE),
-				Protocol:     string(models.ProtocolPPPoESession),
-				PPPSessionID: s.PPPoESessionID,
-				MAC:          s.MAC,
-				OuterVLAN:    s.OuterVLAN,
-				InnerVLAN:    s.InnerVLAN,
-				IfIndex:      s.SwIfIndex,
-				VRF:          s.VRF,
-				ServiceGroup: s.ServiceGroup.Name,
-				SRGName:      s.SRGName,
-				IPv4Address:  s.IPv4Address,
-				IPv6Address:  s.IPv6Address,
-				Username:     s.Username,
-				AAASessionID: s.AcctSessionID,
-				ActivatedAt:  time.Now(),
-				IPv4Pool:     s.allocatedPool,
-				IANAPool:     s.allocatedIANAPool,
-				OuterTPID:    s.OuterTPID,
+				SessionID:        s.SessionID,
+				State:            models.SessionStateActive,
+				AccessType:       string(models.AccessTypePPPoE),
+				Protocol:         string(models.ProtocolPPPoESession),
+				PPPSessionID:     s.PPPoESessionID,
+				MAC:              s.MAC,
+				OuterVLAN:        s.OuterVLAN,
+				InnerVLAN:        s.InnerVLAN,
+				IfIndex:          s.SwIfIndex,
+				VRF:              s.VRF,
+				ServiceGroup:     s.ServiceGroup.Name,
+				SRGName:          s.SRGName,
+				IPv4Address:      s.IPv4Address,
+				IPv6Address:      s.IPv6Address,
+				Username:         s.Username,
+				AAASessionID:     s.AcctSessionID,
+				ActivatedAt:      time.Now(),
+				IPv4Pool:         s.allocatedPool,
+				IANAPool:         s.allocatedIANAPool,
+				OuterTPID:        s.OuterTPID,
+				NegotiatedPPPMTU: s.NegotiatedPPPMTU,
+				IPv4MSS:          s.IPv4MSS,
+				IPv6MSS:          s.IPv6MSS,
 			})
 
 			if s.component.vpp != nil && s.IPv4Address != nil {
@@ -754,6 +764,8 @@ func (s *SessionState) checkOpen() {
 					s.OuterVLAN,
 					s.InnerVLAN,
 					decapVrfID,
+					pppMTU,
+					policy,
 					s.onVPPSessionCreated,
 				)
 			} else if s.component.echoGen != nil {
@@ -764,46 +776,90 @@ func (s *SessionState) checkOpen() {
 	}
 }
 
+// snapshotForTeardown copies the SessionState fields needed for an out-of-lock
+// failure teardown. Caller MUST hold s.mu. The snapshot returns immutable
+// copies of the fields tearDownSessionAfterVPPFailure reads, so it can run
+// without re-acquiring s.mu and without racing against concurrent PPP frame
+// handlers that may still be inside handlePPP() at the moment of failure.
+func (s *SessionState) snapshotForTeardown() sessionTeardownSnapshot {
+	snap := sessionTeardownSnapshot{
+		SessionID:    s.SessionID,
+		PPPSessionID: s.PPPoESessionID,
+		OuterVLAN:    s.OuterVLAN,
+		InnerVLAN:    s.InnerVLAN,
+		VRF:          s.VRF,
+		ServiceGroup: s.ServiceGroup.Name,
+		SRGName:      s.SRGName,
+		Username:     s.Username,
+		AAASessionID: s.AcctSessionID,
+	}
+	if len(s.MAC) > 0 {
+		snap.MAC = make(net.HardwareAddr, len(s.MAC))
+		copy(snap.MAC, s.MAC)
+	}
+	if s.IPv4Address != nil {
+		snap.IPv4Address = make(net.IP, len(s.IPv4Address))
+		copy(snap.IPv4Address, s.IPv4Address)
+	}
+	if s.IPv6Address != nil {
+		snap.IPv6Address = make(net.IP, len(s.IPv6Address))
+		copy(snap.IPv6Address, s.IPv6Address)
+	}
+	return snap
+}
+
 func (s *SessionState) onVPPSessionCreated(swIfIndex uint32, err error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	if err != nil {
-		s.component.logger.Error("Failed to add PPPoE session to VPP",
-			"session_id", s.SessionID,
+		snap := s.snapshotForTeardown()
+		s.mu.Unlock()
+		s.component.logger.Error("Failed to program PPPoE session in VPP, tearing down",
+			"session_id", snap.SessionID,
+			"pppoe_session_id", snap.PPPSessionID,
+			"mac", snap.MAC.String(),
 			"error", err)
+		s.component.tearDownSessionAfterVPPFailure(s, snap, err)
 		return
 	}
+
+	defer s.mu.Unlock()
 
 	s.SwIfIndex = swIfIndex
 	s.component.logger.Debug("Programmed PPPoE session in VPP",
 		"session_id", s.SessionID,
 		"sw_if_index", swIfIndex,
 		"outer_vlan", s.OuterVLAN,
-		"inner_vlan", s.InnerVLAN)
+		"inner_vlan", s.InnerVLAN,
+		"ppp_mtu", s.NegotiatedPPPMTU,
+		"ipv4_mss", s.IPv4MSS,
+		"ipv6_mss", s.IPv6MSS)
 
 	s.component.checkpointSession(s)
 
 	s.component.publishSessionProgrammed(&models.PPPSession{
-		SessionID:    s.SessionID,
-		State:        models.SessionStateActive,
-		AccessType:   string(models.AccessTypePPPoE),
-		Protocol:     string(models.ProtocolPPPoESession),
-		PPPSessionID: s.PPPoESessionID,
-		MAC:          s.MAC,
-		OuterVLAN:    s.OuterVLAN,
-		InnerVLAN:    s.InnerVLAN,
-		IfIndex:      s.SwIfIndex,
-		VRF:          s.VRF,
-		ServiceGroup: s.ServiceGroup.Name,
-		SRGName:      s.SRGName,
-		IPv4Address:  s.IPv4Address,
-		IPv6Address:  s.IPv6Address,
-		Username:     s.Username,
-		AAASessionID: s.AcctSessionID,
-		IPv4Pool:     s.allocatedPool,
-		IANAPool:     s.allocatedIANAPool,
-		OuterTPID:    s.OuterTPID,
+		SessionID:        s.SessionID,
+		State:            models.SessionStateActive,
+		AccessType:       string(models.AccessTypePPPoE),
+		Protocol:         string(models.ProtocolPPPoESession),
+		PPPSessionID:     s.PPPoESessionID,
+		MAC:              s.MAC,
+		OuterVLAN:        s.OuterVLAN,
+		InnerVLAN:        s.InnerVLAN,
+		IfIndex:          s.SwIfIndex,
+		VRF:              s.VRF,
+		ServiceGroup:     s.ServiceGroup.Name,
+		SRGName:          s.SRGName,
+		IPv4Address:      s.IPv4Address,
+		IPv6Address:      s.IPv6Address,
+		Username:         s.Username,
+		AAASessionID:     s.AcctSessionID,
+		IPv4Pool:         s.allocatedPool,
+		IANAPool:         s.allocatedIANAPool,
+		OuterTPID:        s.OuterTPID,
+		NegotiatedPPPMTU: s.NegotiatedPPPMTU,
+		IPv4MSS:          s.IPv4MSS,
+		IPv6MSS:          s.IPv6MSS,
 	})
 
 	if s.component.echoGen != nil {
@@ -811,6 +867,7 @@ func (s *SessionState) onVPPSessionCreated(swIfIndex uint32, err error) {
 		s.component.echoGen.AddSession(s.PPPoESessionID, magic)
 	}
 }
+
 
 func (s *SessionState) sendLCP(code, id uint8, data []byte) {
 	s.sendPPPPacket(ppp.ProtoLCP, code, id, data)

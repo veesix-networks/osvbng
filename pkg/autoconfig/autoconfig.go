@@ -80,6 +80,7 @@ func (a *Autoconfig) deriveSVLANConfig(group *subscriber.SubscriberGroup, vlanRa
 			BNG: &interfaces.BNGConfig{
 				Mode: bngMode,
 			},
+			MSSClamp: a.deriveMSSClamp(group),
 		},
 	})
 
@@ -179,4 +180,28 @@ func (a *Autoconfig) getRAConfig(group *subscriber.SubscriberGroup) raConfig {
 	}
 
 	return cfg
+}
+
+// deriveMSSClamp computes the MSS clamp policy for an IPoE access sub-interface.
+// PPPoE access is handled per-session in internal/pppoe (the negotiated PPP MTU
+// is the source of truth there, not the subscriber-group's path MTU default).
+//
+// MSS is derived from the subscriber-group's subscriber-path-mtu, NOT from the
+// BNG access interface's local MTU. The two are independent: the BNG may run
+// jumbo frames on the access link to support MPLS, SR-MPLS, or pseudowire
+// termination while the actual subscriber CPE on the far side is still 1500-
+// or-less. Operators on non-standard subscriber paths must declare
+// subscriber-path-mtu explicitly per group.
+func (a *Autoconfig) deriveMSSClamp(group *subscriber.SubscriberGroup) *interfaces.MSSClampSpec {
+	if group.AccessType == "pppoe" {
+		return nil
+	}
+	if !group.MSSClamp.IsEnabled() {
+		return &interfaces.MSSClampSpec{Enabled: false}
+	}
+	return &interfaces.MSSClampSpec{
+		Enabled: true,
+		IPv4MSS: group.MSSClamp.IPv4MSSAuto(),
+		IPv6MSS: group.MSSClamp.IPv6MSSAuto(),
+	}
 }

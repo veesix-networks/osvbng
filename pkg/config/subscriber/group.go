@@ -56,6 +56,8 @@ type SubscriberGroup struct {
 	DefaultServiceGroup string                 `json:"default-service-group,omitempty" yaml:"default-service-group,omitempty"`
 	AAAPolicy           string                 `json:"aaa-policy,omitempty" yaml:"aaa-policy,omitempty"`
 	CGNAT               *SubscriberCGNATConfig `json:"cgnat,omitempty" yaml:"cgnat,omitempty"`
+	PPPoE               *PPPoEConfig           `json:"pppoe,omitempty" yaml:"pppoe,omitempty"`
+	MSSClamp            *MSSClampConfig        `json:"mss-clamp,omitempty" yaml:"mss-clamp,omitempty"`
 }
 
 type SubscriberCGNATConfig struct {
