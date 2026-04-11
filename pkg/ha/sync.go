@@ -236,6 +236,9 @@ func sessionToCheckpoint(sess models.SubscriberSession) *hapb.SessionCheckpoint 
 		cp.OuterTpid = uint32(s.OuterTPID)
 		cp.LcpMagic = s.LCPMagic
 		cp.AaaAttributes = s.Attributes
+		cp.NegotiatedPppMtu = uint32(s.NegotiatedPPPMTU)
+		cp.Ipv4Mss = uint32(s.IPv4MSS)
+		cp.Ipv6Mss = uint32(s.IPv6MSS)
 		if !s.ActivatedAt.IsZero() {
 			cp.BoundAtNs = s.ActivatedAt.UnixNano()
 		}
