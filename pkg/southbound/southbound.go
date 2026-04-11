@@ -17,4 +17,5 @@ type Southbound interface {
 	Tables
 	System
 	CGNATDataplane
+	MSSClamp
 }
