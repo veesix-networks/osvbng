@@ -278,3 +278,70 @@ func TestTagBuilder_Chaining(t *testing.T) {
 		t.Error("AddServiceName should return same builder for chaining")
 	}
 }
+
+func TestParseTags_PPPMaxPayloadValid(t *testing.T) {
+	payload := NewTagBuilder().
+		AddServiceName("isp.example").
+		AddPPPMaxPayload(1500).
+		Build()
+
+	tags, err := ParseTags(payload)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tags.ServiceName != "isp.example" {
+		t.Errorf("ServiceName = %q, want isp.example", tags.ServiceName)
+	}
+	if tags.PPPMaxPayload != 1500 {
+		t.Errorf("PPPMaxPayload = %d, want 1500", tags.PPPMaxPayload)
+	}
+}
+
+func TestParseTags_PPPMaxPayloadAtMinimum(t *testing.T) {
+	payload := NewTagBuilder().AddPPPMaxPayload(1492).Build()
+	tags, err := ParseTags(payload)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tags.PPPMaxPayload != 1492 {
+		t.Errorf("PPPMaxPayload = %d, want 1492", tags.PPPMaxPayload)
+	}
+}
+
+func TestParseTags_PPPMaxPayloadBelowMinimumIgnored(t *testing.T) {
+	payload := NewTagBuilder().AddPPPMaxPayload(1480).Build()
+	tags, err := ParseTags(payload)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tags.PPPMaxPayload != 0 {
+		t.Errorf("PPPMaxPayload = %d, want 0 (RFC 4638 §3 ignores < 1492)", tags.PPPMaxPayload)
+	}
+}
+
+func TestParseTags_PPPMaxPayloadAbsent(t *testing.T) {
+	payload := NewTagBuilder().AddServiceName("isp.example").Build()
+	tags, err := ParseTags(payload)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tags.PPPMaxPayload != 0 {
+		t.Errorf("PPPMaxPayload = %d, want 0 when tag absent", tags.PPPMaxPayload)
+	}
+}
+
+func TestParseTags_PPPMaxPayloadMalformedLength(t *testing.T) {
+	// Tag 0x0120, length 1 (invalid; must be 2), one byte of value
+	payload := []byte{0x01, 0x20, 0x00, 0x01, 0xDC}
+	if _, err := ParseTags(payload); err == nil {
+		t.Fatal("expected error for PPP-Max-Payload with length != 2")
+	}
+}
+
+func TestTagBuilder_PPPMaxPayloadWireFormat(t *testing.T) {
+	got := NewTagBuilder().AddPPPMaxPayload(1500).Build()
+	want := []byte{0x01, 0x20, 0x00, 0x02, 0x05, 0xDC}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("wire format = %x, want %x", got, want)
+	}
+}

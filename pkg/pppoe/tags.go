@@ -13,6 +13,7 @@ const (
 	TagACCookie       uint16 = 0x0104
 	TagVendorSpecific uint16 = 0x0105
 	TagRelaySessionID uint16 = 0x0110
+	TagPPPMaxPayload  uint16 = 0x0120
 	TagServiceNameErr uint16 = 0x0201
 	TagACSystemErr    uint16 = 0x0202
 	TagGenericErr     uint16 = 0x0203
@@ -38,6 +39,7 @@ type Tags struct {
 	VendorSpecific []byte
 	AgentCircuitID string
 	AgentRemoteID  string
+	PPPMaxPayload  uint16
 	Errors         []string
 	Raw            []Tag
 }
@@ -82,6 +84,14 @@ func ParseTags(payload []byte) (*Tags, error) {
 			tags.VendorSpecific = make([]byte, len(value))
 			copy(tags.VendorSpecific, value)
 			tags.parseVendorSpecific(value)
+		case TagPPPMaxPayload:
+			if len(value) != 2 {
+				return nil, fmt.Errorf("PPP-Max-Payload tag length %d, want 2", len(value))
+			}
+			payload := binary.BigEndian.Uint16(value)
+			if payload >= 1492 {
+				tags.PPPMaxPayload = payload
+			}
 		case TagServiceNameErr:
 			tags.Errors = append(tags.Errors, "service-name-error: "+string(value))
 		case TagACSystemErr:
@@ -159,6 +169,11 @@ func (b *TagBuilder) AddACCookie(value []byte) *TagBuilder {
 
 func (b *TagBuilder) AddRelaySessionID(value []byte) *TagBuilder {
 	return b.AddTag(TagRelaySessionID, value)
+}
+
+func (b *TagBuilder) AddPPPMaxPayload(payload uint16) *TagBuilder {
+	value := []byte{byte(payload >> 8), byte(payload)}
+	return b.AddTag(TagPPPMaxPayload, value)
 }
 
 func (b *TagBuilder) AddServiceNameError(msg string) *TagBuilder {
