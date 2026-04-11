@@ -446,46 +446,49 @@ func (x *SwitchoverResponse) GetMessage() string {
 }
 
 type SessionCheckpoint struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	SessionId       string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	SrgName         string                 `protobuf:"bytes,2,opt,name=srg_name,json=srgName,proto3" json:"srg_name,omitempty"`
-	AccessType      string                 `protobuf:"bytes,3,opt,name=access_type,json=accessType,proto3" json:"access_type,omitempty"`
-	Mac             []byte                 `protobuf:"bytes,4,opt,name=mac,proto3" json:"mac,omitempty"`
-	OuterVlan       uint32                 `protobuf:"varint,5,opt,name=outer_vlan,json=outerVlan,proto3" json:"outer_vlan,omitempty"`
-	InnerVlan       uint32                 `protobuf:"varint,6,opt,name=inner_vlan,json=innerVlan,proto3" json:"inner_vlan,omitempty"`
-	Username        string                 `protobuf:"bytes,7,opt,name=username,proto3" json:"username,omitempty"`
-	AaaSessionId    string                 `protobuf:"bytes,8,opt,name=aaa_session_id,json=aaaSessionId,proto3" json:"aaa_session_id,omitempty"`
-	Ipv4Address     []byte                 `protobuf:"bytes,9,opt,name=ipv4_address,json=ipv4Address,proto3" json:"ipv4_address,omitempty"`
-	Ipv4Netmask     []byte                 `protobuf:"bytes,10,opt,name=ipv4_netmask,json=ipv4Netmask,proto3" json:"ipv4_netmask,omitempty"`
-	Ipv4Gateway     []byte                 `protobuf:"bytes,11,opt,name=ipv4_gateway,json=ipv4Gateway,proto3" json:"ipv4_gateway,omitempty"`
-	Ipv6Address     []byte                 `protobuf:"bytes,12,opt,name=ipv6_address,json=ipv6Address,proto3" json:"ipv6_address,omitempty"`
-	Ipv6Prefix      []byte                 `protobuf:"bytes,13,opt,name=ipv6_prefix,json=ipv6Prefix,proto3" json:"ipv6_prefix,omitempty"`
-	Ipv6PrefixLen   uint32                 `protobuf:"varint,14,opt,name=ipv6_prefix_len,json=ipv6PrefixLen,proto3" json:"ipv6_prefix_len,omitempty"`
-	Ipv4LeaseTime   uint32                 `protobuf:"varint,15,opt,name=ipv4_lease_time,json=ipv4LeaseTime,proto3" json:"ipv4_lease_time,omitempty"`
-	Ipv6LeaseTime   uint32                 `protobuf:"varint,16,opt,name=ipv6_lease_time,json=ipv6LeaseTime,proto3" json:"ipv6_lease_time,omitempty"`
-	BoundAtNs       int64                  `protobuf:"varint,17,opt,name=bound_at_ns,json=boundAtNs,proto3" json:"bound_at_ns,omitempty"`
-	Ipv6BoundAtNs   int64                  `protobuf:"varint,18,opt,name=ipv6_bound_at_ns,json=ipv6BoundAtNs,proto3" json:"ipv6_bound_at_ns,omitempty"`
-	CircuitId       []byte                 `protobuf:"bytes,19,opt,name=circuit_id,json=circuitId,proto3" json:"circuit_id,omitempty"`
-	RemoteId        []byte                 `protobuf:"bytes,20,opt,name=remote_id,json=remoteId,proto3" json:"remote_id,omitempty"`
-	ClientId        []byte                 `protobuf:"bytes,21,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	Hostname        string                 `protobuf:"bytes,22,opt,name=hostname,proto3" json:"hostname,omitempty"`
-	Dhcpv6Duid      []byte                 `protobuf:"bytes,23,opt,name=dhcpv6_duid,json=dhcpv6Duid,proto3" json:"dhcpv6_duid,omitempty"`
-	Vrf             string                 `protobuf:"bytes,24,opt,name=vrf,proto3" json:"vrf,omitempty"`
-	ServiceGroup    string                 `protobuf:"bytes,25,opt,name=service_group,json=serviceGroup,proto3" json:"service_group,omitempty"`
-	SubscriberGroup string                 `protobuf:"bytes,26,opt,name=subscriber_group,json=subscriberGroup,proto3" json:"subscriber_group,omitempty"`
-	PppoeSessionId  uint32                 `protobuf:"varint,27,opt,name=pppoe_session_id,json=pppoeSessionId,proto3" json:"pppoe_session_id,omitempty"`
-	LcpState        string                 `protobuf:"bytes,28,opt,name=lcp_state,json=lcpState,proto3" json:"lcp_state,omitempty"`
-	IpcpState       string                 `protobuf:"bytes,29,opt,name=ipcp_state,json=ipcpState,proto3" json:"ipcp_state,omitempty"`
-	Ipv6CpState     string                 `protobuf:"bytes,30,opt,name=ipv6cp_state,json=ipv6cpState,proto3" json:"ipv6cp_state,omitempty"`
-	ServiceName     string                 `protobuf:"bytes,31,opt,name=service_name,json=serviceName,proto3" json:"service_name,omitempty"`
-	Ipv4Pool        string                 `protobuf:"bytes,32,opt,name=ipv4_pool,json=ipv4Pool,proto3" json:"ipv4_pool,omitempty"`
-	IanaPool        string                 `protobuf:"bytes,33,opt,name=iana_pool,json=ianaPool,proto3" json:"iana_pool,omitempty"`
-	PdPool          string                 `protobuf:"bytes,34,opt,name=pd_pool,json=pdPool,proto3" json:"pd_pool,omitempty"`
-	OuterTpid       uint32                 `protobuf:"varint,35,opt,name=outer_tpid,json=outerTpid,proto3" json:"outer_tpid,omitempty"`
-	LcpMagic        uint32                 `protobuf:"varint,36,opt,name=lcp_magic,json=lcpMagic,proto3" json:"lcp_magic,omitempty"`
-	AaaAttributes   map[string]string      `protobuf:"bytes,37,rep,name=aaa_attributes,json=aaaAttributes,proto3" json:"aaa_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	SessionId        string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	SrgName          string                 `protobuf:"bytes,2,opt,name=srg_name,json=srgName,proto3" json:"srg_name,omitempty"`
+	AccessType       string                 `protobuf:"bytes,3,opt,name=access_type,json=accessType,proto3" json:"access_type,omitempty"`
+	Mac              []byte                 `protobuf:"bytes,4,opt,name=mac,proto3" json:"mac,omitempty"`
+	OuterVlan        uint32                 `protobuf:"varint,5,opt,name=outer_vlan,json=outerVlan,proto3" json:"outer_vlan,omitempty"`
+	InnerVlan        uint32                 `protobuf:"varint,6,opt,name=inner_vlan,json=innerVlan,proto3" json:"inner_vlan,omitempty"`
+	Username         string                 `protobuf:"bytes,7,opt,name=username,proto3" json:"username,omitempty"`
+	AaaSessionId     string                 `protobuf:"bytes,8,opt,name=aaa_session_id,json=aaaSessionId,proto3" json:"aaa_session_id,omitempty"`
+	Ipv4Address      []byte                 `protobuf:"bytes,9,opt,name=ipv4_address,json=ipv4Address,proto3" json:"ipv4_address,omitempty"`
+	Ipv4Netmask      []byte                 `protobuf:"bytes,10,opt,name=ipv4_netmask,json=ipv4Netmask,proto3" json:"ipv4_netmask,omitempty"`
+	Ipv4Gateway      []byte                 `protobuf:"bytes,11,opt,name=ipv4_gateway,json=ipv4Gateway,proto3" json:"ipv4_gateway,omitempty"`
+	Ipv6Address      []byte                 `protobuf:"bytes,12,opt,name=ipv6_address,json=ipv6Address,proto3" json:"ipv6_address,omitempty"`
+	Ipv6Prefix       []byte                 `protobuf:"bytes,13,opt,name=ipv6_prefix,json=ipv6Prefix,proto3" json:"ipv6_prefix,omitempty"`
+	Ipv6PrefixLen    uint32                 `protobuf:"varint,14,opt,name=ipv6_prefix_len,json=ipv6PrefixLen,proto3" json:"ipv6_prefix_len,omitempty"`
+	Ipv4LeaseTime    uint32                 `protobuf:"varint,15,opt,name=ipv4_lease_time,json=ipv4LeaseTime,proto3" json:"ipv4_lease_time,omitempty"`
+	Ipv6LeaseTime    uint32                 `protobuf:"varint,16,opt,name=ipv6_lease_time,json=ipv6LeaseTime,proto3" json:"ipv6_lease_time,omitempty"`
+	BoundAtNs        int64                  `protobuf:"varint,17,opt,name=bound_at_ns,json=boundAtNs,proto3" json:"bound_at_ns,omitempty"`
+	Ipv6BoundAtNs    int64                  `protobuf:"varint,18,opt,name=ipv6_bound_at_ns,json=ipv6BoundAtNs,proto3" json:"ipv6_bound_at_ns,omitempty"`
+	CircuitId        []byte                 `protobuf:"bytes,19,opt,name=circuit_id,json=circuitId,proto3" json:"circuit_id,omitempty"`
+	RemoteId         []byte                 `protobuf:"bytes,20,opt,name=remote_id,json=remoteId,proto3" json:"remote_id,omitempty"`
+	ClientId         []byte                 `protobuf:"bytes,21,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	Hostname         string                 `protobuf:"bytes,22,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	Dhcpv6Duid       []byte                 `protobuf:"bytes,23,opt,name=dhcpv6_duid,json=dhcpv6Duid,proto3" json:"dhcpv6_duid,omitempty"`
+	Vrf              string                 `protobuf:"bytes,24,opt,name=vrf,proto3" json:"vrf,omitempty"`
+	ServiceGroup     string                 `protobuf:"bytes,25,opt,name=service_group,json=serviceGroup,proto3" json:"service_group,omitempty"`
+	SubscriberGroup  string                 `protobuf:"bytes,26,opt,name=subscriber_group,json=subscriberGroup,proto3" json:"subscriber_group,omitempty"`
+	PppoeSessionId   uint32                 `protobuf:"varint,27,opt,name=pppoe_session_id,json=pppoeSessionId,proto3" json:"pppoe_session_id,omitempty"`
+	LcpState         string                 `protobuf:"bytes,28,opt,name=lcp_state,json=lcpState,proto3" json:"lcp_state,omitempty"`
+	IpcpState        string                 `protobuf:"bytes,29,opt,name=ipcp_state,json=ipcpState,proto3" json:"ipcp_state,omitempty"`
+	Ipv6CpState      string                 `protobuf:"bytes,30,opt,name=ipv6cp_state,json=ipv6cpState,proto3" json:"ipv6cp_state,omitempty"`
+	ServiceName      string                 `protobuf:"bytes,31,opt,name=service_name,json=serviceName,proto3" json:"service_name,omitempty"`
+	Ipv4Pool         string                 `protobuf:"bytes,32,opt,name=ipv4_pool,json=ipv4Pool,proto3" json:"ipv4_pool,omitempty"`
+	IanaPool         string                 `protobuf:"bytes,33,opt,name=iana_pool,json=ianaPool,proto3" json:"iana_pool,omitempty"`
+	PdPool           string                 `protobuf:"bytes,34,opt,name=pd_pool,json=pdPool,proto3" json:"pd_pool,omitempty"`
+	OuterTpid        uint32                 `protobuf:"varint,35,opt,name=outer_tpid,json=outerTpid,proto3" json:"outer_tpid,omitempty"`
+	LcpMagic         uint32                 `protobuf:"varint,36,opt,name=lcp_magic,json=lcpMagic,proto3" json:"lcp_magic,omitempty"`
+	AaaAttributes    map[string]string      `protobuf:"bytes,37,rep,name=aaa_attributes,json=aaaAttributes,proto3" json:"aaa_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	NegotiatedPppMtu uint32                 `protobuf:"varint,38,opt,name=negotiated_ppp_mtu,json=negotiatedPppMtu,proto3" json:"negotiated_ppp_mtu,omitempty"`
+	Ipv4Mss          uint32                 `protobuf:"varint,39,opt,name=ipv4_mss,json=ipv4Mss,proto3" json:"ipv4_mss,omitempty"`
+	Ipv6Mss          uint32                 `protobuf:"varint,40,opt,name=ipv6_mss,json=ipv6Mss,proto3" json:"ipv6_mss,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *SessionCheckpoint) Reset() {
@@ -775,6 +778,27 @@ func (x *SessionCheckpoint) GetAaaAttributes() map[string]string {
 		return x.AaaAttributes
 	}
 	return nil
+}
+
+func (x *SessionCheckpoint) GetNegotiatedPppMtu() uint32 {
+	if x != nil {
+		return x.NegotiatedPppMtu
+	}
+	return 0
+}
+
+func (x *SessionCheckpoint) GetIpv4Mss() uint32 {
+	if x != nil {
+		return x.Ipv4Mss
+	}
+	return 0
+}
+
+func (x *SessionCheckpoint) GetIpv6Mss() uint32 {
+	if x != nil {
+		return x.Ipv6Mss
+	}
+	return 0
 }
 
 type SyncSessionRequest struct {
@@ -1380,8 +1404,7 @@ const file_api_proto_ha_ha_proto_rawDesc = "" +
 	"\bgraceful\x18\x02 \x01(\bR\bgraceful\"H\n" +
 	"\x12SwitchoverResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\xbe\n" +
-	"\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\xa2\v\n" +
 	"\x11SessionCheckpoint\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x19\n" +
@@ -1429,7 +1452,10 @@ const file_api_proto_ha_ha_proto_rawDesc = "" +
 	"\n" +
 	"outer_tpid\x18# \x01(\rR\touterTpid\x12\x1b\n" +
 	"\tlcp_magic\x18$ \x01(\rR\blcpMagic\x12Y\n" +
-	"\x0eaaa_attributes\x18% \x03(\v22.osvbng.ha.v1.SessionCheckpoint.AaaAttributesEntryR\raaaAttributes\x1a@\n" +
+	"\x0eaaa_attributes\x18% \x03(\v22.osvbng.ha.v1.SessionCheckpoint.AaaAttributesEntryR\raaaAttributes\x12,\n" +
+	"\x12negotiated_ppp_mtu\x18& \x01(\rR\x10negotiatedPppMtu\x12\x19\n" +
+	"\bipv4_mss\x18' \x01(\rR\aipv4Mss\x12\x19\n" +
+	"\bipv6_mss\x18( \x01(\rR\aipv6Mss\x1a@\n" +
 	"\x12AaaAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb8\x01\n" +
