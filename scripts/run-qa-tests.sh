@@ -6,35 +6,44 @@
 set -euo pipefail
 
 usage() {
-    echo "Usage: $0 [-r RUNS] [-o OUTPUT_DIR] [-t TEST_NAME] [-h]"
+    echo "Usage: $0 [-r RUNS] [-o OUTPUT_DIR] [-t TEST_NAME] [-x TEST_NAME] [-h]"
     echo ""
     echo "Options:"
     echo "  -r RUNS        Number of runs per test (default: 5)"
     echo "  -o OUTPUT_DIR  Output directory for results (default: test-results/qa)"
     echo "  -t TEST_NAME   Run only this test suite (e.g. 01-smoke). Can be repeated."
+    echo "  -x TEST_NAME   Exclude this test suite. Can be repeated. Mutually exclusive with -t."
     echo "  -h             Show this help"
     echo ""
     echo "Examples:"
-    echo "  $0                          # All tests, 5 runs each"
-    echo "  $0 -r 3                     # All tests, 3 runs each"
-    echo "  $0 -t 03-ipoe-local -r 10   # Single test, 10 runs"
-    echo "  $0 -t 01-smoke -t 02-smoke-ha  # Two tests, 5 runs each"
+    echo "  $0                                      # All tests, 5 runs each"
+    echo "  $0 -r 3                                 # All tests, 3 runs each"
+    echo "  $0 -t 03-ipoe-local -r 10               # Single test, 10 runs"
+    echo "  $0 -t 01-smoke -t 02-smoke-ha           # Two tests, 5 runs each"
+    echo "  $0 -x 09-cgnat-ipoe-det -x 11-cgnat-pppoe-det  # All tests except these two"
     exit 0
 }
 
 RUNS=5
 QA_DIR=""
 FILTER_TESTS=()
+EXCLUDE_TESTS=()
 
-while getopts "r:o:t:h" opt; do
+while getopts "r:o:t:x:h" opt; do
     case $opt in
         r) RUNS="$OPTARG" ;;
         o) QA_DIR="$OPTARG" ;;
         t) FILTER_TESTS+=("$OPTARG") ;;
+        x) EXCLUDE_TESTS+=("$OPTARG") ;;
         h) usage ;;
         *) usage ;;
     esac
 done
+
+if [ ${#FILTER_TESTS[@]} -gt 0 ] && [ ${#EXCLUDE_TESTS[@]} -gt 0 ]; then
+    echo "Error: -t and -x are mutually exclusive"
+    exit 1
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -43,6 +52,16 @@ cd "$REPO_DIR"
 if [ -z "$QA_DIR" ]; then
     QA_DIR="$REPO_DIR/test-results/qa"
 fi
+
+is_excluded() {
+    local name="$1"
+    for excluded in "${EXCLUDE_TESTS[@]}"; do
+        if [ "$name" = "$excluded" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
 
 TESTS=()
 if [ ${#FILTER_TESTS[@]} -gt 0 ]; then
@@ -56,10 +75,16 @@ if [ ${#FILTER_TESTS[@]} -gt 0 ]; then
         fi
     done
 else
+    for excluded in "${EXCLUDE_TESTS[@]}"; do
+        if [ ! -f "tests/${excluded}/${excluded}.robot" ]; then
+            echo "Error: excluded test suite not found: tests/${excluded}/${excluded}.robot"
+            exit 1
+        fi
+    done
     for dir in tests/*/; do
         name=$(basename "$dir")
         robot="$dir/${name}.robot"
-        if [ -f "$robot" ]; then
+        if [ -f "$robot" ] && ! is_excluded "$name"; then
             TESTS+=("$name")
         fi
     done
