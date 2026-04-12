@@ -17,6 +17,46 @@
   opacity: 0.8;
 }
 
+/* ── Event badges ──────────────────────────────────────────────── */
+
+.event-topic {
+  display: inline-block;
+  font-family: var(--md-code-font-family);
+  font-size: 0.8em;
+  font-weight: 600;
+  padding: 0.15em 0.55em;
+  border-radius: 4px;
+  background-color: #e3f2fd;
+  color: #1565c0;
+  border: 1px solid #90caf9;
+  white-space: nowrap;
+}
+
+.event-type {
+  display: inline-block;
+  font-family: var(--md-code-font-family);
+  font-size: 0.8em;
+  font-weight: 500;
+  padding: 0.15em 0.55em;
+  border-radius: 4px;
+  background-color: #f3e5f5;
+  color: #7b1fa2;
+  border: 1px solid #ce93d8;
+  white-space: nowrap;
+}
+
+[data-md-color-scheme="slate"] .event-topic {
+  background-color: #1a3a5c;
+  color: #90caf9;
+  border-color: #2a5a8c;
+}
+
+[data-md-color-scheme="slate"] .event-type {
+  background-color: #3c1f56;
+  color: #ce93d8;
+  border-color: #5a3a7c;
+}
+
 /* ── Vertical Packet Diagram ──────────────────────────────────── */
 
 .packet-diagram--vertical {

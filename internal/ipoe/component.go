@@ -57,10 +57,14 @@ type Component struct {
 	opdb             opdb.Store
 	dhcp4Providers   map[string]dhcp4.DHCPProvider
 	dhcp6Providers   map[string]dhcp6.DHCPProvider
-	sessions     sync.Map
-	xidIndex     sync.Map
-	xid6Index    sync.Map
-	sessionIndex sync.Map
+	sessions         sync.Map
+	xidIndex         sync.Map
+	xid6Index        sync.Map
+	sessionIndex     sync.Map
+	acctSessionIndex sync.Map
+	usernameIndex    sync.Map
+	ipv4Index        sync.Map
+	ipv6Index        sync.Map
 
 	dhcpChan   <-chan *dataplane.ParsedPacket
 	dhcp6Chan  <-chan *dataplane.ParsedPacket
@@ -68,7 +72,8 @@ type Component struct {
 
 	aaaRespSub  events.Subscription
 	haStateSub  events.Subscription
-	mutationSub events.Subscription
+	mutationSub  events.Subscription
+	terminateSub events.Subscription
 }
 
 type SessionState struct {
@@ -118,6 +123,94 @@ type SessionState struct {
 	AllocCtx     *allocator.Context
 	Closing      bool
 	AAAInFlight  bool
+}
+
+func (c *Component) addSessionToIndexes(sess *SessionState) {
+	if sess.AcctSessionID != "" {
+		c.acctSessionIndex.Store(sess.AcctSessionID, sess)
+	}
+	if sess.Username != "" {
+		c.usernameIndex.Store(sess.Username, sess)
+	}
+	if sess.IPv4 != nil {
+		c.ipv4Index.Store(sess.IPv4.String(), sess)
+	}
+	if sess.IPv6Address != nil {
+		c.ipv6Index.Store(sess.IPv6Address.String(), sess)
+	}
+}
+
+func (c *Component) removeSessionFromIndexes(sess *SessionState) {
+	if sess.AcctSessionID != "" {
+		c.acctSessionIndex.Delete(sess.AcctSessionID)
+	}
+	if sess.Username != "" {
+		c.usernameIndex.Delete(sess.Username)
+	}
+	if sess.IPv4 != nil {
+		c.ipv4Index.Delete(sess.IPv4.String())
+	}
+	if sess.IPv6Address != nil {
+		c.ipv6Index.Delete(sess.IPv6Address.String())
+	}
+}
+
+func (c *Component) resolveTargetFromEvent(ev *events.SubscriberMutationEvent) *SessionState {
+	if ev.SessionID != "" {
+		if val, ok := c.sessions.Load(ev.SessionID); ok {
+			return val.(*SessionState)
+		}
+	}
+	if ev.AcctSessionID != "" {
+		if val, ok := c.acctSessionIndex.Load(ev.AcctSessionID); ok {
+			return val.(*SessionState)
+		}
+	}
+	if ev.Username != "" {
+		if val, ok := c.usernameIndex.Load(ev.Username); ok {
+			return val.(*SessionState)
+		}
+	}
+	if ev.FramedIPv4 != "" {
+		if val, ok := c.ipv4Index.Load(ev.FramedIPv4); ok {
+			return val.(*SessionState)
+		}
+	}
+	if ev.FramedIPv6 != "" {
+		if val, ok := c.ipv6Index.Load(ev.FramedIPv6); ok {
+			return val.(*SessionState)
+		}
+	}
+	return nil
+}
+
+func (c *Component) resolveTerminateTarget(ev *events.SubscriberTerminateEvent) *SessionState {
+	if ev.SessionID != "" {
+		if val, ok := c.sessions.Load(ev.SessionID); ok {
+			return val.(*SessionState)
+		}
+	}
+	if ev.AcctSessionID != "" {
+		if val, ok := c.acctSessionIndex.Load(ev.AcctSessionID); ok {
+			return val.(*SessionState)
+		}
+	}
+	if ev.Username != "" {
+		if val, ok := c.usernameIndex.Load(ev.Username); ok {
+			return val.(*SessionState)
+		}
+	}
+	if ev.FramedIPv4 != "" {
+		if val, ok := c.ipv4Index.Load(ev.FramedIPv4); ok {
+			return val.(*SessionState)
+		}
+	}
+	if ev.FramedIPv6 != "" {
+		if val, ok := c.ipv6Index.Load(ev.FramedIPv6); ok {
+			return val.(*SessionState)
+		}
+	}
+	return nil
 }
 
 func (c *Component) resolveServiceGroup(svlan uint16, aaaAttrs map[string]interface{}) svcgroup.ServiceGroup {
@@ -345,6 +438,7 @@ func (c *Component) Start(ctx context.Context) error {
 	c.aaaRespSub = c.eventBus.Subscribe(events.TopicAAAResponseIPoE, c.handleAAAResponse)
 	c.haStateSub = c.eventBus.Subscribe(events.TopicHAStateChange, c.handleHAStateChange)
 	c.mutationSub = c.eventBus.Subscribe(events.TopicSubscriberMutation, c.handleSubscriberMutation)
+	c.terminateSub = c.eventBus.Subscribe(events.TopicSubscriberTerminate, c.handleSubscriberTerminate)
 
 	c.Go(c.cleanupSessions)
 	c.Go(c.consumeDHCPPackets)
@@ -360,6 +454,7 @@ func (c *Component) Stop(ctx context.Context) error {
 	c.aaaRespSub.Unsubscribe()
 	c.haStateSub.Unsubscribe()
 	c.mutationSub.Unsubscribe()
+	c.terminateSub.Unsubscribe()
 
 	c.StopContext()
 
@@ -931,6 +1026,7 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 		c.xid6Index.Delete(dhcpv6XID)
 		c.sessions.Delete(lookupKey)
 		c.sessionIndex.Delete(sessID)
+		c.removeSessionFromIndexes(sess)
 	}
 
 	c.logger.Debug("IPv4 released by client", "session_id", sessID, "delete_session", deleteSession)
@@ -1263,6 +1359,7 @@ func (c *Component) handleAAAResponse(event events.Event) {
 		c.sessions.Delete(lookupV4)
 		c.sessions.Delete(lookupV6)
 		c.sessionIndex.Delete(sessID)
+		c.removeSessionFromIndexes(sess)
 		return
 	}
 
@@ -1651,6 +1748,7 @@ func (c *Component) cleanupSessions() {
 				c.xidIndex.Delete(item.sess.XID)
 				c.sessions.Delete(item.key)
 				c.sessionIndex.Delete(item.sess.SessionID)
+				c.removeSessionFromIndexes(item.sess)
 			}
 
 			for _, item := range toDelete {
@@ -2057,6 +2155,7 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket, msg *dhcp6.
 	if deleteSession {
 		c.sessions.Delete(lookupKey)
 		c.sessionIndex.Delete(sessID)
+		c.removeSessionFromIndexes(sess)
 	}
 
 	c.logger.Debug("IPv6 released by client", "session_id", sessID, "delete_session", deleteSession)
@@ -3062,6 +3161,8 @@ func (c *Component) publishSessionLifecycle(payload models.SubscriberSession) er
 }
 
 func (c *Component) checkpointSession(sess *SessionState) {
+	c.addSessionToIndexes(sess)
+
 	if c.opdb == nil {
 		return
 	}
@@ -3610,16 +3711,14 @@ func (c *Component) ForEachSession(fn func(models.SubscriberSession) bool) {
 
 func (c *Component) handleSubscriberMutation(ev events.Event) {
 	data, ok := ev.Data.(*events.SubscriberMutationEvent)
-	if !ok || data.AccessType != models.AccessTypeIPoE {
+	if !ok {
 		return
 	}
 
-	val, ok := c.sessions.Load(data.SessionID)
-	if !ok {
-		c.publishMutationResult(data.RequestID, data.SessionID, false, "session not found", 503, nil)
+	sess := c.resolveTargetFromEvent(data)
+	if sess == nil {
 		return
 	}
-	sess := val.(*SessionState)
 
 	sess.mu.Lock()
 	defer sess.mu.Unlock()
@@ -3685,6 +3784,87 @@ func (c *Component) buildModelSnapshot(sess *SessionState) *models.IPoESession {
 		snapshot.IPv6Prefix = sess.IPv6Prefix.String()
 	}
 	return snapshot
+}
+
+func (c *Component) handleSubscriberTerminate(ev events.Event) {
+	data, ok := ev.Data.(*events.SubscriberTerminateEvent)
+	if !ok {
+		return
+	}
+
+	sess := c.resolveTerminateTarget(data)
+	if sess == nil {
+		return
+	}
+
+	sess.mu.Lock()
+	if sess.Closing {
+		sess.mu.Unlock()
+		return
+	}
+	sess.Closing = true
+
+	mac := sess.MAC
+	ipv4 := sess.IPv4
+	ipv6Addr := sess.IPv6Address
+	ipv6Prefix := sess.IPv6Prefix
+	encapIfIndex := sess.EncapIfIndex
+	ipoeSwIfIndex := sess.IPoESwIfIndex
+	innerVLAN := sess.InnerVLAN
+	acctSessionID := sess.AcctSessionID
+	username := sess.Username
+	vrf := sess.VRF
+	srgName := sess.SRGName
+	outerVLAN := sess.OuterVLAN
+	sess.mu.Unlock()
+
+	if registry := allocator.GetGlobalRegistry(); registry != nil {
+		if ipv4 != nil {
+			registry.ReleaseIP(ipv4)
+		}
+		if ipv6Addr != nil {
+			registry.ReleaseIANAByIP(ipv6Addr)
+		}
+		if ipv6Prefix != nil {
+			registry.ReleasePDByPrefix(ipv6Prefix)
+		}
+	}
+
+	if c.vpp != nil && ipoeSwIfIndex != 0 {
+		c.vpp.DeleteIPoESessionAsync(mac, encapIfIndex, innerVLAN, func(err error) {
+			if err != nil {
+				c.logger.Warn("Failed to delete IPoE session on terminate", "session_id", data.SessionID, "error", err)
+			}
+		})
+	}
+
+	lookupKey := c.makeSessionKeyV4(mac, outerVLAN, innerVLAN)
+	c.sessions.Delete(lookupKey)
+	lookupKeyV6 := c.makeSessionKeyV6(mac, outerVLAN, innerVLAN)
+	c.sessions.Delete(lookupKeyV6)
+	c.sessionIndex.Delete(sess.SessionID)
+	c.removeSessionFromIndexes(sess)
+	c.deleteSessionCheckpoint(sess.SessionID)
+
+	c.publishSessionLifecycle(&models.IPoESession{
+		SessionID:    sess.SessionID,
+		State:        models.SessionStateReleased,
+		AccessType:   string(models.AccessTypeIPoE),
+		Protocol:     string(models.ProtocolDHCPv4),
+		AAASessionID: acctSessionID,
+		MAC:          mac,
+		OuterVLAN:    outerVLAN,
+		InnerVLAN:    innerVLAN,
+		VRF:          vrf,
+		SRGName:      srgName,
+		Username:     username,
+		IPv4Address:  ipv4,
+		IfIndex:      ipoeSwIfIndex,
+	})
+
+	c.logger.Debug("Session terminated by external request",
+		"session_id", sess.SessionID,
+		"reason", data.Reason)
 }
 
 func (c *Component) publishMutationResult(requestID, sessionID string, ok bool, errMsg string, errCause int, session models.SubscriberSession) {

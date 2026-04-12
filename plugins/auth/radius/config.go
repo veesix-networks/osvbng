@@ -6,6 +6,7 @@ package radius
 
 import (
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/auth"
@@ -15,13 +16,15 @@ import (
 const Namespace = "subscriber.auth.radius"
 
 const (
-	DefaultAuthPort      = 1812
-	DefaultAcctPort      = 1813
-	DefaultTimeout       = 3 * time.Second
-	DefaultRetries       = 3
-	DefaultDeadTime      = 30 * time.Second
-	DefaultDeadThreshold = 3
-	DefaultNASPortType   = "Virtual"
+	DefaultAuthPort        = 1812
+	DefaultAcctPort        = 1813
+	DefaultTimeout         = 3 * time.Second
+	DefaultRetries         = 3
+	DefaultDeadTime        = 30 * time.Second
+	DefaultDeadThreshold   = 3
+	DefaultNASPortType     = "Virtual"
+	DefaultCoAPort         = 3799
+	DefaultCoAReplayWindow = 300
 )
 
 type Config struct {
@@ -38,6 +41,14 @@ type Config struct {
 	Dictionaries     []string         `json:"dictionaries,omitempty" yaml:"dictionaries,omitempty"`
 	ResponseMappings []CustomMapping  `json:"response_mappings,omitempty" yaml:"response_mappings,omitempty"`
 	RequestMappings  []RequestMapping `json:"request_mappings,omitempty" yaml:"request_mappings,omitempty"`
+	CoAPort          int              `json:"coa_port,omitempty" yaml:"coa_port,omitempty"`
+	CoAClients       []CoAClientConfig `json:"coa_clients,omitempty" yaml:"coa_clients,omitempty"`
+	CoAReplayWindow  int64            `json:"coa_replay_window,omitempty" yaml:"coa_replay_window,omitempty"`
+}
+
+type CoAClientConfig struct {
+	Host   string `json:"host" yaml:"host"`
+	Secret string `json:"secret" yaml:"secret"`
 }
 
 type ServerConfig struct {
@@ -82,6 +93,12 @@ func (c *Config) applyDefaults() {
 	if c.DeadThreshold == 0 {
 		c.DeadThreshold = DefaultDeadThreshold
 	}
+	if c.CoAPort == 0 {
+		c.CoAPort = DefaultCoAPort
+	}
+	if c.CoAReplayWindow == 0 {
+		c.CoAReplayWindow = DefaultCoAReplayWindow
+	}
 }
 
 func (c *Config) validate() error {
@@ -112,7 +129,26 @@ func (c *Config) validate() error {
 			return fmt.Errorf("request_mappings[%d]: radius_attr or vendor_id is required", i)
 		}
 	}
+	for i, c := range c.CoAClients {
+		if c.Host == "" {
+			return fmt.Errorf("coa_clients[%d]: host is required", i)
+		}
+		if c.Secret == "" {
+			return fmt.Errorf("coa_clients[%d]: secret is required", i)
+		}
+		if !isValidIPOrCIDR(c.Host) {
+			return fmt.Errorf("coa_clients[%d]: host must be a valid IP or CIDR: %s", i, c.Host)
+		}
+	}
 	return nil
+}
+
+func isValidIPOrCIDR(s string) bool {
+	if net.ParseIP(s) != nil {
+		return true
+	}
+	_, _, err := net.ParseCIDR(s)
+	return err == nil
 }
 
 func init() {

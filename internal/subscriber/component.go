@@ -276,21 +276,11 @@ func (c *Component) GetStats(ctx context.Context) (map[string]uint32, error) {
 }
 
 func (c *Component) TerminateSession(ctx context.Context, sessionID string) error {
-	sess, err := c.GetSession(ctx, sessionID)
-	if err != nil {
-		return err
-	}
-
-	sess.State = models.SessionStateReleased
-
-	c.eventBus.Publish(events.TopicSessionLifecycle, events.Event{
+	c.eventBus.Publish(events.TopicSubscriberTerminate, events.Event{
 		Source: c.Name(),
-		Data: &events.SessionLifecycleEvent{
-			AccessType: models.AccessType(sess.AccessType),
-			Protocol:   models.Protocol(sess.Protocol),
-			SessionID:  sessionID,
-			State:      sess.State,
-			Session:    sess,
+		Data: &events.SubscriberTerminateEvent{
+			SessionID: sessionID,
+			Reason:    "admin-clear",
 		},
 	})
 
@@ -573,8 +563,6 @@ func (c *Component) persistSession(sess models.SubscriberSession) error {
 			}
 		}
 
-		c.deleteMutationLookupKeys(sessionID, sess)
-
 		c.logger.Debug("Deleted session from cache", "session_id", sessionID)
 		return nil
 	}
@@ -614,74 +602,9 @@ func (c *Component) persistSession(sess models.SubscriberSession) error {
 		c.logger.Debug("Skipping ARP lookup index creation", "session_id", sessionID, "reason", "empty key")
 	}
 
-	c.writeMutationLookupKeys(sessionID, sess, ttl)
-
 	return nil
 }
 
-func (c *Component) writeMutationLookupKeys(sessionID string, sess models.SubscriberSession, ttl time.Duration) {
-	if aaaSessionID := sess.GetAAASessionID(); aaaSessionID != "" {
-		key := fmt.Sprintf("osvbng:lookup:acct-session-id:%s", aaaSessionID)
-		if err := c.cache.Set(c.Ctx, key, []byte(sessionID), ttl); err != nil {
-			c.logger.Warn("Failed to set acct-session-id lookup", "key", key, "error", err)
-		}
-	}
-
-	if username := sess.GetUsername(); username != "" {
-		key := fmt.Sprintf("osvbng:lookup:username:%s", username)
-		if err := c.cache.Set(c.Ctx, key, []byte(sessionID), ttl); err != nil {
-			c.logger.Warn("Failed to set username lookup", "key", key, "error", err)
-		}
-	}
-
-	if ipv4 := sess.GetIPv4Address(); ipv4 != nil {
-		key := fmt.Sprintf("osvbng:lookup:framed-ipv4:%s", ipv4.String())
-		if err := c.cache.Set(c.Ctx, key, []byte(sessionID), ttl); err != nil {
-			c.logger.Warn("Failed to set framed-ipv4 lookup", "key", key, "error", err)
-		}
-	}
-
-	if ipv6 := sess.GetIPv6Address(); ipv6 != nil {
-		key := fmt.Sprintf("osvbng:lookup:framed-ipv6:%s", ipv6.String())
-		if err := c.cache.Set(c.Ctx, key, []byte(sessionID), ttl); err != nil {
-			c.logger.Warn("Failed to set framed-ipv6 lookup", "key", key, "error", err)
-		}
-	}
-}
-
-func (c *Component) deleteMutationLookupKeys(sessionID string, sess models.SubscriberSession) {
-	if aaaSessionID := sess.GetAAASessionID(); aaaSessionID != "" {
-		key := fmt.Sprintf("osvbng:lookup:acct-session-id:%s", aaaSessionID)
-		existing, err := c.cache.Get(c.Ctx, key)
-		if err == nil && string(existing) == sessionID {
-			c.cache.Delete(c.Ctx, key)
-		}
-	}
-
-	if username := sess.GetUsername(); username != "" {
-		key := fmt.Sprintf("osvbng:lookup:username:%s", username)
-		existing, err := c.cache.Get(c.Ctx, key)
-		if err == nil && string(existing) == sessionID {
-			c.cache.Delete(c.Ctx, key)
-		}
-	}
-
-	if ipv4 := sess.GetIPv4Address(); ipv4 != nil {
-		key := fmt.Sprintf("osvbng:lookup:framed-ipv4:%s", ipv4.String())
-		existing, err := c.cache.Get(c.Ctx, key)
-		if err == nil && string(existing) == sessionID {
-			c.cache.Delete(c.Ctx, key)
-		}
-	}
-
-	if ipv6 := sess.GetIPv6Address(); ipv6 != nil {
-		key := fmt.Sprintf("osvbng:lookup:framed-ipv6:%s", ipv6.String())
-		existing, err := c.cache.Get(c.Ctx, key)
-		if err == nil && string(existing) == sessionID {
-			c.cache.Delete(c.Ctx, key)
-		}
-	}
-}
 
 func (c *Component) buildLookupKey(sess models.SubscriberSession) string {
 	mac := sess.GetMAC()

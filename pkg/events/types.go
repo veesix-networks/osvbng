@@ -56,7 +56,10 @@ type CGNATMappingEvent struct {
 type SubscriberMutationEvent struct {
 	RequestID      string
 	SessionID      string
-	AccessType     models.AccessType
+	AcctSessionID  string
+	Username       string
+	FramedIPv4     string
+	FramedIPv6     string
 	AttributeDelta map[string]string
 }
 
@@ -67,4 +70,13 @@ type SubscriberMutationResultEvent struct {
 	Error      string
 	ErrorCause int
 	Session    models.SubscriberSession
+}
+
+type SubscriberTerminateEvent struct {
+	SessionID     string
+	AcctSessionID string
+	Username      string
+	FramedIPv4    string
+	FramedIPv6    string
+	Reason        string
 }

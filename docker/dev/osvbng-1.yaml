@@ -113,6 +113,7 @@ subscriber-groups:
     groups:
         default:
             access-type: ipoe
+            vlan-tpid: dot1q
             ipv4-profile: default
             ipv6-profile: default-v6
             vlans:
@@ -126,6 +127,7 @@ subscriber-groups:
             aaa-policy: default-policy
         relay:
             access-type: ipoe
+            vlan-tpid: dot1q
             ipv4-profile: relay-v4
             ipv6-profile: relay-v6
             vlans:
@@ -135,6 +137,7 @@ subscriber-groups:
             aaa-policy: default-policy
         proxy:
             access-type: ipoe
+            vlan-tpid: dot1q
             ipv4-profile: proxy-v4
             ipv6-profile: proxy-v6
             vlans:
@@ -144,6 +147,7 @@ subscriber-groups:
             aaa-policy: default-policy
         pppoe:
             access-type: pppoe
+            vlan-tpid: dot1q
             ipv4-profile: default
             vlans:
                 - svlan: "200-220"

@@ -10,4 +10,5 @@ import (
 
 const (
 	ShowServersPath = showpaths.Path("aaa.radius.servers")
+	ShowCoAPath     = showpaths.Path("aaa.radius.coa")
 )
