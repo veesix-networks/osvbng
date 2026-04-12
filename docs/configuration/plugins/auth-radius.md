@@ -115,11 +115,68 @@ Accounting-Request packets include:
 | Framed-IP-Address | 8 | Assigned IPv4 address |
 | Event-Timestamp | 55 | Current time |
 
+## CoA / Disconnect-Message (RFC 5176)
+
+osvbng can receive RADIUS Change of Authorization (CoA) and Disconnect-Message (DM) requests from authorized RADIUS servers. CoA changes subscriber attributes mid-session; Disconnect tears down a session.
+
+CoA is implemented as a plugin component (`subscriber.auth.radius.coa`) that starts automatically when `coa_clients` is configured. It uses the event bus to communicate with subscriber components - no direct coupling.
+
+| Field | Type | Description | Default |
+|-------|------|-------------|---------|
+| `coa_port` | int | UDP port to listen for CoA/DM requests | `3799` |
+| `coa_clients` | [CoAClient](#coa-client)[] | Authorized CoA senders | |
+| `coa_replay_window` | int | Event-Timestamp replay window in seconds. Set to 0 to disable. | `300` |
+
+If `coa_clients` is empty or absent, the CoA listener is not started.
+
+### CoA Client
+
+| Field | Type | Description | Example |
+|-------|------|-------------|---------|
+| `host` | string | IP address or CIDR range of the CoA sender | `10.1.1.1` or `10.244.0.0/16` |
+| `secret` | string | Shared secret for this client | `${COA_SECRET}` |
+
+The `host` field accepts bare IP addresses (matched as /32) or CIDR ranges. CIDR support is useful for Kubernetes deployments where CoA sources have ephemeral pod IPs within a known network:
+
+```yaml
+coa_clients:
+  - host: "10.244.0.0/16"    # K8s pod CIDR
+    secret: "${COA_SECRET}"
+```
+
+For environments where source IP filtering is not practical, use `0.0.0.0/0` to accept from any source. Message-Authenticator (HMAC-MD5) remains the authentication boundary:
+
+```yaml
+coa_clients:
+  - host: "0.0.0.0/0"
+    secret: "${COA_SECRET}"
+```
+
+### Supported Operations
+
+**CoA-Request:** Changes subscriber session attributes. The request must contain at least one session identifier (Acct-Session-Id, User-Name, Framed-IP-Address, or Framed-IPv6-Address) and one or more mutable attributes. Attributes that require session teardown (IP addresses, VRF, pools) are rejected.
+
+**Disconnect-Request:** Tears down a subscriber session. The request must contain only session identification attributes. The session is fully deprovisioned from the VPP dataplane.
+
+### Error-Cause Values
+
+| Code | Name | When |
+|------|------|------|
+| 201 | Residual Session Context Removed | Disconnect-ACK |
+| 401 | Unsupported Attribute | CoA attribute not in the mutable set |
+| 402 | Missing Attribute | No session identifier or no mutable attributes |
+| 403 | NAS Identification Mismatch | NAS-Identifier doesn't match config |
+| 404 | Invalid Request | Disconnect-Request contains non-identification attributes |
+| 503 | Session Context Not Found | Target session not found |
+| 506 | Resources Unavailable | Worker pool overflow or internal error |
+| 507 | Request Initiated | Service-Type = Authorize Only (not supported) |
+
 ## Show Commands
 
 | Path | API Endpoint | Description |
 |------|-------------|-------------|
 | `aaa.radius.servers` | `/api/show/aaa/radius/servers` | Per-server auth/acct statistics |
+| `aaa.radius.coa` | `/api/show/aaa/radius/coa` | Per-client CoA/DM statistics |
 
 ## Example
 
@@ -138,7 +195,7 @@ plugins:
     nas_ip: 10.0.0.1
 ```
 
-### Full
+### Full (with CoA)
 
 ```yaml
 aaa:
@@ -160,6 +217,10 @@ plugins:
     nas_port_type: Virtual
     dead_time: 30s
     dead_threshold: 3
+    coa_port: 3799
+    coa_clients:
+      - host: 10.1.1.1
+        secret: "${COA_SECRET}"
     response_mappings:
       - vendor_id: 9
         vendor_type: 1

@@ -79,6 +79,7 @@ nav:
       - Collectors: architecture/COLLECTORS.md
       - Components: architecture/COMPONENTS.md
       - Configuration: architecture/CONFIGURATION.md
+      - Event Bus: architecture/EVENTS.md
       - Handlers: architecture/HANDLERS.md
       - Plugins: architecture/PLUGINS.md
       - Supported NICs: architecture/SUPPORTED_NICS.md
