@@ -61,15 +61,17 @@ type Component struct {
 	cookieMgr *pppoe.CookieManager
 	echoGen   *EchoGenerator
 
-	sessions  map[string]*SessionState
-	sidIndex  map[uint16]*SessionState
-	sessionMu sync.RWMutex
+	sessions       map[string]*SessionState
+	sidIndex       map[uint16]*SessionState
+	sessionIDIndex map[string]*SessionState
+	sessionMu      sync.RWMutex
 
 	registry *allocator.Registry
 
-	aaaRespSub  events.Subscription
-	haStateSub  events.Subscription
-	pppoeChan   <-chan *dataplane.ParsedPacket
+	aaaRespSub   events.Subscription
+	haStateSub   events.Subscription
+	mutationSub  events.Subscription
+	pppoeChan    <-chan *dataplane.ParsedPacket
 
 	nextSessionID uint16
 	sidMu         sync.Mutex
@@ -166,6 +168,7 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 		cookieMgr:        cookieMgr,
 		sessions:         make(map[string]*SessionState),
 		sidIndex:         make(map[uint16]*SessionState),
+		sessionIDIndex:   make(map[string]*SessionState),
 		registry:         allocator.GetGlobalRegistry(),
 		pppoeChan:        deps.PPPChan,
 		nextSessionID:    1,
@@ -222,6 +225,7 @@ func (c *Component) Start(ctx context.Context) error {
 
 	c.aaaRespSub = c.eventBus.Subscribe(events.TopicAAAResponsePPPoE, c.handleAAAResponse)
 	c.haStateSub = c.eventBus.Subscribe(events.TopicHAStateChange, c.handleHAStateChange)
+	c.mutationSub = c.eventBus.Subscribe(events.TopicSubscriberMutation, c.handleSubscriberMutation)
 
 	c.echoGen.Start()
 	c.Go(c.consumePPPoEPackets)
@@ -233,6 +237,7 @@ func (c *Component) Stop(ctx context.Context) error {
 	c.logger.Info("Stopping PPPoE component")
 	c.aaaRespSub.Unsubscribe()
 	c.haStateSub.Unsubscribe()
+	c.mutationSub.Unsubscribe()
 	c.echoGen.Stop()
 	c.StopContext()
 	return nil
@@ -379,6 +384,7 @@ func (c *Component) handlePADR(pkt *dataplane.ParsedPacket) error {
 	c.sessionMu.Lock()
 	c.sessions[key] = sess
 	c.sidIndex[sessionID] = sess
+	c.sessionIDIndex[sess.SessionID] = sess
 	c.sessionMu.Unlock()
 
 	c.logger.Debug("Created PPPoE session",
@@ -406,6 +412,7 @@ func (c *Component) handlePADT(pkt *dataplane.ParsedPacket) error {
 		key := c.sessionKey(sess.MAC, sess.OuterVLAN, sess.InnerVLAN)
 		delete(c.sessions, key)
 		delete(c.sidIndex, sid)
+		delete(c.sessionIDIndex, sess.SessionID)
 	}
 	c.sessionMu.Unlock()
 
@@ -523,6 +530,7 @@ func (c *Component) tearDownSessionAfterVPPFailure(sess *SessionState, snap sess
 	key := c.sessionKey(snap.MAC, snap.OuterVLAN, snap.InnerVLAN)
 	delete(c.sessions, key)
 	delete(c.sidIndex, snap.PPPSessionID)
+	delete(c.sessionIDIndex, sess.SessionID)
 	c.sessionMu.Unlock()
 
 	c.publishSessionLifecycle(&models.PPPSession{
@@ -822,6 +830,7 @@ func (c *Component) handleDeadPeer(sessionID uint16) {
 		key := c.sessionKey(sess.MAC, sess.OuterVLAN, sess.InnerVLAN)
 		delete(c.sessions, key)
 		delete(c.sidIndex, sessionID)
+		delete(c.sessionIDIndex, sess.SessionID)
 	}
 	c.sessionMu.Unlock()
 
@@ -941,6 +950,7 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 			sess.lcp.SetMagic(sess.LCPMagic)
 		}
 		c.sessions[lookupKey] = &sess
+		c.sessionIDIndex[sess.SessionID] = &sess
 		if sess.PPPoESessionID > 0 {
 			c.sidIndex[sess.PPPoESessionID] = &sess
 			if sess.PPPoESessionID >= c.nextSessionID {
@@ -1259,6 +1269,7 @@ func (c *Component) restoreFromHASync(srgName string) {
 		c.sessionMu.Lock()
 		c.sessions[lookupKey] = sess
 		c.sidIndex[pppoeSessionID] = sess
+		c.sessionIDIndex[sess.SessionID] = sess
 		if pppoeSessionID >= c.nextSessionID {
 			c.nextSessionID = pppoeSessionID + 1
 		}
@@ -1364,4 +1375,113 @@ func (c *Component) ForEachSession(fn func(models.SubscriberSession) bool) {
 			return
 		}
 	}
+}
+
+func (c *Component) handleSubscriberMutation(ev events.Event) {
+	data, ok := ev.Data.(*events.SubscriberMutationEvent)
+	if !ok || data.AccessType != models.AccessTypePPPoE {
+		return
+	}
+
+	c.sessionMu.RLock()
+	sess := c.sessionIDIndex[data.SessionID]
+	c.sessionMu.RUnlock()
+
+	if sess == nil {
+		c.publishMutationResult(data.RequestID, data.SessionID, false, "session not found", 503, nil)
+		return
+	}
+
+	sess.mu.Lock()
+	defer sess.mu.Unlock()
+
+	c.sessionMu.RLock()
+	stillIndexed := c.sessionIDIndex[data.SessionID] == sess
+	c.sessionMu.RUnlock()
+	if !stillIndexed || sess.Phase == ppp.PhaseTerminate || sess.Phase == ppp.PhaseDead {
+		c.publishMutationResult(data.RequestID, data.SessionID, false, "session released during mutation", 503, nil)
+		return
+	}
+
+	if sess.Attributes == nil {
+		sess.Attributes = make(map[string]string)
+	}
+	for k, v := range data.AttributeDelta {
+		sess.Attributes[k] = v
+	}
+
+	if err := c.checkpointSessionSync(sess); err != nil {
+		c.publishMutationResult(data.RequestID, data.SessionID, false, err.Error(), 506, nil)
+		return
+	}
+
+	snapshot := c.buildModelSnapshot(sess)
+	c.publishMutationResult(data.RequestID, data.SessionID, true, "", 0, snapshot)
+}
+
+func (c *Component) checkpointSessionSync(sess *SessionState) error {
+	if c.opdb == nil {
+		return nil
+	}
+	data, err := json.Marshal(sess)
+	if err != nil {
+		return fmt.Errorf("marshal session: %w", err)
+	}
+	return c.opdb.Put(c.Ctx, opdb.NamespacePPPoESessions, sess.SessionID, data)
+}
+
+func (c *Component) buildModelSnapshot(sess *SessionState) *models.PPPSession {
+	snapshot := &models.PPPSession{
+		SessionID:    sess.SessionID,
+		State:        models.SessionStateActive,
+		AccessType:   string(models.AccessTypePPPoE),
+		Protocol:     string(models.ProtocolPPPoESession),
+		PPPSessionID: sess.PPPoESessionID,
+		MAC:          sess.MAC,
+		OuterVLAN:    sess.OuterVLAN,
+		InnerVLAN:    sess.InnerVLAN,
+		IfIndex:      sess.SwIfIndex,
+		VRF:          sess.VRF,
+		ServiceGroup: sess.ServiceGroup.Name,
+		SRGName:      sess.SRGName,
+		IPv4Address:  sess.IPv4Address,
+		IPv6Address:  sess.IPv6Address,
+		Username:     sess.Username,
+		AAASessionID: sess.AcctSessionID,
+		ActivatedAt:  sess.BoundAt,
+		OuterTPID:    sess.OuterTPID,
+		LCPMagic:     sess.LCPMagic,
+		Attributes:   sess.Attributes,
+		NegotiatedPPPMTU: sess.NegotiatedPPPMTU,
+		IPv4MSS:      sess.IPv4MSS,
+		IPv6MSS:      sess.IPv6MSS,
+	}
+	if sess.IPv6Prefix != nil {
+		snapshot.IPv6Prefix = sess.IPv6Prefix.String()
+	}
+	if sess.lcp != nil {
+		snapshot.LCPState = sess.lcp.FSM().State().String()
+	}
+	if sess.ipcp != nil {
+		snapshot.IPCPState = sess.ipcp.FSM().State().String()
+	}
+	if sess.ipv6cp != nil {
+		snapshot.IPv6CPState = sess.ipv6cp.FSM().State().String()
+	}
+	return snapshot
+}
+
+func (c *Component) publishMutationResult(requestID, sessionID string, ok bool, errMsg string, errCause int, session models.SubscriberSession) {
+	c.eventBus.Publish(events.TopicSubscriberMutationResult, events.Event{
+		Source:    c.Name(),
+		Timestamp: time.Now(),
+		Data: &events.SubscriberMutationResultEvent{
+			RequestID:  requestID,
+			SessionID:  sessionID,
+			Ok:         ok,
+			Error:      errMsg,
+			ErrorCause: errCause,
+			Session:    session,
+		},
+	})
 }

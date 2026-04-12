@@ -68,6 +68,7 @@ type Component struct {
 
 	aaaRespSub  events.Subscription
 	haStateSub  events.Subscription
+	mutationSub events.Subscription
 }
 
 type SessionState struct {
@@ -343,6 +344,7 @@ func (c *Component) Start(ctx context.Context) error {
 
 	c.aaaRespSub = c.eventBus.Subscribe(events.TopicAAAResponseIPoE, c.handleAAAResponse)
 	c.haStateSub = c.eventBus.Subscribe(events.TopicHAStateChange, c.handleHAStateChange)
+	c.mutationSub = c.eventBus.Subscribe(events.TopicSubscriberMutation, c.handleSubscriberMutation)
 
 	c.Go(c.cleanupSessions)
 	c.Go(c.consumeDHCPPackets)
@@ -357,6 +359,7 @@ func (c *Component) Stop(ctx context.Context) error {
 
 	c.aaaRespSub.Unsubscribe()
 	c.haStateSub.Unsubscribe()
+	c.mutationSub.Unsubscribe()
 
 	c.StopContext()
 
@@ -3602,5 +3605,99 @@ func (c *Component) ForEachSession(fn func(models.SubscriberSession) bool) {
 		sess.mu.Unlock()
 
 		return fn(snapshot)
+	})
+}
+
+func (c *Component) handleSubscriberMutation(ev events.Event) {
+	data, ok := ev.Data.(*events.SubscriberMutationEvent)
+	if !ok || data.AccessType != models.AccessTypeIPoE {
+		return
+	}
+
+	val, ok := c.sessions.Load(data.SessionID)
+	if !ok {
+		c.publishMutationResult(data.RequestID, data.SessionID, false, "session not found", 503, nil)
+		return
+	}
+	sess := val.(*SessionState)
+
+	sess.mu.Lock()
+	defer sess.mu.Unlock()
+
+	if sess.Closing || sess.State == string(models.SessionStateReleased) {
+		c.publishMutationResult(data.RequestID, data.SessionID, false, "session released during mutation", 503, nil)
+		return
+	}
+
+	if sess.Attributes == nil {
+		sess.Attributes = make(map[string]string)
+	}
+	for k, v := range data.AttributeDelta {
+		sess.Attributes[k] = v
+	}
+
+	if err := c.checkpointSessionSync(sess); err != nil {
+		c.publishMutationResult(data.RequestID, data.SessionID, false, err.Error(), 506, nil)
+		return
+	}
+
+	snapshot := c.buildModelSnapshot(sess)
+	c.publishMutationResult(data.RequestID, data.SessionID, true, "", 0, snapshot)
+}
+
+func (c *Component) checkpointSessionSync(sess *SessionState) error {
+	if c.opdb == nil {
+		return nil
+	}
+	data, err := json.Marshal(sess)
+	if err != nil {
+		return fmt.Errorf("marshal session: %w", err)
+	}
+	return c.opdb.Put(c.Ctx, opdb.NamespaceIPoESessions, sess.SessionID, data)
+}
+
+func (c *Component) buildModelSnapshot(sess *SessionState) *models.IPoESession {
+	snapshot := &models.IPoESession{
+		SessionID:    sess.SessionID,
+		State:        models.SessionState(sess.State),
+		AccessType:   string(models.AccessTypeIPoE),
+		MAC:          sess.MAC,
+		OuterVLAN:    sess.OuterVLAN,
+		InnerVLAN:    sess.InnerVLAN,
+		IfIndex:      sess.IPoESwIfIndex,
+		VRF:          sess.VRF,
+		ServiceGroup: sess.ServiceGroup.Name,
+		SRGName:      sess.SRGName,
+		IPv4Address:  sess.IPv4,
+		LeaseTime:    sess.LeaseTime,
+		Hostname:     sess.Hostname,
+		ClientID:     sess.ClientID,
+		IPv6Address:  sess.IPv6Address,
+		IPv6LeaseTime: sess.IPv6LeaseTime,
+		DUID:         sess.DHCPv6DUID,
+		Username:     sess.Username,
+		AAASessionID: sess.AcctSessionID,
+		ActivatedAt:  sess.BoundAt,
+		OuterTPID:    sess.OuterTPID,
+		Attributes:   sess.Attributes,
+	}
+	if sess.IPv6Prefix != nil {
+		snapshot.IPv6Prefix = sess.IPv6Prefix.String()
+	}
+	return snapshot
+}
+
+func (c *Component) publishMutationResult(requestID, sessionID string, ok bool, errMsg string, errCause int, session models.SubscriberSession) {
+	c.eventBus.Publish(events.TopicSubscriberMutationResult, events.Event{
+		Source:    c.Name(),
+		Timestamp: time.Now(),
+		Data: &events.SubscriberMutationResultEvent{
+			RequestID:  requestID,
+			SessionID:  sessionID,
+			Ok:         ok,
+			Error:      errMsg,
+			ErrorCause: errCause,
+			Session:    session,
+		},
 	})
 }

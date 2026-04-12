@@ -14,5 +14,7 @@ const (
 	TopicEgress            = "osvbng:events:egress"
 	TopicHAStateChange     = "osvbng:events:ha:state_change"
 	TopicInterfaceState    = "osvbng:events:interface:state"
-	TopicCGNATMapping      = "osvbng:events:cgnat:mapping"
+	TopicCGNATMapping             = "osvbng:events:cgnat:mapping"
+	TopicSubscriberMutation       = "osvbng:events:subscriber:mutation"
+	TopicSubscriberMutationResult = "osvbng:events:subscriber:mutation:result"
 )
