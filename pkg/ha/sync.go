@@ -174,6 +174,45 @@ func (s *SyncSender) GetLastSendTime(srgName string) time.Time {
 	return time.Unix(0, ns)
 }
 
+func (s *SyncSender) HandleMutationResult(ev events.Event) {
+	data, ok := ev.Data.(*events.SubscriberMutationResultEvent)
+	if !ok || !data.Ok || !s.active.Load() || data.Session == nil {
+		return
+	}
+
+	srgName := data.Session.GetSRGName()
+	if srgName == "" {
+		return
+	}
+
+	s.mu.RLock()
+	backlog, hasBacklog := s.backlogs[srgName]
+	seqCounter, hasSeq := s.seqNums[srgName]
+	ctr := s.counters[srgName]
+	s.mu.RUnlock()
+	if !hasBacklog || !hasSeq {
+		return
+	}
+
+	seq := seqCounter.Add(1)
+	req := &hapb.SyncSessionRequest{
+		SrgName:  srgName,
+		Sequence: seq,
+		Action:   hapb.SyncAction_SYNC_ACTION_UPDATE,
+		Session:  sessionToCheckpoint(data.Session),
+	}
+
+	backlog.Push(req)
+	if ctr != nil {
+		ctr.updates.Add(1)
+	}
+
+	select {
+	case s.sendCh <- req:
+	default:
+	}
+}
+
 func sessionToCheckpoint(sess models.SubscriberSession) *hapb.SessionCheckpoint {
 	cp := &hapb.SessionCheckpoint{
 		SessionId:    sess.GetSessionID(),

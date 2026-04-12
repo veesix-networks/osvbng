@@ -207,6 +207,7 @@ func (m *Manager) Start(ctx context.Context) error {
 		}
 		m.syncSender = NewSyncSender(m.peer, m.cfg.GetSyncBacklogSize(), srgNames, m.logger)
 		m.eventBus.Subscribe(events.TopicSessionLifecycle, m.syncSender.HandleEvent)
+		m.eventBus.Subscribe(events.TopicSubscriberMutationResult, m.syncSender.HandleMutationResult)
 		m.Go(func() { m.syncSender.Run(m.Ctx) })
 
 		m.cgnatSyncSender = NewCGNATSyncSender(m.peer, m.cfg.GetSyncBacklogSize(), srgNames, m.logger)

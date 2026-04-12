@@ -13,7 +13,8 @@ type Path string
 const (
 	SystemLoggingLevel     Path = "system.logging.level.<*>"
 	SystemEventsDebug      Path = "system.events.debug"
-	SubscriberSessionClear Path = "subscriber.session.clear"
+	SubscriberSessionClear  Path = "subscriber.session.clear"
+	SubscriberSessionMutate Path = "subscriber.session.mutate"
 
 	HASwitchover Path = "ha.switchover"
 

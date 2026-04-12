@@ -52,3 +52,19 @@ type CGNATMappingEvent struct {
 	Mapping   *models.CGNATMapping
 	IsAdd     bool
 }
+
+type SubscriberMutationEvent struct {
+	RequestID      string
+	SessionID      string
+	AccessType     models.AccessType
+	AttributeDelta map[string]string
+}
+
+type SubscriberMutationResultEvent struct {
+	RequestID  string
+	SessionID  string
+	Ok         bool
+	Error      string
+	ErrorCause int
+	Session    models.SubscriberSession
+}
