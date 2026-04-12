@@ -6,21 +6,19 @@ package subscriber
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/veesix-networks/osvbng/pkg/aaa"
 	"github.com/veesix-networks/osvbng/pkg/events"
-	"github.com/veesix-networks/osvbng/pkg/models"
 )
 
 const (
-	defaultMutationTimeout  = 10 * time.Second
-	defaultBurstThreshold   = 32
-	defaultBucketSize       = 32
-	defaultBucketInterval   = 10 * time.Millisecond
+	defaultMutationTimeout   = 10 * time.Second
+	defaultBurstThreshold    = 32
+	defaultBucketSize        = 32
+	defaultBucketInterval    = 10 * time.Millisecond
 	defaultMaxTargetsPerCall = 10240
 
 	ErrorCauseUnsupportedAttribute = 401
@@ -109,146 +107,6 @@ func validateTarget(t Target) (int, error) {
 	return 0, nil
 }
 
-type resolvedTarget struct {
-	sessionID  string
-	accessType models.AccessType
-	target     Target
-}
-
-func (c *Component) resolveTarget(ctx context.Context, t Target) (*resolvedTarget, int, error) {
-	var sessionID string
-	var err error
-
-	switch {
-	case t.SessionID != "":
-		sessionID = t.SessionID
-	case t.AcctSessionID != "":
-		sessionID, err = c.lookupByKey(ctx, fmt.Sprintf("osvbng:lookup:acct-session-id:%s", t.AcctSessionID))
-	case t.Username != "":
-		sessionID, err = c.lookupByKey(ctx, fmt.Sprintf("osvbng:lookup:username:%s", t.Username))
-	case t.FramedIPv4 != "":
-		sessionID, err = c.lookupByKey(ctx, fmt.Sprintf("osvbng:lookup:framed-ipv4:%s", t.FramedIPv4))
-	case t.FramedIPv6 != "":
-		sessionID, err = c.lookupByKey(ctx, fmt.Sprintf("osvbng:lookup:framed-ipv6:%s", t.FramedIPv6))
-	}
-
-	if err != nil {
-		return nil, ErrorCauseSessionNotFound, fmt.Errorf("session not found")
-	}
-
-	if sessionID == "" {
-		return nil, ErrorCauseSessionNotFound, fmt.Errorf("session not found")
-	}
-
-	sess, accessType, err := c.GetSessionGeneric(ctx, sessionID)
-	if err != nil {
-		return nil, ErrorCauseSessionNotFound, fmt.Errorf("session not found: %w", err)
-	}
-
-	if t.Username != "" {
-		if err := c.checkUsernameAmbiguity(ctx, t.Username, sessionID); err != nil {
-			return nil, ErrorCauseSessionNotFound, err
-		}
-	}
-
-	if t.AcctSessionID != "" && sess.GetAAASessionID() != t.AcctSessionID {
-		return nil, ErrorCauseSessionNotFound, fmt.Errorf("stale lookup key for acct-session-id")
-	}
-	if t.FramedIPv4 != "" && (sess.GetIPv4Address() == nil || sess.GetIPv4Address().String() != t.FramedIPv4) {
-		return nil, ErrorCauseSessionNotFound, fmt.Errorf("stale lookup key for framed-ipv4")
-	}
-
-	return &resolvedTarget{
-		sessionID:  sessionID,
-		accessType: accessType,
-		target:     t,
-	}, 0, nil
-}
-
-func (c *Component) lookupByKey(ctx context.Context, key string) (string, error) {
-	data, err := c.cache.Get(ctx, key)
-	if err != nil {
-		return "", err
-	}
-	if len(data) == 0 {
-		return "", fmt.Errorf("empty lookup")
-	}
-	return string(data), nil
-}
-
-func (c *Component) checkUsernameAmbiguity(ctx context.Context, username, expectedSessionID string) error {
-	pattern := "osvbng:sessions:*"
-	var cursor uint64
-	matchCount := 0
-
-	for {
-		keys, nextCursor, err := c.cache.Scan(ctx, cursor, pattern, 100)
-		if err != nil {
-			break
-		}
-
-		for _, key := range keys {
-			data, err := c.cache.Get(ctx, key)
-			if err != nil {
-				continue
-			}
-			var meta struct {
-				Username string `json:"Username"`
-				State    string `json:"State"`
-			}
-			if err := json.Unmarshal(data, &meta); err != nil {
-				continue
-			}
-			if meta.Username == username && meta.State == string(models.SessionStateActive) {
-				matchCount++
-				if matchCount > 1 {
-					return fmt.Errorf("ambiguous username — use acct_session_id or session_id")
-				}
-			}
-		}
-
-		cursor = nextCursor
-		if cursor == 0 {
-			break
-		}
-	}
-
-	return nil
-}
-
-func (c *Component) GetSessionGeneric(ctx context.Context, sessionID string) (models.SubscriberSession, models.AccessType, error) {
-	key := fmt.Sprintf("osvbng:sessions:%s", sessionID)
-	data, err := c.cache.Get(ctx, key)
-	if err != nil {
-		return nil, "", fmt.Errorf("session not found: %s", sessionID)
-	}
-	if len(data) == 0 {
-		return nil, "", fmt.Errorf("empty session data: %s", sessionID)
-	}
-
-	var meta struct {
-		AccessType string `json:"AccessType"`
-	}
-	if err := json.Unmarshal(data, &meta); err != nil {
-		return nil, "", fmt.Errorf("unmarshal metadata: %w", err)
-	}
-
-	switch models.AccessType(meta.AccessType) {
-	case models.AccessTypePPPoE:
-		var sess models.PPPSession
-		if err := json.Unmarshal(data, &sess); err != nil {
-			return nil, "", fmt.Errorf("unmarshal ppp session: %w", err)
-		}
-		return &sess, models.AccessTypePPPoE, nil
-	default:
-		var sess models.IPoESession
-		if err := json.Unmarshal(data, &sess); err != nil {
-			return nil, "", fmt.Errorf("unmarshal ipoe session: %w", err)
-		}
-		return &sess, models.AccessTypeIPoE, nil
-	}
-}
-
 func (c *Component) MutateSubscribers(ctx context.Context, targets []Target, attrs map[string]string) (*MutationResult, error) {
 	if len(targets) > defaultMaxTargetsPerCall {
 		return nil, fmt.Errorf("too many targets (%d > %d)", len(targets), defaultMaxTargetsPerCall)
@@ -261,7 +119,7 @@ func (c *Component) MutateSubscribers(ctx context.Context, targets []Target, att
 		}, nil
 	}
 
-	var resolved []*resolvedTarget
+	var valid []Target
 	result := &MutationResult{}
 
 	for _, t := range targets {
@@ -275,41 +133,28 @@ func (c *Component) MutateSubscribers(ctx context.Context, targets []Target, att
 			result.Failed++
 			continue
 		}
-
-		rt, errCause, err := c.resolveTarget(ctx, t)
-		if err != nil {
-			result.Results = append(result.Results, TargetResult{
-				Target:     t,
-				Ok:         false,
-				Error:      err.Error(),
-				ErrorCause: errCause,
-			})
-			result.Failed++
-			continue
-		}
-
-		resolved = append(resolved, rt)
+		valid = append(valid, t)
 	}
 
-	if len(resolved) == 0 {
+	if len(valid) == 0 {
 		return result, nil
 	}
 
 	requestID := uuid.NewString()
 	waiter := &mutationWaiter{
-		ch:       make(chan TargetResult, len(resolved)),
-		expected: len(resolved),
+		ch:       make(chan TargetResult, len(valid)),
+		expected: len(valid),
 	}
 	c.mutationWaiters.Store(requestID, waiter)
 	defer c.mutationWaiters.Delete(requestID)
 
-	c.publishMutationEvents(requestID, resolved, attrs)
+	c.publishMutationEvents(requestID, valid, attrs)
 
 	timer := time.NewTimer(defaultMutationTimeout)
 	defer timer.Stop()
 
 	collected := 0
-	for collected < len(resolved) {
+	for collected < len(valid) {
 		select {
 		case tr := <-waiter.ch:
 			result.Results = append(result.Results, tr)
@@ -320,11 +165,10 @@ func (c *Component) MutateSubscribers(ctx context.Context, targets []Target, att
 			}
 			collected++
 		case <-timer.C:
-			for _, rt := range resolved {
-				if !c.resultCollected(result, rt.sessionID) {
+			for _, t := range valid {
+				if !c.resultCollectedForTarget(result, t) {
 					result.Results = append(result.Results, TargetResult{
-						SessionID:  rt.sessionID,
-						Target:     rt.target,
+						Target:     t,
 						Ok:         false,
 						Error:      "mutation timeout — applied state unknown",
 						ErrorCause: ErrorCauseResourcesUnavailable,
@@ -334,11 +178,10 @@ func (c *Component) MutateSubscribers(ctx context.Context, targets []Target, att
 			}
 			return result, nil
 		case <-ctx.Done():
-			for _, rt := range resolved {
-				if !c.resultCollected(result, rt.sessionID) {
+			for _, t := range valid {
+				if !c.resultCollectedForTarget(result, t) {
 					result.Results = append(result.Results, TargetResult{
-						SessionID:  rt.sessionID,
-						Target:     rt.target,
+						Target:     t,
 						Ok:         false,
 						Error:      "context cancelled",
 						ErrorCause: ErrorCauseResourcesUnavailable,
@@ -353,70 +196,63 @@ func (c *Component) MutateSubscribers(ctx context.Context, targets []Target, att
 	return result, nil
 }
 
-func (c *Component) resultCollected(result *MutationResult, sessionID string) bool {
+func (c *Component) resultCollectedForTarget(result *MutationResult, t Target) bool {
 	for _, r := range result.Results {
-		if r.SessionID == sessionID {
+		if r.Target == t {
 			return true
 		}
 	}
 	return false
 }
 
-func (c *Component) publishMutationEvents(requestID string, resolved []*resolvedTarget, attrs map[string]string) {
-	if len(resolved) <= defaultBurstThreshold {
-		for _, rt := range resolved {
-			c.eventBus.Publish(events.TopicSubscriberMutation, events.Event{
-				Source:    c.Name(),
-				Timestamp: time.Now(),
-				Data: &events.SubscriberMutationEvent{
-					RequestID:      requestID,
-					SessionID:      rt.sessionID,
-					AccessType:     rt.accessType,
-					AttributeDelta: attrs,
-				},
-			})
+func targetToMutationEvent(requestID string, t Target, attrs map[string]string) *events.SubscriberMutationEvent {
+	return &events.SubscriberMutationEvent{
+		RequestID:      requestID,
+		SessionID:      t.SessionID,
+		AcctSessionID:  t.AcctSessionID,
+		Username:       t.Username,
+		FramedIPv4:     t.FramedIPv4,
+		FramedIPv6:     t.FramedIPv6,
+		AttributeDelta: attrs,
+	}
+}
+
+func (c *Component) publishMutationEvents(requestID string, targets []Target, attrs map[string]string) {
+	publish := func(t Target) {
+		c.eventBus.Publish(events.TopicSubscriberMutation, events.Event{
+			Source:    c.Name(),
+			Timestamp: time.Now(),
+			Data:      targetToMutationEvent(requestID, t, attrs),
+		})
+	}
+
+	if len(targets) <= defaultBurstThreshold {
+		for _, t := range targets {
+			publish(t)
 		}
 		return
 	}
 
-	for i := 0; i < len(resolved); i += defaultBucketSize {
+	for i := 0; i < len(targets); i += defaultBucketSize {
 		end := i + defaultBucketSize
-		if end > len(resolved) {
-			end = len(resolved)
+		if end > len(targets) {
+			end = len(targets)
 		}
-		bucket := resolved[i:end]
+		bucket := targets[i:end]
 
 		if i == 0 {
-			for _, rt := range bucket {
-				c.eventBus.Publish(events.TopicSubscriberMutation, events.Event{
-					Source:    c.Name(),
-					Timestamp: time.Now(),
-					Data: &events.SubscriberMutationEvent{
-						RequestID:      requestID,
-						SessionID:      rt.sessionID,
-						AccessType:     rt.accessType,
-						AttributeDelta: attrs,
-					},
-				})
+			for _, t := range bucket {
+				publish(t)
 			}
 			continue
 		}
 
 		delay := time.Duration(i/defaultBucketSize) * defaultBucketInterval
-		bucketCopy := make([]*resolvedTarget, len(bucket))
+		bucketCopy := make([]Target, len(bucket))
 		copy(bucketCopy, bucket)
 		time.AfterFunc(delay, func() {
-			for _, rt := range bucketCopy {
-				c.eventBus.Publish(events.TopicSubscriberMutation, events.Event{
-					Source:    c.Name(),
-					Timestamp: time.Now(),
-					Data: &events.SubscriberMutationEvent{
-						RequestID:      requestID,
-						SessionID:      rt.sessionID,
-						AccessType:     rt.accessType,
-						AttributeDelta: attrs,
-					},
-				})
+			for _, t := range bucketCopy {
+				publish(t)
 			}
 		})
 	}
