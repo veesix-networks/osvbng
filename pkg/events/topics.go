@@ -17,4 +17,5 @@ const (
 	TopicCGNATMapping             = "osvbng:events:cgnat:mapping"
 	TopicSubscriberMutation       = "osvbng:events:subscriber:mutation"
 	TopicSubscriberMutationResult = "osvbng:events:subscriber:mutation:result"
+	TopicSubscriberTerminate      = "osvbng:events:subscriber:terminate"
 )
