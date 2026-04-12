@@ -1,0 +1,51 @@
+{
+  "interfaces": {
+    "network": [
+      {
+        "interface": "eth2",
+        "address": "10.100.0.2/24",
+        "gateway": "10.100.0.1"
+      }
+    ],
+    "access": [
+      {
+        "interface": "eth1",
+        "network-interface": "eth2",
+        "type": "ipoe",
+        "vlan-mode": "1:1",
+        "outer-vlan-min": 100,
+        "outer-vlan-max": 100,
+        "inner-vlan-min": 2,
+        "inner-vlan-max": 11
+      }
+    ]
+  },
+  "session-traffic": {
+    "ipv4-pps": 10
+  },
+  "dhcp": {
+    "enable": true,
+    "retry": 10
+  },
+  "dhcpv6": {
+    "enable": true,
+    "ia-na": true,
+    "ia-pd": true,
+    "rapid-commit": false,
+    "access-line": true,
+    "ldra": true
+  },
+  "ipoe": {
+    "ipv6": true
+  },
+  "sessions": {
+    "count": 10,
+    "max-outstanding": 10,
+    "start-rate": 10,
+    "stop-rate": 10
+  },
+  "access-line": {
+    "agent-circuit-id": "eth 0/1/{session-global}:{outer-vlan}.{inner-vlan}",
+    "agent-remote-id": "DEV-{session-global}"
+  }
+}
