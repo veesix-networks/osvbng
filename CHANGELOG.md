@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.10.0](https://github.com/veesix-networks/osvbng/compare/v0.9.0...v0.10.0) (2026-04-13)
+
+
+### Features
+
+* **pppoe:** add TCP MSS clamping with PPP MRU configuration (RFC 4638) ([#279](https://github.com/veesix-networks/osvbng/issues/279)) ([4f7e041](https://github.com/veesix-networks/osvbng/commit/4f7e0418cbde2fd106dd27dc5b22c7b497b2eac9))
+* **radius:** add RADIUS CoA/Disconnect-Message with subscriber runtime mutation ([#282](https://github.com/veesix-networks/osvbng/issues/282)) ([b2797b6](https://github.com/veesix-networks/osvbng/commit/b2797b6d5388187fed89d144ed0e4ee4324fd172))
+* **subscriber:** add plugin-agnostic subscriber runtime mutation API ([#281](https://github.com/veesix-networks/osvbng/issues/281)) ([7bf5a0d](https://github.com/veesix-networks/osvbng/commit/7bf5a0d33e540334e5a6862adab6df3ac3d81899))
+
+
+### Bug Fixes
+
+* **test:** harden 23-radius-coa suite reliability ([#283](https://github.com/veesix-networks/osvbng/issues/283)) ([9e5c399](https://github.com/veesix-networks/osvbng/commit/9e5c3999d1ce5dae8ce730d8616bcc8011b40dd2))
+
 ## [0.9.0](https://github.com/veesix-networks/osvbng/compare/v0.8.0...v0.9.0) (2026-04-10)
 
 
