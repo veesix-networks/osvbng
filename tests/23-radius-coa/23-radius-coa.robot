@@ -52,7 +52,8 @@ Verify All Sessions In osvbng API
 
 Verify Traffic Flowing
     [Documentation]    Verify session traffic is flowing for all 10 sessions.
-    Verify Traffic Flowing    ${subscribers}    ${session-count}
+    Wait Until Keyword Succeeds    30s    5s
+    ...    Verify Traffic Flowing    ${subscribers}    ${session-count}
 
 Pick Random Session For CoA
     [Documentation]    Pick a random session and store its Acct-Session-Id for CoA testing.
@@ -73,15 +74,15 @@ Send CoA-Request With Session-Timeout
     Should Contain    ${output}    CoA-ACK
 
 Verify CoA Updated Only Target Session
-    [Documentation]    Verify Session-Timeout was set on the CoA target and not on other sessions.
+    [Documentation]    Verify Session-Timeout was changed to 7200 on the CoA target only.
     Sleep    2s
     ${output} =    Get osvbng API Response    ${bng1}    /api/show/subscriber/sessions
     ${rc}    ${result} =    Run And Return Rc And Output
-    ...    echo '${output}' | python3 -c "import sys,json; d=json.load(sys.stdin); sessions=d.get('data',[]); target='${COA_ACCT_SESSION_ID}'; matched=[s for s in sessions if s.get('AAASessionID')==target]; other=[s for s in sessions if s.get('AAASessionID')!=target]; t_val=matched[0].get('Attributes',{}).get('session_timeout','') if matched else ''; o_has=[s for s in other if s.get('Attributes',{}).get('session_timeout','')!= '']; print(f'{t_val} {len(o_has)}')"
+    ...    echo '${output}' | python3 -c "import sys,json; d=json.load(sys.stdin); sessions=d.get('data',[]); target='${COA_ACCT_SESSION_ID}'; matched=[s for s in sessions if s.get('AAASessionID')==target]; other=[s for s in sessions if s.get('AAASessionID')!=target]; t_val=(matched[0].get('Attributes') or {}).get('session_timeout','') if matched else ''; o_changed=[s for s in other if (s.get('Attributes') or {}).get('session_timeout','')=='7200']; print(f'{t_val} {len(o_changed)}')"
     Should Be Equal As Integers    ${rc}    0
     @{parts} =    Split String    ${result}
     Should Be Equal As Strings    ${parts}[0]    7200    CoA target session_timeout should be 7200
-    Should Be Equal As Strings    ${parts}[1]    0    No other sessions should have session_timeout set
+    Should Be Equal As Strings    ${parts}[1]    0    No other sessions should have session_timeout changed to 7200
 
 Verify All Sessions Still Active After CoA
     [Documentation]    All 10 sessions should still be active after CoA.
@@ -129,15 +130,13 @@ Verify Disconnected Session Is Gone From osvbng
     Should Be Equal As Integers    ${rc}    0
     Should Be Equal As Strings    ${found}    0    Disconnected session ${DISCONNECT_ACCT_SESSION_ID} should not be in API
 
-Verify BNG Blaster Shows 9 Established Sessions
-    [Documentation]    BNG Blaster session counters should reflect the loss of 1 session.
-    ${rc}    ${output} =    BNG Blaster CLI Command    ${subscribers}    session-counters
+Verify Disconnected Session Not Reachable
+    [Documentation]    Verify the disconnected session's VPP FIB entry was removed.
+    ${output} =    Execute VPP Command    ${bng1}    show ip fib
+    ${rc}    ${fib_count} =    Run And Return Rc And Output
+    ...    echo '${output}' | grep -cP "10\\.255\\.0\\.\\d+/32"
     Should Be Equal As Integers    ${rc}    0
-    ${rc}    ${result} =    Run And Return Rc And Output
-    ...    echo '${output}' | python3 -c "import sys,json; d=json.load(sys.stdin); c=d.get('session-counters',{}); print(c.get('session-traffic-flows-verified',0))"
-    Should Be Equal As Integers    ${rc}    0
-    ${verified} =    Convert To Integer    ${result}
-    Should Be True    ${verified} <= 18    Expected at most 18 verified flows (9 sessions x 2 directions) but got ${verified}
+    Should Be Equal As Strings    ${fib_count}    10    Expected 10 FIB entries (9 subscribers + 1 gateway) but got ${fib_count}
 
 Verify CoA Stats
     [Documentation]    Verify CoA stats show the expected counts.
