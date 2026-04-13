@@ -1,0 +1,38 @@
+# Copyright 2026 Veesix Networks Ltd
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: vrf-lite-tests
+
+on:
+  workflow_call:
+
+jobs:
+  vrf-lite:
+    name: VRF-Lite Tests
+    runs-on: self-hosted
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/test-setup
+        with:
+          topology: tests/24-vrf-lite/24-vrf-lite.clab.yml
+
+      - name: Run VRF-lite tests
+        run: |
+          mkdir -p test-results
+          robot --loglevel DEBUG --output test-results/output.xml --log test-results/24-vrf-lite-log.html --report NONE tests/24-vrf-lite/
+
+      - uses: ./.github/actions/test-cleanup
+        if: always()
+        with:
+          topology: tests/24-vrf-lite/24-vrf-lite.clab.yml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vrf-lite-test-results
+          path: test-results/
+          retention-days: 14

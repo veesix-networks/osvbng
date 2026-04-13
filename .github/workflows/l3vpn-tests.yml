@@ -1,0 +1,38 @@
+# Copyright 2026 Veesix Networks Ltd
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: l3vpn-tests
+
+on:
+  workflow_call:
+
+jobs:
+  l3vpn:
+    name: MPLS L3VPN Tests
+    runs-on: self-hosted
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/test-setup
+        with:
+          topology: tests/25-l3vpn/25-l3vpn.clab.yml
+
+      - name: Run L3VPN tests
+        run: |
+          mkdir -p test-results
+          robot --loglevel DEBUG --output test-results/output.xml --log test-results/25-l3vpn-log.html --report NONE tests/25-l3vpn/
+
+      - uses: ./.github/actions/test-cleanup
+        if: always()
+        with:
+          topology: tests/25-l3vpn/25-l3vpn.clab.yml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: l3vpn-test-results
+          path: test-results/
+          retention-days: 14

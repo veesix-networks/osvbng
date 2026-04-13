@@ -1,0 +1,179 @@
+# Copyright 2026 Veesix Networks Ltd
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+vrfs:
+  CUSTOMER-A:
+    description: "VRF-lite customer A"
+    address-families:
+      ipv4-unicast: {}
+
+service-groups:
+  customer-a:
+    vrf: CUSTOMER-A
+    unnumbered: loop101
+    pool: customer-a-pool
+
+subscriber-groups:
+  groups:
+    default-ipoe:
+      access-type: ipoe
+      vlan-tpid: dot1q
+      ipv4-profile: default
+      vlans:
+        - svlan: "100-104"
+          cvlan: any
+          interface: loop100
+      bgp:
+        enabled: true
+        advertise-pools: true
+      aaa-policy: default-policy
+    custa-ipoe:
+      access-type: ipoe
+      vlan-tpid: dot1q
+      ipv4-profile: default
+      default-service-group: customer-a
+      vlans:
+        - svlan: "200-204"
+          cvlan: any
+          interface: loop101
+      bgp:
+        enabled: true
+        advertise-pools: true
+      aaa-policy: default-policy
+    default-pppoe:
+      access-type: pppoe
+      vlan-tpid: dot1q
+      ipv4-profile: default
+      vlans:
+        - svlan: "110-114"
+          cvlan: any
+          interface: loop100
+      aaa-policy: default-policy
+    custa-pppoe:
+      access-type: pppoe
+      vlan-tpid: dot1q
+      ipv4-profile: default
+      default-service-group: customer-a
+      vlans:
+        - svlan: "210-214"
+          cvlan: any
+          interface: loop101
+      aaa-policy: default-policy
+
+ipv4-profiles:
+  default:
+    gateway: 10.255.0.1
+    pools:
+      - name: subscriber-pool
+        network: 10.255.0.0/16
+        priority: 1
+      - name: customer-a-pool
+        network: 192.168.123.0/24
+        range_start: 192.168.123.2
+        range_end: 192.168.123.254
+        gateway: 192.168.123.1
+        vrf: CUSTOMER-A
+        priority: 10
+    dhcp:
+      lease-time: 3600
+
+dhcp:
+  provider: local
+
+interfaces:
+  loop0:
+    description: Control Plane Loopback
+    enabled: true
+    address:
+      ipv4:
+        - 10.254.0.1/32
+  loop100:
+    description: Default Subscriber Gateway
+    enabled: true
+    address:
+      ipv4:
+        - 10.255.0.1/32
+  loop101:
+    description: CUSTOMER-A Subscriber Gateway
+    enabled: true
+    address:
+      ipv4:
+        - 192.168.123.1/32
+    vrf: CUSTOMER-A
+  eth1:
+    description: Access Interface
+    enabled: true
+    bng_mode: access
+  eth2:
+    description: Core Link (corerouter1)
+    enabled: true
+    subinterfaces:
+      - id: 100
+        vlan: 100
+        enabled: true
+        address:
+          ipv4:
+            - 10.0.100.1/30
+      - id: 200
+        vlan: 200
+        enabled: true
+        vrf: CUSTOMER-A
+        address:
+          ipv4:
+            - 10.0.200.1/30
+
+protocols:
+  bgp:
+    asn: 65000
+    router-id: 10.254.0.1
+    ipv4-unicast: {}
+    neighbors:
+      10.0.100.2:
+        remote-as: 65000
+        ipv4-unicast: {}
+    vrf:
+      CUSTOMER-A:
+        ipv4-unicast:
+          redistribute:
+            connected: true
+        neighbors:
+          10.0.200.2:
+            remote-as: 65000
+            ipv4-unicast: {}
+
+aaa:
+  auth_provider: local
+  nas_identifier: osvbng
+  policy:
+    - name: default-policy
+      format: $remote-id$
+      max_concurrent_sessions: 1
+
+plugins:
+  exporter.prometheus:
+    enabled: true
+    listen_address: :9090
+  northbound.api:
+    enabled: true
+    listen_address: :8080
+  subscriber.auth.local:
+    allow_all: true
+    database_path: /tmp/osvbng.db
+
+monitoring:
+  collect_interval: 30s
+
+logging:
+  format: text
+  level: info
+  components:
+    aaa: debug
+    dataplane: debug
+
+dataplane:
+  lcp-netns: dataplane
+  statseg:
+    size: "512m"
+    page-size: "4k"
+    per-node-counters: false

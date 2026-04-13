@@ -73,6 +73,8 @@ nav:
     - PPPoE BNG: examples/pppoe-bng.md
     - IPoE + PPPoE BNG: examples/ipoe-pppoe-bng.md
     - Routing Policies: examples/routing-policies.md
+    - VRF-Lite: examples/vrf-lite.md
+    - MPLS L3VPN: examples/l3vpn.md
   - Architecture:
     - High Level: architecture/HIGH_LEVEL.md
     - Low Level:
