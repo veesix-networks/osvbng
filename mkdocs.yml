@@ -65,6 +65,7 @@ nav:
       - subscriber.auth.http: configuration/plugins/auth-http.md
       - subscriber.auth.radius: configuration/plugins/auth-radius.md
       - exporter.prometheus: configuration/plugins/exporter-prometheus.md
+      - exporter.cgnat.http: configuration/plugins/exporter-cgnat-http.md
       - northbound.api: configuration/plugins/northbound-api.md
       - example.hello: configuration/plugins/example-hello.md
   - Examples:
