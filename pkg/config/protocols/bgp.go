@@ -45,10 +45,11 @@ type BGPRedistribute struct {
 }
 
 type BGPVRFConfig struct {
-	RouterID    string          `json:"router-id,omitempty" yaml:"router-id,omitempty"`
-	RD          string          `json:"rd,omitempty" yaml:"rd,omitempty"`
-	IPv4Unicast *BGPVRFAFConfig `json:"ipv4-unicast,omitempty" yaml:"ipv4-unicast,omitempty"`
-	IPv6Unicast *BGPVRFAFConfig `json:"ipv6-unicast,omitempty" yaml:"ipv6-unicast,omitempty"`
+	RouterID    string                  `json:"router-id,omitempty" yaml:"router-id,omitempty"`
+	RD          string                  `json:"rd,omitempty" yaml:"rd,omitempty"`
+	Neighbors   map[string]*BGPNeighbor `json:"neighbors,omitempty" yaml:"neighbors,omitempty"`
+	IPv4Unicast *BGPVRFAFConfig         `json:"ipv4-unicast,omitempty" yaml:"ipv4-unicast,omitempty"`
+	IPv6Unicast *BGPVRFAFConfig         `json:"ipv6-unicast,omitempty" yaml:"ipv6-unicast,omitempty"`
 }
 
 type BGPVPNAddressFamily struct {
@@ -56,12 +57,11 @@ type BGPVPNAddressFamily struct {
 }
 
 type BGPVRFAFConfig struct {
-	Neighbors    map[string]*BGPNeighbor `json:"neighbors,omitempty" yaml:"neighbors,omitempty"`
-	Networks     map[string]*BGPNetwork  `json:"networks,omitempty" yaml:"networks,omitempty"`
-	Redistribute *BGPRedistribute        `json:"redistribute,omitempty" yaml:"redistribute,omitempty"`
-	LabelVPN     string                  `json:"label-vpn,omitempty" yaml:"label-vpn,omitempty"`
-	ExportVPN    bool                    `json:"export-vpn,omitempty" yaml:"export-vpn,omitempty"`
-	ImportVPN    bool                    `json:"import-vpn,omitempty" yaml:"import-vpn,omitempty"`
+	Networks     map[string]*BGPNetwork `json:"networks,omitempty" yaml:"networks,omitempty"`
+	Redistribute *BGPRedistribute       `json:"redistribute,omitempty" yaml:"redistribute,omitempty"`
+	LabelVPN     string                 `json:"label-vpn,omitempty" yaml:"label-vpn,omitempty"`
+	ExportVPN    bool                   `json:"export-vpn,omitempty" yaml:"export-vpn,omitempty"`
+	ImportVPN    bool                   `json:"import-vpn,omitempty" yaml:"import-vpn,omitempty"`
 }
 
 type BGPNeighbor struct {

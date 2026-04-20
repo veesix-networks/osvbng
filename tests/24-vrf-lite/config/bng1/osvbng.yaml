@@ -32,6 +32,7 @@ subscriber-groups:
       access-type: ipoe
       vlan-tpid: dot1q
       ipv4-profile: default
+      vrf: CUSTOMER-A
       default-service-group: customer-a
       vlans:
         - svlan: "200-204"
@@ -54,6 +55,7 @@ subscriber-groups:
       access-type: pppoe
       vlan-tpid: dot1q
       ipv4-profile: default
+      vrf: CUSTOMER-A
       default-service-group: customer-a
       vlans:
         - svlan: "210-214"
@@ -134,13 +136,13 @@ protocols:
         ipv4-unicast: {}
     vrf:
       CUSTOMER-A:
-        ipv4-unicast:
-          redistribute:
-            connected: true
         neighbors:
           10.0.200.2:
             remote-as: 65000
             ipv4-unicast: {}
+        ipv4-unicast:
+          redistribute:
+            connected: true
 
 aaa:
   auth_provider: local

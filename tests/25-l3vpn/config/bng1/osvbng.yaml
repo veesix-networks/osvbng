@@ -37,6 +37,7 @@ subscriber-groups:
       access-type: ipoe
       vlan-tpid: dot1q
       ipv4-profile: default
+      vrf: CUSTOMER-A
       default-service-group: customer-a
       vlans:
         - svlan: "200-204"
@@ -59,6 +60,7 @@ subscriber-groups:
       access-type: pppoe
       vlan-tpid: dot1q
       ipv4-profile: default
+      vrf: CUSTOMER-A
       default-service-group: customer-a
       vlans:
         - svlan: "210-214"
