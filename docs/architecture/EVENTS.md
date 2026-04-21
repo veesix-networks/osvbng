@@ -216,6 +216,7 @@ Common plugin use cases:
 - **CDR / billing** - subscribe to `TopicSessionLifecycle` for session start/stop
 - **External IPAM** - subscribe to `TopicSessionLifecycle` to sync IP allocations
 - **Lawful intercept** - subscribe to `TopicSessionLifecycle` to activate/deactivate taps
+- **CGNAT port-block logging** - subscribe to `TopicCGNATMapping` to persist allocate/release events for metadata retention
 - **CoA / policy push** - publish to `TopicSubscriberMutation` with attribute changes
 - **Admin disconnect** - publish to `TopicSubscriberTerminate` with session target
 - **Standby awareness** - subscribe to `TopicHAStateChange` to disable features on standby

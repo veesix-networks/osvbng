@@ -11,6 +11,7 @@ Plugin-specific configuration. Each key under `plugins` is a plugin namespace wi
 ## Exporters
 
 - [exporter.prometheus](plugins/exporter-prometheus.md) - Prometheus metrics exporter
+- [exporter.cgnat.http](plugins/exporter-cgnat-http.md) - HTTP exporter for CGNAT port-block allocate/release events (metadata retention / LI correlation)
 
 ## Northbound
 
