@@ -82,18 +82,36 @@ This helps reviewers understand your approach and makes the contribution more va
 
 ## Copyright Headers
 
-Every new file must include the SPDX copyright header.
+Every new file must include the SPDX copyright header. osvbng follows the
+same pattern as projects like Kubernetes and CNCF members: the copyright
+is attributed collectively to the project's contributors rather than to
+any single company. This keeps the credit with the community that
+actually wrote the code.
+
+Use the current year for new files. Existing files keep their original
+year; do not bump it on unrelated edits.
 
 **Go/Proto files:**
 ```go
-// Copyright 2026 Veesix Networks Ltd
+// Copyright 2026 The osvbng Authors
 // Licensed under the GNU General Public License v3.0 or later.
 // SPDX-License-Identifier: GPL-3.0-or-later
 ```
 
 **Shell/YAML/Makefile/Dockerfile:**
 ```bash
-# Copyright 2026 Veesix Networks Ltd
+# Copyright 2026 The osvbng Authors
 # Licensed under the GNU General Public License v3.0 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 ```
+
+JSON and other formats without comment syntax are exempt.
+
+!!! note "Who are 'The osvbng Authors'?"
+    Everyone who has contributed code to the project, as recorded in
+    `git log`. Contributors retain copyright over their own
+    contributions; the collective header exists so individual files
+    don't need to be rewritten every time a new contributor touches
+    them. If you prefer to attach your own name or employer, you may
+    add a second line (e.g. `// Copyright 2026 Jane Smith`) alongside
+    the collective header, but do not replace it.
