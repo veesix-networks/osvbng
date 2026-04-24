@@ -58,6 +58,18 @@ type SubscriberGroup struct {
 	CGNAT               *SubscriberCGNATConfig `json:"cgnat,omitempty" yaml:"cgnat,omitempty"`
 	PPPoE               *PPPoEConfig           `json:"pppoe,omitempty" yaml:"pppoe,omitempty"`
 	MSSClamp            *MSSClampConfig        `json:"mss-clamp,omitempty" yaml:"mss-clamp,omitempty"`
+	DHCPv6              *SubscriberDHCPv6      `json:"dhcpv6,omitempty" yaml:"dhcpv6,omitempty"`
+}
+
+type SubscriberDHCPv6 struct {
+	AllowRelayForward *bool `json:"allow-relay-forward,omitempty" yaml:"allow-relay-forward,omitempty"`
+}
+
+func (sg *SubscriberGroup) GetAllowRelayForward() bool {
+	if sg == nil || sg.DHCPv6 == nil || sg.DHCPv6.AllowRelayForward == nil {
+		return true
+	}
+	return *sg.DHCPv6.AllowRelayForward
 }
 
 type SubscriberCGNATConfig struct {
