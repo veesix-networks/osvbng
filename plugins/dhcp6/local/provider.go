@@ -10,6 +10,7 @@ import (
 
 	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/config"
+	"github.com/veesix-networks/osvbng/pkg/dhcp/relay"
 	dhcp6msg "github.com/veesix-networks/osvbng/pkg/dhcp6"
 	"github.com/veesix-networks/osvbng/pkg/provider"
 )
@@ -196,22 +197,30 @@ func (p *Provider) HandlePacket(ctx context.Context, pkt *dhcp6msg.Packet) (*dhc
 		return nil, fmt.Errorf("parse DHCPv6: %w", err)
 	}
 
+	var resp *dhcp6msg.Packet
 	switch msg.MsgType {
 	case dhcp6msg.MsgTypeSolicit:
-		return p.handleSolicit(pkt, msg)
+		resp, err = p.handleSolicit(pkt, msg)
 	case dhcp6msg.MsgTypeRequest:
-		return p.handleRequest(pkt, msg)
+		resp, err = p.handleRequest(pkt, msg)
 	case dhcp6msg.MsgTypeRenew:
-		return p.handleRenew(pkt, msg)
+		resp, err = p.handleRenew(pkt, msg)
 	case dhcp6msg.MsgTypeRebind:
-		return p.handleRebind(pkt, msg)
+		resp, err = p.handleRebind(pkt, msg)
 	case dhcp6msg.MsgTypeRelease:
-		return p.handleRelease(pkt, msg)
+		resp, err = p.handleRelease(pkt, msg)
 	case dhcp6msg.MsgTypeDecline:
-		return p.handleDecline(pkt, msg)
+		resp, err = p.handleDecline(pkt, msg)
 	default:
 		return nil, fmt.Errorf("unsupported DHCPv6 message type: %v", msg.MsgType)
 	}
+	if err != nil || resp == nil || len(resp.Raw) == 0 || pkt.RelayInfo == nil {
+		return resp, err
+	}
+	if wrapped := relay.BuildRelayReply(resp.Raw, pkt.RelayInfo); wrapped != nil {
+		resp.Raw = wrapped
+	}
+	return resp, nil
 }
 
 // readExistingLeases reads IANA/PD leases and their pools for a DUID.

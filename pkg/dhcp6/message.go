@@ -266,6 +266,32 @@ func UnwrapRelay(data []byte) (*Message, *RelayInfo) {
 	return nil, info
 }
 
+func UnwrapRelayReply(data []byte) *Message {
+	if len(data) < 34 || MessageType(data[0]) != MsgTypeRelayReply {
+		return nil
+	}
+	for offset := 34; offset+4 <= len(data); {
+		code := binary.BigEndian.Uint16(data[offset : offset+2])
+		length := binary.BigEndian.Uint16(data[offset+2 : offset+4])
+		if offset+4+int(length) > len(data) {
+			break
+		}
+		if code == OptRelayMsg {
+			innerData := data[offset+4 : offset+4+int(length)]
+			if len(innerData) > 0 && MessageType(innerData[0]) == MsgTypeRelayReply {
+				return UnwrapRelayReply(innerData)
+			}
+			msg, err := ParseMessage(innerData)
+			if err != nil {
+				return nil
+			}
+			return msg
+		}
+		offset += 4 + int(length)
+	}
+	return nil
+}
+
 func (m *Message) DeepCopy() *Message {
 	if m == nil {
 		return nil

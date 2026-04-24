@@ -8,6 +8,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+
+	"github.com/veesix-networks/osvbng/pkg/dhcp6"
 )
 
 const (
@@ -91,6 +93,52 @@ func BuildRelayForward(clientMsg []byte, p *RelayForwardParams) []byte {
 	binary.BigEndian.PutUint16(buf[offset:], DHCPv6OptRelayMessage)
 	binary.BigEndian.PutUint16(buf[offset+2:], uint16(len(clientMsg)))
 	copy(buf[offset+4:], clientMsg)
+
+	return buf
+}
+
+// BuildRelayReply wraps an inner server response in a Relay-Reply envelope.
+// Remote-Id is not echoed: RelayInfo.RemoteID drops the enterprise-number
+// prefix at unwrap time so it cannot be reconstructed here, and RFC 3315
+// §20.2 only mandates Interface-ID echo. Nil LinkAddr/PeerAddr zero-fill.
+func BuildRelayReply(innerMsg []byte, info *dhcp6.RelayInfo) []byte {
+	if info == nil {
+		return nil
+	}
+
+	totalOpts := 4 + len(innerMsg)
+	if len(info.InterfaceID) > 0 {
+		totalOpts += 4 + len(info.InterfaceID)
+	}
+
+	buf := make([]byte, DHCPv6RelayHeaderLen+totalOpts)
+	buf[0] = DHCPv6MsgRelayReply
+	buf[1] = info.HopCount
+
+	linkAddr := info.LinkAddr.To16()
+	if linkAddr == nil {
+		linkAddr = net.IPv6zero
+	}
+	copy(buf[2:18], linkAddr)
+
+	peerAddr := info.PeerAddr.To16()
+	if peerAddr == nil {
+		peerAddr = net.IPv6zero
+	}
+	copy(buf[18:34], peerAddr)
+
+	offset := DHCPv6RelayHeaderLen
+
+	if len(info.InterfaceID) > 0 {
+		binary.BigEndian.PutUint16(buf[offset:], DHCPv6OptInterfaceID)
+		binary.BigEndian.PutUint16(buf[offset+2:], uint16(len(info.InterfaceID)))
+		copy(buf[offset+4:], info.InterfaceID)
+		offset += 4 + len(info.InterfaceID)
+	}
+
+	binary.BigEndian.PutUint16(buf[offset:], DHCPv6OptRelayMessage)
+	binary.BigEndian.PutUint16(buf[offset+2:], uint16(len(innerMsg)))
+	copy(buf[offset+4:], innerMsg)
 
 	return buf
 }

@@ -375,6 +375,15 @@ func (c *Component) resolveSRGName(svlan uint16) string {
 	return c.srgMgr.GetSRGForGroup(groupName)
 }
 
+func (c *Component) allowRelayForward(svlan uint16) bool {
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+		return true
+	}
+	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(svlan)
+	return group.GetAllowRelayForward()
+}
+
 func (c *Component) resolveOuterTPID(svlan uint16) uint16 {
 	cfg, err := c.cfgMgr.GetRunning()
 	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
@@ -563,6 +572,34 @@ func parseOption82(data []byte) (circuitID, remoteID []byte) {
 		i += 2 + subOptLen
 	}
 	return
+}
+
+func unwrapInnerReply(raw []byte) *dhcp6.Message {
+	if len(raw) == 0 {
+		return nil
+	}
+	if dhcp6.MessageType(raw[0]) == dhcp6.MsgTypeRelayReply {
+		return dhcp6.UnwrapRelayReply(raw)
+	}
+	msg, err := dhcp6.ParseMessage(raw)
+	if err != nil {
+		return nil
+	}
+	return msg
+}
+
+func splitPendingDHCPv6(raw []byte) ([]byte, *dhcp6.RelayInfo) {
+	if len(raw) == 0 {
+		return raw, nil
+	}
+	if dhcp6.MessageType(raw[0]) != dhcp6.MsgTypeRelayForward {
+		return raw, nil
+	}
+	inner, info := dhcp6.UnwrapRelay(raw)
+	if inner == nil {
+		return raw, info
+	}
+	return inner.Raw, info
 }
 
 func (c *Component) unwrapDHCPv6Relay(rawDHCPv6 []byte) (*dhcp6.Message, *dhcp6.RelayInfo) {
@@ -1913,12 +1950,12 @@ func (c *Component) processDHCPv6Packet(pkt *dataplane.ParsedPacket) error {
 		if inner == nil {
 			return fmt.Errorf("failed to unwrap relay message")
 		}
-		var interfaceID, remoteID []byte
-		if info != nil {
-			interfaceID = info.InterfaceID
-			remoteID = info.RemoteID
+		if !c.allowRelayForward(pkt.OuterVLAN) {
+			c.logger.WithGroup(logger.IPoEDHCP6).Info("Rejected DHCPv6 Relay-Forward: subscriber group opted out",
+				"svlan", pkt.OuterVLAN, "mac", pkt.MAC.String())
+			return nil
 		}
-		return c.processDHCPv6Message(pkt, inner, interfaceID, remoteID)
+		return c.processDHCPv6Message(pkt, inner, info)
 	}
 
 	msg, err := dhcp6.ParseMessage(rawDHCPv6)
@@ -1926,23 +1963,28 @@ func (c *Component) processDHCPv6Packet(pkt *dataplane.ParsedPacket) error {
 		return fmt.Errorf("parse DHCPv6: %w", err)
 	}
 
-	return c.processDHCPv6Message(pkt, msg, nil, nil)
+	return c.processDHCPv6Message(pkt, msg, nil)
 }
 
-func (c *Component) processDHCPv6Message(pkt *dataplane.ParsedPacket, msg *dhcp6.Message, relayInterfaceID, relayRemoteID []byte) error {
+func (c *Component) processDHCPv6Message(pkt *dataplane.ParsedPacket, msg *dhcp6.Message, relayInfo *dhcp6.RelayInfo) error {
 	switch msg.MsgType {
 	case dhcp6.MsgTypeSolicit:
-		return c.handleDHCPv6Solicit(pkt, msg, relayInterfaceID, relayRemoteID)
+		return c.handleDHCPv6Solicit(pkt, msg, relayInfo)
 	case dhcp6.MsgTypeRequest, dhcp6.MsgTypeRenew, dhcp6.MsgTypeRebind:
-		return c.handleDHCPv6Request(pkt, msg)
+		return c.handleDHCPv6Request(pkt, msg, relayInfo)
 	case dhcp6.MsgTypeRelease, dhcp6.MsgTypeDecline:
-		return c.handleDHCPv6Release(pkt, msg)
+		return c.handleDHCPv6Release(pkt, msg, relayInfo)
 	}
 
 	return nil
 }
 
-func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.Message, relayInterfaceID, relayRemoteID []byte) error {
+func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.Message, relayInfo *dhcp6.RelayInfo) error {
+	var relayInterfaceID, relayRemoteID []byte
+	if relayInfo != nil {
+		relayInterfaceID = relayInfo.InterfaceID
+		relayRemoteID = relayInfo.RemoteID
+	}
 	lookupKey := c.makeSessionKeyV6(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN)
 
 	var sess *SessionState
@@ -1979,7 +2021,7 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 	sess.DHCPv6XID = msg.TransactionID
 	sess.DHCPv6DUID = msg.Options.ClientID
 	sess.LastSeen = time.Now()
-	sess.PendingDHCPv6Solicit = msg.Raw
+	sess.PendingDHCPv6Solicit = append(pkt.DHCPv6.LayerContents(), pkt.DHCPv6.LayerPayload()...)
 	if pkt.IPv6 != nil {
 		sess.ClientLinkLocal = pkt.IPv6.SrcIP
 	}
@@ -2004,7 +2046,7 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 	}
 
 	if alreadyApproved && ipoeCreated {
-		return c.forwardDHCPv6ToProvider(sess, pkt, msg.Raw)
+		return c.forwardDHCPv6ToProvider(sess, pkt, msg.Raw, relayInfo)
 	}
 
 	if alreadyApproved && !ipoeCreated {
@@ -2083,7 +2125,7 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 	return nil
 }
 
-func (c *Component) handleDHCPv6Request(pkt *dataplane.ParsedPacket, msg *dhcp6.Message) error {
+func (c *Component) handleDHCPv6Request(pkt *dataplane.ParsedPacket, msg *dhcp6.Message, relayInfo *dhcp6.RelayInfo) error {
 	lookupKey := c.makeSessionKeyV6(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN)
 
 	val, ok := c.sessions.Load(lookupKey)
@@ -2095,7 +2137,7 @@ func (c *Component) handleDHCPv6Request(pkt *dataplane.ParsedPacket, msg *dhcp6.
 	sess.mu.Lock()
 	sess.DHCPv6XID = msg.TransactionID
 	sess.LastSeen = time.Now()
-	sess.PendingDHCPv6Request = msg.Raw
+	sess.PendingDHCPv6Request = append(pkt.DHCPv6.LayerContents(), pkt.DHCPv6.LayerPayload()...)
 	if pkt.IPv6 != nil && sess.ClientLinkLocal == nil {
 		sess.ClientLinkLocal = pkt.IPv6.SrcIP
 	}
@@ -2105,7 +2147,7 @@ func (c *Component) handleDHCPv6Request(pkt *dataplane.ParsedPacket, msg *dhcp6.
 	c.xid6Index.Store(msg.TransactionID, sess)
 
 	if alreadyApproved && ipoeCreated {
-		return c.forwardDHCPv6ToProvider(sess, pkt, msg.Raw)
+		return c.forwardDHCPv6ToProvider(sess, pkt, msg.Raw, relayInfo)
 	}
 
 	c.logger.WithGroup(logger.IPoEDHCP6).Debug("DHCPv6 REQUEST received, session awaiting AAA", "session_id", sess.SessionID)
@@ -2113,7 +2155,7 @@ func (c *Component) handleDHCPv6Request(pkt *dataplane.ParsedPacket, msg *dhcp6.
 	return nil
 }
 
-func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket, msg *dhcp6.Message) error {
+func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket, msg *dhcp6.Message, relayInfo *dhcp6.RelayInfo) error {
 	lookupKey := c.makeSessionKeyV6(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN)
 
 	val, ok := c.sessions.Load(lookupKey)
@@ -2176,6 +2218,7 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket, msg *dhcp6.
 				PeerAddr:  sess.ClientLinkLocal,
 				Profile:   v6Prof,
 				LocalMAC:  c.getLocalMAC(sess.SRGName, sess.EncapIfIndex),
+				RelayInfo: relayInfo,
 			}
 			response, err := v6Prov.HandlePacket(c.Ctx, dhcpPkt)
 			if err != nil {
@@ -2353,19 +2396,21 @@ func (c *Component) forwardPendingDHCPv6(sess *SessionState, sessID string, mac 
 		if v6Profile == nil || v6Profile.GetMode() == "server" {
 			resolved = c.resolveDHCPv6(allocCtx)
 		}
+		inner, relayInfo := splitPendingDHCPv6(pendingSolicit)
 		pkt := &dhcp6.Packet{
 			SessionID: sessID,
 			MAC:       mac.String(),
 			SVLAN:     svlan,
 			CVLAN:     cvlan,
 			DUID:      dhcpv6DUID,
-			Raw:       pendingSolicit,
+			Raw:       inner,
 			Resolved:  resolved,
 			SwIfIndex: encapIfIndex,
 			Interface: accessIfName,
 			PeerAddr:  sess.ClientLinkLocal,
 			Profile:   v6Profile,
 			LocalMAC:  localMAC,
+			RelayInfo: relayInfo,
 		}
 		response, err := v6Provider.HandlePacket(c.Ctx, pkt)
 		if err != nil {
@@ -2383,19 +2428,21 @@ func (c *Component) forwardPendingDHCPv6(sess *SessionState, sessID string, mac 
 		if v6Profile == nil || v6Profile.GetMode() == "server" {
 			resolved = c.resolveDHCPv6(allocCtx)
 		}
+		inner, relayInfo := splitPendingDHCPv6(pendingRequest)
 		pkt := &dhcp6.Packet{
 			SessionID: sessID,
 			MAC:       mac.String(),
 			SVLAN:     svlan,
 			CVLAN:     cvlan,
 			DUID:      dhcpv6DUID,
-			Raw:       pendingRequest,
+			Raw:       inner,
 			Resolved:  resolved,
 			SwIfIndex: encapIfIndex,
 			Interface: accessIfName,
 			PeerAddr:  sess.ClientLinkLocal,
 			Profile:   v6Profile,
 			LocalMAC:  localMAC,
+			RelayInfo: relayInfo,
 		}
 		response, err := v6Provider.HandlePacket(c.Ctx, pkt)
 		if err != nil {
@@ -2404,8 +2451,8 @@ func (c *Component) forwardPendingDHCPv6(sess *SessionState, sessID string, mac 
 			if err := c.sendDHCPv6Response(sess, response.Raw); err != nil {
 				c.logger.Error("Failed to send DHCPv6 REPLY", "session_id", sessID, "error", err)
 			}
-			respMsg, parseErr := dhcp6.ParseMessage(response.Raw)
-			if parseErr == nil && respMsg.MsgType == dhcp6.MsgTypeReply {
+			respMsg := unwrapInnerReply(response.Raw)
+			if respMsg != nil && respMsg.MsgType == dhcp6.MsgTypeReply {
 				c.handleDHCPv6Reply(sess, respMsg)
 			}
 		}
@@ -2492,19 +2539,21 @@ func (c *Component) forwardLatePendingPackets(sess *SessionState, sessID string,
 		if v6Profile == nil || v6Profile.GetMode() == "server" {
 			resolved = c.resolveDHCPv6(allocCtx)
 		}
+		inner, relayInfo := splitPendingDHCPv6(pendingV6Solicit)
 		pkt := &dhcp6.Packet{
 			SessionID: sessID,
 			MAC:       mac.String(),
 			SVLAN:     svlan,
 			CVLAN:     cvlan,
 			DUID:      dhcpv6DUID,
-			Raw:       pendingV6Solicit,
+			Raw:       inner,
 			Resolved:  resolved,
 			SwIfIndex: encapIfIndex,
 			Interface: accessIfName,
 			PeerAddr:  sess.ClientLinkLocal,
 			Profile:   v6Profile,
 			LocalMAC:  localMAC,
+			RelayInfo: relayInfo,
 		}
 		response, err := v6Provider.HandlePacket(c.Ctx, pkt)
 		if err != nil {
@@ -2522,19 +2571,21 @@ func (c *Component) forwardLatePendingPackets(sess *SessionState, sessID string,
 		if v6Profile == nil || v6Profile.GetMode() == "server" {
 			resolved = c.resolveDHCPv6(allocCtx)
 		}
+		inner, relayInfo := splitPendingDHCPv6(pendingV6Request)
 		pkt := &dhcp6.Packet{
 			SessionID: sessID,
 			MAC:       mac.String(),
 			SVLAN:     svlan,
 			CVLAN:     cvlan,
 			DUID:      dhcpv6DUID,
-			Raw:       pendingV6Request,
+			Raw:       inner,
 			Resolved:  resolved,
 			SwIfIndex: encapIfIndex,
 			Interface: accessIfName,
 			PeerAddr:  sess.ClientLinkLocal,
 			Profile:   v6Profile,
 			LocalMAC:  localMAC,
+			RelayInfo: relayInfo,
 		}
 		response, err := v6Provider.HandlePacket(c.Ctx, pkt)
 		if err != nil {
@@ -2543,15 +2594,15 @@ func (c *Component) forwardLatePendingPackets(sess *SessionState, sessID string,
 			if err := c.sendDHCPv6Response(sess, response.Raw); err != nil {
 				c.logger.Error("Failed to send DHCPv6 REPLY", "session_id", sessID, "error", err)
 			}
-			respMsg, parseErr := dhcp6.ParseMessage(response.Raw)
-			if parseErr == nil && respMsg.MsgType == dhcp6.MsgTypeReply {
+			respMsg := unwrapInnerReply(response.Raw)
+			if respMsg != nil && respMsg.MsgType == dhcp6.MsgTypeReply {
 				c.handleDHCPv6Reply(sess, respMsg)
 			}
 		}
 	}
 }
 
-func (c *Component) forwardDHCPv6ToProvider(sess *SessionState, pkt *dataplane.ParsedPacket, raw []byte) error {
+func (c *Component) forwardDHCPv6ToProvider(sess *SessionState, pkt *dataplane.ParsedPacket, raw []byte, relayInfo *dhcp6.RelayInfo) error {
 	v6Profile := c.resolveIPv6Profile(sess.AllocCtx)
 	var resolved *dhcp.ResolvedDHCPv6
 	if v6Profile == nil || v6Profile.GetMode() == "server" {
@@ -2570,6 +2621,7 @@ func (c *Component) forwardDHCPv6ToProvider(sess *SessionState, pkt *dataplane.P
 		PeerAddr:  sess.ClientLinkLocal,
 		Profile:   v6Profile,
 		LocalMAC:  c.getLocalMAC(sess.SRGName, sess.EncapIfIndex),
+		RelayInfo: relayInfo,
 	}
 
 	provider := c.getDHCP6Provider(v6Profile)
@@ -2589,8 +2641,8 @@ func (c *Component) forwardDHCPv6ToProvider(sess *SessionState, pkt *dataplane.P
 		return err
 	}
 
-	respMsg, err := dhcp6.ParseMessage(response.Raw)
-	if err == nil && respMsg.MsgType == dhcp6.MsgTypeReply {
+	respMsg := unwrapInnerReply(response.Raw)
+	if respMsg != nil && respMsg.MsgType == dhcp6.MsgTypeReply {
 		return c.handleDHCPv6Reply(sess, respMsg)
 	}
 
