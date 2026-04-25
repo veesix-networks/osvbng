@@ -9,6 +9,7 @@ import (
 	"text/template"
 
 	"github.com/veesix-networks/osvbng/pkg/config"
+	"github.com/veesix-networks/osvbng/pkg/config/protocols"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 )
 
@@ -44,7 +45,8 @@ func (c *Config) GenerateConfig(config *config.Config) (string, error) {
 	}
 
 	funcMap := template.FuncMap{
-		"seq": func(i int) int { return (i + 1) * 10 },
+		"seq":        func(i int) int { return (i + 1) * 10 },
+		"staticVRFs": protocols.StaticVRFs,
 	}
 
 	tmpl, err := template.New("frr.conf.tmpl").Funcs(funcMap).ParseGlob(subTemplates)

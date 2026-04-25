@@ -225,8 +225,27 @@ func (m *Manager) RemoveIPv6Address(swIfIndex uint32, ip net.IP) {
 }
 
 func (m *Manager) SetFIBTableID(swIfIndex uint32, tableID uint32) {
-	if v, ok := m.bySwIfIndex.Load(swIfIndex); ok {
-		v.(*Interface).FIBTableID = tableID
+	v, ok := m.bySwIfIndex.Load(swIfIndex)
+	if !ok {
+		return
+	}
+	iface := v.(*Interface)
+	iface.mu.Lock()
+	iface.FIBTableID = tableID
+	v4s := append([]net.IP(nil), iface.IPv4Addresses...)
+	v6s := append([]net.IP(nil), iface.IPv6Addresses...)
+	iface.mu.Unlock()
+	for _, ip := range v4s {
+		if v4 := ip.To4(); v4 != nil {
+			if addr, ok := netip.AddrFromSlice(v4); ok {
+				m.byIPv4.Store(addr, &ipIndex{SwIfIndex: swIfIndex, FIBTableID: tableID})
+			}
+		}
+	}
+	for _, ip := range v6s {
+		if addr, ok := netip.AddrFromSlice(ip.To16()); ok {
+			m.byIPv6.Store(addr.Unmap(), &ipIndex{SwIfIndex: swIfIndex, FIBTableID: tableID})
+		}
 	}
 }
 

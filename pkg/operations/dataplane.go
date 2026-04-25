@@ -61,7 +61,7 @@ type DataplaneStateReader interface {
 	IsIPv6Enabled(swIfIndex uint32) bool
 	IsPuntEnabled(swIfIndex uint32, protocol uint8) bool
 	GetIPv6RAConfig(swIfIndex uint32) *IPv6RAState
-	IsDHCPv6MulticastEnabled(swIfIndex uint32) bool
+	IsDHCPv6MulticastEnabled(tableID uint32) bool
 }
 
 type PuntConfig struct {

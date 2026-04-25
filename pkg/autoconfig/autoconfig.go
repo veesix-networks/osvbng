@@ -66,6 +66,7 @@ func (a *Autoconfig) deriveSVLANConfig(group *subscriber.SubscriberGroup, vlanRa
 
 	loopback := vlanRange.Interface
 	raConfig := a.getRAConfig(group)
+	resolvedVRF := resolveRangeVRF(group, vlanRange)
 
 	bngMode := a.getBNGMode(group)
 
@@ -113,6 +114,13 @@ func (a *Autoconfig) deriveSVLANConfig(group *subscriber.SubscriberGroup, vlanRa
 		},
 	})
 
+	if resolvedVRF != "" {
+		changes = append(changes, Change{
+			Path:  fmt.Sprintf("interfaces.%s.subinterfaces.%d.vrf", a.parentInterface, svlan),
+			Value: resolvedVRF,
+		})
+	}
+
 	changes = append(changes, Change{
 		Path:  fmt.Sprintf("interfaces.%s.subinterfaces.%d.unnumbered", a.parentInterface, svlan),
 		Value: loopback,
@@ -126,6 +134,19 @@ func (a *Autoconfig) deriveSVLANConfig(group *subscriber.SubscriberGroup, vlanRa
 	})
 
 	return changes
+}
+
+func resolveRangeVRF(group *subscriber.SubscriberGroup, r subscriber.VLANRange) string {
+	if r.VRF == "default" {
+		return ""
+	}
+	if r.VRF != "" {
+		return r.VRF
+	}
+	if group.VRF == "default" {
+		return ""
+	}
+	return group.VRF
 }
 
 func (a *Autoconfig) getBNGMode(group *subscriber.SubscriberGroup) interfaces.BNGMode {

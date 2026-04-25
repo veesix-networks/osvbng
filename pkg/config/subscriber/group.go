@@ -149,6 +149,7 @@ type VLANRange struct {
 	SVLAN     string    `json:"svlan,omitempty" yaml:"svlan,omitempty"`
 	CVLAN     string    `json:"cvlan,omitempty" yaml:"cvlan,omitempty"`
 	Interface string    `json:"interface,omitempty" yaml:"interface,omitempty"`
+	VRF       string    `json:"vrf,omitempty" yaml:"vrf,omitempty"`
 	IPv4      []string  `json:"ipv4,omitempty" yaml:"ipv4,omitempty"`
 	IPv6      []string  `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`
 	DHCP      string    `json:"dhcp,omitempty" yaml:"dhcp,omitempty"`

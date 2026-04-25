@@ -201,16 +201,46 @@ exit
 !
 {{ range $vrfName, $vrfConfig := .Protocols.BGP.VRF }}
 router bgp {{ $.Protocols.BGP.ASN }} vrf {{ $vrfName }}
+ no bgp default ipv4-unicast
 {{ if $vrfConfig.RouterID }}
  bgp router-id {{ $vrfConfig.RouterID }}
 {{ end }}
 !
+{{ range $addr, $neighbor := $vrfConfig.Neighbors }}
+{{ if $neighbor.PeerGroup }}
+ neighbor {{ $addr }} peer-group {{ $neighbor.PeerGroup }}
+{{ end }}
+{{ if $neighbor.RemoteAS }}
+ neighbor {{ $addr }} remote-as {{ $neighbor.RemoteAS }}
+{{ end }}
+{{ if $neighbor.Peer }}
+ neighbor {{ $addr }} update-source {{ $neighbor.Peer }}
+{{ end }}
+{{ if $neighbor.BFD }}
+ neighbor {{ $addr }} bfd
+{{ end }}
+{{ if $neighbor.Description }}
+ neighbor {{ $addr }} description {{ $neighbor.Description }}
+{{ end }}
+{{ end }}
+!
 {{ if $vrfConfig.IPv4Unicast }}
  address-family ipv4 unicast
-{{ range $addr, $neighbor := $vrfConfig.IPv4Unicast.Neighbors }}
-  neighbor {{ $addr }} remote-as {{ $neighbor.RemoteAS }}
-{{ if $neighbor.Description }}
-  neighbor {{ $addr }} description {{ $neighbor.Description }}
+{{ range $addr, $neighbor := $vrfConfig.Neighbors }}
+{{ if $neighbor.IPv4Unicast }}
+  neighbor {{ $addr }} activate
+{{ if $neighbor.IPv4Unicast.NextHopSelf }}
+  neighbor {{ $addr }} next-hop-self
+{{ end }}
+{{ if $neighbor.IPv4Unicast.SendCommunity }}
+  neighbor {{ $addr }} send-community {{ $neighbor.IPv4Unicast.SendCommunity }}
+{{ end }}
+{{ if $neighbor.IPv4Unicast.RoutePolicyIn }}
+  neighbor {{ $addr }} route-map {{ $neighbor.IPv4Unicast.RoutePolicyIn }} in
+{{ end }}
+{{ if $neighbor.IPv4Unicast.RoutePolicyOut }}
+  neighbor {{ $addr }} route-map {{ $neighbor.IPv4Unicast.RoutePolicyOut }} out
+{{ end }}
 {{ end }}
 {{ end }}
 {{ range $network, $config := $vrfConfig.IPv4Unicast.Networks }}
@@ -250,10 +280,21 @@ router bgp {{ $.Protocols.BGP.ASN }} vrf {{ $vrfName }}
 {{ end }}
 {{ if $vrfConfig.IPv6Unicast }}
  address-family ipv6 unicast
-{{ range $addr, $neighbor := $vrfConfig.IPv6Unicast.Neighbors }}
-  neighbor {{ $addr }} remote-as {{ $neighbor.RemoteAS }}
-{{ if $neighbor.Description }}
-  neighbor {{ $addr }} description {{ $neighbor.Description }}
+{{ range $addr, $neighbor := $vrfConfig.Neighbors }}
+{{ if $neighbor.IPv6Unicast }}
+  neighbor {{ $addr }} activate
+{{ if $neighbor.IPv6Unicast.NextHopSelf }}
+  neighbor {{ $addr }} next-hop-self
+{{ end }}
+{{ if $neighbor.IPv6Unicast.SendCommunity }}
+  neighbor {{ $addr }} send-community {{ $neighbor.IPv6Unicast.SendCommunity }}
+{{ end }}
+{{ if $neighbor.IPv6Unicast.RoutePolicyIn }}
+  neighbor {{ $addr }} route-map {{ $neighbor.IPv6Unicast.RoutePolicyIn }} in
+{{ end }}
+{{ if $neighbor.IPv6Unicast.RoutePolicyOut }}
+  neighbor {{ $addr }} route-map {{ $neighbor.IPv6Unicast.RoutePolicyOut }} out
+{{ end }}
 {{ end }}
 {{ end }}
 {{ range $network, $config := $vrfConfig.IPv6Unicast.Networks }}

@@ -10,6 +10,65 @@ import (
 	"net"
 )
 
+func (v *VPP) AddMfibAcceptOnInterface(group net.IP, grpPrefixLen uint8, swIfIndex uint32, tableID uint32) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	var grpAddr ip_types.AddressUnion
+	var af ip_types.AddressFamily
+	var proto fib_types.FibPathNhProto
+	if ip4 := group.To4(); ip4 != nil {
+		var addr ip_types.IP4Address
+		copy(addr[:], ip4)
+		grpAddr.SetIP4(addr)
+		af = ip_types.ADDRESS_IP4
+		proto = fib_types.FIB_API_PATH_NH_PROTO_IP4
+	} else {
+		var addr ip_types.IP6Address
+		copy(addr[:], group.To16())
+		grpAddr.SetIP6(addr)
+		af = ip_types.ADDRESS_IP6
+		proto = fib_types.FIB_API_PATH_NH_PROTO_IP6
+	}
+
+	req := &ip.IPMrouteAddDel{
+		IsAdd:       true,
+		IsMultipath: true,
+		Route: ip.IPMroute{
+			TableID: tableID,
+			Prefix: ip_types.Mprefix{
+				Af:               af,
+				GrpAddressLength: uint16(grpPrefixLen),
+				GrpAddress:       grpAddr,
+			},
+			NPaths: 1,
+			Paths: []mfib_types.MfibPath{
+				{
+					ItfFlags: mfib_types.MFIB_API_ITF_FLAG_ACCEPT,
+					Path: fib_types.FibPath{
+						SwIfIndex: swIfIndex,
+						Proto:     proto,
+					},
+				},
+			},
+		},
+	}
+
+	reply := &ip.IPMrouteAddDelReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("add mfib accept on interface: %w", err)
+	}
+	if reply.Retval != 0 {
+		return fmt.Errorf("add mfib accept on interface failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Debug("Added MFIB accept on interface", "group", group, "prefix_len", grpPrefixLen, "sw_if_index", swIfIndex, "table", tableID)
+	return nil
+}
+
 func (v *VPP) AddMfibLocalReceiveAllInterfaces(group net.IP, tableID uint32) error {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
