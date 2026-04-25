@@ -1,0 +1,17 @@
+# Copyright 2026 Veesix Networks Ltd
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+zebra=yes
+bgpd=no
+ospfd=yes
+ospf6d=no
+isisd=no
+ldpd=yes
+staticd=yes
+
+vtysh_enable=yes
+zebra_options="  -A 127.0.0.1"
+ospfd_options="  -A 127.0.0.1"
+ldpd_options="   -A 127.0.0.1"
+staticd_options="-A 127.0.0.1"

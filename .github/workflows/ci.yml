@@ -25,6 +25,7 @@ jobs:
       dhcp: ${{ steps.filter.outputs.dhcp }}
       radius: ${{ steps.filter.outputs.radius }}
       cgnat: ${{ steps.filter.outputs.cgnat }}
+      vrf: ${{ steps.filter.outputs.vrf }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -71,6 +72,9 @@ jobs:
               - 'pkg/config/aaa/**'
               - 'tests/05-ipoe-radius/**'
               - 'tests/06-pppoe-radius/**'
+            vrf:
+              - 'tests/24-vrf-lite/**'
+              - 'tests/25-l3vpn/**'
             cgnat:
               - 'internal/cgnat/**'
               - 'pkg/config/cgnat/**'
@@ -211,3 +215,13 @@ jobs:
     uses: ./.github/workflows/ipoe-linux-client-tests.yml
     needs: [file-changes, build-image]
     if: (needs.file-changes.outputs.sessions == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+
+  vrf-lite-tests:
+    uses: ./.github/workflows/vrf-lite-tests.yml
+    needs: [file-changes, build-image]
+    if: (needs.file-changes.outputs.vrf == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+
+  l3vpn-tests:
+    uses: ./.github/workflows/l3vpn-tests.yml
+    needs: [file-changes, build-image]
+    if: (needs.file-changes.outputs.vrf == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')

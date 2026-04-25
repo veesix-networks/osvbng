@@ -98,15 +98,17 @@ func (h *IPv6Handler) Apply(ctx context.Context, hctx *conf.HandlerContext) erro
 	}
 
 	if cfg.Multicast {
-		needsMulticast := true
+		var tableID uint32
 		if h.dataplaneState != nil {
 			ifState := h.dataplaneState.GetInterfaceByName(ifName)
-			if ifState != nil && h.dataplaneState.IsDHCPv6MulticastEnabled(ifState.SwIfIndex) {
-				needsMulticast = false
+			if ifState != nil {
+				if t, err := h.southbound.GetFIBIDForInterface(ifState.SwIfIndex); err == nil {
+					tableID = t
+				}
 			}
 		}
-		if needsMulticast {
-			if err := h.southbound.EnableDHCPv6Multicast(ifName); err != nil {
+		if !(h.dataplaneState != nil && h.dataplaneState.IsDHCPv6MulticastEnabled(tableID)) {
+			if err := h.southbound.EnableDHCPv6Multicast(ifName, tableID); err != nil {
 				return fmt.Errorf("enable multicast: %w", err)
 			}
 		}

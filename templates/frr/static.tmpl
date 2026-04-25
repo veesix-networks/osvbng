@@ -3,13 +3,25 @@
 {{ if .Protocols.Static }}
 {{ if .Protocols.Static.IPv4 }}
 {{ range $route := .Protocols.Static.IPv4 }}
+{{ if eq $route.VRF "" }}
 ip route {{ $route.Destination }}{{ if $route.NextHop }} {{ $route.NextHop }}{{ end }}{{ if $route.Device }} {{ $route.Device }}{{ end }}
+{{ end }}
 {{ end }}
 {{ end }}
 {{ if .Protocols.Static.IPv6 }}
 {{ range $route := .Protocols.Static.IPv6 }}
+{{ if eq $route.VRF "" }}
 ipv6 route {{ $route.Destination }}{{ if $route.NextHop }} {{ $route.NextHop }}{{ end }}{{ if $route.Device }} {{ $route.Device }}{{ end }}
 {{ end }}
+{{ end }}
+{{ end }}
+{{ range $vrf := staticVRFs .Protocols.Static }}
+vrf {{ $vrf }}
+{{ range $route := $.Protocols.Static.IPv4 }}{{ if eq $route.VRF $vrf }} ip route {{ $route.Destination }}{{ if $route.NextHop }} {{ $route.NextHop }}{{ end }}{{ if $route.Device }} {{ $route.Device }}{{ end }}
+{{ end }}{{ end }}
+{{ range $route := $.Protocols.Static.IPv6 }}{{ if eq $route.VRF $vrf }} ipv6 route {{ $route.Destination }}{{ if $route.NextHop }} {{ $route.NextHop }}{{ end }}{{ if $route.Device }} {{ $route.Device }}{{ end }}
+{{ end }}{{ end }}
+exit-vrf
 {{ end }}
 {{ end }}
 {{ end }}

@@ -53,14 +53,13 @@ func (cm *ConfigManager) processBGPForGroup(sessionID conf.SessionID, cfg *confi
 	if group.BGP.AdvertisePools {
 		if profile := cfg.IPv4Profiles[group.IPv4Profile]; profile != nil {
 			for _, pool := range profile.Pools {
-				poolVRF := vrf
-				if pool.VRF != "" {
-					poolVRF = pool.VRF
+				if pool.VRF != vrf {
+					continue
 				}
-				if err := cm.addBGPNetwork(sessionID, pool.Network, poolVRF, group.BGP.NetworkRoutePolicy); err != nil {
+				if err := cm.addBGPNetwork(sessionID, pool.Network, pool.VRF, group.BGP.NetworkRoutePolicy); err != nil {
 					return fmt.Errorf("pool %s: %w", pool.Name, err)
 				}
-				addPoolBlackholeRoute(cfg, pool.Network)
+				addPoolBlackholeRoute(cfg, pool.Network, pool.VRF)
 			}
 		}
 	}
@@ -106,10 +105,11 @@ func (cm *ConfigManager) addBGPNetwork(sessionID conf.SessionID, network, vrf, r
 	return cm.Set(sessionID, path, &protocols.BGPNetwork{RoutePolicy: routePolicy})
 }
 
-func addPoolBlackholeRoute(cfg *config.Config, network string) {
+func addPoolBlackholeRoute(cfg *config.Config, network, vrf string) {
 	route := protocols.StaticRoute{
 		Destination: network,
 		NextHop:     "blackhole",
+		VRF:         vrf,
 	}
 
 	if cfg.Protocols.Static == nil {
@@ -141,7 +141,7 @@ func (cm *ConfigManager) ProcessCGNATPools(sessionID conf.SessionID, cfg *config
 				continue
 			}
 
-			addPoolBlackholeRoute(cfg, addr)
+			addPoolBlackholeRoute(cfg, addr, "")
 
 			// SRG handles the BGP advertisement if HA is enabled
 			// Otherwise it'll cause active/active BGP ECMP issues upstream

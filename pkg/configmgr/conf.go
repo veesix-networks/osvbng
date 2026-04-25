@@ -267,6 +267,9 @@ func (cd *ConfigManager) Commit(id conf.SessionID) error {
 	if err := config.ValidateMSSClampParentMTU(sess.config); err != nil {
 		return fmt.Errorf("pre-commit validation failed: %w", err)
 	}
+	if err := config.ValidateSubscriberGroupVRF(sess.config); err != nil {
+		return fmt.Errorf("pre-commit validation failed: %w", err)
+	}
 
 	cd.logger.Info("Committing configuration", "session", id, "changes", len(sortedChanges))
 

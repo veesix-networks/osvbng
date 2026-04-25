@@ -135,8 +135,7 @@ func (ds *DataplaneState) LoadFromDataplane(sb southbound.Southbound) error {
 
 	for _, m := range mroutes {
 		if m.IsIPv6 && m.GrpAddress.Equal(dhcpv6MulticastAddr) {
-			ds.DHCPv6MulticastEnabled[0] = true
-			break
+			ds.DHCPv6MulticastEnabled[m.TableID] = true
 		}
 	}
 
@@ -219,6 +218,6 @@ func (ds *DataplaneState) GetIPv6RAConfig(swIfIndex uint32) *operations.IPv6RASt
 	return ds.IPv6RA[swIfIndex]
 }
 
-func (ds *DataplaneState) IsDHCPv6MulticastEnabled(swIfIndex uint32) bool {
-	return ds.DHCPv6MulticastEnabled[swIfIndex]
+func (ds *DataplaneState) IsDHCPv6MulticastEnabled(tableID uint32) bool {
+	return ds.DHCPv6MulticastEnabled[tableID]
 }
