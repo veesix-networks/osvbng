@@ -79,7 +79,46 @@ func (h *VRFHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error
 	}
 
 	hasLCP := h.southbound.HasLCPPair(ifName)
-	return h.southbound.BindInterfaceToVRF(ifName, vrfName, hasLCP)
+	if err := h.southbound.BindInterfaceToVRF(ifName, vrfName, hasLCP); err != nil {
+		return err
+	}
+
+	return h.reconcileMulticast(ifName, hctx)
+}
+
+func (h *VRFHandler) reconcileMulticast(ifName string, hctx *conf.HandlerContext) error {
+	if hctx.Config == nil {
+		return nil
+	}
+	values, err := h.pathPattern.ExtractWildcards(hctx.Path, 2)
+	if err != nil || len(values) != 2 {
+		return nil
+	}
+	parent, ok := hctx.Config.Interfaces[values[0]]
+	if !ok || parent == nil || parent.Subinterfaces == nil {
+		return nil
+	}
+	sub, ok := parent.Subinterfaces[values[1]]
+	if !ok || sub == nil || sub.IPv6 == nil || !sub.IPv6.Multicast {
+		return nil
+	}
+
+	ifMgr := h.southbound.GetIfMgr()
+	iface := ifMgr.GetByName(ifName)
+	if iface == nil {
+		return nil
+	}
+	tableID, err := h.southbound.GetFIBIDForInterface(iface.SwIfIndex)
+	if err != nil {
+		return nil
+	}
+	if err := h.southbound.DisableIPv6(ifName); err != nil {
+		return fmt.Errorf("disable ipv6 for vrf rebind: %w", err)
+	}
+	if err := h.southbound.EnableIPv6(ifName); err != nil {
+		return fmt.Errorf("re-enable ipv6 after vrf rebind: %w", err)
+	}
+	return h.southbound.EnableDHCPv6Multicast(ifName, tableID)
 }
 
 func (h *VRFHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) error {
