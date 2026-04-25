@@ -17,7 +17,18 @@ while [ ! -e /sys/class/net/eth1 ]; do
     fi
 done
 
-echo "eth1 ready, configuring VRF-lite topology..."
+echo "Waiting for eth2..."
+WAIT_COUNT=0
+while [ ! -e /sys/class/net/eth2 ]; do
+    sleep 1
+    WAIT_COUNT=$((WAIT_COUNT + 1))
+    if [ $WAIT_COUNT -ge $WAIT_TIMEOUT ]; then
+        echo "ERROR: Timeout waiting for eth2"
+        exit 1
+    fi
+done
+
+echo "eth1, eth2 ready, configuring VRF-lite topology..."
 modprobe vrf 2>/dev/null || true
 modprobe 8021q 2>/dev/null || true
 
@@ -27,6 +38,10 @@ if ip link add CUSTOMER-A type vrf table 200 2>/dev/null; then
 else
     echo "WARNING: CUSTOMER-A VRF already exists, continuing"
 fi
+
+ip link set eth2 master CUSTOMER-A 2>/dev/null || true
+ip address add 10.99.0.1/24 dev eth2 2>/dev/null || true
+ip link set eth2 up
 
 if ip link add link eth1 name eth1.100 type vlan id 100 2>/dev/null; then
     ip link set eth1.100 up
