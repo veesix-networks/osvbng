@@ -44,8 +44,7 @@ func (v *VPP) EnableIPv6(ifaceName string) error {
 	return nil
 }
 
-
-func (v *VPP) EnableDHCPv6Multicast(ifaceName string) error {
+func (v *VPP) DisableIPv6(ifaceName string) error {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
 		return fmt.Errorf("create API channel: %w", err)
@@ -57,14 +56,39 @@ func (v *VPP) EnableDHCPv6Multicast(ifaceName string) error {
 		return fmt.Errorf("get interface index: %w", err)
 	}
 
-	// DHCPv6 all-relay-agents-and-servers multicast: ff02::1:2
+	req := &ip.SwInterfaceIP6EnableDisable{
+		SwIfIndex: interface_types.InterfaceIndex(idx),
+		Enable:    false,
+	}
+
+	reply := &ip.SwInterfaceIP6EnableDisableReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("disable ipv6: %w", err)
+	}
+
+	v.logger.Debug("Disabled IPv6 on interface", "interface", ifaceName)
+	return nil
+}
+
+func (v *VPP) EnableDHCPv6Multicast(ifaceName string, tableID uint32) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	idx, err := v.GetInterfaceIndex(ifaceName)
+	if err != nil {
+		return fmt.Errorf("get interface index: %w", err)
+	}
+
 	var grpAddr ip_types.AddressUnion
 	grpAddr.SetIP6(ip_types.IP6Address{0xff, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01, 0, 0x02})
 
 	req := &ip.IPMrouteAddDel{
 		IsAdd: true,
 		Route: ip.IPMroute{
-			TableID:    0,
+			TableID:    tableID,
 			EntryFlags: mfib_types.MFIB_API_ENTRY_FLAG_ACCEPT_ALL_ITF,
 			Prefix: ip_types.Mprefix{
 				Af:               ip_types.ADDRESS_IP6,
@@ -94,7 +118,7 @@ func (v *VPP) EnableDHCPv6Multicast(ifaceName string) error {
 		return fmt.Errorf("add dhcpv6 mcast route failed: retval=%d", reply.Retval)
 	}
 
-	v.logger.Debug("Enabled DHCPv6 multicast on interface", "interface", ifaceName)
+	v.logger.Debug("Enabled DHCPv6 multicast on interface", "interface", ifaceName, "table_id", tableID)
 	return nil
 }
 
