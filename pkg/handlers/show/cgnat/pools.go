@@ -63,3 +63,7 @@ func (h *PoolsHandler) Summary() string {
 func (h *PoolsHandler) Description() string {
 	return "Display utilization and allocation statistics for each configured CGNAT address pool."
 }
+
+func (h *PoolsHandler) SortKey() string {
+	return "name"
+}

@@ -43,3 +43,7 @@ func (h *InterfacesHandler) Summary() string {
 func (h *InterfacesHandler) Description() string {
 	return "Display per-interface packet and byte counters from the VPP stats segment."
 }
+
+func (h *InterfacesHandler) SortKey() string {
+	return "name"
+}

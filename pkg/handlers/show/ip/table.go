@@ -57,3 +57,7 @@ func (h *TableHandler) Summary() string {
 func (h *TableHandler) Description() string {
 	return "Display the IP FIB entries from the dataplane."
 }
+
+func (h *TableHandler) SortKey() string {
+	return "name"
+}

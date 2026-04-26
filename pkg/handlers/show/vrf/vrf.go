@@ -38,3 +38,7 @@ func (h *VRFHandler) Summary() string {
 func (h *VRFHandler) Description() string {
 	return "Return all VRFs managed by the VRF manager including their VPP table IDs and Linux device mappings."
 }
+
+func (h *VRFHandler) SortKey() string {
+	return "name"
+}

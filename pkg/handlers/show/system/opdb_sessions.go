@@ -89,3 +89,7 @@ type OpDBSessionsOptions struct {
 func (h *OpDBSessionsHandler) OptionsType() interface{} {
 	return &OpDBSessionsOptions{}
 }
+
+func (h *OpDBSessionsHandler) SortKey() string {
+	return "key"
+}

@@ -50,3 +50,7 @@ func (h *SchedulerHandler) Summary() string {
 func (h *SchedulerHandler) Description() string {
 	return "Display all QoS scheduler policies configured in the dataplane."
 }
+
+func (h *SchedulerHandler) SortKey() string {
+	return "sw_if_index"
+}
