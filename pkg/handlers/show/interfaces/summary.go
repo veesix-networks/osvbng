@@ -112,3 +112,7 @@ type SummaryOptions struct {
 func (h *SummaryHandler) OptionsType() interface{} {
 	return &SummaryOptions{}
 }
+
+func (h *SummaryHandler) SortKey() string {
+	return "name"
+}

@@ -38,3 +38,7 @@ func (h *ServiceGroupsHandler) Summary() string {
 func (h *ServiceGroupsHandler) Description() string {
 	return "Return all configured service groups from the service group resolver."
 }
+
+func (h *ServiceGroupsHandler) SortKey() string {
+	return "name"
+}
