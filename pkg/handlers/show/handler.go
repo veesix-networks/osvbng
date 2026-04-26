@@ -49,6 +49,11 @@ type ShowDescriptionHandler interface {
 	Description() string
 }
 
+type ShowSortHandler interface {
+	ShowHandler
+	SortKey() string
+}
+
 type HandlerFactory func(deps *deps.ShowDeps) ShowHandler
 
 var factories []HandlerFactory
