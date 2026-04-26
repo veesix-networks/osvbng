@@ -46,3 +46,7 @@ func (h *SessionsHandler) Summary() string {
 func (h *SessionsHandler) Description() string {
 	return "Return every active CGNAT mapping including inside and outside address and port-block pairs."
 }
+
+func (h *SessionsHandler) SortKey() string {
+	return "outside_ip"
+}

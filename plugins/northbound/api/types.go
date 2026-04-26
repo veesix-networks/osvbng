@@ -1,6 +1,10 @@
 package api
 
-import "time"
+import (
+	"time"
+
+	"github.com/veesix-networks/osvbng/pkg/handlers/pagination"
+)
 
 type Status struct {
 	State         string `json:"state"`
@@ -17,6 +21,12 @@ type PathsResponse struct {
 type ShowResponse struct {
 	Path string      `json:"path"`
 	Data interface{} `json:"data"`
+}
+
+type PaginatedShowResponse struct {
+	Path       string          `json:"path"`
+	Data       interface{}     `json:"data"`
+	Pagination pagination.Meta `json:"pagination"`
 }
 
 type ConfigRequest struct {

@@ -43,6 +43,20 @@ type showResponse struct {
 	Data interface{} `json:"data"`
 }
 
+type paginatedShowResponse struct {
+	Path       string         `json:"path"`
+	Data       interface{}    `json:"data"`
+	Pagination paginationMeta `json:"pagination"`
+}
+
+type paginationMeta struct {
+	Limit    int  `json:"limit"`
+	Offset   int  `json:"offset"`
+	Returned int  `json:"returned"`
+	Total    int  `json:"total"`
+	HasMore  bool `json:"has_more"`
+}
+
 type errorResponse struct {
 	Error string `json:"error"`
 }
@@ -123,12 +137,20 @@ func BuildOpenAPISpec(adapter *Adapter) (*openapi3.T, error) {
 	spec := &openapi3.T{
 		OpenAPI: "3.0.3",
 		Info: &openapi3.Info{
-			Title:       "osvBNG API",
-			Description: "Northbound REST API for osvBNG - Open Source Virtual Broadband Network Gateway",
-			Version:     version.Version,
+			Title: "osvBNG API",
+			Description: "Northbound REST API for osvBNG - Open Source Virtual Broadband Network Gateway.\n\n" +
+				"### Response shapes\n\n" +
+				"- **Single-object handlers** (stats, status, single-record lookups) return `{path, data}` where `data` is an object.\n" +
+				"- **List-returning handlers** are paginated: they return `{path, data, pagination}` where `data` is an array " +
+				"and `pagination` is a `Pagination` component (`limit`, `offset`, `returned`, `total`, `has_more`). " +
+				"Default `limit=100`, max `1000`. Offset shifts if items are added/removed between calls.",
+			Version: version.Version,
 		},
-		Paths: &openapi3.Paths{},
+		Paths:      &openapi3.Paths{},
+		Components: &openapi3.Components{Schemas: openapi3.Schemas{}},
 	}
+
+	spec.Components.Schemas["Pagination"] = paginationComponentSchema()
 
 	addFixedEndpoints(spec, tagSet)
 	if err := addShowEndpoints(spec, adapter, tagSet); err != nil {
@@ -409,12 +431,34 @@ func addShowEndpoints(spec *openapi3.T, adapter *Adapter, tagSet map[string]bool
 		tagSet[tag] = true
 
 		responseSchema := &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{"object"}}}
+		paginated := false
 		if typed, ok := handler.(show.TypedShowHandler); ok && typed.OutputType() != nil {
+			t := reflect.TypeOf(typed.OutputType())
+			for t.Kind() == reflect.Ptr {
+				t = t.Elem()
+			}
+			if t.Kind() == reflect.Slice || t.Kind() == reflect.Array {
+				paginated = true
+			}
 			responseSchema = schemaFromType(reflect.TypeOf(typed.OutputType()))
 		}
+		if _, ok := handler.(show.ShowSortHandler); ok {
+			paginated = true
+		}
 
-		showSchema := schemaFromType(reflect.TypeOf(showResponse{}))
-		showSchema.Value.Properties["data"] = responseSchema
+		var envelopeSchema *openapi3.SchemaRef
+		if paginated {
+			envelopeSchema = schemaFromType(reflect.TypeOf(paginatedShowResponse{}))
+			envelopeSchema.Value.Properties["data"] = responseSchema
+			envelopeSchema.Value.Properties["pagination"] = &openapi3.SchemaRef{Ref: "#/components/schemas/Pagination"}
+			envelopeSchema.Value.Description = "Paginated show response. `data` is an array; `pagination` describes the slice. " +
+				"`offset` shifts when items are added/removed between calls."
+			params = append(params, paginationQueryParams()...)
+		} else {
+			envelopeSchema = schemaFromType(reflect.TypeOf(showResponse{}))
+			envelopeSchema.Value.Properties["data"] = responseSchema
+			envelopeSchema.Value.Description = "Single-object show response. `data` is the handler's return value (object/scalar). No pagination."
+		}
 
 		op := &openapi3.Operation{
 			Tags:        []string{tag},
@@ -423,7 +467,7 @@ func addShowEndpoints(spec *openapi3.T, adapter *Adapter, tagSet map[string]bool
 			OperationID: operationID("show", pattern),
 			Parameters:  params,
 			Responses: openapi3.NewResponses(
-				openapi3.WithStatus(200, responseWithSchema("Show command result", showSchema)),
+				openapi3.WithStatus(200, responseWithSchema("Show command result", envelopeSchema)),
 				openapi3.WithStatus(500, responseWithSchema("Internal server error", schemaFromType(reflect.TypeOf(errorResponse{})))),
 			),
 		}
@@ -437,6 +481,58 @@ func addShowEndpoints(spec *openapi3.T, adapter *Adapter, tagSet map[string]bool
 	}
 
 	return nil
+}
+
+func paginationComponentSchema() *openapi3.SchemaRef {
+	intType := &openapi3.Types{"integer"}
+	boolType := &openapi3.Types{"boolean"}
+	return &openapi3.SchemaRef{Value: &openapi3.Schema{
+		Type:        &openapi3.Types{"object"},
+		Description: "Pagination metadata returned alongside list-typed `data`.",
+		Required:    []string{"limit", "offset", "returned", "total", "has_more"},
+		Properties: openapi3.Schemas{
+			"limit":    {Value: &openapi3.Schema{Type: intType, Min: ptrFloat(1), Max: ptrFloat(1000), Description: "Page size used for this response."}},
+			"offset":   {Value: &openapi3.Schema{Type: intType, Min: ptrFloat(0), Description: "Items skipped from the start of the sorted result."}},
+			"returned": {Value: &openapi3.Schema{Type: intType, Min: ptrFloat(0), Description: "Number of items in this page (may be less than `limit` on the last page)."}},
+			"total":    {Value: &openapi3.Schema{Type: intType, Min: ptrFloat(0), Description: "Total items in the (post-handler-filter) result set."}},
+			"has_more": {Value: &openapi3.Schema{Type: boolType, Description: "True when more items exist beyond this page (i.e., `offset+returned < total`)."}},
+		},
+	}}
+}
+
+func paginationQueryParams() openapi3.Parameters {
+	limitSchema := &openapi3.SchemaRef{Value: &openapi3.Schema{
+		Type:    &openapi3.Types{"integer"},
+		Min:     ptrFloat(1),
+		Max:     ptrFloat(1000),
+		Default: 100,
+	}}
+	offsetSchema := &openapi3.SchemaRef{Value: &openapi3.Schema{
+		Type:    &openapi3.Types{"integer"},
+		Min:     ptrFloat(0),
+		Default: 0,
+	}}
+
+	return openapi3.Parameters{
+		&openapi3.ParameterRef{Value: &openapi3.Parameter{
+			Name:        "limit",
+			In:          "query",
+			Required:    false,
+			Schema:      limitSchema,
+			Description: "Maximum items in this page. Default 100, server-clamped to 1000.",
+		}},
+		&openapi3.ParameterRef{Value: &openapi3.Parameter{
+			Name:        "offset",
+			In:          "query",
+			Required:    false,
+			Schema:      offsetSchema,
+			Description: "Number of items to skip from the start of the sorted result. Offsets shift if items are added or removed between calls.",
+		}},
+	}
+}
+
+func ptrFloat(v float64) *float64 {
+	return &v
 }
 
 func addConfEndpoints(spec *openapi3.T, adapter *Adapter, tagSet map[string]bool) error {

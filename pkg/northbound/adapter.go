@@ -200,6 +200,37 @@ func (a *Adapter) HasOperHandler(path string) bool {
 	return err == nil
 }
 
+func (a *Adapter) LookupShowHandler(path string) show.ShowHandler {
+	for pattern, h := range a.showRegistry.GetAllHandlers() {
+		if pattern == path {
+			return h
+		}
+	}
+	for pattern, h := range a.showRegistry.GetAllHandlers() {
+		if matchShowPattern(pattern, path) {
+			return h
+		}
+	}
+	return nil
+}
+
+func matchShowPattern(pattern, path string) bool {
+	pParts := strings.Split(pattern, ".")
+	xParts := strings.Split(path, ".")
+	if len(pParts) != len(xParts) {
+		return false
+	}
+	for i := range pParts {
+		if strings.HasPrefix(pParts[i], "<") && strings.HasSuffix(pParts[i], ">") {
+			continue
+		}
+		if pParts[i] != xParts[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func (a *Adapter) GetRunningConfig(ctx context.Context) (*config.Config, error) {
 	return a.configMgr.GetRunning()
 }

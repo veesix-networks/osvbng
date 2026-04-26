@@ -9,6 +9,8 @@ import (
 
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
 	confhandler "github.com/veesix-networks/osvbng/pkg/handlers/conf"
+	"github.com/veesix-networks/osvbng/pkg/handlers/pagination"
+	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 )
 
 func (c *Component) handlePaths(w http.ResponseWriter, r *http.Request) {
@@ -70,13 +72,34 @@ func (c *Component) handleShow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := ShowResponse{
-		Path: showPath,
-		Data: data,
+	pageReq := pagination.RequestFromQuery(r.URL.Query())
+	sortKey := ""
+	if h := c.adapter.LookupShowHandler(showPath); h != nil {
+		if sh, ok := h.(show.ShowSortHandler); ok {
+			sortKey = sh.SortKey()
+		}
+	}
+
+	page, err := pagination.Paginate(data, pageReq, sortKey)
+	if err != nil {
+		c.logger.Warn("pagination sort failed; falling back to unsorted", "path", showPath, "sort_key", sortKey, "error", err)
+		page, _ = pagination.Paginate(data, pageReq, "")
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	c.writeJSON(w, resp)
+	if page.Paginated {
+		c.writeJSON(w, PaginatedShowResponse{
+			Path:       showPath,
+			Data:       page.Items,
+			Pagination: page.Meta,
+		})
+		return
+	}
+
+	c.writeJSON(w, ShowResponse{
+		Path: showPath,
+		Data: data,
+	})
 }
 
 func (c *Component) handleSet(w http.ResponseWriter, r *http.Request) {

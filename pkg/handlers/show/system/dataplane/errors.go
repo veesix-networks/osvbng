@@ -43,3 +43,7 @@ func (h *ErrorsHandler) Summary() string {
 func (h *ErrorsHandler) Description() string {
 	return "Display non-zero VPP node error counters from the stats segment."
 }
+
+func (h *ErrorsHandler) SortKey() string {
+	return "name"
+}

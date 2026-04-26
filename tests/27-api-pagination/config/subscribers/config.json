@@ -1,0 +1,40 @@
+{
+  "interfaces": {
+    "access": [
+      {
+        "interface": "eth1",
+        "type": "ipoe",
+        "vlan-mode": "1:1",
+        "outer-vlan-min": 100,
+        "outer-vlan-max": 110,
+        "inner-vlan-min": 2,
+        "inner-vlan-max": 8
+      }
+    ]
+  },
+  "dhcp": {
+    "enable": true,
+    "retry": 10
+  },
+  "dhcpv6": {
+    "enable": true,
+    "ia-na": true,
+    "ia-pd": true,
+    "rapid-commit": false,
+    "access-line": true,
+    "ldra": true
+  },
+  "ipoe": {
+    "ipv6": true
+  },
+  "access-line": {
+    "agent-circuit-id": "eth 0/1/{session-global}:{outer-vlan}.{inner-vlan}",
+    "agent-remote-id": "DEV-{session-global}"
+  },
+  "sessions": {
+    "count": 50,
+    "max-outstanding": 20,
+    "start-rate": 10,
+    "stop-rate": 10
+  }
+}

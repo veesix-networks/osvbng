@@ -77,3 +77,7 @@ func (h *SRGHandler) Summary() string {
 func (h *SRGHandler) Description() string {
 	return "Display each SRG with its current state, priority, preempt setting, virtual MAC, and tracked interface status."
 }
+
+func (h *SRGHandler) SortKey() string {
+	return "name"
+}

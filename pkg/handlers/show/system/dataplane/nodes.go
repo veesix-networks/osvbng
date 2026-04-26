@@ -43,3 +43,7 @@ func (h *NodesHandler) Summary() string {
 func (h *NodesHandler) Description() string {
 	return "Display per-node packet counters from the VPP stats segment."
 }
+
+func (h *NodesHandler) SortKey() string {
+	return "name"
+}

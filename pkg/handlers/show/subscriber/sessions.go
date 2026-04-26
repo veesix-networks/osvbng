@@ -67,3 +67,7 @@ type SessionsOptions struct {
 func (h *SessionsHandler) OptionsType() interface{} {
 	return &SessionsOptions{}
 }
+
+func (h *SessionsHandler) SortKey() string {
+	return "SessionID"
+}
