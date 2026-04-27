@@ -59,14 +59,17 @@ func (b Binding) String() string {
 	}
 }
 
-func (b Binding) dialer(timeout time.Duration) *net.Dialer {
+// dialer returns a *net.Dialer for the given network. The LocalAddr
+// type must match the network family — net.Dialer.DialContext rejects a
+// *net.TCPAddr LocalAddr when called with "udp", and vice versa.
+func (b Binding) dialer(network string, timeout time.Duration) *net.Dialer {
 	d := &net.Dialer{
 		Timeout:  timeout,
 		Resolver: Resolver(b),
 		Control:  bindControl(b),
 	}
 	if b.SourceIP.IsValid() {
-		d.LocalAddr = sourceTCPAddr(b.SourceIP)
+		d.LocalAddr = sourceLocalAddr(network, b.SourceIP)
 	}
 	return d
 }
@@ -102,7 +105,7 @@ func ListenTCP(ctx context.Context, network, addr string, b Binding) (net.Listen
 }
 
 func DialUDP(ctx context.Context, network string, raddr *net.UDPAddr, b Binding) (*net.UDPConn, error) {
-	c, err := b.dialer(0).DialContext(ctx, network, raddr.String())
+	c, err := b.dialer(network, 0).DialContext(ctx, network, raddr.String())
 	if err != nil {
 		return nil, fmt.Errorf("netbind: dial %s %s: %w", network, b, err)
 	}
@@ -115,7 +118,7 @@ func DialUDP(ctx context.Context, network string, raddr *net.UDPAddr, b Binding)
 }
 
 func HTTPClient(b Binding, timeout time.Duration) *http.Client {
-	d := b.dialer(timeout)
+	d := b.dialer("tcp", timeout)
 
 	transport := &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
@@ -140,7 +143,7 @@ func HTTPClient(b Binding, timeout time.Duration) *http.Client {
 // GRPCDialOpts returns dialer options for VRF binding only. Caller
 // supplies its own grpc.WithTransportCredentials.
 func GRPCDialOpts(b Binding) []grpc.DialOption {
-	d := b.dialer(0)
+	d := b.dialer("tcp", 0)
 	return []grpc.DialOption{
 		grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
 			return d.DialContext(ctx, "tcp", addr)
@@ -167,9 +170,17 @@ func resolveTCPListenAddr(addr string, src netip.Addr) string {
 	return net.JoinHostPort(src.String(), port)
 }
 
-func sourceTCPAddr(src netip.Addr) net.Addr {
+// sourceLocalAddr returns a net.Addr suitable for net.Dialer.LocalAddr
+// matching the dial network family. The kernel rejects a TCP LocalAddr
+// on a UDP dial and vice versa with "mismatched local address type".
+func sourceLocalAddr(network string, src netip.Addr) net.Addr {
 	if !src.IsValid() {
 		return nil
 	}
-	return &net.TCPAddr{IP: src.AsSlice()}
+	switch network {
+	case "udp", "udp4", "udp6":
+		return &net.UDPAddr{IP: src.AsSlice()}
+	default:
+		return &net.TCPAddr{IP: src.AsSlice()}
+	}
 }

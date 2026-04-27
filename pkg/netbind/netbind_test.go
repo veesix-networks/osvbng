@@ -154,7 +154,7 @@ func TestSourceIPOnly_LocalAddrSet_NoBindToDevice(t *testing.T) {
 	// vrf="" but source_ip set → LocalAddr is bound, no SO_BINDTODEVICE.
 	// We can verify the dialer's LocalAddr is what we asked for.
 	b := Binding{SourceIP: netip.MustParseAddr("127.0.0.1")}
-	d := b.dialer(0)
+	d := b.dialer("tcp", 0)
 	if d.LocalAddr == nil {
 		t.Fatal("LocalAddr should be set when source_ip is set")
 	}
@@ -165,12 +165,31 @@ func TestSourceIPOnly_LocalAddrSet_NoBindToDevice(t *testing.T) {
 
 func TestVRFOnly_ControlSet_LocalAddrNil(t *testing.T) {
 	b := Binding{VRF: "mgmt"}
-	d := b.dialer(0)
+	d := b.dialer("tcp", 0)
 	if d.Control == nil {
 		t.Fatal("Control should be set when vrf is set")
 	}
 	if d.LocalAddr != nil {
 		t.Fatal("LocalAddr should be nil when source_ip is empty")
+	}
+}
+
+// TestSourceLocalAddr_NetworkFamily guards the bug where Dialer.DialContext
+// returns "mismatched local address type" when LocalAddr is *TCPAddr on a
+// UDP dial. The dialer must pick *UDPAddr for udp* networks.
+func TestSourceLocalAddr_NetworkFamily(t *testing.T) {
+	src := netip.MustParseAddr("10.99.0.2")
+	if _, ok := sourceLocalAddr("udp", src).(*net.UDPAddr); !ok {
+		t.Errorf("sourceLocalAddr(udp) should return *net.UDPAddr")
+	}
+	if _, ok := sourceLocalAddr("udp4", src).(*net.UDPAddr); !ok {
+		t.Errorf("sourceLocalAddr(udp4) should return *net.UDPAddr")
+	}
+	if _, ok := sourceLocalAddr("tcp", src).(*net.TCPAddr); !ok {
+		t.Errorf("sourceLocalAddr(tcp) should return *net.TCPAddr")
+	}
+	if got := sourceLocalAddr("udp", netip.Addr{}); got != nil {
+		t.Errorf("sourceLocalAddr with zero src should return nil, got %v", got)
 	}
 }
 
