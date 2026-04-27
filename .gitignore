@@ -20,6 +20,11 @@ tests/**/clab-*/
 /osvbngd
 /osvbngcli
 
+tests/**/config/certs/*.crt
+tests/**/config/certs/*.key
+tests/**/config/certs/*.csr
+tests/**/config/certs/*.srl
+
 # Commercial plugins
 plugins/cache/redis/
 
