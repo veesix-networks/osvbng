@@ -89,11 +89,11 @@ func New(cfg *config.Config) (auth.AuthProvider, error) {
 	acctConns := make([]*radiusConn, 0, len(pluginCfg.Servers))
 
 	for _, s := range pluginCfg.Servers {
-		authAddr := net.JoinHostPort(s.Host, fmt.Sprintf("%d", pluginCfg.AuthPort))
-		acctAddr := net.JoinHostPort(s.Host, fmt.Sprintf("%d", pluginCfg.AcctPort))
 		secret := []byte(s.Secret)
 
-		ac, err := newRadiusConn(authAddr, secret, pluginCfg.Timeout)
+		effective := s.EndpointBinding.MergeWith(pluginCfg.EndpointBinding)
+		family := serverFamily(s.Host)
+		bind, err := effective.Resolve(family, nil)
 		if err != nil {
 			for _, c := range authConns {
 				_ = c.close()
@@ -101,11 +101,22 @@ func New(cfg *config.Config) (auth.AuthProvider, error) {
 			for _, c := range acctConns {
 				_ = c.close()
 			}
-			return nil, fmt.Errorf("auth conn to %s: %w", authAddr, err)
+			return nil, fmt.Errorf("server %s binding: %w", s.Host, err)
+		}
+
+		ac, err := newRadiusConn(s.Host, pluginCfg.AuthPort, secret, pluginCfg.Timeout, bind)
+		if err != nil {
+			for _, c := range authConns {
+				_ = c.close()
+			}
+			for _, c := range acctConns {
+				_ = c.close()
+			}
+			return nil, fmt.Errorf("auth conn to %s: %w", s.Host, err)
 		}
 		authConns = append(authConns, ac)
 
-		acc, err := newRadiusConn(acctAddr, secret, pluginCfg.Timeout)
+		acc, err := newRadiusConn(s.Host, pluginCfg.AcctPort, secret, pluginCfg.Timeout, bind)
 		if err != nil {
 			for _, c := range authConns {
 				_ = c.close()
@@ -113,7 +124,7 @@ func New(cfg *config.Config) (auth.AuthProvider, error) {
 			for _, c := range acctConns {
 				_ = c.close()
 			}
-			return nil, fmt.Errorf("acct conn to %s: %w", acctAddr, err)
+			return nil, fmt.Errorf("acct conn to %s: %w", s.Host, err)
 		}
 		acctConns = append(acctConns, acc)
 	}

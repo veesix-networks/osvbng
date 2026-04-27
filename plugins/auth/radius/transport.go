@@ -5,14 +5,18 @@
 package radius
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/md5"
 	"fmt"
 	"net"
+	"net/netip"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/veesix-networks/osvbng/pkg/netbind"
 	"layeh.com/radius"
 )
 
@@ -44,13 +48,18 @@ type radiusConn struct {
 	deadSince atomic.Int64
 }
 
-func newRadiusConn(addr string, secret []byte, timeout time.Duration) (*radiusConn, error) {
-	raddr, err := net.ResolveUDPAddr("udp", addr)
+func newRadiusConn(host string, port int, secret []byte, timeout time.Duration, b netbind.Binding) (*radiusConn, error) {
+	addr := net.JoinHostPort(host, strconv.Itoa(port))
+
+	raddr, err := resolveServerAddr(host, port, b, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("resolve %s: %w", addr, err)
 	}
 
-	conn, err := net.DialUDP("udp", nil, raddr)
+	dialCtx, cancel := context.WithTimeout(context.Background(), dialTimeout(timeout))
+	defer cancel()
+
+	conn, err := netbind.DialUDP(dialCtx, "udp", raddr, b)
 	if err != nil {
 		return nil, fmt.Errorf("dial %s: %w", addr, err)
 	}
@@ -64,6 +73,59 @@ func newRadiusConn(addr string, secret []byte, timeout time.Duration) (*radiusCo
 
 	go rc.readLoop()
 	return rc, nil
+}
+
+// resolveServerAddr returns a *net.UDPAddr for host:port, looking
+// hostnames up via b's bound resolver so DNS does not leak to the
+// default routing table.
+func resolveServerAddr(host string, port int, b netbind.Binding, timeout time.Duration) (*net.UDPAddr, error) {
+	if ip := net.ParseIP(host); ip != nil {
+		return &net.UDPAddr{IP: ip, Port: port}, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), dialTimeout(timeout))
+	defer cancel()
+
+	addrs, err := netbind.Resolver(b).LookupHost(ctx, host)
+	if err != nil {
+		return nil, err
+	}
+	if len(addrs) == 0 {
+		return nil, fmt.Errorf("no addresses for %s", host)
+	}
+
+	preferV6 := b.SourceIP.IsValid() && !b.SourceIP.Is4() && !b.SourceIP.Is4In6()
+
+	pick := pickAddr(addrs, preferV6)
+	if !pick.IsValid() {
+		return nil, fmt.Errorf("no usable address for %s", host)
+	}
+	return &net.UDPAddr{IP: pick.AsSlice(), Port: port}, nil
+}
+
+func pickAddr(addrs []string, preferV6 bool) netip.Addr {
+	var fallback netip.Addr
+	for _, a := range addrs {
+		ip, err := netip.ParseAddr(a)
+		if err != nil {
+			continue
+		}
+		isV6 := !ip.Is4() && !ip.Is4In6()
+		if isV6 == preferV6 {
+			return ip
+		}
+		if !fallback.IsValid() {
+			fallback = ip
+		}
+	}
+	return fallback
+}
+
+func dialTimeout(t time.Duration) time.Duration {
+	if t <= 0 {
+		return DefaultTimeout
+	}
+	return t
 }
 
 func (rc *radiusConn) close() error {

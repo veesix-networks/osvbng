@@ -14,17 +14,14 @@ func Resolver(b Binding) *net.Resolver {
 		return net.DefaultResolver
 	}
 
-	dnsDialer := &net.Dialer{
-		Control: bindControl(b),
-	}
-	if b.SourceIP.IsValid() {
-		dnsDialer.LocalAddr = sourceTCPAddr(b.SourceIP)
-	}
-
 	return &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-			return dnsDialer.DialContext(ctx, network, address)
+			d := &net.Dialer{Control: bindControl(b)}
+			if b.SourceIP.IsValid() {
+				d.LocalAddr = sourceLocalAddr(network, b.SourceIP)
+			}
+			return d.DialContext(ctx, network, address)
 		},
 	}
 }

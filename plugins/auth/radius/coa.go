@@ -19,6 +19,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/logger"
+	"github.com/veesix-networks/osvbng/pkg/netbind"
 	"layeh.com/radius"
 )
 
@@ -131,10 +132,13 @@ func (c *CoAComponent) Start(ctx context.Context) error {
 		return fmt.Errorf("radius provider not available")
 	}
 
-	addr := &net.UDPAddr{Port: provider.cfg.CoAPort}
-	conn, err := net.ListenUDP("udp4", addr)
+	bind, err := provider.cfg.CoAListener.Resolve(netbind.FamilyV4, nil)
 	if err != nil {
-		return fmt.Errorf("listen udp4 :%d: %w", provider.cfg.CoAPort, err)
+		return fmt.Errorf("coa listener binding: %w", err)
+	}
+	conn, err := netbind.ListenUDP(ctx, "udp4", provider.cfg.CoAListener.Port, bind)
+	if err != nil {
+		return fmt.Errorf("listen udp4 :%d: %w", provider.cfg.CoAListener.Port, err)
 	}
 	c.conn = conn
 
@@ -151,7 +155,10 @@ func (c *CoAComponent) Start(ctx context.Context) error {
 	c.wg.Add(1)
 	go c.readLoop()
 
-	c.logger.Info("CoA listener started", "port", provider.cfg.CoAPort, "clients", len(c.clients))
+	c.logger.Info("CoA listener started",
+		"port", provider.cfg.CoAListener.Port,
+		"binding", bind,
+		"clients", len(c.clients))
 	return nil
 }
 
