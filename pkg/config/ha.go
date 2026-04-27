@@ -9,6 +9,8 @@ import (
 	"net"
 	"os"
 	"time"
+
+	"github.com/veesix-networks/osvbng/pkg/netbind"
 )
 
 type HAConfig struct {
@@ -35,10 +37,14 @@ type HATLSConfig struct {
 }
 
 type HAListenConfig struct {
+	netbind.EndpointBinding `json:",inline" yaml:",inline"`
+
 	Address string `json:"address,omitempty" yaml:"address,omitempty"`
 }
 
 type HAPeerConfig struct {
+	netbind.EndpointBinding `json:",inline" yaml:",inline"`
+
 	Address string `json:"address,omitempty" yaml:"address,omitempty"`
 }
 
