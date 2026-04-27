@@ -14,6 +14,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/veesix-networks/osvbng/pkg/netbind"
 )
 
 // client owns the *http.Client plus the request-shaping logic. Kept
@@ -25,21 +27,23 @@ type client struct {
 }
 
 func newClient(cfg *Config) (*client, error) {
-	transport := &http.Transport{}
+	binding, err := cfg.EndpointBinding.Resolve(netbind.FamilyV4, nil)
+	if err != nil {
+		return nil, fmt.Errorf("resolve binding: %w", err)
+	}
+	httpClient := netbind.HTTPClient(binding, cfg.Timeout)
+
 	if cfg.TLS != nil {
 		tlsCfg, err := buildTLSConfig(cfg.TLS)
 		if err != nil {
 			return nil, err
 		}
-		transport.TLSClientConfig = tlsCfg
+		if t, ok := httpClient.Transport.(*http.Transport); ok {
+			t.TLSClientConfig = tlsCfg
+		}
 	}
-	return &client{
-		cfg: cfg,
-		http: &http.Client{
-			Transport: transport,
-			Timeout:   cfg.Timeout,
-		},
-	}, nil
+
+	return &client{cfg: cfg, http: httpClient}, nil
 }
 
 // post issues one HTTP request. Retry logic is layered on top by the

@@ -16,6 +16,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
 	"github.com/veesix-networks/osvbng/pkg/logger"
+	"github.com/veesix-networks/osvbng/pkg/netbind"
 	"github.com/veesix-networks/osvbng/pkg/provider"
 )
 
@@ -195,20 +196,23 @@ func (p *Provider) buildTemplateContext(req *auth.AuthRequest) *TemplateContext 
 }
 
 func (p *Provider) buildHTTPClient() (*http.Client, error) {
-	transport := &http.Transport{}
+	binding, err := p.cfg.EndpointBinding.Resolve(netbind.FamilyV4, nil)
+	if err != nil {
+		return nil, fmt.Errorf("resolve binding: %w", err)
+	}
+	client := netbind.HTTPClient(binding, p.cfg.Timeout)
 
 	if p.cfg.TLS != nil {
 		tlsConfig, err := p.buildTLSConfig()
 		if err != nil {
 			return nil, err
 		}
-		transport.TLSClientConfig = tlsConfig
+		if t, ok := client.Transport.(*http.Transport); ok {
+			t.TLSClientConfig = tlsConfig
+		}
 	}
 
-	return &http.Client{
-		Transport: transport,
-		Timeout:   p.cfg.Timeout,
-	}, nil
+	return client, nil
 }
 
 func (p *Provider) buildTLSConfig() (*tls.Config, error) {

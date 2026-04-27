@@ -2,9 +2,9 @@ package api
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io/fs"
-	"net"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -15,6 +15,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
 	"github.com/veesix-networks/osvbng/pkg/logger"
+	"github.com/veesix-networks/osvbng/pkg/netbind"
 	"github.com/veesix-networks/osvbng/pkg/northbound"
 )
 
@@ -22,7 +23,7 @@ type Component struct {
 	*component.Base
 	logger   *logger.Logger
 	adapter  *northbound.Adapter
-	addr     string
+	cfg      *Config
 	server   *http.Server
 	watchdog *watchdog.Watchdog
 	mu       sync.RWMutex
@@ -46,15 +47,14 @@ func NewComponent(deps component.Dependencies) (component.Component, error) {
 		return nil, nil
 	}
 
-	addr := ":8080"
-	if pluginCfg.ListenAddress != "" {
-		addr = pluginCfg.ListenAddress
+	if _, err := pluginCfg.TLS.BuildTLSConfig(); err != nil {
+		return nil, fmt.Errorf("%s: %w", Namespace, err)
 	}
 
 	return &Component{
 		Base:   component.NewBaseAsync(Namespace),
 		logger: logger.Get(Namespace),
-		addr:   addr,
+		cfg:    pluginCfg,
 	}, nil
 }
 
@@ -81,7 +81,7 @@ func (c *Component) Start(ctx context.Context) error {
 	c.logger.Info("OpenAPI spec generated", "paths", specData.Spec.Paths.Len(), "etag", c.specETag)
 
 	c.StartContext(ctx)
-	c.logger.Info("Starting API server", "addr", c.addr)
+	c.logger.Info("Starting API server", "addr", c.listenAddr())
 
 	c.Go(func() {
 		c.startServer()
@@ -118,20 +118,36 @@ func (c *Component) GetStatus() *Status {
 
 	return &Status{
 		State:         state,
-		ListenAddress: c.addr,
+		ListenAddress: c.listenAddr(),
 		Running:       c.running,
 	}
 }
 
+func (c *Component) listenAddr() string {
+	if c.cfg.ListenAddress != "" {
+		return c.cfg.ListenAddress
+	}
+	return ":8080"
+}
+
 func (c *Component) startServer() {
-	c.server = &http.Server{
-		Addr:    c.addr,
-		Handler: c.newMux(),
+	addr := c.listenAddr()
+	binding := c.cfg.ListenerBinding.Resolve()
+	tlsCfg, err := c.cfg.TLS.BuildTLSConfig()
+	if err != nil {
+		c.logger.Error("Failed to build TLS config", "error", err)
+		return
 	}
 
-	ln, err := net.Listen("tcp", c.addr)
+	c.server = &http.Server{
+		Addr:      addr,
+		Handler:   c.newMux(),
+		TLSConfig: tlsCfg,
+	}
+
+	ln, err := netbind.ListenTCP(c.Ctx, "tcp", addr, binding)
 	if err != nil {
-		c.logger.Error("Failed to bind API server", "addr", c.addr, "error", err)
+		c.logger.Error("Failed to bind API server", "addr", addr, "binding", binding.String(), "error", err)
 		return
 	}
 
@@ -139,7 +155,13 @@ func (c *Component) startServer() {
 	c.running = true
 	c.mu.Unlock()
 
-	c.logger.Info("API server listening", "addr", c.addr)
+	if tlsCfg != nil {
+		ln = tls.NewListener(ln, tlsCfg)
+		c.logger.Info("API server listening (HTTPS)", "addr", addr, "binding", binding.String())
+	} else {
+		c.logger.Warn("API server listening unencrypted; set tls.cert_file + tls.key_file in production",
+			"addr", addr, "binding", binding.String())
+	}
 	c.SignalReady()
 	if err := c.server.Serve(ln); err != nil && err != http.ErrServerClosed {
 		c.logger.Error("API server error", "error", err)
