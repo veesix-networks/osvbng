@@ -20,7 +20,6 @@ tests/**/clab-*/
 /osvbngd
 /osvbngcli
 
-# Test certs generated at suite setup (see e.g. tests/29-northbound-api-tls/gen_certs.sh)
 tests/**/config/certs/*.crt
 tests/**/config/certs/*.key
 tests/**/config/certs/*.csr
