@@ -4,22 +4,22 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 
 	pb "github.com/veesix-networks/osvbng/api/proto"
 	"github.com/veesix-networks/osvbng/internal/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
-	"github.com/veesix-networks/osvbng/pkg/handlers/oper"
-	"github.com/veesix-networks/osvbng/pkg/handlers/show"
-	"github.com/veesix-networks/osvbng/pkg/logger"
-	"github.com/veesix-networks/osvbng/pkg/models"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/ip"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/protocols/bgp"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/subscriber"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/system"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/vrf"
+	"github.com/veesix-networks/osvbng/pkg/handlers/oper"
+	"github.com/veesix-networks/osvbng/pkg/handlers/show"
+	"github.com/veesix-networks/osvbng/pkg/logger"
+	"github.com/veesix-networks/osvbng/pkg/models"
+	"github.com/veesix-networks/osvbng/pkg/netbind"
 	"google.golang.org/grpc"
 )
 
@@ -32,17 +32,19 @@ type Component struct {
 	showRegistry *show.Registry
 	operRegistry *oper.Registry
 	bindAddr     string
+	binding      netbind.Binding
 	subscriber   *subscriber.Component
 	configd      *configmgr.ConfigManager
 }
 
-func New(deps component.Dependencies, showRegistry *show.Registry, operRegistry *oper.Registry, subscriberComp *subscriber.Component, configd *configmgr.ConfigManager, bindAddr string) (*Component, error) {
+func New(deps component.Dependencies, showRegistry *show.Registry, operRegistry *oper.Registry, subscriberComp *subscriber.Component, configd *configmgr.ConfigManager, bindAddr string, binding netbind.Binding) (*Component, error) {
 	return &Component{
 		Base:         component.NewBase("gateway"),
 		logger:       logger.Get(logger.Gateway),
 		showRegistry: showRegistry,
 		operRegistry: operRegistry,
 		bindAddr:     bindAddr,
+		binding:      binding,
 		subscriber:   subscriberComp,
 		configd:      configd,
 	}, nil
@@ -50,9 +52,9 @@ func New(deps component.Dependencies, showRegistry *show.Registry, operRegistry 
 
 func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
-	c.logger.Info("Starting gateway component", "addr", c.bindAddr)
+	c.logger.Info("Starting gateway component", "addr", c.bindAddr, "binding", c.binding)
 
-	lis, err := net.Listen("tcp", c.bindAddr)
+	lis, err := netbind.ListenTCP(ctx, "tcp", c.bindAddr, c.binding)
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)
 	}

@@ -1,4 +1,4 @@
-// Copyright 2025 The osvbng Authors
+// Copyright 2026 The osvbng Authors
 // Licensed under the GNU General Public License v3.0 or later.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -6,14 +6,23 @@ package ha
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sync"
 	"time"
 
 	hapb "github.com/veesix-networks/osvbng/api/proto/ha"
 	"github.com/veesix-networks/osvbng/pkg/logger"
+	"github.com/veesix-networks/osvbng/pkg/netbind"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 )
+
+// connectReadyTimeout caps how long PeerClient.Connect waits for the
+// gRPC connection to reach Ready. ConnectWithBackoff retries on top of
+// this with exponential backoff, so set it short enough that a flapping
+// VRF master does not block the heartbeat loop for long.
+const connectReadyTimeout = 5 * time.Second
 
 type PeerState struct {
 	Connected     bool
@@ -25,7 +34,8 @@ type PeerState struct {
 
 type PeerClient struct {
 	address  string
-	dialOpts []grpc.DialOption
+	binding  netbind.Binding
+	extraOpts []grpc.DialOption
 	logger   *logger.Logger
 
 	conn   *grpc.ClientConn
@@ -39,24 +49,61 @@ type PeerClient struct {
 	cancel context.CancelFunc
 }
 
-func NewPeerClient(address string, dialOpts []grpc.DialOption, logger *logger.Logger) *PeerClient {
+// NewPeerClient stores the binding so every reconnect re-applies
+// GRPCDialOpts(b) — SO_BINDTODEVICE survives the lifetime of one TCP
+// connection, so a reset must allocate a new one with the bound dialer.
+// extraOpts carry credentials (TLS or insecure) chosen by the caller.
+func NewPeerClient(address string, binding netbind.Binding, extraOpts []grpc.DialOption, logger *logger.Logger) *PeerClient {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &PeerClient{
-		address:  address,
-		dialOpts: dialOpts,
-		logger:   logger,
-		ctx:      ctx,
-		cancel:   cancel,
+		address:   address,
+		binding:   binding,
+		extraOpts: extraOpts,
+		logger:    logger,
+		ctx:       ctx,
+		cancel:    cancel,
 	}
 }
 
+// Connect builds a fresh ClientConn through netbind.GRPCDialOpts(b) and
+// waits for the gRPC connection to reach Ready (or fail) within
+// connectReadyTimeout. Earlier behaviour treated grpc.NewClient
+// allocation as reachability, which masked VRF flap because NewClient
+// returns immediately.
 func (p *PeerClient) Connect() error {
-	conn, err := grpc.NewClient(p.address, p.dialOpts...)
+	opts := append([]grpc.DialOption{}, p.extraOpts...)
+	opts = append(opts, netbind.GRPCDialOpts(p.binding)...)
+
+	conn, err := grpc.NewClient(p.address, opts...)
 	if err != nil {
-		return err
+		return fmt.Errorf("grpc.NewClient %s: %w", p.address, err)
+	}
+
+	conn.Connect()
+
+	ctx, cancel := context.WithTimeout(p.ctx, connectReadyTimeout)
+	defer cancel()
+
+	for {
+		s := conn.GetState()
+		if s == connectivity.Ready {
+			break
+		}
+		if s == connectivity.Shutdown {
+			_ = conn.Close()
+			return fmt.Errorf("grpc connection to %s entered Shutdown", p.address)
+		}
+		if !conn.WaitForStateChange(ctx, s) {
+			_ = conn.Close()
+			return fmt.Errorf("grpc connection to %s did not reach Ready within %s (last state: %s)",
+				p.address, connectReadyTimeout, s)
+		}
 	}
 
 	p.mu.Lock()
+	if p.conn != nil {
+		_ = p.conn.Close()
+	}
 	p.conn = conn
 	p.client = hapb.NewHAPeerServiceClient(conn)
 	p.mu.Unlock()
@@ -76,7 +123,7 @@ func (p *PeerClient) ConnectWithBackoff() {
 		}
 
 		if err := p.Connect(); err != nil {
-			p.logger.Debug("Peer connection failed, retrying", "address", p.address, "backoff", backoff, "error", err)
+			p.logger.Debug("Peer connection failed, retrying", "address", p.address, "binding", p.binding, "backoff", backoff, "error", err)
 			select {
 			case <-time.After(backoff):
 			case <-p.ctx.Done():
@@ -86,7 +133,7 @@ func (p *PeerClient) ConnectWithBackoff() {
 			continue
 		}
 
-		p.logger.Info("Connected to peer", "address", p.address)
+		p.logger.Info("Connected to peer", "address", p.address, "binding", p.binding)
 		return
 	}
 }
@@ -255,6 +302,24 @@ func (p *PeerClient) Close() error {
 	}
 
 	return nil
+}
+
+// CloseConn drops just the underlying ClientConn (not the PeerClient
+// itself). Used by the heartbeat reconnect path so the next Connect
+// allocates a fresh ClientConn instead of overwriting a leaked one.
+func (p *PeerClient) CloseConn() {
+	p.mu.Lock()
+	if p.stream != nil {
+		_ = p.stream.CloseSend()
+		p.stream = nil
+	}
+	if p.conn != nil {
+		_ = p.conn.Close()
+		p.conn = nil
+		p.client = nil
+	}
+	p.state.Connected = false
+	p.mu.Unlock()
 }
 
 var (
