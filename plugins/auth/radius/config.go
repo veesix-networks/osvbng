@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/auth"
+	osvbngconfig "github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
+	"github.com/veesix-networks/osvbng/pkg/netbind"
 )
 
 const Namespace = "subscriber.auth.radius"
@@ -28,30 +30,42 @@ const (
 )
 
 type Config struct {
-	Servers          []ServerConfig   `json:"servers" yaml:"servers"`
-	AuthPort         int              `json:"auth_port,omitempty" yaml:"auth_port,omitempty"`
-	AcctPort         int              `json:"acct_port,omitempty" yaml:"acct_port,omitempty"`
-	Timeout          time.Duration    `json:"timeout,omitempty" yaml:"timeout,omitempty"`
-	Retries          int              `json:"retries,omitempty" yaml:"retries,omitempty"`
-	NASIdentifier    string           `json:"nas_identifier,omitempty" yaml:"nas_identifier,omitempty"`
-	NASIP            string           `json:"nas_ip,omitempty" yaml:"nas_ip,omitempty"`
-	NASPortType      string           `json:"nas_port_type,omitempty" yaml:"nas_port_type,omitempty"`
-	DeadTime         time.Duration    `json:"dead_time,omitempty" yaml:"dead_time,omitempty"`
-	DeadThreshold    int              `json:"dead_threshold,omitempty" yaml:"dead_threshold,omitempty"`
-	Dictionaries     []string         `json:"dictionaries,omitempty" yaml:"dictionaries,omitempty"`
-	ResponseMappings []CustomMapping  `json:"response_mappings,omitempty" yaml:"response_mappings,omitempty"`
-	RequestMappings  []RequestMapping `json:"request_mappings,omitempty" yaml:"request_mappings,omitempty"`
-	CoAPort          int              `json:"coa_port,omitempty" yaml:"coa_port,omitempty"`
+	netbind.EndpointBinding `json:",inline" yaml:",inline"`
+
+	Servers          []ServerConfig    `json:"servers" yaml:"servers"`
+	AuthPort         int               `json:"auth_port,omitempty" yaml:"auth_port,omitempty"`
+	AcctPort         int               `json:"acct_port,omitempty" yaml:"acct_port,omitempty"`
+	Timeout          time.Duration     `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	Retries          int               `json:"retries,omitempty" yaml:"retries,omitempty"`
+	NASIdentifier    string            `json:"nas_identifier,omitempty" yaml:"nas_identifier,omitempty"`
+	NASIP            string            `json:"nas_ip,omitempty" yaml:"nas_ip,omitempty"`
+	NASPortType      string            `json:"nas_port_type,omitempty" yaml:"nas_port_type,omitempty"`
+	DeadTime         time.Duration     `json:"dead_time,omitempty" yaml:"dead_time,omitempty"`
+	DeadThreshold    int               `json:"dead_threshold,omitempty" yaml:"dead_threshold,omitempty"`
+	Dictionaries     []string          `json:"dictionaries,omitempty" yaml:"dictionaries,omitempty"`
+	ResponseMappings []CustomMapping   `json:"response_mappings,omitempty" yaml:"response_mappings,omitempty"`
+	RequestMappings  []RequestMapping  `json:"request_mappings,omitempty" yaml:"request_mappings,omitempty"`
+	CoAListener      CoAListenerConfig `json:"coa_listener,omitempty" yaml:"coa_listener,omitempty"`
 	CoAClients       []CoAClientConfig `json:"coa_clients,omitempty" yaml:"coa_clients,omitempty"`
-	CoAReplayWindow  int64            `json:"coa_replay_window,omitempty" yaml:"coa_replay_window,omitempty"`
+	CoAReplayWindow  int64             `json:"coa_replay_window,omitempty" yaml:"coa_replay_window,omitempty"`
 }
 
-type CoAClientConfig struct {
+type ServerConfig struct {
+	netbind.EndpointBinding `json:",inline" yaml:",inline"`
+
 	Host   string `json:"host" yaml:"host"`
 	Secret string `json:"secret" yaml:"secret"`
 }
 
-type ServerConfig struct {
+type CoAListenerConfig struct {
+	netbind.EndpointBinding `json:",inline" yaml:",inline"`
+
+	Port int `json:"port,omitempty" yaml:"port,omitempty"`
+}
+
+type CoAClientConfig struct {
+	netbind.EndpointBinding `json:",inline" yaml:",inline"`
+
 	Host   string `json:"host" yaml:"host"`
 	Secret string `json:"secret" yaml:"secret"`
 }
@@ -93,8 +107,8 @@ func (c *Config) applyDefaults() {
 	if c.DeadThreshold == 0 {
 		c.DeadThreshold = DefaultDeadThreshold
 	}
-	if c.CoAPort == 0 {
-		c.CoAPort = DefaultCoAPort
+	if c.CoAListener.Port == 0 {
+		c.CoAListener.Port = DefaultCoAPort
 	}
 	if c.CoAReplayWindow == 0 {
 		c.CoAReplayWindow = DefaultCoAReplayWindow
@@ -154,4 +168,70 @@ func isValidIPOrCIDR(s string) bool {
 func init() {
 	configmgr.RegisterPluginConfig(Namespace, Config{})
 	auth.Register("radius", New)
+	configmgr.RegisterPostVRFValidator(Namespace, validateBinding)
+}
+
+func validateBinding(cfg *osvbngconfig.Config, vrfMgr netbind.VRFResolver, nl netbind.LinkLister) error {
+	pluginCfg, err := configmgr.DecodeCandidatePluginConfig[Config](cfg, Namespace)
+	if err != nil {
+		return fmt.Errorf("%s: %w", Namespace, err)
+	}
+	if pluginCfg == nil {
+		return nil
+	}
+	return pluginCfg.validateBindings(vrfMgr, nl)
+}
+
+func (c *Config) validateBindings(vrfMgr netbind.VRFResolver, nl netbind.LinkLister) error {
+	for i, s := range c.Servers {
+		effective := s.MergeWith(c.EndpointBinding)
+		family := serverFamily(s.Host)
+		if err := effective.Validate(family, vrfMgr, nl); err != nil {
+			return fmt.Errorf("servers[%d] %s: %w", i, s.Host, err)
+		}
+	}
+
+	if err := c.CoAListener.Validate(netbind.FamilyV4, vrfMgr, nl); err != nil {
+		return fmt.Errorf("coa_listener: %w", err)
+	}
+
+	for i, cc := range c.CoAClients {
+		family := coaClientFamily(cc.Host)
+		if err := cc.Validate(family, vrfMgr, nl); err != nil {
+			return fmt.Errorf("coa_clients[%d] %s: %w", i, cc.Host, err)
+		}
+	}
+
+	return nil
+}
+
+// serverFamily returns the IP family implied by a server's Host. A
+// non-IP-literal hostname defaults to v4 for binding purposes; the
+// resolver picks the actual family at lookup time.
+func serverFamily(host string) netbind.Family {
+	h, _, err := net.SplitHostPort(host)
+	if err != nil {
+		h = host
+	}
+	if ip := net.ParseIP(h); ip != nil && ip.To4() == nil {
+		return netbind.FamilyV6
+	}
+	return netbind.FamilyV4
+}
+
+// coaClientFamily returns the family of a CoA client's IP-or-CIDR Host.
+// CoA clients are restricted to IP/CIDR by validate(); a parse miss
+// falls through to v4 to match findClient's IPv4-net behaviour for
+// invalid input.
+func coaClientFamily(host string) netbind.Family {
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.To4() == nil {
+			return netbind.FamilyV6
+		}
+		return netbind.FamilyV4
+	}
+	if _, ipNet, err := net.ParseCIDR(host); err == nil && ipNet.IP.To4() == nil {
+		return netbind.FamilyV6
+	}
+	return netbind.FamilyV4
 }
