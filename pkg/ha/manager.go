@@ -20,6 +20,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
+	"github.com/veesix-networks/osvbng/pkg/netbind"
 	"github.com/veesix-networks/osvbng/pkg/opdb"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"google.golang.org/grpc"
@@ -176,7 +177,11 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.server = grpc.NewServer(serverOpts...)
 	hapb.RegisterHAPeerServiceServer(m.server, NewHAPeerServer(m, m.logger))
 
-	lis, err := net.Listen("tcp", m.cfg.GetListenAddress())
+	listenBind, err := m.cfg.Listen.Resolve(addrFamily(m.cfg.GetListenAddress()), nil)
+	if err != nil {
+		return fmt.Errorf("ha listen binding: %w", err)
+	}
+	lis, err := netbind.ListenTCP(ctx, "tcp", m.cfg.GetListenAddress(), listenBind)
 	if err != nil {
 		return err
 	}
@@ -199,7 +204,11 @@ func (m *Manager) Start(ctx context.Context) error {
 			dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		}
 
-		m.peer = NewPeerClient(m.cfg.Peer.Address, dialOpts, m.logger)
+		peerBind, err := m.cfg.Peer.Resolve(addrFamily(m.cfg.Peer.Address), nil)
+		if err != nil {
+			return fmt.Errorf("ha peer binding: %w", err)
+		}
+		m.peer = NewPeerClient(m.cfg.Peer.Address, peerBind, dialOpts, m.logger)
 
 		srgNames := make([]string, 0, len(m.srgs))
 		for name := range m.srgs {
@@ -968,5 +977,21 @@ func (m *Manager) handleInterfaceEvent(ev events.Event) {
 			"down_count", downCount,
 			"effective_priority", sm.Priority())
 	}
+}
+
+// addrFamily returns the IP family of a host:port string. IPv6 hosts are
+// either bracketed ([::1]:50051) or hostless with a v6-shaped form. We
+// default to v4 when the form is ambiguous since EndpointBinding source
+// fields are family-specific (source_ip vs source_ipv6) and the binding
+// will surface a family mismatch during validation.
+func addrFamily(addr string) netbind.Family {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.To4() == nil {
+		return netbind.FamilyV6
+	}
+	return netbind.FamilyV4
 }
 

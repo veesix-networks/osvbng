@@ -51,6 +51,7 @@ import (
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"github.com/veesix-networks/osvbng/pkg/logger"
+	"github.com/veesix-networks/osvbng/pkg/netbind"
 	"github.com/veesix-networks/osvbng/pkg/northbound"
 	"github.com/veesix-networks/osvbng/pkg/opdb/sqlite"
 	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
@@ -437,7 +438,11 @@ func main() {
 	if cfg.API.Address != "" {
 		gatewayAddr = cfg.API.Address
 	}
-	gatewayComp, err := gateway.New(coreDeps, showRegistry, operRegistry, subscriberComp, configd, gatewayAddr)
+	gatewayBinding, err := cfg.API.Resolve(netbind.FamilyV4, nil)
+	if err != nil {
+		log.Fatalf("Failed to resolve API binding: %v", err)
+	}
+	gatewayComp, err := gateway.New(coreDeps, showRegistry, operRegistry, subscriberComp, configd, gatewayAddr, gatewayBinding)
 	if err != nil {
 		log.Fatalf("Failed to create gateway component: %v", err)
 	}

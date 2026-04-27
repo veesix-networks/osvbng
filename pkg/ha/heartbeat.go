@@ -136,6 +136,12 @@ func (h *HeartbeatLoop) reconnectPeer() {
 		return
 	}
 
+	// SO_BINDTODEVICE is per-socket and survives only the lifetime of one
+	// TCP connection, so the prior ClientConn must be closed before
+	// allocating a replacement. ConnectWithBackoff calls Connect, which
+	// re-applies GRPCDialOpts(b) on the fresh socket.
+	h.manager.peer.CloseConn()
+
 	h.manager.peer.ConnectWithBackoff()
 	if err := h.manager.peer.OpenHeartbeatStream(); err != nil {
 		h.logger.Warn("Failed to reopen heartbeat stream", "error", err)
