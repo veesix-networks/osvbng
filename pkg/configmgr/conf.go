@@ -14,6 +14,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf/paths"
 	"github.com/veesix-networks/osvbng/pkg/logger"
+	"github.com/veesix-networks/osvbng/pkg/netbind"
 	pathspkg "github.com/veesix-networks/osvbng/pkg/paths"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
@@ -34,6 +35,9 @@ type ConfigManager struct {
 	versionDir        string
 	startupConfigPath string
 	disableVersions   bool
+
+	vrfMgr   netbind.VRFResolver
+	nlHandle netbind.LinkLister
 
 	mu sync.RWMutex
 }
@@ -268,6 +272,9 @@ func (cd *ConfigManager) Commit(id conf.SessionID) error {
 		return fmt.Errorf("pre-commit validation failed: %w", err)
 	}
 	if err := config.ValidateSubscriberGroupVRF(sess.config); err != nil {
+		return fmt.Errorf("pre-commit validation failed: %w", err)
+	}
+	if err := cd.runPostVRFValidators(sess.config); err != nil {
 		return fmt.Errorf("pre-commit validation failed: %w", err)
 	}
 

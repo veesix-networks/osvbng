@@ -22,7 +22,9 @@ import (
 	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/component"
+	osvbngconfig "github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
+	"github.com/veesix-networks/osvbng/pkg/netbind"
 )
 
 // Namespace is the plugin config key. Matches YAML under `plugins:`.
@@ -33,6 +35,8 @@ const Namespace = "exporter.cgnat.http"
 // operator who only sets `enabled: true` + `endpoint:` gets a useful
 // exporter without further tuning.
 type Config struct {
+	netbind.EndpointBinding `json:",inline" yaml:",inline"`
+
 	Enabled bool `json:"enabled" yaml:"enabled"`
 
 	// Endpoint is the absolute URL that each event is POSTed to.
@@ -172,4 +176,16 @@ func init() {
 		component.WithAuthor("veesix ::networks contributors"),
 		component.WithVersion("1.0.0"),
 	)
+	configmgr.RegisterPostVRFValidator(Namespace, validateBinding)
+}
+
+func validateBinding(cfg *osvbngconfig.Config, vrfMgr netbind.VRFResolver, nl netbind.LinkLister) error {
+	pluginCfg, err := configmgr.DecodeCandidatePluginConfig[Config](cfg, Namespace)
+	if err != nil {
+		return fmt.Errorf("%s: %w", Namespace, err)
+	}
+	if pluginCfg == nil {
+		return nil
+	}
+	return pluginCfg.EndpointBinding.Validate(netbind.FamilyV4, vrfMgr, nl)
 }

@@ -2,7 +2,8 @@ package prometheus
 
 import (
 	"context"
-	"net"
+	"crypto/tls"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
 	"github.com/veesix-networks/osvbng/pkg/logger"
+	"github.com/veesix-networks/osvbng/pkg/netbind"
 	"github.com/veesix-networks/osvbng/plugins/exporter/prometheus/metrics"
 	"github.com/veesix-networks/osvbng/plugins/exporter/prometheus/show"
 
@@ -30,7 +32,7 @@ type Component struct {
 	*component.Base
 	logger        *logger.Logger
 	cache         cache.Cache
-	addr          string
+	cfg           *Config
 	server        *http.Server
 	mu            sync.RWMutex
 	handlerCount  int
@@ -38,7 +40,10 @@ type Component struct {
 }
 
 func (c *Component) Addr() string {
-	return c.addr
+	if c.cfg.ListenAddress != "" {
+		return c.cfg.ListenAddress
+	}
+	return ":9090"
 }
 
 func (c *Component) GetStatus() *show.Status {
@@ -52,7 +57,7 @@ func (c *Component) GetStatus() *show.Status {
 
 	return &show.Status{
 		State:         state,
-		ListenAddress: c.addr,
+		ListenAddress: c.Addr(),
 		HandlerCount:  c.handlerCount,
 		ServerRunning: c.serverRunning,
 	}
@@ -73,22 +78,21 @@ func New(deps component.Dependencies) (component.Component, error) {
 		return nil, nil
 	}
 
-	addr := ":9090"
-	if pluginCfg.ListenAddress != "" {
-		addr = pluginCfg.ListenAddress
+	if _, err := pluginCfg.TLS.BuildTLSConfig(); err != nil {
+		return nil, fmt.Errorf("%s: %w", Namespace, err)
 	}
 
 	return &Component{
 		Base:   component.NewBaseAsync(Namespace),
 		logger: logger.Get(Namespace),
 		cache:  deps.Cache,
-		addr:   addr,
+		cfg:    pluginCfg,
 	}, nil
 }
 
 func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
-	c.logger.Info("Starting Prometheus exporter", "addr", c.addr)
+	c.logger.Info("Starting Prometheus exporter", "addr", c.Addr())
 
 	c.Go(func() {
 		c.startServer()
@@ -170,14 +174,23 @@ func (c *Component) startServer() {
 
 	mux.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 
-	c.server = &http.Server{
-		Addr:    c.addr,
-		Handler: mux,
+	addr := c.Addr()
+	binding := c.cfg.ListenerBinding.Resolve()
+	tlsCfg, err := c.cfg.TLS.BuildTLSConfig()
+	if err != nil {
+		c.logger.Error("Failed to build TLS config", "error", err)
+		return
 	}
 
-	ln, err := net.Listen("tcp", c.addr)
+	c.server = &http.Server{
+		Addr:      addr,
+		Handler:   mux,
+		TLSConfig: tlsCfg,
+	}
+
+	ln, err := netbind.ListenTCP(c.Ctx, "tcp", addr, binding)
 	if err != nil {
-		c.logger.Error("Failed to bind Prometheus HTTP server", "addr", c.addr, "error", err)
+		c.logger.Error("Failed to bind Prometheus HTTP server", "addr", addr, "binding", binding.String(), "error", err)
 		return
 	}
 
@@ -185,7 +198,13 @@ func (c *Component) startServer() {
 	c.serverRunning = true
 	c.mu.Unlock()
 
-	c.logger.Info("Prometheus HTTP server listening", "addr", c.addr)
+	if tlsCfg != nil {
+		ln = tls.NewListener(ln, tlsCfg)
+		c.logger.Info("Prometheus HTTPS server listening", "addr", addr, "binding", binding.String())
+	} else {
+		c.logger.Warn("Prometheus HTTP server listening unencrypted; set tls.cert_file + tls.key_file in production",
+			"addr", addr, "binding", binding.String())
+	}
 	c.SignalReady()
 	if err := c.server.Serve(ln); err != nil && err != http.ErrServerClosed {
 		c.logger.Error("Prometheus HTTP server error", "error", err)

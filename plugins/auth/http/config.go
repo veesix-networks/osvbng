@@ -1,24 +1,28 @@
 package http
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/auth"
+	osvbngconfig "github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
+	"github.com/veesix-networks/osvbng/pkg/netbind"
 )
 
 const Namespace = "subscriber.auth.http"
 
 type Config struct {
-	Endpoint    string            `json:"endpoint" yaml:"endpoint"`
-	Method      string            `json:"method,omitempty" yaml:"method,omitempty"`
-	Timeout     time.Duration     `json:"timeout,omitempty" yaml:"timeout,omitempty"`
-	TLS         *TLSConfig        `json:"tls,omitempty" yaml:"tls,omitempty"`
-	Auth        *AuthConfig       `json:"auth,omitempty" yaml:"auth,omitempty"`
-	Headers     map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
-	RequestBody *RequestBodyConfig `json:"request_body,omitempty" yaml:"request_body,omitempty"`
-	Response    *ResponseConfig   `json:"response,omitempty" yaml:"response,omitempty"`
-	Accounting  *AccountingConfig `json:"accounting,omitempty" yaml:"accounting,omitempty"`
+	netbind.EndpointBinding `json:",inline" yaml:",inline"`
+	Endpoint                string             `json:"endpoint" yaml:"endpoint"`
+	Method                  string             `json:"method,omitempty" yaml:"method,omitempty"`
+	Timeout                 time.Duration      `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	TLS                     *TLSConfig         `json:"tls,omitempty" yaml:"tls,omitempty"`
+	Auth                    *AuthConfig        `json:"auth,omitempty" yaml:"auth,omitempty"`
+	Headers                 map[string]string  `json:"headers,omitempty" yaml:"headers,omitempty"`
+	RequestBody             *RequestBodyConfig `json:"request_body,omitempty" yaml:"request_body,omitempty"`
+	Response                *ResponseConfig    `json:"response,omitempty" yaml:"response,omitempty"`
+	Accounting              *AccountingConfig  `json:"accounting,omitempty" yaml:"accounting,omitempty"`
 }
 
 type TLSConfig struct {
@@ -70,4 +74,16 @@ type AccountingEventConfig struct {
 func init() {
 	configmgr.RegisterPluginConfig(Namespace, Config{})
 	auth.Register("http", New)
+	configmgr.RegisterPostVRFValidator(Namespace, validateBinding)
+}
+
+func validateBinding(cfg *osvbngconfig.Config, vrfMgr netbind.VRFResolver, nl netbind.LinkLister) error {
+	pluginCfg, err := configmgr.DecodeCandidatePluginConfig[Config](cfg, Namespace)
+	if err != nil {
+		return fmt.Errorf("%s: %w", Namespace, err)
+	}
+	if pluginCfg == nil {
+		return nil
+	}
+	return pluginCfg.EndpointBinding.Validate(netbind.FamilyV4, vrfMgr, nl)
 }
