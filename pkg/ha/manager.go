@@ -177,7 +177,7 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.server = grpc.NewServer(serverOpts...)
 	hapb.RegisterHAPeerServiceServer(m.server, NewHAPeerServer(m, m.logger))
 
-	listenBind, err := m.cfg.Listen.Resolve(addrFamily(m.cfg.GetListenAddress()), nil)
+	listenBind, err := m.cfg.Listen.Resolve(addrFamily(m.cfg.GetListenAddress()))
 	if err != nil {
 		return fmt.Errorf("ha listen binding: %w", err)
 	}
@@ -204,7 +204,7 @@ func (m *Manager) Start(ctx context.Context) error {
 			dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		}
 
-		peerBind, err := m.cfg.Peer.Resolve(addrFamily(m.cfg.Peer.Address), nil)
+		peerBind, err := m.cfg.Peer.Resolve(addrFamily(m.cfg.Peer.Address))
 		if err != nil {
 			return fmt.Errorf("ha peer binding: %w", err)
 		}

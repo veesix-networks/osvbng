@@ -132,7 +132,7 @@ func (c *CoAComponent) Start(ctx context.Context) error {
 		return fmt.Errorf("radius provider not available")
 	}
 
-	bind, err := provider.cfg.CoAListener.Resolve(netbind.FamilyV4, nil)
+	bind, err := provider.cfg.CoAListener.Resolve(netbind.FamilyV4)
 	if err != nil {
 		return fmt.Errorf("coa listener binding: %w", err)
 	}

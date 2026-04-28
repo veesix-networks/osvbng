@@ -18,11 +18,11 @@ func (b ListenerBinding) IsZero() bool { return b.VRF == "" }
 
 func (b ListenerBinding) Resolve() Binding { return Binding{VRF: b.VRF} }
 
-func (b ListenerBinding) Validate(family Family, vrfMgr VRFResolver, nl LinkLister) error {
+func (b ListenerBinding) Validate(family Family, lookup VRFLookup) error {
 	if b.IsZero() {
 		return nil
 	}
-	return ValidateBinding(vrfMgr, nl, b.Resolve(), family)
+	return b.Resolve().Validate(family, lookup)
 }
 
 type EndpointBinding struct {
@@ -55,9 +55,7 @@ func (b EndpointBinding) MergeWith(parent EndpointBinding) EndpointBinding {
 	return out
 }
 
-// Resolve parses the strings into a runtime Binding for family. nl is
-// reserved for future SourceInterface resolution.
-func (b EndpointBinding) Resolve(family Family, _ LinkLister) (Binding, error) {
+func (b EndpointBinding) Resolve(family Family) (Binding, error) {
 	if b.SourceInterface != "" {
 		return Binding{}, errors.New("netbind: source_interface not yet implemented; use source_ip / source_ipv6")
 	}
@@ -73,18 +71,18 @@ func (b EndpointBinding) Resolve(family Family, _ LinkLister) (Binding, error) {
 	return out, nil
 }
 
-func (b EndpointBinding) Validate(family Family, vrfMgr VRFResolver, nl LinkLister) error {
+func (b EndpointBinding) Validate(family Family, lookup VRFLookup) error {
 	if b.IsZero() {
 		return nil
 	}
 	if b.SourceInterface != "" {
 		return errors.New("netbind: source_interface not yet implemented; use source_ip / source_ipv6")
 	}
-	runtime, err := b.Resolve(family, nl)
+	runtime, err := b.Resolve(family)
 	if err != nil {
 		return err
 	}
-	return ValidateBinding(vrfMgr, nl, runtime, family)
+	return runtime.Validate(family, lookup)
 }
 
 func (b EndpointBinding) sourceIPForFamily(family Family) (netip.Addr, error) {

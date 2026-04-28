@@ -126,7 +126,7 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	if err := c.HA.Validate(); err != nil {
+	if err := c.ValidateBindings(); err != nil {
 		return err
 	}
 

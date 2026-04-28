@@ -5,6 +5,7 @@
 package relay
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/veesix-networks/osvbng/pkg/config/ip"
 	"github.com/veesix-networks/osvbng/pkg/logger"
+	"github.com/veesix-networks/osvbng/pkg/netbind"
 )
 
 var (
@@ -43,23 +45,25 @@ type v6PendingKey struct {
 	peerAddr [16]byte
 }
 
+type serverCacheKey struct {
+	servers string
+	binding bindingKey
+}
+
 type Client struct {
-	conn4     *net.UDPConn
-	conn6     *net.UDPConn
-	conn4Once sync.Once
-	conn6Once sync.Once
-	conn4Err  error
-	conn6Err  error
-	pending4  map[v4PendingKey]chan<- []byte
-	pending6  map[v6PendingKey]chan<- []byte
-	mu4       sync.Mutex
-	mu6       sync.Mutex
+	openCtx context.Context
+	opener  socketOpener
+
+	groupsMu sync.RWMutex
+	groups   map[bindingKey]*socketGroup
+
 	replyPool sync.Pool
 	closed    chan struct{}
+	closeOnce sync.Once
 	logger    *logger.Logger
 
 	serversMu     sync.RWMutex
-	servers       map[string]*Server
+	servers       map[serverEntryKey]*Server
 	resolvedCache sync.Map
 
 	requests4 atomic.Uint64
@@ -68,6 +72,11 @@ type Client struct {
 	requests6 atomic.Uint64
 	replies6  atomic.Uint64
 	timeouts6 atomic.Uint64
+}
+
+type serverEntryKey struct {
+	address string
+	binding bindingKey
 }
 
 var (
@@ -84,11 +93,12 @@ func GetClient() *Client {
 
 func newClient() *Client {
 	c := &Client{
-		pending4: make(map[v4PendingKey]chan<- []byte),
-		pending6: make(map[v6PendingKey]chan<- []byte),
-		servers:  make(map[string]*Server),
-		closed:   make(chan struct{}),
-		logger:   logger.Get(logger.IPoERelay),
+		openCtx: context.Background(),
+		opener:  defaultSocketOpener,
+		groups:  make(map[bindingKey]*socketGroup),
+		servers: make(map[serverEntryKey]*Server),
+		closed:  make(chan struct{}),
+		logger:  logger.Get(logger.IPoERelay),
 		replyPool: sync.Pool{
 			New: func() interface{} {
 				ch := make(chan []byte, 1)
@@ -99,37 +109,16 @@ func newClient() *Client {
 	return c
 }
 
-func (c *Client) ensureConn4() error {
-	c.conn4Once.Do(func() {
-		conn, err := net.ListenUDP("udp4", &net.UDPAddr{Port: 67})
-		if err != nil {
-			c.conn4Err = fmt.Errorf("listen udp4:67: %w", err)
-			return
-		}
-		c.conn4 = conn
-		go c.readLoop4()
-	})
-	return c.conn4Err
-}
-
-func (c *Client) ensureConn6() error {
-	c.conn6Once.Do(func() {
-		conn, err := net.ListenUDP("udp6", &net.UDPAddr{Port: 547})
-		if err != nil {
-			c.conn6Err = fmt.Errorf("listen udp6:547: %w", err)
-			return
-		}
-		c.conn6 = conn
-		go c.readLoop6()
-	})
-	return c.conn6Err
+func (c *Client) isClosed() bool {
+	select {
+	case <-c.closed:
+		return true
+	default:
+		return false
+	}
 }
 
 func (c *Client) Forward4(pkt []byte, xid uint32, servers []*Server, timeout time.Duration, deadTime time.Duration, deadThreshold int) ([]byte, error) {
-	if err := c.ensureConn4(); err != nil {
-		return nil, err
-	}
-
 	key := v4PendingKey{xid: xid}
 	if len(pkt) >= 34 {
 		copy(key.mac[:], pkt[28:34])
@@ -144,25 +133,24 @@ func (c *Client) Forward4(pkt []byte, xid uint32, servers []*Server, timeout tim
 		c.replyPool.Put(replyCh)
 	}()
 
-	c.mu4.Lock()
-	c.pending4[key] = replyCh
-	c.mu4.Unlock()
-
-	defer func() {
-		c.mu4.Lock()
-		delete(c.pending4, key)
-		c.mu4.Unlock()
-	}()
-
 	for _, srv := range servers {
 		if srv.IsDead(deadTime) {
 			continue
 		}
 
+		group, err := c.groupFor(srv.bindingKey(), srv.Binding)
+		if err != nil {
+			c.logger.Debug("groupFor failed", "server", srv.Addr, "error", err)
+			continue
+		}
+
+		group.registerV4(key, replyCh)
+
 		srv.requests.Add(1)
 		c.requests4.Add(1)
 
-		if _, err := c.conn4.WriteToUDP(pkt, srv.Addr); err != nil {
+		if err := group.write(pkt, srv.Addr); err != nil {
+			group.cancelV4(key)
 			srv.RecordFailure(deadThreshold)
 			continue
 		}
@@ -175,10 +163,12 @@ func (c *Client) Forward4(pkt []byte, xid uint32, servers []*Server, timeout tim
 			c.replies4.Add(1)
 			return reply, nil
 		case <-timer.C:
+			group.cancelV4(key)
 			srv.RecordFailure(deadThreshold)
 			c.timeouts4.Add(1)
 		case <-c.closed:
 			timer.Stop()
+			group.cancelV4(key)
 			return nil, ErrClientClose
 		}
 	}
@@ -187,10 +177,6 @@ func (c *Client) Forward4(pkt []byte, xid uint32, servers []*Server, timeout tim
 }
 
 func (c *Client) Forward6(pkt []byte, txnID [3]byte, servers []*Server, timeout time.Duration, deadTime time.Duration, deadThreshold int) ([]byte, error) {
-	if err := c.ensureConn6(); err != nil {
-		return nil, err
-	}
-
 	key := v6PendingKey{txnID: txnID}
 	if len(pkt) >= DHCPv6RelayHeaderLen {
 		copy(key.peerAddr[:], pkt[18:34])
@@ -205,25 +191,24 @@ func (c *Client) Forward6(pkt []byte, txnID [3]byte, servers []*Server, timeout 
 		c.replyPool.Put(replyCh)
 	}()
 
-	c.mu6.Lock()
-	c.pending6[key] = replyCh
-	c.mu6.Unlock()
-
-	defer func() {
-		c.mu6.Lock()
-		delete(c.pending6, key)
-		c.mu6.Unlock()
-	}()
-
 	for _, srv := range servers {
 		if srv.IsDead(deadTime) {
 			continue
 		}
 
+		group, err := c.groupFor(srv.bindingKey(), srv.Binding)
+		if err != nil {
+			c.logger.Debug("groupFor failed", "server", srv.Addr, "error", err)
+			continue
+		}
+
+		group.registerV6(key, replyCh)
+
 		srv.requests.Add(1)
 		c.requests6.Add(1)
 
-		if _, err := c.conn6.WriteToUDP(pkt, srv.Addr); err != nil {
+		if err := group.write(pkt, srv.Addr); err != nil {
+			group.cancelV6(key)
 			srv.RecordFailure(deadThreshold)
 			continue
 		}
@@ -236,10 +221,12 @@ func (c *Client) Forward6(pkt []byte, txnID [3]byte, servers []*Server, timeout 
 			c.replies6.Add(1)
 			return reply, nil
 		case <-timer.C:
+			group.cancelV6(key)
 			srv.RecordFailure(deadThreshold)
 			c.timeouts6.Add(1)
 		case <-c.closed:
 			timer.Stop()
+			group.cancelV6(key)
 			return nil, ErrClientClose
 		}
 	}
@@ -248,16 +235,17 @@ func (c *Client) Forward6(pkt []byte, txnID [3]byte, servers []*Server, timeout 
 }
 
 func (c *Client) SendOnly4(pkt []byte, servers []*Server, deadTime time.Duration, deadThreshold int) error {
-	if err := c.ensureConn4(); err != nil {
-		return err
-	}
 	for _, srv := range servers {
 		if srv.IsDead(deadTime) {
 			continue
 		}
+		group, err := c.groupFor(srv.bindingKey(), srv.Binding)
+		if err != nil {
+			continue
+		}
 		srv.requests.Add(1)
 		c.requests4.Add(1)
-		if _, err := c.conn4.WriteToUDP(pkt, srv.Addr); err != nil {
+		if err := group.write(pkt, srv.Addr); err != nil {
 			srv.RecordFailure(deadThreshold)
 			continue
 		}
@@ -267,103 +255,16 @@ func (c *Client) SendOnly4(pkt []byte, servers []*Server, deadTime time.Duration
 }
 
 func (c *Client) Close() error {
-	close(c.closed)
+	c.closeOnce.Do(func() { close(c.closed) })
+
+	c.groupsMu.Lock()
+	defer c.groupsMu.Unlock()
 	var errs []error
-	if c.conn4 != nil {
-		errs = append(errs, c.conn4.Close())
-	}
-	if c.conn6 != nil {
-		errs = append(errs, c.conn6.Close())
+	for k, g := range c.groups {
+		g.close()
+		delete(c.groups, k)
 	}
 	return errors.Join(errs...)
-}
-
-func (c *Client) readLoop4() {
-	var buf [2048]byte
-	for {
-		n, _, err := c.conn4.ReadFromUDP(buf[:])
-		if err != nil {
-			select {
-			case <-c.closed:
-				return
-			default:
-			}
-			continue
-		}
-		if n < 34 {
-			continue
-		}
-
-		var key v4PendingKey
-		key.xid = uint32(buf[4])<<24 | uint32(buf[5])<<16 | uint32(buf[6])<<8 | uint32(buf[7])
-		copy(key.mac[:], buf[28:34])
-
-		reply := make([]byte, n)
-		copy(reply, buf[:n])
-
-		c.mu4.Lock()
-		ch, ok := c.pending4[key]
-		if ok {
-			delete(c.pending4, key)
-		}
-		c.mu4.Unlock()
-
-		if ok {
-			select {
-			case ch <- reply:
-			default:
-			}
-		}
-	}
-}
-
-func (c *Client) readLoop6() {
-	var buf [2048]byte
-	for {
-		n, _, err := c.conn6.ReadFromUDP(buf[:])
-		if err != nil {
-			select {
-			case <-c.closed:
-				return
-			default:
-			}
-			continue
-		}
-		if n < DHCPv6RelayHeaderLen {
-			continue
-		}
-
-		var key v6PendingKey
-
-		msgType := buf[0]
-		if msgType == 13 {
-			copy(key.peerAddr[:], buf[18:34])
-			inner := extractRelayMessage(buf[:n])
-			if inner == nil || len(inner) < 4 {
-				continue
-			}
-			copy(key.txnID[:], inner[1:4])
-		} else {
-			copy(key.txnID[:], buf[1:4])
-		}
-
-		reply := make([]byte, n)
-		copy(reply, buf[:n])
-
-		c.mu6.Lock()
-		ch, ok := c.pending6[key]
-		if ok {
-			delete(c.pending6, key)
-		}
-		c.mu6.Unlock()
-
-		if ok {
-			select {
-			case ch <- reply:
-			default:
-			}
-		}
-	}
 }
 
 func (c *Client) GetStats() ClientStats {
@@ -388,8 +289,15 @@ func (c *Client) GetServers(deadTime time.Duration) []ServerStatus {
 	return statuses
 }
 
-func (c *Client) getOrCreateServer(addr *net.UDPAddr, priority int) *Server {
-	key := addr.String()
+func (c *Client) SocketGroupCount() int {
+	c.groupsMu.RLock()
+	defer c.groupsMu.RUnlock()
+	return len(c.groups)
+}
+
+func (c *Client) getOrCreateServer(family Family, addr *net.UDPAddr, priority int, b netbind.Binding) *Server {
+	bk := makeBindingKey(family, b)
+	key := serverEntryKey{address: addr.String(), binding: bk}
 
 	c.serversMu.RLock()
 	if s, ok := c.servers[key]; ok {
@@ -403,52 +311,135 @@ func (c *Client) getOrCreateServer(addr *net.UDPAddr, priority int) *Server {
 	if s, ok := c.servers[key]; ok {
 		return s
 	}
-	s := &Server{Addr: addr, Priority: priority}
+	s := &Server{
+		Addr:     addr,
+		Priority: priority,
+		Family:   family,
+		Binding:  b,
+	}
 	c.servers[key] = s
 	return s
 }
 
-func ResolveServers(cfgServers []ip.DHCPRelayServer) ([]*Server, error) {
+func ResolveServers(family Family, cfgServers []ip.DHCPRelayServer, profileBinding netbind.EndpointBinding) ([]*Server, error) {
 	if len(cfgServers) == 0 {
 		return nil, ErrNoServers
 	}
 
+	netbindFamily := netbind.FamilyV4
+	if family == FamilyV6 {
+		netbindFamily = netbind.FamilyV6
+	}
+
 	client := GetClient()
 
-	key := serverCacheKey(cfgServers)
-	if cached, ok := client.resolvedCache.Load(key); ok {
+	cacheKey := buildServerCacheKey(family, cfgServers, profileBinding)
+	if cached, ok := client.resolvedCache.Load(cacheKey); ok {
 		return cached.([]*Server), nil
 	}
 
 	servers := make([]*Server, 0, len(cfgServers))
 	for _, cs := range cfgServers {
-		addr, err := net.ResolveUDPAddr("udp", cs.Address)
+		effective := cs.EndpointBinding.MergeWith(profileBinding)
+		bind, err := effective.Resolve(netbindFamily)
+		if err != nil {
+			return nil, fmt.Errorf("resolve binding for %s: %w", cs.Address, err)
+		}
+
+		addr, err := resolveServerUDPAddr(family, cs.Address, bind)
 		if err != nil {
 			return nil, fmt.Errorf("resolve %s: %w", cs.Address, err)
 		}
-		servers = append(servers, client.getOrCreateServer(addr, cs.Priority))
+		servers = append(servers, client.getOrCreateServer(family, addr, cs.Priority, bind))
 	}
 
 	sort.Slice(servers, func(i, j int) bool {
 		return servers[i].Priority > servers[j].Priority
 	})
 
-	client.resolvedCache.Store(key, servers)
+	client.resolvedCache.Store(cacheKey, servers)
 	return servers, nil
 }
 
-func serverCacheKey(cfgServers []ip.DHCPRelayServer) string {
+func resolveServerUDPAddr(family Family, addr string, b netbind.Binding) (*net.UDPAddr, error) {
+	defaultPort := family.localPort()
+
+	host, port, err := splitHostPortDefault(addr, defaultPort)
+	if err != nil {
+		return nil, err
+	}
+
+	if ip := net.ParseIP(host); ip != nil {
+		return &net.UDPAddr{IP: ip, Port: port}, nil
+	}
+
+	resolver := netbind.Resolver(b)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	ips, err := resolver.LookupIP(ctx, "ip", host)
+	if err != nil {
+		return nil, err
+	}
+	for _, ip := range ips {
+		if family == FamilyV6 && ip.To4() != nil {
+			continue
+		}
+		if family == FamilyV4 && ip.To4() == nil {
+			continue
+		}
+		return &net.UDPAddr{IP: ip, Port: port}, nil
+	}
+	return nil, fmt.Errorf("no %s address found for %s", family.network(), host)
+}
+
+func splitHostPortDefault(addr string, defaultPort int) (string, int, error) {
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr, defaultPort, nil
+	}
+	if portStr == "" {
+		return host, defaultPort, nil
+	}
+	p, err := net.LookupPort("udp", portStr)
+	if err != nil {
+		return "", 0, err
+	}
+	return host, p, nil
+}
+
+func buildServerCacheKey(family Family, cfgServers []ip.DHCPRelayServer, profile netbind.EndpointBinding) serverCacheKey {
+	bk := bindingKey{
+		Family:    family,
+		VRF:       profile.VRF,
+		LocalPort: family.localPort(),
+	}
+	switch family {
+	case FamilyV4:
+		bk.SourceIP = profile.SourceIP
+	case FamilyV6:
+		bk.SourceIP = profile.SourceIPv6
+	}
+
 	if len(cfgServers) == 1 {
-		return cfgServers[0].Address
+		s := cfgServers[0]
+		return serverCacheKey{
+			servers: serverFingerprint(s),
+			binding: bk,
+		}
 	}
 	size := 0
 	for i := range cfgServers {
-		size += len(cfgServers[i].Address) + 1
+		size += len(serverFingerprint(cfgServers[i])) + 1
 	}
 	b := make([]byte, 0, size)
 	for i := range cfgServers {
-		b = append(b, cfgServers[i].Address...)
+		b = append(b, serverFingerprint(cfgServers[i])...)
 		b = append(b, ',')
 	}
-	return string(b)
+	return serverCacheKey{servers: string(b), binding: bk}
+}
+
+func serverFingerprint(s ip.DHCPRelayServer) string {
+	return s.Address + "|" + s.VRF + "|" + s.SourceIP + "|" + s.SourceIPv6
 }

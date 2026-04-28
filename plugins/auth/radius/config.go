@@ -115,6 +115,13 @@ func (c *Config) applyDefaults() {
 	}
 }
 
+func (c *Config) Validate(cfg *osvbngconfig.Config) error {
+	if err := c.validate(); err != nil {
+		return err
+	}
+	return c.validateBindings(cfg.VRFLookup())
+}
+
 func (c *Config) validate() error {
 	if len(c.Servers) == 0 {
 		return fmt.Errorf("at least one RADIUS server is required")
@@ -168,36 +175,24 @@ func isValidIPOrCIDR(s string) bool {
 func init() {
 	configmgr.RegisterPluginConfig(Namespace, Config{})
 	auth.Register("radius", New)
-	configmgr.RegisterPostVRFValidator(Namespace, validateBinding)
 }
 
-func validateBinding(cfg *osvbngconfig.Config, vrfMgr netbind.VRFResolver, nl netbind.LinkLister) error {
-	pluginCfg, err := configmgr.DecodeCandidatePluginConfig[Config](cfg, Namespace)
-	if err != nil {
-		return fmt.Errorf("%s: %w", Namespace, err)
-	}
-	if pluginCfg == nil {
-		return nil
-	}
-	return pluginCfg.validateBindings(vrfMgr, nl)
-}
-
-func (c *Config) validateBindings(vrfMgr netbind.VRFResolver, nl netbind.LinkLister) error {
+func (c *Config) validateBindings(lookup netbind.VRFLookup) error {
 	for i, s := range c.Servers {
 		effective := s.MergeWith(c.EndpointBinding)
 		family := serverFamily(s.Host)
-		if err := effective.Validate(family, vrfMgr, nl); err != nil {
+		if err := effective.Validate(family, lookup); err != nil {
 			return fmt.Errorf("servers[%d] %s: %w", i, s.Host, err)
 		}
 	}
 
-	if err := c.CoAListener.Validate(netbind.FamilyV4, vrfMgr, nl); err != nil {
+	if err := c.CoAListener.Validate(netbind.FamilyV4, lookup); err != nil {
 		return fmt.Errorf("coa_listener: %w", err)
 	}
 
 	for i, cc := range c.CoAClients {
 		family := coaClientFamily(cc.Host)
-		if err := cc.Validate(family, vrfMgr, nl); err != nil {
+		if err := cc.Validate(family, lookup); err != nil {
 			return fmt.Errorf("coa_clients[%d] %s: %w", i, cc.Host, err)
 		}
 	}

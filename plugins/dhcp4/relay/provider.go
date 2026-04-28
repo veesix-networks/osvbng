@@ -69,7 +69,7 @@ func (p *Provider) HandlePacket(ctx context.Context, pkt *dhcp4.Packet) (*dhcp4.
 }
 
 func (p *Provider) handleForward(pkt *dhcp4.Packet, opts *ip.IPv4DHCPOptions) (*dhcp4.Packet, error) {
-	servers, err := relay.ResolveServers(opts.Servers)
+	servers, err := relay.ResolveServers(relay.FamilyV4, opts.Servers, opts.EndpointBinding)
 	if err != nil {
 		return nil, fmt.Errorf("resolve servers: %w", err)
 	}
@@ -134,7 +134,7 @@ func (p *Provider) handleForward(pkt *dhcp4.Packet, opts *ip.IPv4DHCPOptions) (*
 }
 
 func (p *Provider) handleRelease(pkt *dhcp4.Packet, opts *ip.IPv4DHCPOptions) (*dhcp4.Packet, error) {
-	servers, err := relay.ResolveServers(opts.Servers)
+	servers, err := relay.ResolveServers(relay.FamilyV4, opts.Servers, opts.EndpointBinding)
 	if err != nil {
 		return nil, fmt.Errorf("resolve servers: %w", err)
 	}

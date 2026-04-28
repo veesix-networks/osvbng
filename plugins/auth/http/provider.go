@@ -196,7 +196,7 @@ func (p *Provider) buildTemplateContext(req *auth.AuthRequest) *TemplateContext 
 }
 
 func (p *Provider) buildHTTPClient() (*http.Client, error) {
-	binding, err := p.cfg.EndpointBinding.Resolve(netbind.FamilyV4, nil)
+	binding, err := p.cfg.EndpointBinding.Resolve(netbind.FamilyV4)
 	if err != nil {
 		return nil, fmt.Errorf("resolve binding: %w", err)
 	}
