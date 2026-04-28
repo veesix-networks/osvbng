@@ -281,7 +281,7 @@ What can you expect from the open source version of this project? Below are some
 - Minimum of 100Gbps out-of-the-box support
 - IPoE access technology with DHCPv4 support
 - Authenticate customers via DHCPv4 Option 82 (Sub-options 1 and 2, Circuit ID and/or Remote ID)
-- BGP, IS-IS and OSPF support
-- Only Default VRF implementation
+- BGP and OSPF support
+- Multi-VRF support
 - No QoS/HQoS support from day 1 of the v1.0.0 release
 - Modern monitoring solution with Prometheus
