@@ -27,7 +27,7 @@ type client struct {
 }
 
 func newClient(cfg *Config) (*client, error) {
-	binding, err := cfg.EndpointBinding.Resolve(netbind.FamilyV4, nil)
+	binding, err := cfg.EndpointBinding.Resolve(netbind.FamilyV4)
 	if err != nil {
 		return nil, fmt.Errorf("resolve binding: %w", err)
 	}

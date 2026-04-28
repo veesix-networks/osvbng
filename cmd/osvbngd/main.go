@@ -175,6 +175,7 @@ func main() {
 	}
 
 	vrfMgr := vrfmgr.New(vpp)
+	vrfmgr.Set(vrfMgr)
 	vpp.SetVRFResolver(vrfMgr.ResolveVRF)
 
 	if err := vpp.SetLCPNetNs(config.LCPNetNs); err != nil {
@@ -438,7 +439,7 @@ func main() {
 	if cfg.API.Address != "" {
 		gatewayAddr = cfg.API.Address
 	}
-	gatewayBinding, err := cfg.API.Resolve(netbind.FamilyV4, nil)
+	gatewayBinding, err := cfg.API.Resolve(netbind.FamilyV4)
 	if err != nil {
 		log.Fatalf("Failed to resolve API binding: %v", err)
 	}

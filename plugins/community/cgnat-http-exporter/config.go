@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/component"
-	osvbngconfig "github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
 	"github.com/veesix-networks/osvbng/pkg/netbind"
 )
@@ -176,16 +175,4 @@ func init() {
 		component.WithAuthor("veesix ::networks contributors"),
 		component.WithVersion("1.0.0"),
 	)
-	configmgr.RegisterPostVRFValidator(Namespace, validateBinding)
-}
-
-func validateBinding(cfg *osvbngconfig.Config, vrfMgr netbind.VRFResolver, nl netbind.LinkLister) error {
-	pluginCfg, err := configmgr.DecodeCandidatePluginConfig[Config](cfg, Namespace)
-	if err != nil {
-		return fmt.Errorf("%s: %w", Namespace, err)
-	}
-	if pluginCfg == nil {
-		return nil
-	}
-	return pluginCfg.EndpointBinding.Validate(netbind.FamilyV4, vrfMgr, nl)
 }

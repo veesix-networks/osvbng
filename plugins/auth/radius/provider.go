@@ -72,7 +72,7 @@ func New(cfg *config.Config) (auth.AuthProvider, error) {
 	}
 
 	pluginCfg.applyDefaults()
-	if err := pluginCfg.validate(); err != nil {
+	if err := pluginCfg.Validate(cfg); err != nil {
 		return nil, fmt.Errorf("radius config: %w", err)
 	}
 
@@ -93,7 +93,7 @@ func New(cfg *config.Config) (auth.AuthProvider, error) {
 
 		effective := s.EndpointBinding.MergeWith(pluginCfg.EndpointBinding)
 		family := serverFamily(s.Host)
-		bind, err := effective.Resolve(family, nil)
+		bind, err := effective.Resolve(family)
 		if err != nil {
 			for _, c := range authConns {
 				_ = c.close()

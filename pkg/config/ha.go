@@ -155,7 +155,7 @@ func (c *HAConfig) GetBulkSyncTimeout() time.Duration {
 	return 60 * time.Second
 }
 
-func (c *HAConfig) Validate() error {
+func (c *HAConfig) Validate(lookup netbind.VRFLookup) error {
 	if !c.Enabled {
 		return nil
 	}
@@ -214,6 +214,15 @@ func (c *HAConfig) Validate() error {
 	if c.Heartbeat.Timeout > 0 && c.Heartbeat.Interval > 0 {
 		if c.Heartbeat.Timeout <= c.Heartbeat.Interval {
 			return fmt.Errorf("ha.heartbeat.timeout (%s) must be greater than interval (%s)", c.Heartbeat.Timeout, c.Heartbeat.Interval)
+		}
+	}
+
+	if err := c.Listen.Validate(addrFamily(c.GetListenAddress()), lookup); err != nil {
+		return fmt.Errorf("ha.listen: %w", err)
+	}
+	if c.Peer.Address != "" {
+		if err := c.Peer.Validate(addrFamily(c.Peer.Address), lookup); err != nil {
+			return fmt.Errorf("ha.peer: %w", err)
 		}
 	}
 
