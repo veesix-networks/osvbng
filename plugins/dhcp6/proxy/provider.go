@@ -112,7 +112,7 @@ func (p *Provider) handleForwardAndRewrite(pkt *dhcp6.Packet, opts *ip.IPv6DHCPv
 		return p.handleRelease(pkt, opts)
 	}
 
-	servers, err := relay.ResolveServers(opts.Servers)
+	servers, err := relay.ResolveServers(relay.FamilyV6, opts.Servers, opts.EndpointBinding)
 	if err != nil {
 		return nil, fmt.Errorf("resolve servers: %w", err)
 	}
@@ -216,7 +216,7 @@ func (p *Provider) handleForwardAndRewrite(pkt *dhcp6.Packet, opts *ip.IPv6DHCPv
 }
 
 func (p *Provider) handleRelease(pkt *dhcp6.Packet, opts *ip.IPv6DHCPv6Options) (*dhcp6.Packet, error) {
-	servers, err := relay.ResolveServers(opts.Servers)
+	servers, err := relay.ResolveServers(relay.FamilyV6, opts.Servers, opts.EndpointBinding)
 	if err != nil {
 		return nil, fmt.Errorf("resolve servers: %w", err)
 	}

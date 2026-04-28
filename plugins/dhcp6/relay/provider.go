@@ -69,7 +69,7 @@ func (p *Provider) HandlePacket(ctx context.Context, pkt *dhcp6.Packet) (*dhcp6.
 }
 
 func (p *Provider) handleForward(pkt *dhcp6.Packet, opts *ip.IPv6DHCPv6Options) (*dhcp6.Packet, error) {
-	servers, err := relay.ResolveServers(opts.Servers)
+	servers, err := relay.ResolveServers(relay.FamilyV6, opts.Servers, opts.EndpointBinding)
 	if err != nil {
 		return nil, fmt.Errorf("resolve servers: %w", err)
 	}
