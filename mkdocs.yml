@@ -34,7 +34,6 @@ extra_css:
 nav:
   - Get Started:
     - Intro: index.md
-    - Supported NICs: getting-started/supported-nics.md
     - API: getting-started/api.md
     - Testing & QA: qa/testing-methodology.md
   - Configuration:
@@ -85,12 +84,23 @@ nav:
       - Event Bus: architecture/EVENTS.md
       - Handlers: architecture/HANDLERS.md
       - Plugins: architecture/PLUGINS.md
-      - Supported NICs: architecture/SUPPORTED_NICS.md
       - Reference Deployment Methods: architecture/REFERENCE_DEPLOYMENT_METHODS.md
       - High Availability: architecture/HA.md
       - DHCP Relay & Proxy: architecture/DHCP_RELAY_PROXY.md
       - DHCPv6 LDRA: architecture/DHCPV6_LDRA.md
       - QoS: architecture/QOS.md
+  - Reference:
+    - Overview: reference/index.md
+    - Hardware Matrix: reference/hardware-matrix.md
+    - Validating new hardware: reference/validating-hardware.md
+    - Hardware Designs:
+      - HP ProLiant DL360 Gen10: reference/hardware-designs/hp-dl360-gen10.md
+    - NICs:
+      - Overview: reference/nics/index.md
+      - Intel X710 / XXV710 / XL710: reference/nics/intel-x710.md
+      - Intel E810: reference/nics/intel-e810.md
+      - Mellanox / NVIDIA ConnectX: reference/nics/mellanox-connectx.md
+      - Adding vendor support: reference/nics/adding-vendor-support.md
   - Quality Assurance:
     - Testing & Methodology: qa/testing-methodology.md
   - Contributing:
