@@ -43,8 +43,17 @@ Each test deploys a complete network: BNG nodes, core routers, subscriber simula
 | 16 | HA Failover RADIUS | RADIUS-assigned pool attribute preserved across failover |
 | 17 | HA Tracker Promotion IPoE | Tracker-driven automatic promotion from STANDBY_ALONE to ACTIVE_SOLO on access interface failure |
 | 18 | IPoE Linux Client | Real Linux subscriber with QinQ VLANs, DHCP, ping, and iperf3 throughput |
+| 20 | Routing Policy | Prefix-sets, community-sets, AS-path-sets, and route-policy application to BGP/OSPF |
+| 21 | CLI / OpenAPI | Northbound REST API generated from CLI handler registry; schema parity |
+| 22 | MSS Clamp | TCP MSS clamping with PPP MRU configuration (RFC 4638) |
+| 23 | RADIUS CoA | RADIUS Change-of-Authorization and Disconnect-Message per RFC 5176 |
+| 24 | VRF-Lite | End-to-end VRF-lite with subscriber-group VRF cascade onto access sub-interfaces |
+| 26 | DHCPv6 LDRA | Local DHCPv6 provider terminating RFC 6221 LDRA Relay-Forward from access |
+| 27 | API Pagination | Pagination across list-returning northbound show endpoints |
+| 28 | Northbound API TLS | Northbound API + Prometheus over TLS with HTTP auth; CGNAT exporter dialer |
+| 29 | RADIUS VRF | RADIUS auth/acct sockets pinned to MGMT-VRF with `SO_BINDTODEVICE` proof |
 
-740+ total tests across 18 integration suites.
+1000+ tests across 27 integration suites.
 
 ### What Gets Verified
 
@@ -95,7 +104,7 @@ All test results, CI logs, and reports are public. Most vendors keep their testi
 
 osvbng's dataplane is built on [FD.io VPP](https://fd.io/) (Vector Packet Processing), a high-performance forwarding engine already used in production by telecom operators for traditional routing functionality. The FD.io Technical Steering Committee is driven by employees from Cisco Systems, Ericsson, Netgate, Intel, and others.
 
-FD.io maintains its own independent performance validation through the [CSIT project](https://csit.fd.io/) (Continuous System Integration and Testing). CSIT runs fully automated throughput, latency, and regression tests against every VPP release using TRex traffic generators on bare-metal testbeds (Intel Icelake, SapphireRapids, AMD EPYC, Nvidia Grace). Tests cover L2 switching, IPv4/IPv6 routing at up to 2 million FIB entries, NAT, IPsec (including Intel QAT hardware acceleration), VXLan, and container networking via memif. Results are published at [csit.fd.io](https://csit.fd.io/) and performance trends are tracked continuously to catch regressions between releases. A detailed breakdown of their testing methodologies, performance testbed configurations, and hardware diagrams can be found in the [CSIT Report](https://docs.fd.io/csit/master/report/).
+FD.io maintains its own independent performance validation through the [CSIT project](https://csit.fd.io/) (Continuous System Integration Testing). CSIT runs fully automated throughput, latency, and regression tests against every VPP release using TRex traffic generators on bare-metal testbeds (Intel Icelake, SapphireRapids, AMD EPYC, Nvidia Grace). Tests cover L2 switching, IPv4/IPv6 routing at up to 2 million FIB entries, NAT, IPsec (including Intel QAT hardware acceleration), VXLan, and container networking via memif. Results are published at [csit.fd.io](https://csit.fd.io/) and performance trends are tracked continuously to catch regressions between releases. A detailed breakdown of their testing methodologies, performance testbed configurations, and hardware diagrams can be found in the [CSIT Report](https://docs.fd.io/csit/master/report/).
 
 This matters because osvbng is primarily a control plane implementation. The actual packet forwarding (IPv4/IPv6 routing, QoS policing, interface handling) is done natively by VPP. osvbng manages subscriber sessions, DHCP, AAA, HA state, and CGNAT pool allocation, but once a session is programmed, packets flow through VPP's forwarding graph at the same speeds CSIT benchmarks. We add a small number of custom VPP plugins (IPoE/PPPoE session encapsulation, CGNAT port block allocation), but the vast majority of the forwarding path is unmodified VPP.
 
