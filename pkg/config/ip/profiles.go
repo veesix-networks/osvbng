@@ -1,6 +1,10 @@
 package ip
 
-import "time"
+import (
+	"time"
+
+	"github.com/veesix-networks/osvbng/pkg/netbind"
+)
 
 type IPv4Pool struct {
 	Name       string   `json:"name,omitempty" yaml:"name,omitempty"`
@@ -79,6 +83,8 @@ func (r *IPv6RAConfig) GetMinInterval() uint32 {
 }
 
 type DHCPRelayServer struct {
+	netbind.EndpointBinding `json:",inline" yaml:",inline"`
+
 	Address  string `json:"address" yaml:"address"`
 	Priority int    `json:"priority,omitempty" yaml:"priority,omitempty"`
 }
@@ -98,6 +104,8 @@ type LeasequeryConfig struct {
 }
 
 type IPv4DHCPOptions struct {
+	netbind.EndpointBinding `json:",inline" yaml:",inline"`
+
 	Mode            string            `json:"mode,omitempty" yaml:"mode,omitempty"`
 	AddressModel    string            `json:"address_model,omitempty" yaml:"address-model,omitempty"`
 	ServerID        string            `json:"server_id,omitempty" yaml:"server-id,omitempty"`
@@ -116,6 +124,8 @@ type IPv4DHCPOptions struct {
 type IPv4ICPPOptions struct{}
 
 type IPv6DHCPv6Options struct {
+	netbind.EndpointBinding `json:",inline" yaml:",inline"`
+
 	Mode                    string            `json:"mode,omitempty" yaml:"mode,omitempty"`
 	PreferredTime           uint32            `json:"preferred_time,omitempty" yaml:"preferred-time,omitempty"`
 	ValidTime               uint32            `json:"valid_time,omitempty" yaml:"valid-time,omitempty"`

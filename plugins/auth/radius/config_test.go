@@ -78,7 +78,7 @@ func TestServerEffectiveBinding_ResolvesToBinding(t *testing.T) {
 	}
 
 	effective := cfg.Servers[0].EndpointBinding.MergeWith(cfg.EndpointBinding)
-	bind, err := effective.Resolve(netbind.FamilyV4, nil)
+	bind, err := effective.Resolve(netbind.FamilyV4)
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}

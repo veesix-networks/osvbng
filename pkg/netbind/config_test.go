@@ -68,7 +68,7 @@ func TestEndpointBinding_MergeWith(t *testing.T) {
 
 func TestEndpointBinding_Resolve_V4(t *testing.T) {
 	b := EndpointBinding{VRF: "MGMT", SourceIP: "10.0.0.1"}
-	got, err := b.Resolve(FamilyV4, nil)
+	got, err := b.Resolve(FamilyV4)
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestEndpointBinding_Resolve_V4(t *testing.T) {
 
 func TestEndpointBinding_Resolve_V6(t *testing.T) {
 	b := EndpointBinding{VRF: "MGMT", SourceIPv6: "2001:db8::1"}
-	got, err := b.Resolve(FamilyV6, nil)
+	got, err := b.Resolve(FamilyV6)
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestEndpointBinding_Resolve_V6(t *testing.T) {
 
 func TestEndpointBinding_Resolve_FamilyMismatch(t *testing.T) {
 	b := EndpointBinding{SourceIP: "2001:db8::1"} // v6 in v4 field
-	_, err := b.Resolve(FamilyV4, nil)
+	_, err := b.Resolve(FamilyV4)
 	if err == nil || !strings.Contains(err.Error(), "IPv6") {
 		t.Fatalf("want IPv6 family-mismatch error, got %v", err)
 	}
@@ -101,7 +101,7 @@ func TestEndpointBinding_Resolve_FamilyMismatch(t *testing.T) {
 
 func TestEndpointBinding_Resolve_SourceInterfaceNotImplemented(t *testing.T) {
 	b := EndpointBinding{SourceInterface: "Loopback0"}
-	_, err := b.Resolve(FamilyV4, nil)
+	_, err := b.Resolve(FamilyV4)
 	if err == nil || !strings.Contains(err.Error(), "not yet implemented") {
 		t.Fatalf("want source_interface not-implemented error, got %v", err)
 	}
@@ -109,14 +109,14 @@ func TestEndpointBinding_Resolve_SourceInterfaceNotImplemented(t *testing.T) {
 
 func TestEndpointBinding_Resolve_InvalidIP(t *testing.T) {
 	b := EndpointBinding{SourceIP: "not.an.ip"}
-	_, err := b.Resolve(FamilyV4, nil)
+	_, err := b.Resolve(FamilyV4)
 	if err == nil {
 		t.Fatal("want error on invalid IP")
 	}
 }
 
 func TestEndpointBinding_Validate_Empty(t *testing.T) {
-	if err := (EndpointBinding{}).Validate(FamilyV4, nil, nil); err != nil {
+	if err := (EndpointBinding{}).Validate(FamilyV4, nil); err != nil {
 		t.Fatalf("empty binding should validate: %v", err)
 	}
 }

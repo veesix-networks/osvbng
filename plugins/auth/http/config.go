@@ -1,11 +1,9 @@
 package http
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/auth"
-	osvbngconfig "github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
 	"github.com/veesix-networks/osvbng/pkg/netbind"
 )
@@ -74,16 +72,4 @@ type AccountingEventConfig struct {
 func init() {
 	configmgr.RegisterPluginConfig(Namespace, Config{})
 	auth.Register("http", New)
-	configmgr.RegisterPostVRFValidator(Namespace, validateBinding)
-}
-
-func validateBinding(cfg *osvbngconfig.Config, vrfMgr netbind.VRFResolver, nl netbind.LinkLister) error {
-	pluginCfg, err := configmgr.DecodeCandidatePluginConfig[Config](cfg, Namespace)
-	if err != nil {
-		return fmt.Errorf("%s: %w", Namespace, err)
-	}
-	if pluginCfg == nil {
-		return nil
-	}
-	return pluginCfg.EndpointBinding.Validate(netbind.FamilyV4, vrfMgr, nl)
 }

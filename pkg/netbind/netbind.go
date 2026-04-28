@@ -59,9 +59,8 @@ func (b Binding) String() string {
 	}
 }
 
-// dialer returns a *net.Dialer for the given network. The LocalAddr
-// type must match the network family — net.Dialer.DialContext rejects a
-// *net.TCPAddr LocalAddr when called with "udp", and vice versa.
+// LocalAddr type must match the network family or DialContext returns
+// "mismatched local address type".
 func (b Binding) dialer(network string, timeout time.Duration) *net.Dialer {
 	d := &net.Dialer{
 		Timeout:  timeout,
@@ -170,9 +169,6 @@ func resolveTCPListenAddr(addr string, src netip.Addr) string {
 	return net.JoinHostPort(src.String(), port)
 }
 
-// sourceLocalAddr returns a net.Addr suitable for net.Dialer.LocalAddr
-// matching the dial network family. The kernel rejects a TCP LocalAddr
-// on a UDP dial and vice versa with "mismatched local address type".
 func sourceLocalAddr(network string, src netip.Addr) net.Addr {
 	if !src.IsValid() {
 		return nil
