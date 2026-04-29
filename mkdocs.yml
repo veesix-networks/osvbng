@@ -58,6 +58,7 @@ nav:
     - High Availability: configuration/ha.md
     - System: configuration/system.md
     - Monitoring: configuration/monitoring.md
+    - Telemetry SDK: configuration/telemetry.md
     - Plugins:
       - Overview: configuration/plugins.md
       - subscriber.auth.local: configuration/plugins/auth-local.md
@@ -89,6 +90,7 @@ nav:
       - DHCP Relay & Proxy: architecture/DHCP_RELAY_PROXY.md
       - DHCPv6 LDRA: architecture/DHCPV6_LDRA.md
       - QoS: architecture/QOS.md
+      - Telemetry: architecture/TELEMETRY.md
   - Reference:
     - Overview: reference/index.md
     - Hardware Matrix: reference/hardware-matrix.md

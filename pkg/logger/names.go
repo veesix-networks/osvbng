@@ -32,4 +32,6 @@ const (
 	IPoEDHCP6   = "dhcp6"
 	IPoESession = "session"
 	IPoERelay   = "relay"
+
+	Telemetry = "telemetry"
 )

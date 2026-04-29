@@ -7,13 +7,10 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
-	"github.com/veesix-networks/osvbng/pkg/state"
-	statepaths "github.com/veesix-networks/osvbng/pkg/state/paths"
 )
 
 func init() {
 	show.RegisterFactory(NewNodesHandler)
-	state.RegisterMetric(statepaths.SystemDataplaneNodes, paths.SystemDataplaneNodes)
 }
 
 type NodesHandler struct {
