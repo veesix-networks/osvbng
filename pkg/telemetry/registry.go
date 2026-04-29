@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // Registry holds registered metrics and supports snapshot and subscribe.
@@ -18,9 +19,17 @@ import (
 type Registry struct {
 	metrics sync.Map
 
-	subscriberCount atomic.Int64
+	subscribers      sync.Map
+	subscriberCount  atomic.Int64
+	nextSubscriberID atomic.Uint64
 
 	registrationErrors atomic.Uint64
+
+	tickMu       sync.Mutex
+	tickRunning  bool
+	tickCancel   context.CancelFunc
+	tickWG       sync.WaitGroup
+	tickInterval time.Duration
 }
 
 // NewRegistry constructs an isolated registry. Use this in tests; production
@@ -220,11 +229,109 @@ func (r *Registry) SeriesCount() int64 {
 	return total
 }
 
-// Shutdown releases registry-internal resources. Safe to call multiple times.
-// Subscribe support added in a later phase will use this for tick-goroutine
-// teardown.
+// Shutdown releases registry-internal resources. Safe to call multiple
+// times. Stops the tick goroutine if running and waits for it to exit.
 func (r *Registry) Shutdown(_ context.Context) error {
+	r.tickMu.Lock()
+	cancel := r.tickCancel
+	running := r.tickRunning
+	r.tickRunning = false
+	r.tickCancel = nil
+	r.tickMu.Unlock()
+
+	if running && cancel != nil {
+		cancel()
+		r.tickWG.Wait()
+	}
 	return nil
+}
+
+// SetTickInterval overrides the registry's tick cadence. Must be called
+// before any Subscribe; calls after the tick goroutine has started have no
+// effect on the running goroutine. The setting is process-wide on the
+// default registry and applies to all subscribers.
+func (r *Registry) SetTickInterval(d time.Duration) {
+	r.tickMu.Lock()
+	r.tickInterval = d
+	r.tickMu.Unlock()
+}
+
+func (r *Registry) maybeStartTick() {
+	r.tickMu.Lock()
+	defer r.tickMu.Unlock()
+	if r.tickRunning {
+		return
+	}
+	if r.tickInterval == 0 {
+		r.tickInterval = defaultTickInterval
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	r.tickCancel = cancel
+	r.tickRunning = true
+	r.tickWG.Add(1)
+	go r.tickLoop(ctx)
+}
+
+func (r *Registry) maybeStopTick() {
+	if r.subscriberCount.Load() != 0 {
+		return
+	}
+	r.tickMu.Lock()
+	if !r.tickRunning {
+		r.tickMu.Unlock()
+		return
+	}
+	if r.subscriberCount.Load() != 0 {
+		r.tickMu.Unlock()
+		return
+	}
+	cancel := r.tickCancel
+	r.tickRunning = false
+	r.tickCancel = nil
+	r.tickMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+func (r *Registry) tickLoop(ctx context.Context) {
+	defer r.tickWG.Done()
+	r.tickMu.Lock()
+	interval := r.tickInterval
+	r.tickMu.Unlock()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	var buf []Sample
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case t := <-ticker.C:
+			buf = r.publishTick(buf, t)
+		}
+	}
+}
+
+func (r *Registry) publishTick(buf []Sample, ts time.Time) []Sample {
+	r.metrics.Range(func(_, v any) bool {
+		m, ok := v.(metric)
+		if !ok {
+			return true
+		}
+		if !m.swapDirty() {
+			return true
+		}
+		buf = m.appendSamples(buf[:0])
+		r.subscribers.Range(func(_, sv any) bool {
+			sub := sv.(*Subscription)
+			for i := range buf {
+				sub.publish(buf[i], ts)
+			}
+			return true
+		})
+		return true
+	})
+	return buf
 }
 
 var defaultRegistry = NewRegistry()

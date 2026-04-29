@@ -5,16 +5,19 @@
 package telemetry
 
 const (
-	internalMetricCardinalityDrops = "osvbng_telemetry_cardinality_drops_total"
-	internalMetricUnknownEmits     = "osvbng_telemetry_unknown_series_emits_total"
-	internalMetricStaleEmits       = "osvbng_telemetry_stale_handle_emits_total"
-	internalMetricRegistrationErrs = "osvbng_telemetry_registration_errors_total"
-	internalMetricMetricsTotal     = "osvbng_telemetry_metrics_total"
-	internalMetricSeriesTotal      = "osvbng_telemetry_series_total"
+	internalMetricCardinalityDrops   = "osvbng_telemetry_cardinality_drops_total"
+	internalMetricUnknownEmits       = "osvbng_telemetry_unknown_series_emits_total"
+	internalMetricStaleEmits         = "osvbng_telemetry_stale_handle_emits_total"
+	internalMetricRegistrationErrs   = "osvbng_telemetry_registration_errors_total"
+	internalMetricMetricsTotal       = "osvbng_telemetry_metrics_total"
+	internalMetricSeriesTotal        = "osvbng_telemetry_series_total"
+	internalMetricSubscriptionsTotal = "osvbng_telemetry_subscriptions_total"
+	internalMetricSubscriptionDrops  = "osvbng_telemetry_subscription_drops_total"
 )
 
 const internalLabelMetric = "metric"
 const internalLabelReason = "reason"
+const internalLabelSubscriber = "subscriber_id"
 
 var internalRegistrationErrorLabels = []LabelPair{{Name: internalLabelReason, Value: "all"}}
 
@@ -84,6 +87,29 @@ func (r *Registry) appendInternalSamples(dst []Sample, opts SnapshotOptions) []S
 			Type:   MetricCounter,
 			Labels: internalRegistrationErrorLabels,
 			Value:  float64(errs),
+		})
+	}
+
+	if MatchGlob(opts.PathGlob, internalMetricSubscriptionsTotal) {
+		dst = append(dst, Sample{
+			Name:  internalMetricSubscriptionsTotal,
+			Type:  MetricGauge,
+			Value: float64(r.subscriberCount.Load()),
+		})
+	}
+
+	if MatchGlob(opts.PathGlob, internalMetricSubscriptionDrops) {
+		r.subscribers.Range(func(_, v any) bool {
+			sub := v.(*Subscription)
+			if d := sub.dropped.Load(); d > 0 {
+				dst = append(dst, Sample{
+					Name:   internalMetricSubscriptionDrops,
+					Type:   MetricCounter,
+					Labels: sub.internalLabels,
+					Value:  float64(d),
+				})
+			}
+			return true
 		})
 	}
 

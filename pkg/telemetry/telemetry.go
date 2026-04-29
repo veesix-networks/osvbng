@@ -9,7 +9,10 @@
 // without JSON or reflection.
 package telemetry
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // RegisterCounter registers a counter on the package-level default registry.
 func RegisterCounter(opts CounterOpts) (*Counter, error) {
@@ -30,6 +33,17 @@ func RegisterHistogram(opts HistogramOpts) (*Histogram, error) {
 // AppendSnapshot reads the package-level default registry into dst.
 func AppendSnapshot(dst []Sample, opts SnapshotOptions) []Sample {
 	return defaultRegistry.AppendSnapshot(dst, opts)
+}
+
+// Subscribe registers a subscriber on the package-level default registry.
+func Subscribe(opts SubscribeOptions) *Subscription {
+	return defaultRegistry.Subscribe(opts)
+}
+
+// SetTickInterval overrides the tick cadence on the package-level default
+// registry. Must be called before any Subscribe to take effect.
+func SetTickInterval(d time.Duration) {
+	defaultRegistry.SetTickInterval(d)
 }
 
 // Shutdown releases resources held by the package-level default registry.
