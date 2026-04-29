@@ -33,43 +33,45 @@ func (r *Registry) appendInternalSamples(dst []Sample, opts SnapshotOptions) []S
 	}
 
 	r.metrics.Range(func(_, v any) bool {
-		c, ok := v.(*Counter)
+		m, ok := v.(metric)
 		if !ok {
 			return true
 		}
+
+		labels := m.internalLabelsRef()
 
 		if MatchGlob(opts.PathGlob, internalMetricSeriesTotal) {
 			dst = append(dst, Sample{
 				Name:   internalMetricSeriesTotal,
 				Type:   MetricGauge,
-				Labels: c.internalLabels,
-				Value:  float64(c.seriesCount.Load()),
+				Labels: labels,
+				Value:  float64(m.seriesCountLoad()),
 			})
 		}
 
-		if d := c.cardinalityDrops.Load(); d > 0 && MatchGlob(opts.PathGlob, internalMetricCardinalityDrops) {
+		if d := m.cardinalityDropsLoad(); d > 0 && MatchGlob(opts.PathGlob, internalMetricCardinalityDrops) {
 			dst = append(dst, Sample{
 				Name:   internalMetricCardinalityDrops,
 				Type:   MetricCounter,
-				Labels: c.internalLabels,
+				Labels: labels,
 				Value:  float64(d),
 			})
 		}
 
-		if e := c.unknownSeriesEmits.Load(); e > 0 && MatchGlob(opts.PathGlob, internalMetricUnknownEmits) {
+		if e := m.unknownSeriesEmitsLoad(); e > 0 && MatchGlob(opts.PathGlob, internalMetricUnknownEmits) {
 			dst = append(dst, Sample{
 				Name:   internalMetricUnknownEmits,
 				Type:   MetricCounter,
-				Labels: c.internalLabels,
+				Labels: labels,
 				Value:  float64(e),
 			})
 		}
 
-		if s := c.staleHandleEmits.Load(); s > 0 && MatchGlob(opts.PathGlob, internalMetricStaleEmits) {
+		if s := m.staleHandleEmitsLoad(); s > 0 && MatchGlob(opts.PathGlob, internalMetricStaleEmits) {
 			dst = append(dst, Sample{
 				Name:   internalMetricStaleEmits,
 				Type:   MetricCounter,
-				Labels: c.internalLabels,
+				Labels: labels,
 				Value:  float64(s),
 			})
 		}
@@ -109,13 +111,13 @@ func (r *Registry) SnapshotInternal() InternalCounts {
 		SeriesTotal:        r.SeriesCount(),
 	}
 	r.metrics.Range(func(_, v any) bool {
-		c, ok := v.(*Counter)
+		m, ok := v.(metric)
 		if !ok {
 			return true
 		}
-		out.CardinalityDrops += c.cardinalityDrops.Load()
-		out.UnknownSeriesEmits += c.unknownSeriesEmits.Load()
-		out.StaleHandleEmits += c.staleHandleEmits.Load()
+		out.CardinalityDrops += m.cardinalityDropsLoad()
+		out.UnknownSeriesEmits += m.unknownSeriesEmitsLoad()
+		out.StaleHandleEmits += m.staleHandleEmitsLoad()
 		return true
 	})
 	return out

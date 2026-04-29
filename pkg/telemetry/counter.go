@@ -39,12 +39,19 @@ type Counter struct {
 	dirty atomic.Bool
 }
 
-func (c *Counter) name() string           { return c.opts.Name }
-func (c *Counter) help() string           { return c.opts.Help }
-func (c *Counter) labelNames() []string   { return c.opts.Labels }
-func (c *Counter) metricType() MetricType { return MetricCounter }
-func (c *Counter) streamingOnly() bool    { return c.opts.StreamingOnly }
-func (c *Counter) swapDirty() bool        { return c.dirty.Swap(false) }
+func (c *Counter) name() string                 { return c.opts.Name }
+func (c *Counter) help() string                 { return c.opts.Help }
+func (c *Counter) labelNames() []string         { return c.opts.Labels }
+func (c *Counter) metricType() MetricType       { return MetricCounter }
+func (c *Counter) streamingOnly() bool          { return c.opts.StreamingOnly }
+func (c *Counter) swapDirty() bool              { return c.dirty.Swap(false) }
+func (c *Counter) cardinalityDropsLoad() uint64 { return c.cardinalityDrops.Load() }
+func (c *Counter) unknownSeriesEmitsLoad() uint64 {
+	return c.unknownSeriesEmits.Load()
+}
+func (c *Counter) staleHandleEmitsLoad() uint64   { return c.staleHandleEmits.Load() }
+func (c *Counter) seriesCountLoad() int64         { return c.seriesCount.Load() }
+func (c *Counter) internalLabelsRef() []LabelPair { return c.internalLabels }
 
 // CounterHandle is the per-series emit handle. Hot path: Inc/Add are a
 // single atomic add on the embedded value.

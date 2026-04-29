@@ -16,6 +16,17 @@ func RegisterCounter(opts CounterOpts) (*Counter, error) {
 	return defaultRegistry.RegisterCounter(opts)
 }
 
+// RegisterGauge registers a gauge on the package-level default registry.
+func RegisterGauge(opts GaugeOpts) (*Gauge, error) {
+	return defaultRegistry.RegisterGauge(opts)
+}
+
+// RegisterHistogram registers a histogram on the package-level default
+// registry.
+func RegisterHistogram(opts HistogramOpts) (*Histogram, error) {
+	return defaultRegistry.RegisterHistogram(opts)
+}
+
 // AppendSnapshot reads the package-level default registry into dst.
 func AppendSnapshot(dst []Sample, opts SnapshotOptions) []Sample {
 	return defaultRegistry.AppendSnapshot(dst, opts)

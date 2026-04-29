@@ -75,6 +75,116 @@ func (r *Registry) RegisterCounter(opts CounterOpts) (*Counter, error) {
 	return c, nil
 }
 
+// RegisterGauge registers a gauge metric. Re-registering with the same
+// name and matching schema returns the existing metric.
+func (r *Registry) RegisterGauge(opts GaugeOpts) (*Gauge, error) {
+	if opts.Name == "" {
+		return nil, fmt.Errorf("%w: name is required", ErrInvalidMetric)
+	}
+	if err := validateLabels(opts.Labels, opts.StreamingOnly); err != nil {
+		r.registrationErrors.Add(1)
+		return nil, err
+	}
+	if opts.MaxSeriesPerMetric == 0 {
+		opts.MaxSeriesPerMetric = DefaultMaxSeriesPerMetric
+	}
+
+	if existing, ok := r.metrics.Load(opts.Name); ok {
+		m := existing.(metric)
+		if m.metricType() != MetricGauge {
+			r.registrationErrors.Add(1)
+			return nil, fmt.Errorf("%w: %q is %s", ErrTypeMismatch, opts.Name, m.metricType())
+		}
+		g := existing.(*Gauge)
+		if !labelNamesEqual(g.opts.Labels, opts.Labels) {
+			r.registrationErrors.Add(1)
+			return nil, fmt.Errorf("%w: %q", ErrSchemaMismatch, opts.Name)
+		}
+		return g, nil
+	}
+
+	g := &Gauge{
+		opts:           opts,
+		registry:       r,
+		internalLabels: []LabelPair{{Name: internalLabelMetric, Value: opts.Name}},
+	}
+	actual, loaded := r.metrics.LoadOrStore(opts.Name, g)
+	if loaded {
+		existing := actual.(*Gauge)
+		if !labelNamesEqual(existing.opts.Labels, opts.Labels) {
+			r.registrationErrors.Add(1)
+			return nil, fmt.Errorf("%w: %q", ErrSchemaMismatch, opts.Name)
+		}
+		return existing, nil
+	}
+	return g, nil
+}
+
+// RegisterHistogram registers a histogram metric. Re-registering with the
+// same name, matching schema, and matching bucket boundaries returns the
+// existing metric.
+func (r *Registry) RegisterHistogram(opts HistogramOpts) (*Histogram, error) {
+	if opts.Name == "" {
+		return nil, fmt.Errorf("%w: name is required", ErrInvalidMetric)
+	}
+	if err := validateLabels(opts.Labels, opts.StreamingOnly); err != nil {
+		r.registrationErrors.Add(1)
+		return nil, err
+	}
+	if len(opts.Buckets) == 0 {
+		opts.Buckets = DefaultHistogramBuckets
+	}
+	if err := validateBuckets(opts.Buckets); err != nil {
+		r.registrationErrors.Add(1)
+		return nil, err
+	}
+	if opts.MaxSeriesPerMetric == 0 {
+		opts.MaxSeriesPerMetric = DefaultMaxSeriesPerMetric
+	}
+
+	if existing, ok := r.metrics.Load(opts.Name); ok {
+		m := existing.(metric)
+		if m.metricType() != MetricHistogram {
+			r.registrationErrors.Add(1)
+			return nil, fmt.Errorf("%w: %q is %s", ErrTypeMismatch, opts.Name, m.metricType())
+		}
+		h := existing.(*Histogram)
+		if !labelNamesEqual(h.opts.Labels, opts.Labels) || !bucketsEqual(h.opts.Buckets, opts.Buckets) {
+			r.registrationErrors.Add(1)
+			return nil, fmt.Errorf("%w: %q", ErrSchemaMismatch, opts.Name)
+		}
+		return h, nil
+	}
+
+	h := &Histogram{
+		opts:           opts,
+		registry:       r,
+		internalLabels: []LabelPair{{Name: internalLabelMetric, Value: opts.Name}},
+	}
+	actual, loaded := r.metrics.LoadOrStore(opts.Name, h)
+	if loaded {
+		existing := actual.(*Histogram)
+		if !labelNamesEqual(existing.opts.Labels, opts.Labels) || !bucketsEqual(existing.opts.Buckets, opts.Buckets) {
+			r.registrationErrors.Add(1)
+			return nil, fmt.Errorf("%w: %q", ErrSchemaMismatch, opts.Name)
+		}
+		return existing, nil
+	}
+	return h, nil
+}
+
+func bucketsEqual(a, b []float64) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func labelNamesEqual(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -102,9 +212,8 @@ func (r *Registry) MetricCount() int {
 func (r *Registry) SeriesCount() int64 {
 	var total int64
 	r.metrics.Range(func(_, v any) bool {
-		switch m := v.(type) {
-		case *Counter:
-			total += m.seriesCount.Load()
+		if m, ok := v.(metric); ok {
+			total += m.seriesCountLoad()
 		}
 		return true
 	})

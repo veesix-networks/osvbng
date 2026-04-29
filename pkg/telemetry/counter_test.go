@@ -215,3 +215,8 @@ func (f *fakeMetric) metricType() MetricType              { return f.t }
 func (f *fakeMetric) streamingOnly() bool                 { return false }
 func (f *fakeMetric) appendSamples(dst []Sample) []Sample { return dst }
 func (f *fakeMetric) swapDirty() bool                     { return false }
+func (f *fakeMetric) cardinalityDropsLoad() uint64        { return 0 }
+func (f *fakeMetric) unknownSeriesEmitsLoad() uint64      { return 0 }
+func (f *fakeMetric) staleHandleEmitsLoad() uint64        { return 0 }
+func (f *fakeMetric) seriesCountLoad() int64              { return 0 }
+func (f *fakeMetric) internalLabelsRef() []LabelPair      { return nil }

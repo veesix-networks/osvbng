@@ -77,4 +77,13 @@ type metric interface {
 	streamingOnly() bool
 	appendSamples(dst []Sample) []Sample
 	swapDirty() bool
+
+	// Internal observability accessors. Each metric type maintains
+	// per-metric atomic counters that the registry surfaces as
+	// osvbng_telemetry_* metrics during snapshot.
+	cardinalityDropsLoad() uint64
+	unknownSeriesEmitsLoad() uint64
+	staleHandleEmitsLoad() uint64
+	seriesCountLoad() int64
+	internalLabelsRef() []LabelPair
 }
