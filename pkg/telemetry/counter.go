@@ -70,9 +70,12 @@ type CounterHandle struct {
 	stale atomic.Bool
 }
 
-// Inc adds 1 to the counter handle's value.
 func (h *CounterHandle) Inc() {
 	h.Add(1)
+}
+
+func (h *CounterHandle) Value() uint64 {
+	return h.value.Load()
 }
 
 // Add adds delta to the counter handle's value. If the handle is the
