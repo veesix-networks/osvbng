@@ -218,6 +218,7 @@ func (c *Counter) appendSamples(dst []Sample) []Sample {
 		entry := v.(*CounterHandle)
 		dst = append(dst, Sample{
 			Name:          c.opts.Name,
+			Help:          c.opts.Help,
 			Type:          MetricCounter,
 			Labels:        entry.labels,
 			StreamingOnly: c.opts.StreamingOnly,

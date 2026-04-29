@@ -11,14 +11,11 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
-	"github.com/veesix-networks/osvbng/pkg/state"
-	statepaths "github.com/veesix-networks/osvbng/pkg/state/paths"
 	radiusplugin "github.com/veesix-networks/osvbng/plugins/auth/radius"
 )
 
 func init() {
 	show.RegisterFactory(NewServersHandler)
-	state.RegisterMetric(statepaths.AAARadiusServers, paths.Path(radiusplugin.ShowServersPath))
 }
 
 type ServersHandler struct{}

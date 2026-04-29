@@ -17,7 +17,6 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
-	"github.com/veesix-networks/osvbng/pkg/telemetry"
 )
 
 type Component struct {
@@ -40,7 +39,6 @@ type Component struct {
 	egressSub     events.Subscription
 	lifecycleSub  events.Subscription
 	ifaceStateSub events.Subscription
-	telemetry     *dataplaneTelemetry
 
 	egressCount  atomic.Int64
 	egressErrors atomic.Int64
@@ -74,12 +72,6 @@ func New(deps component.Dependencies) (*Component, error) {
 	c.ingress = ingress
 
 	c.egress = shm.NewEgress(ingress.Client())
-
-	tel, err := newDataplaneTelemetry(telemetry.Default())
-	if err != nil {
-		return nil, fmt.Errorf("init dataplane telemetry: %w", err)
-	}
-	c.telemetry = tel
 
 	return c, nil
 }

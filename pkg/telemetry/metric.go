@@ -35,6 +35,7 @@ type LabelPair struct {
 // Sample is one snapshot record from a metric series.
 type Sample struct {
 	Name          string
+	Help          string
 	Type          MetricType
 	Labels        []LabelPair
 	StreamingOnly bool

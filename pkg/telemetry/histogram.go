@@ -64,7 +64,7 @@ func (h *Histogram) seriesCountLoad() int64         { return h.seriesCount.Load(
 func (h *Histogram) internalLabelsRef() []LabelPair { return h.internalLabels }
 
 // HistogramHandle is the per-series emit handle. Buckets is one larger
-// than opts.Buckets — the final slot accumulates observations >= the
+// than opts.Buckets; the final slot accumulates observations >= the
 // largest configured bucket ceiling.
 type HistogramHandle struct {
 	histogram   *Histogram
@@ -238,6 +238,7 @@ func (h *Histogram) appendSamples(dst []Sample) []Sample {
 		}
 		dst = append(dst, Sample{
 			Name:          h.opts.Name,
+			Help:          h.opts.Help,
 			Type:          MetricHistogram,
 			Labels:        entry.labels,
 			StreamingOnly: h.opts.StreamingOnly,

@@ -14,39 +14,46 @@ import (
 	"time"
 )
 
-// RegisterCounter registers a counter on the package-level default registry.
 func RegisterCounter(opts CounterOpts) (*Counter, error) {
 	return defaultRegistry.RegisterCounter(opts)
 }
 
-// RegisterGauge registers a gauge on the package-level default registry.
 func RegisterGauge(opts GaugeOpts) (*Gauge, error) {
 	return defaultRegistry.RegisterGauge(opts)
 }
 
-// RegisterHistogram registers a histogram on the package-level default
-// registry.
 func RegisterHistogram(opts HistogramOpts) (*Histogram, error) {
 	return defaultRegistry.RegisterHistogram(opts)
 }
 
-// AppendSnapshot reads the package-level default registry into dst.
+// MustRegisterCounter panics on registration error. Intended for component
+// init paths where a failure means a programming bug (duplicate name with
+// mismatched schema, unbounded label without StreamingOnly), not runtime
+// input.
+func MustRegisterCounter(opts CounterOpts) *Counter {
+	return defaultRegistry.MustRegisterCounter(opts)
+}
+
+func MustRegisterGauge(opts GaugeOpts) *Gauge {
+	return defaultRegistry.MustRegisterGauge(opts)
+}
+
+func MustRegisterHistogram(opts HistogramOpts) *Histogram {
+	return defaultRegistry.MustRegisterHistogram(opts)
+}
+
 func AppendSnapshot(dst []Sample, opts SnapshotOptions) []Sample {
 	return defaultRegistry.AppendSnapshot(dst, opts)
 }
 
-// Subscribe registers a subscriber on the package-level default registry.
 func Subscribe(opts SubscribeOptions) *Subscription {
 	return defaultRegistry.Subscribe(opts)
 }
 
-// SetTickInterval overrides the tick cadence on the package-level default
-// registry. Must be called before any Subscribe to take effect.
 func SetTickInterval(d time.Duration) {
 	defaultRegistry.SetTickInterval(d)
 }
 
-// Shutdown releases resources held by the package-level default registry.
 func Shutdown(ctx context.Context) error {
 	return defaultRegistry.Shutdown(ctx)
 }
