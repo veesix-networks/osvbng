@@ -17,6 +17,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/telemetry"
 )
 
 type Component struct {
@@ -28,16 +29,18 @@ type Component struct {
 	egress   *shm.Egress
 	vpp      southbound.Southbound
 
-	DHCPChan    chan *dataplane.ParsedPacket
-	DHCPv6Chan  chan *dataplane.ParsedPacket
-	ARPChan     chan *dataplane.ParsedPacket
-	PPPoEChan   chan *dataplane.ParsedPacket
-	IPv6NDChan  chan *dataplane.ParsedPacket
+	DHCPChan   chan *dataplane.ParsedPacket
+	DHCPv6Chan chan *dataplane.ParsedPacket
+	ARPChan    chan *dataplane.ParsedPacket
+	PPPoEChan  chan *dataplane.ParsedPacket
+	IPv6NDChan chan *dataplane.ParsedPacket
 
 	CPPM *cppm.Manager
 
-	egressSub    events.Subscription
-	lifecycleSub events.Subscription
+	egressSub     events.Subscription
+	lifecycleSub  events.Subscription
+	ifaceStateSub events.Subscription
+	telemetry     *dataplaneTelemetry
 
 	egressCount  atomic.Int64
 	egressErrors atomic.Int64
@@ -56,11 +59,11 @@ func New(deps component.Dependencies) (*Component, error) {
 		logger:     log,
 		eventBus:   deps.EventBus,
 		vpp:        deps.Southbound,
-		DHCPChan:    make(chan *dataplane.ParsedPacket, 1000),
-		DHCPv6Chan:  make(chan *dataplane.ParsedPacket, 1000),
-		ARPChan:     make(chan *dataplane.ParsedPacket, 1000),
-		PPPoEChan:   make(chan *dataplane.ParsedPacket, 1000),
-		IPv6NDChan:  make(chan *dataplane.ParsedPacket, 1000),
+		DHCPChan:   make(chan *dataplane.ParsedPacket, 1000),
+		DHCPv6Chan: make(chan *dataplane.ParsedPacket, 1000),
+		ARPChan:    make(chan *dataplane.ParsedPacket, 1000),
+		PPPoEChan:  make(chan *dataplane.ParsedPacket, 1000),
+		IPv6NDChan: make(chan *dataplane.ParsedPacket, 1000),
 		CPPM:       deps.CPPM,
 	}
 
@@ -72,6 +75,12 @@ func New(deps component.Dependencies) (*Component, error) {
 
 	c.egress = shm.NewEgress(ingress.Client())
 
+	tel, err := newDataplaneTelemetry(telemetry.Default())
+	if err != nil {
+		return nil, fmt.Errorf("init dataplane telemetry: %w", err)
+	}
+	c.telemetry = tel
+
 	return c, nil
 }
 
@@ -81,8 +90,10 @@ func (c *Component) Start(ctx context.Context) error {
 
 	c.egressSub = c.eventBus.Subscribe(events.TopicEgress, c.handleEgress)
 	c.lifecycleSub = c.eventBus.Subscribe(events.TopicSessionLifecycle, c.handleSessionLifecycle)
+	c.ifaceStateSub = c.eventBus.Subscribe(events.TopicInterfaceState, c.handleInterfaceState)
 
 	c.startReadLoop()
+	c.startTelemetryLoop()
 
 	return nil
 }
@@ -263,6 +274,9 @@ func (c *Component) Stop(ctx context.Context) error {
 
 	c.egressSub.Unsubscribe()
 	c.lifecycleSub.Unsubscribe()
+	if c.ifaceStateSub != nil {
+		c.ifaceStateSub.Unsubscribe()
+	}
 
 	c.StopContext()
 	c.readLoopWg.Wait()
@@ -277,7 +291,6 @@ func (c *Component) Stop(ctx context.Context) error {
 
 	return nil
 }
-
 
 func (c *Component) handleEgress(event events.Event) {
 	data, ok := event.Data.(*events.EgressEvent)
@@ -342,4 +355,3 @@ func (c *Component) handleEgress(event events.Event) {
 
 func (c *Component) handleSessionLifecycle(event events.Event) {
 }
-

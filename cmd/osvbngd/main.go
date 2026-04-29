@@ -27,18 +27,18 @@ import (
 	"github.com/veesix-networks/osvbng/internal/subscriber"
 	"github.com/veesix-networks/osvbng/internal/watchdog"
 	"github.com/veesix-networks/osvbng/internal/watchdog/targets"
-	syscfg "github.com/veesix-networks/osvbng/pkg/config/system"
+	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/auth"
 	"github.com/veesix-networks/osvbng/pkg/cache/memory"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/config"
+	syscfg "github.com/veesix-networks/osvbng/pkg/config/system"
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
 	"github.com/veesix-networks/osvbng/pkg/cppm"
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/dhcp4"
 	"github.com/veesix-networks/osvbng/pkg/dhcp6"
 	"github.com/veesix-networks/osvbng/pkg/events/local"
-	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/ha"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/conf/all"
 	"github.com/veesix-networks/osvbng/pkg/handlers/oper"
@@ -46,18 +46,19 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/all"
 	"github.com/veesix-networks/osvbng/pkg/ifmgr"
-	"github.com/veesix-networks/osvbng/pkg/svcgroup"
-	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
-	"github.com/vishvananda/netlink"
-	"github.com/vishvananda/netns"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/netbind"
 	"github.com/veesix-networks/osvbng/pkg/northbound"
 	"github.com/veesix-networks/osvbng/pkg/opdb/sqlite"
 	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
 	"github.com/veesix-networks/osvbng/pkg/state"
+	"github.com/veesix-networks/osvbng/pkg/svcgroup"
+	"github.com/veesix-networks/osvbng/pkg/telemetry"
 	"github.com/veesix-networks/osvbng/pkg/version"
+	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
 	_ "github.com/veesix-networks/osvbng/plugins/all"
+	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netns"
 	"go.fd.io/govpp"
 )
 
@@ -572,6 +573,10 @@ func main() {
 
 	if err := orch.Stop(ctx); err != nil {
 		mainLog.Error("Error stopping components", "error", err)
+	}
+
+	if err := telemetry.Shutdown(ctx); err != nil {
+		mainLog.Error("Error shutting down telemetry", "error", err)
 	}
 
 	if err := vpp.Close(); err != nil {
