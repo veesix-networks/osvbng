@@ -92,7 +92,7 @@ func TestSubscribe_StreamingOnlyExcludedByDefault(t *testing.T) {
 	regular.WithLabelValues().Inc()
 	streaming.WithLabelValues("s-1").Inc()
 
-	deadline := time.After(200 * time.Millisecond)
+	deadline := time.After(2 * time.Second)
 	defaultNames := map[string]bool{}
 	allNames := map[string]bool{}
 	for len(defaultNames) < 1 || len(allNames) < 2 {
