@@ -85,7 +85,6 @@ func (c *Component) Start(ctx context.Context) error {
 	c.ifaceStateSub = c.eventBus.Subscribe(events.TopicInterfaceState, c.handleInterfaceState)
 
 	c.startReadLoop()
-	c.startTelemetryLoop()
 
 	return nil
 }

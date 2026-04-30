@@ -7,10 +7,12 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/telemetry"
 )
 
 func init() {
 	show.RegisterFactory(NewMemoryHandler)
+	telemetry.RegisterMetricMulti[southbound.MemoryStats](paths.SystemDataplaneMemory)
 }
 
 type MemoryHandler struct {

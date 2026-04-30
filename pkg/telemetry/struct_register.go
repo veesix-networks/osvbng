@@ -24,8 +24,9 @@ type RegisterOpts struct {
 // returns cached typed handles for one tuple of label values, ready for
 // hot-path emit.
 type StructMetrics[T any] struct {
-	registry   *Registry
-	labelNames []string // wire label names, in declaration order
+	registry    *Registry
+	labelNames  []string // wire label names, in declaration order
+	labelFields []labelFieldIndex
 
 	fields []structField // metric fields in the order they appear on T
 	byName map[string]int
@@ -40,6 +41,13 @@ type structField struct {
 	counter   *Counter // exactly one of counter/gauge/histogram is non-nil
 	gauge     *Gauge
 	histogram *Histogram
+}
+
+// labelFieldIndex maps a label position to the source struct field index,
+// so EmitInstance can read label values without re-parsing tags.
+type labelFieldIndex struct {
+	wireName string
+	fieldIdx int
 }
 
 // MustRegisterStruct registers every field of T tagged `metric:"..."`
@@ -73,7 +81,9 @@ func MustRegisterStructWith[T any](reg *Registry, opts RegisterOpts) *StructMetr
 		}
 		spec := parseMetricTag(tag)
 		if spec.isLabel {
-			sm.labelNames = append(sm.labelNames, labelName(f, spec))
+			wire := labelName(f, spec)
+			sm.labelNames = append(sm.labelNames, wire)
+			sm.labelFields = append(sm.labelFields, labelFieldIndex{wireName: wire, fieldIdx: i})
 		}
 	}
 
@@ -171,6 +181,39 @@ func (m *StructMetrics[T]) LabelNames() []string {
 	return out
 }
 
+// EmitInstance reads the label fields from src to resolve a per-tuple
+// handle, then emits all metric field values via EmitFrom. The handle
+// resolution is cached by the underlying Counter/Gauge/Histogram so this
+// is safe to call from poll loops.
+func (m *StructMetrics[T]) EmitInstance(src *T) {
+	v := reflect.ValueOf(src).Elem()
+	values := make([]string, len(m.labelFields))
+	for i, lf := range m.labelFields {
+		fv := v.Field(lf.fieldIdx)
+		values[i] = formatLabelValue(fv)
+	}
+	h := m.WithLabelValues(values...)
+	m.EmitFrom(h, src)
+}
+
+func formatLabelValue(fv reflect.Value) string {
+	switch fv.Kind() {
+	case reflect.String:
+		return fv.String()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return fmt.Sprintf("%d", fv.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return fmt.Sprintf("%d", fv.Uint())
+	case reflect.Bool:
+		if fv.Bool() {
+			return "true"
+		}
+		return "false"
+	default:
+		return fmt.Sprintf("%v", fv.Interface())
+	}
+}
+
 // EmitFrom copies counter/gauge values from src into the SDK metrics.
 // Counter fields use absolute-to-delta semantics: Add(src - lastObserved),
 // so callers can pass an externally-tracked monotonic value (e.g. VPP
@@ -188,6 +231,12 @@ func (m *StructMetrics[T]) EmitFrom(h *StructHandles, src *T) {
 			switch fv.Kind() {
 			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 				current = fv.Uint()
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				v := fv.Int()
+				if v < 0 {
+					continue
+				}
+				current = uint64(v)
 			default:
 				continue
 			}
@@ -206,6 +255,10 @@ func (m *StructMetrics[T]) EmitFrom(h *StructHandles, src *T) {
 				current = float64(fv.Uint())
 			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 				current = float64(fv.Int())
+			case reflect.Bool:
+				if fv.Bool() {
+					current = 1
+				}
 			default:
 				continue
 			}

@@ -111,58 +111,58 @@ type MPLSInterfaceInfo struct {
 }
 
 type SystemStats struct {
-	VectorRate          uint64   `json:"vector_rate"        metric:"name=system.vector_rate,type=gauge,help=VPP vector rate."`
-	InputRate           uint64   `json:"input_rate"         metric:"name=system.input_rate,type=gauge,help=VPP input rate."`
-	LastUpdate          uint64   `json:"last_update"        metric:"name=system.last_update,type=gauge,help=VPP last stats update timestamp."`
-	LastStatsClear      uint64   `json:"last_stats_clear"   metric:"name=system.last_stats_clear,type=gauge,help=VPP last stats clear timestamp."`
-	Heartbeat           uint64   `json:"heartbeat"          metric:"name=system.heartbeat,type=counter,help=VPP heartbeat counter."`
-	NumWorkerThreads    uint64   `json:"num_worker_threads" metric:"name=system.worker_threads,type=gauge,help=VPP worker thread count."`
+	VectorRate          uint64   `json:"vector_rate"        metric:"name=dataplane.vpp.system.vector_rate,type=gauge,help=VPP vector rate."`
+	InputRate           uint64   `json:"input_rate"         metric:"name=dataplane.vpp.system.input_rate,type=gauge,help=VPP input rate."`
+	LastUpdate          uint64   `json:"last_update"        metric:"name=dataplane.vpp.system.last_update,type=gauge,help=VPP last stats update timestamp."`
+	LastStatsClear      uint64   `json:"last_stats_clear"   metric:"name=dataplane.vpp.system.last_stats_clear,type=gauge,help=VPP last stats clear timestamp."`
+	Heartbeat           uint64   `json:"heartbeat"          metric:"name=dataplane.vpp.system.heartbeat,type=counter,help=VPP heartbeat counter."`
+	NumWorkerThreads    uint64   `json:"num_worker_threads" metric:"name=dataplane.vpp.system.worker_threads,type=gauge,help=VPP worker thread count."`
 	VectorRatePerWorker []uint64 `json:"vector_rate_per_worker"`
 }
 
 type MemoryStats struct {
 	Heap       string `json:"heap"        metric:"label"`
-	Total      uint64 `json:"total"       metric:"name=memory.total_bytes,type=gauge,help=VPP heap total bytes."`
-	Used       uint64 `json:"used"        metric:"name=memory.used_bytes,type=gauge,help=VPP heap used bytes."`
-	Free       uint64 `json:"free"        metric:"name=memory.free_bytes,type=gauge,help=VPP heap free bytes."`
-	UsedMMap   uint64 `json:"used_mmap"   metric:"name=memory.used_mmap_bytes,type=gauge,help=VPP heap used mmap bytes."`
-	TotalAlloc uint64 `json:"total_alloc" metric:"name=memory.total_alloc_bytes,type=counter,help=VPP heap total allocated bytes."`
-	FreeChunks uint64 `json:"free_chunks" metric:"name=memory.free_chunks,type=gauge,help=VPP heap free chunks."`
-	Releasable uint64 `json:"releasable"  metric:"name=memory.releasable_bytes,type=gauge,help=VPP heap releasable bytes."`
+	Total      uint64 `json:"total"       metric:"name=dataplane.vpp.memory.total_bytes,type=gauge,help=VPP heap total bytes."`
+	Used       uint64 `json:"used"        metric:"name=dataplane.vpp.memory.used_bytes,type=gauge,help=VPP heap used bytes."`
+	Free       uint64 `json:"free"        metric:"name=dataplane.vpp.memory.free_bytes,type=gauge,help=VPP heap free bytes."`
+	UsedMMap   uint64 `json:"used_mmap"   metric:"name=dataplane.vpp.memory.used_mmap_bytes,type=gauge,help=VPP heap used mmap bytes."`
+	TotalAlloc uint64 `json:"total_alloc" metric:"name=dataplane.vpp.memory.total_alloc_bytes,type=counter,help=VPP heap total allocated bytes."`
+	FreeChunks uint64 `json:"free_chunks" metric:"name=dataplane.vpp.memory.free_chunks,type=gauge,help=VPP heap free chunks."`
+	Releasable uint64 `json:"releasable"  metric:"name=dataplane.vpp.memory.releasable_bytes,type=gauge,help=VPP heap releasable bytes."`
 }
 
 type InterfaceStats struct {
 	Name     string `json:"name"     metric:"label"`
 	Index    uint32 `json:"index"    metric:"label"`
-	Rx       uint64 `json:"rx_packets" metric:"name=interface.rx_packets,type=counter,help=VPP per-interface received packets."`
-	RxBytes  uint64 `json:"rx_bytes"   metric:"name=interface.rx_bytes,type=counter,help=VPP per-interface received bytes."`
-	RxErrors uint64 `json:"rx_errors"  metric:"name=interface.rx_errors,type=counter,help=VPP per-interface receive errors."`
-	Tx       uint64 `json:"tx_packets" metric:"name=interface.tx_packets,type=counter,help=VPP per-interface transmitted packets."`
-	TxBytes  uint64 `json:"tx_bytes"   metric:"name=interface.tx_bytes,type=counter,help=VPP per-interface transmitted bytes."`
-	TxErrors uint64 `json:"tx_errors"  metric:"name=interface.tx_errors,type=counter,help=VPP per-interface transmit errors."`
-	Drops    uint64 `json:"drops"      metric:"name=interface.drops,type=counter,help=VPP per-interface dropped packets."`
-	Punts    uint64 `json:"punts"      metric:"name=interface.punts,type=counter,help=VPP per-interface punted packets."`
+	Rx       uint64 `json:"rx_packets" metric:"name=dataplane.vpp.interface.rx_packets,type=counter,help=VPP per-interface received packets."`
+	RxBytes  uint64 `json:"rx_bytes"   metric:"name=dataplane.vpp.interface.rx_bytes,type=counter,help=VPP per-interface received bytes."`
+	RxErrors uint64 `json:"rx_errors"  metric:"name=dataplane.vpp.interface.rx_errors,type=counter,help=VPP per-interface receive errors."`
+	Tx       uint64 `json:"tx_packets" metric:"name=dataplane.vpp.interface.tx_packets,type=counter,help=VPP per-interface transmitted packets."`
+	TxBytes  uint64 `json:"tx_bytes"   metric:"name=dataplane.vpp.interface.tx_bytes,type=counter,help=VPP per-interface transmitted bytes."`
+	TxErrors uint64 `json:"tx_errors"  metric:"name=dataplane.vpp.interface.tx_errors,type=counter,help=VPP per-interface transmit errors."`
+	Drops    uint64 `json:"drops"      metric:"name=dataplane.vpp.interface.drops,type=counter,help=VPP per-interface dropped packets."`
+	Punts    uint64 `json:"punts"      metric:"name=dataplane.vpp.interface.punts,type=counter,help=VPP per-interface punted packets."`
 }
 
 type NodeStats struct {
 	Name     string `json:"name"     metric:"label"`
 	Index    uint32 `json:"index"    metric:"label"`
-	Calls    uint64 `json:"calls"    metric:"name=node.calls,type=counter,help=VPP graph node calls."`
-	Vectors  uint64 `json:"vectors"  metric:"name=node.vectors,type=counter,help=VPP graph node vectors processed."`
-	Suspends uint64 `json:"suspends" metric:"name=node.suspends,type=counter,help=VPP graph node suspends."`
-	Clocks   uint64 `json:"clocks"   metric:"name=node.clocks,type=counter,help=VPP graph node clock cycles."`
+	Calls    uint64 `json:"calls"    metric:"name=dataplane.vpp.node.calls,type=counter,help=VPP graph node calls."`
+	Vectors  uint64 `json:"vectors"  metric:"name=dataplane.vpp.node.vectors,type=counter,help=VPP graph node vectors processed."`
+	Suspends uint64 `json:"suspends" metric:"name=dataplane.vpp.node.suspends,type=counter,help=VPP graph node suspends."`
+	Clocks   uint64 `json:"clocks"   metric:"name=dataplane.vpp.node.clocks,type=counter,help=VPP graph node clock cycles."`
 }
 
 type ErrorStats struct {
 	Name  string `json:"name"  metric:"label"`
-	Count uint64 `json:"count" metric:"name=error.count,type=counter,help=VPP error counter."`
+	Count uint64 `json:"count" metric:"name=dataplane.vpp.error.count,type=counter,help=VPP error counter."`
 }
 
 type BufferStats struct {
 	PoolName  string  `json:"pool_name" metric:"label"`
-	Cached    float64 `json:"cached"    metric:"name=buffer.cached,type=gauge,help=VPP cached buffers."`
-	Used      float64 `json:"used"      metric:"name=buffer.used,type=gauge,help=VPP used buffers."`
-	Available float64 `json:"available" metric:"name=buffer.available,type=gauge,help=VPP available buffers."`
+	Cached    float64 `json:"cached"    metric:"name=dataplane.vpp.buffer.cached,type=gauge,help=VPP cached buffers."`
+	Used      float64 `json:"used"      metric:"name=dataplane.vpp.buffer.used,type=gauge,help=VPP used buffers."`
+	Available float64 `json:"available" metric:"name=dataplane.vpp.buffer.available,type=gauge,help=VPP available buffers."`
 }
 
 type DataplaneStats struct {

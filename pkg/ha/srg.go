@@ -16,12 +16,12 @@ import (
 type SRGState string
 
 const (
-	SRGStateInit       SRGState = "INIT"
-	SRGStateWaiting    SRGState = "WAITING"
-	SRGStateReady      SRGState = "READY"
-	SRGStateActive     SRGState = "ACTIVE"
-	SRGStateStandby    SRGState = "STANDBY"
-	SRGStateActiveSolo    SRGState = "ACTIVE_SOLO"
+	SRGStateInit         SRGState = "INIT"
+	SRGStateWaiting      SRGState = "WAITING"
+	SRGStateReady        SRGState = "READY"
+	SRGStateActive       SRGState = "ACTIVE"
+	SRGStateStandby      SRGState = "STANDBY"
+	SRGStateActiveSolo   SRGState = "ACTIVE_SOLO"
 	SRGStateStandbyAlone SRGState = "STANDBY_ALONE"
 )
 
