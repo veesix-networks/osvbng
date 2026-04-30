@@ -8,18 +8,17 @@ import (
 	"context"
 
 	"github.com/veesix-networks/osvbng/pkg/deps"
+	"github.com/veesix-networks/osvbng/pkg/ha"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
-	"github.com/veesix-networks/osvbng/pkg/state"
-	statepaths "github.com/veesix-networks/osvbng/pkg/state/paths"
+	"github.com/veesix-networks/osvbng/pkg/telemetry"
 )
 
 func init() {
 	show.RegisterFactory(func(d *deps.ShowDeps) show.ShowHandler {
 		return &SyncHandler{deps: d}
 	})
-
-	state.RegisterMetric(statepaths.HASync, paths.HASync)
+	telemetry.RegisterMetricMulti[ha.SyncSRGStatus](paths.HASync)
 }
 
 type SyncHandler struct {

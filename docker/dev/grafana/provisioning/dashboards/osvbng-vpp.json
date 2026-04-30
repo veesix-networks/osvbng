@@ -32,7 +32,7 @@
       "pluginVersion": "10.2.2",
       "targets": [{
         "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "expr": "vpp_system_heartbeat{job=\"osvbng\"}",
+        "expr": "osvbng_dataplane_vpp_system_heartbeat{job=\"osvbng\"}",
         "legendFormat": "Heartbeat"
       }],
       "title": "Dataplane Heartbeat",
@@ -60,7 +60,7 @@
       },
       "targets": [{
         "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "expr": "vpp_system_vector_rate{job=\"osvbng\"}",
+        "expr": "osvbng_dataplane_vpp_system_vector_rate{job=\"osvbng\"}",
         "legendFormat": "Vector Rate"
       }],
       "title": "Vector Rate",
@@ -88,7 +88,7 @@
       },
       "targets": [{
         "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "expr": "vpp_system_worker_threads{job=\"osvbng\"}",
+        "expr": "osvbng_dataplane_vpp_system_worker_threads{job=\"osvbng\"}",
         "legendFormat": "Workers"
       }],
       "title": "Worker Threads",
@@ -120,7 +120,7 @@
       },
       "targets": [{
         "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "expr": "vpp_memory_used_bytes{job=\"osvbng\"} / vpp_memory_total_bytes{job=\"osvbng\"}",
+        "expr": "osvbng_dataplane_vpp_memory_used_bytes{job=\"osvbng\"} / osvbng_dataplane_vpp_memory_total_bytes{job=\"osvbng\"}",
         "legendFormat": "{{Heap}}"
       }],
       "title": "Memory Utilization",
@@ -152,7 +152,7 @@
       },
       "targets": [{
         "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "expr": "vpp_buffer_used{job=\"osvbng\"} / (vpp_buffer_used{job=\"osvbng\"} + vpp_buffer_available{job=\"osvbng\"})",
+        "expr": "osvbng_dataplane_vpp_buffer_used{job=\"osvbng\"} / (osvbng_dataplane_vpp_buffer_used{job=\"osvbng\"} + osvbng_dataplane_vpp_buffer_available{job=\"osvbng\"})",
         "legendFormat": "{{PoolName}}"
       }],
       "title": "Buffer Utilization",
@@ -206,12 +206,12 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "rate(vpp_interface_rx_bytes{job=\"osvbng\"}[60s]) * 8",
+          "expr": "rate(osvbng_dataplane_vpp_interface_rx_bytes{job=\"osvbng\"}[60s]) * 8",
           "legendFormat": "{{Name}} RX"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "rate(vpp_interface_tx_bytes{job=\"osvbng\"}[60s]) * 8",
+          "expr": "rate(osvbng_dataplane_vpp_interface_tx_bytes{job=\"osvbng\"}[60s]) * 8",
           "legendFormat": "{{Name}} TX",
           "refId": "B"
         }
@@ -259,12 +259,12 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "rate(vpp_interface_rx_packets{job=\"osvbng\"}[60s])",
+          "expr": "rate(osvbng_dataplane_vpp_interface_rx_packets{job=\"osvbng\"}[60s])",
           "legendFormat": "{{Name}} RX"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "rate(vpp_interface_tx_packets{job=\"osvbng\"}[60s])",
+          "expr": "rate(osvbng_dataplane_vpp_interface_tx_packets{job=\"osvbng\"}[60s])",
           "legendFormat": "{{Name}} TX",
           "refId": "B"
         }
@@ -307,17 +307,17 @@
       },
       "targets": [{
         "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "expr": "rate(vpp_interface_drops{job=\"osvbng\"}[60s])",
+        "expr": "rate(osvbng_dataplane_vpp_interface_drops{job=\"osvbng\"}[60s])",
         "legendFormat": "{{Name}} drops"
       },
       {
         "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "expr": "rate(vpp_interface_rx_errors{job=\"osvbng\"}[60s])",
+        "expr": "rate(osvbng_dataplane_vpp_interface_rx_errors{job=\"osvbng\"}[60s])",
         "legendFormat": "{{Name}} RX errors"
       },
       {
         "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "expr": "rate(vpp_interface_tx_errors{job=\"osvbng\"}[60s])",
+        "expr": "rate(osvbng_dataplane_vpp_interface_tx_errors{job=\"osvbng\"}[60s])",
         "legendFormat": "{{Name}} TX errors"
       }],
       "title": "Interface Drops & Errors",
@@ -368,7 +368,7 @@
       },
       "targets": [{
         "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "expr": "rate(vpp_node_vectors{job=\"osvbng\"}[60s]) > 1",
+        "expr": "rate(osvbng_dataplane_vpp_node_vectors{job=\"osvbng\"}[60s]) > 1",
         "legendFormat": "{{Name}}"
       }],
       "title": "Node Vectors/Sec",
@@ -411,7 +411,7 @@
       },
       "targets": [{
         "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "expr": "rate(vpp_node_clocks{job=\"osvbng\"}[60s]) / (rate(vpp_node_vectors{job=\"osvbng\"}[60s]) > 10)",
+        "expr": "rate(osvbng_dataplane_vpp_node_clocks{job=\"osvbng\"}[60s]) / (rate(osvbng_dataplane_vpp_node_vectors{job=\"osvbng\"}[60s]) > 10)",
         "legendFormat": "{{Name}}"
       }],
       "title": "Node Clocks/Vector",
@@ -460,7 +460,7 @@
       },
       "targets": [{
         "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "expr": "rate(vpp_error_count{job=\"osvbng\"}[60s]) > 0",
+        "expr": "rate(osvbng_dataplane_vpp_error_count{job=\"osvbng\"}[60s]) > 0",
         "legendFormat": "{{Name}}"
       }],
       "title": "Dataplane Errors/Sec",

@@ -8,7 +8,6 @@ service BNGService {
   // Session management
   rpc GetSessions(GetSessionsRequest) returns (GetSessionsResponse);
   rpc GetSession(GetSessionRequest) returns (Session);
-  rpc GetStats(GetStatsRequest) returns (Stats);
   rpc TerminateSession(TerminateSessionRequest) returns (TerminateSessionResponse);
 
   // Show operational data (generic handler-based)
@@ -65,17 +64,6 @@ message Session {
   uint32 sw_if_index = 18;
   uint32 adj_index = 19;
   uint32 fib_id = 20;
-}
-
-message GetStatsRequest {}
-
-message Stats {
-  uint32 total_sessions = 1;
-  uint32 ipoe_v4_sessions = 2;
-  uint32 ipoe_v6_sessions = 3;
-  uint32 ppp_sessions = 4;
-  uint32 active_sessions = 5;
-  uint32 released_sessions = 6;
 }
 
 message TerminateSessionRequest {

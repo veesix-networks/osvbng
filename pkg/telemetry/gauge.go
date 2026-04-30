@@ -241,6 +241,7 @@ func (g *Gauge) appendSamples(dst []Sample) []Sample {
 		entry := v.(*GaugeHandle)
 		dst = append(dst, Sample{
 			Name:          g.opts.Name,
+			Help:          g.opts.Help,
 			Type:          MetricGauge,
 			Labels:        entry.labels,
 			StreamingOnly: g.opts.StreamingOnly,

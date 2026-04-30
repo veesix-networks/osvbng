@@ -11,12 +11,12 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	hapb "github.com/veesix-networks/osvbng/api/proto/ha"
 	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/opdb"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type memStore struct {

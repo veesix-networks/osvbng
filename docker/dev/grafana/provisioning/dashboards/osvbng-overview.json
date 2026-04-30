@@ -273,7 +273,7 @@
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "textMode": "auto"
       },
-      "targets": [{ "expr": "vpp_system_vector_rate{node=\"bng-1\"}", "legendFormat": "Vector Rate" }],
+      "targets": [{ "expr": "osvbng_dataplane_vpp_system_vector_rate{node=\"bng-1\"}", "legendFormat": "Vector Rate" }],
       "title": "Vector Rate",
       "type": "stat"
     },
@@ -292,7 +292,7 @@
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "textMode": "auto"
       },
-      "targets": [{ "expr": "vpp_system_worker_threads{node=\"bng-1\"}", "legendFormat": "Workers" }],
+      "targets": [{ "expr": "osvbng_dataplane_vpp_system_worker_threads{node=\"bng-1\"}", "legendFormat": "Workers" }],
       "title": "Workers",
       "type": "stat"
     },
@@ -316,7 +316,7 @@
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "showUnfilled": true
       },
-      "targets": [{ "expr": "vpp_memory_used_bytes{node=\"bng-1\"} / vpp_memory_total_bytes{node=\"bng-1\"}", "legendFormat": "{{Heap}}" }],
+      "targets": [{ "expr": "osvbng_dataplane_vpp_memory_used_bytes{node=\"bng-1\"} / osvbng_dataplane_vpp_memory_total_bytes{node=\"bng-1\"}", "legendFormat": "{{Heap}}" }],
       "title": "Memory Utilization",
       "type": "bargauge"
     },
@@ -344,8 +344,8 @@
         "tooltip": { "mode": "multi" }
       },
       "targets": [
-        { "expr": "rate(vpp_interface_rx_bytes{node=\"bng-1\"}[60s]) * 8", "legendFormat": "{{Name}} RX" },
-        { "expr": "rate(vpp_interface_tx_bytes{node=\"bng-1\"}[60s]) * 8", "legendFormat": "{{Name}} TX", "refId": "B" }
+        { "expr": "rate(osvbng_dataplane_vpp_interface_rx_bytes{node=\"bng-1\"}[60s]) * 8", "legendFormat": "{{Name}} RX" },
+        { "expr": "rate(osvbng_dataplane_vpp_interface_tx_bytes{node=\"bng-1\"}[60s]) * 8", "legendFormat": "{{Name}} TX", "refId": "B" }
       ],
       "title": "Interface Throughput",
       "type": "timeseries"
@@ -374,8 +374,8 @@
         "tooltip": { "mode": "multi" }
       },
       "targets": [
-        { "expr": "rate(vpp_interface_rx_packets{node=\"bng-1\"}[60s])", "legendFormat": "{{Name}} RX" },
-        { "expr": "rate(vpp_interface_tx_packets{node=\"bng-1\"}[60s])", "legendFormat": "{{Name}} TX", "refId": "B" }
+        { "expr": "rate(osvbng_dataplane_vpp_interface_rx_packets{node=\"bng-1\"}[60s])", "legendFormat": "{{Name}} RX" },
+        { "expr": "rate(osvbng_dataplane_vpp_interface_tx_packets{node=\"bng-1\"}[60s])", "legendFormat": "{{Name}} TX", "refId": "B" }
       ],
       "title": "Interface Packets/Sec",
       "type": "timeseries"
@@ -400,9 +400,9 @@
         "tooltip": { "mode": "multi" }
       },
       "targets": [
-        { "expr": "rate(vpp_interface_drops{node=\"bng-1\"}[60s])", "legendFormat": "{{Name}} drops" },
-        { "expr": "rate(vpp_interface_rx_errors{node=\"bng-1\"}[60s])", "legendFormat": "{{Name}} RX err" },
-        { "expr": "rate(vpp_interface_tx_errors{node=\"bng-1\"}[60s])", "legendFormat": "{{Name}} TX err" }
+        { "expr": "rate(osvbng_dataplane_vpp_interface_drops{node=\"bng-1\"}[60s])", "legendFormat": "{{Name}} drops" },
+        { "expr": "rate(osvbng_dataplane_vpp_interface_rx_errors{node=\"bng-1\"}[60s])", "legendFormat": "{{Name}} RX err" },
+        { "expr": "rate(osvbng_dataplane_vpp_interface_tx_errors{node=\"bng-1\"}[60s])", "legendFormat": "{{Name}} TX err" }
       ],
       "title": "Interface Drops & Errors",
       "type": "timeseries"

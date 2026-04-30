@@ -21,7 +21,6 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	BNGService_GetSessions_FullMethodName         = "/openbng.v1.BNGService/GetSessions"
 	BNGService_GetSession_FullMethodName          = "/openbng.v1.BNGService/GetSession"
-	BNGService_GetStats_FullMethodName            = "/openbng.v1.BNGService/GetStats"
 	BNGService_TerminateSession_FullMethodName    = "/openbng.v1.BNGService/TerminateSession"
 	BNGService_GetOperationalStats_FullMethodName = "/openbng.v1.BNGService/GetOperationalStats"
 	BNGService_ExecuteOperation_FullMethodName    = "/openbng.v1.BNGService/ExecuteOperation"
@@ -43,7 +42,6 @@ type BNGServiceClient interface {
 	// Session management
 	GetSessions(ctx context.Context, in *GetSessionsRequest, opts ...grpc.CallOption) (*GetSessionsResponse, error)
 	GetSession(ctx context.Context, in *GetSessionRequest, opts ...grpc.CallOption) (*Session, error)
-	GetStats(ctx context.Context, in *GetStatsRequest, opts ...grpc.CallOption) (*Stats, error)
 	TerminateSession(ctx context.Context, in *TerminateSessionRequest, opts ...grpc.CallOption) (*TerminateSessionResponse, error)
 	// Show operational data (generic handler-based)
 	GetOperationalStats(ctx context.Context, in *GetOperationalStatsRequest, opts ...grpc.CallOption) (*GetOperationalStatsResponse, error)
@@ -83,16 +81,6 @@ func (c *bNGServiceClient) GetSession(ctx context.Context, in *GetSessionRequest
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Session)
 	err := c.cc.Invoke(ctx, BNGService_GetSession_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *bNGServiceClient) GetStats(ctx context.Context, in *GetStatsRequest, opts ...grpc.CallOption) (*Stats, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Stats)
-	err := c.cc.Invoke(ctx, BNGService_GetStats_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +214,6 @@ type BNGServiceServer interface {
 	// Session management
 	GetSessions(context.Context, *GetSessionsRequest) (*GetSessionsResponse, error)
 	GetSession(context.Context, *GetSessionRequest) (*Session, error)
-	GetStats(context.Context, *GetStatsRequest) (*Stats, error)
 	TerminateSession(context.Context, *TerminateSessionRequest) (*TerminateSessionResponse, error)
 	// Show operational data (generic handler-based)
 	GetOperationalStats(context.Context, *GetOperationalStatsRequest) (*GetOperationalStatsResponse, error)
@@ -257,9 +244,6 @@ func (UnimplementedBNGServiceServer) GetSessions(context.Context, *GetSessionsRe
 }
 func (UnimplementedBNGServiceServer) GetSession(context.Context, *GetSessionRequest) (*Session, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSession not implemented")
-}
-func (UnimplementedBNGServiceServer) GetStats(context.Context, *GetStatsRequest) (*Stats, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetStats not implemented")
 }
 func (UnimplementedBNGServiceServer) TerminateSession(context.Context, *TerminateSessionRequest) (*TerminateSessionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method TerminateSession not implemented")
@@ -350,24 +334,6 @@ func _BNGService_GetSession_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(BNGServiceServer).GetSession(ctx, req.(*GetSessionRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _BNGService_GetStats_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetStatsRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BNGServiceServer).GetStats(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: BNGService_GetStats_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BNGServiceServer).GetStats(ctx, req.(*GetStatsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -602,10 +568,6 @@ var BNGService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetSession",
 			Handler:    _BNGService_GetSession_Handler,
-		},
-		{
-			MethodName: "GetStats",
-			Handler:    _BNGService_GetStats_Handler,
 		},
 		{
 			MethodName: "TerminateSession",

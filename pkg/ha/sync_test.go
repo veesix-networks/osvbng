@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	hapb "github.com/veesix-networks/osvbng/api/proto/ha"
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func newTestSender(srgNames ...string) *SyncSender {
@@ -180,29 +180,29 @@ func TestSyncSender_PPPoECheckpoint(t *testing.T) {
 
 func TestSessionToCheckpoint_IPoE(t *testing.T) {
 	sess := &models.IPoESession{
-		SessionID:    "ipoe:aa:bb:cc:dd:ee:ff:100",
-		State:        models.SessionStateActive,
-		MAC:          net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-		OuterVLAN:    100,
-		InnerVLAN:    200,
-		VRF:          "vrf-1",
-		SRGName:      "srg1",
-		ServiceGroup: "sg-residential",
-		Username:     "user@isp.com",
-		IPv4Address:  net.ParseIP("10.0.0.5"),
-		LeaseTime:    7200,
-		IPv6Address:  net.ParseIP("2001:db8::5"),
-		IPv6Prefix:   "2001:db8:1::/48",
+		SessionID:     "ipoe:aa:bb:cc:dd:ee:ff:100",
+		State:         models.SessionStateActive,
+		MAC:           net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
+		OuterVLAN:     100,
+		InnerVLAN:     200,
+		VRF:           "vrf-1",
+		SRGName:       "srg1",
+		ServiceGroup:  "sg-residential",
+		Username:      "user@isp.com",
+		IPv4Address:   net.ParseIP("10.0.0.5"),
+		LeaseTime:     7200,
+		IPv6Address:   net.ParseIP("2001:db8::5"),
+		IPv6Prefix:    "2001:db8:1::/48",
 		IPv6LeaseTime: 3600,
-		ClientID:     []byte{0x01, 0x02},
-		Hostname:     "cpe-1",
-		DUID:         []byte{0x00, 0x03, 0x00, 0x01},
-		RelayInfo:    map[uint8][]byte{1: {0x10, 0x20}, 2: {0x30, 0x40}},
-		ActivatedAt:  time.Unix(1000000, 0),
-		IPv4Pool:     "residential/pool-1",
-		IANAPool:     "residential-v6/iana-1",
-		PDPool:       "residential-v6/pd-1",
-		OuterTPID:    0x88a8,
+		ClientID:      []byte{0x01, 0x02},
+		Hostname:      "cpe-1",
+		DUID:          []byte{0x00, 0x03, 0x00, 0x01},
+		RelayInfo:     map[uint8][]byte{1: {0x10, 0x20}, 2: {0x30, 0x40}},
+		ActivatedAt:   time.Unix(1000000, 0),
+		IPv4Pool:      "residential/pool-1",
+		IANAPool:      "residential-v6/iana-1",
+		PDPool:        "residential-v6/pd-1",
+		OuterTPID:     0x88a8,
 	}
 
 	cp := sessionToCheckpoint(sess)

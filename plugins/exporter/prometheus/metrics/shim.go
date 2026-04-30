@@ -6,6 +6,7 @@ package metrics
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -14,22 +15,19 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/telemetry"
 )
 
-const dataplaneGlob = "vpp_*"
+// promPrefix is the prefix prepended to every osvbng-internal metric path
+// when rendering Prometheus output. Internal paths use dots ("aaa.radius.
+// auth.requests"); the Prom rendering replaces dots with underscores and
+// prepends this prefix, producing "osvbng_aaa_radius_auth_requests".
+const promPrefix = "osvbng_"
 
 func init() {
-	Register("dataplane.vpp", func(log *logger.Logger) (MetricHandler, error) {
-		return newSDKShim("dataplane.vpp", dataplaneGlob, log, telemetry.Default()), nil
+	Register("sdk", func(log *logger.Logger) (MetricHandler, error) {
+		return newSDKShim(log, telemetry.Default()), nil
 	})
 }
 
-// sdkShim translates samples from the telemetry SDK registry into
-// prometheus.Metric values. One shim covers every metric matching its glob;
-// per-name prometheus.Desc objects are cached on first observation. This is
-// transitional code: the full Prometheus exporter rewrite (osvbng-context #52)
-// replaces the entire prometheusCollector with an SDK-backed implementation.
 type sdkShim struct {
-	name     string
-	glob     string
 	log      *logger.Logger
 	registry *telemetry.Registry
 
@@ -39,26 +37,20 @@ type sdkShim struct {
 	scratch []telemetry.Sample
 }
 
-func newSDKShim(name, glob string, log *logger.Logger, reg *telemetry.Registry) *sdkShim {
+func newSDKShim(log *logger.Logger, reg *telemetry.Registry) *sdkShim {
 	return &sdkShim{
-		name:     name,
-		glob:     glob,
 		log:      log,
 		registry: reg,
 		descs:    make(map[string]*prometheus.Desc),
 	}
 }
 
-func (s *sdkShim) Name() string    { return s.name }
-func (s *sdkShim) Paths() []string { return []string{s.glob} }
-func (s *sdkShim) Describe(_ chan<- *prometheus.Desc) {
-	// Descs are constructed lazily on first Collect (unchecked collector).
-}
+func (s *sdkShim) Name() string                       { return "sdk" }
+func (s *sdkShim) Paths() []string                    { return []string{"*"} }
+func (s *sdkShim) Describe(_ chan<- *prometheus.Desc) {}
 
 func (s *sdkShim) Collect(_ context.Context, _ cache.Cache, ch chan<- prometheus.Metric) error {
-	s.scratch = s.registry.AppendSnapshot(s.scratch[:0], telemetry.SnapshotOptions{
-		PathGlob: s.glob,
-	})
+	s.scratch = s.registry.AppendSnapshot(s.scratch[:0], telemetry.SnapshotOptions{})
 	for i := range s.scratch {
 		s.emit(&s.scratch[i], ch)
 	}
@@ -67,7 +59,6 @@ func (s *sdkShim) Collect(_ context.Context, _ cache.Cache, ch chan<- prometheus
 
 func (s *sdkShim) emit(sample *telemetry.Sample, ch chan<- prometheus.Metric) {
 	desc := s.descFor(sample)
-
 	switch sample.Type {
 	case telemetry.MetricCounter:
 		ch <- prometheus.MustNewConstMetric(desc, prometheus.CounterValue, sample.Value, labelValuesOf(sample.Labels)...)
@@ -96,9 +87,24 @@ func (s *sdkShim) descFor(sample *telemetry.Sample) *prometheus.Desc {
 	if d, ok := s.descs[key]; ok {
 		return d
 	}
-	d = prometheus.NewDesc(sample.Name, sample.Name, labelNamesOf(sample.Labels), nil)
+	promName := internalToProm(sample.Name)
+	help := sample.Help
+	if help == "" {
+		help = promName
+	}
+	d = prometheus.NewDesc(promName, help, labelNamesOf(sample.Labels), nil)
 	s.descs[key] = d
 	return d
+}
+
+// internalToProm renders an osvbng-internal metric path as a Prometheus
+// metric name. Dots become underscores and the osvbng_ prefix is added.
+func internalToProm(internal string) string {
+	rendered := strings.ReplaceAll(internal, ".", "_")
+	if strings.HasPrefix(rendered, promPrefix) {
+		return rendered
+	}
+	return promPrefix + rendered
 }
 
 func descKey(name string, labels []telemetry.LabelPair) string {

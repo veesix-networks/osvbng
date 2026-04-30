@@ -33,10 +33,10 @@ type PeerState struct {
 }
 
 type PeerClient struct {
-	address  string
-	binding  netbind.Binding
+	address   string
+	binding   netbind.Binding
 	extraOpts []grpc.DialOption
-	logger   *logger.Logger
+	logger    *logger.Logger
 
 	conn   *grpc.ClientConn
 	client hapb.HAPeerServiceClient

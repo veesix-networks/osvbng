@@ -10,16 +10,12 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
-	"github.com/veesix-networks/osvbng/pkg/state"
-	statepaths "github.com/veesix-networks/osvbng/pkg/state/paths"
 )
 
 func init() {
 	show.RegisterFactory(func(d *deps.ShowDeps) show.ShowHandler {
 		return &StatusHandler{deps: d}
 	})
-
-	state.RegisterMetric(statepaths.HAStatus, paths.HAStatus)
 }
 
 type StatusHandler struct {

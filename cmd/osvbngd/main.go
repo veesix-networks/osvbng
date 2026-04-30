@@ -559,6 +559,8 @@ func main() {
 		log.Fatalf("Failed to start components: %v", err)
 	}
 
+	telemetry.StartShowPollers(ctx, showRegistry, mainLog)
+
 	if err := orch.WaitReady(ctx, 10*time.Second); err != nil {
 		log.Fatalf("Failed waiting for components to be ready: %v", err)
 	}

@@ -156,6 +156,14 @@ func (r *Registry) GetAllPaths() []paths.Path {
 	return allPaths
 }
 
+func (r *Registry) Snapshot(ctx context.Context, path string) (any, error) {
+	h, err := r.GetHandler(path)
+	if err != nil {
+		return nil, err
+	}
+	return h.Collect(ctx, &Request{Path: path})
+}
+
 type handlerAdapter struct {
 	h ShowHandler
 }

@@ -498,18 +498,3 @@ func (c *Component) TerminateSession(ctx context.Context, req *pb.TerminateSessi
 	}, nil
 }
 
-func (c *Component) GetStats(ctx context.Context, req *pb.GetStatsRequest) (*pb.Stats, error) {
-	stats, err := c.subscriber.GetStats(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return &pb.Stats{
-		TotalSessions:    stats["total"],
-		IpoeV4Sessions:   stats["ipoe_v4"],
-		IpoeV6Sessions:   stats["ipoe_v6"],
-		PppSessions:      stats["ppp"],
-		ActiveSessions:   stats["active"],
-		ReleasedSessions: stats["released"],
-	}, nil
-}

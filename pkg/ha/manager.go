@@ -825,16 +825,16 @@ func (m *Manager) GetTrackedInterfaceCount(srgName string) int {
 }
 
 type SyncSRGStatus struct {
-	SRGName      string  `json:"srg_name"`
-	Role         string  `json:"role"`
-	LastSyncSeq  uint64  `json:"last_sync_seq"`
-	BacklogDepth int     `json:"backlog_depth"`
-	PeerAckedSeq uint64  `json:"peer_acked_seq"`
-	SyncLagSecs  float64 `json:"sync_lag_seconds"`
-	Creates      uint64  `json:"creates"`
-	Updates      uint64  `json:"updates"`
-	Deletes      uint64  `json:"deletes"`
-	BulkSyncs    uint64  `json:"bulk_syncs"`
+	SRGName      string  `json:"srg_name"          metric:"label=srg"`
+	Role         string  `json:"role"              metric:"label"`
+	LastSyncSeq  uint64  `json:"last_sync_seq"     metric:"name=ha.sync.last_seq,type=gauge,help=Most recent local sync sequence number."`
+	BacklogDepth int     `json:"backlog_depth"     metric:"name=ha.sync.backlog_depth,type=gauge,help=Current entries in the sync backlog."`
+	PeerAckedSeq uint64  `json:"peer_acked_seq"    metric:"name=ha.sync.peer_acked_seq,type=gauge,help=Most recent sequence number acked by the peer."`
+	SyncLagSecs  float64 `json:"sync_lag_seconds"  metric:"name=ha.sync.lag_seconds,type=gauge,help=Seconds since last sync send."`
+	Creates      uint64  `json:"creates"           metric:"name=ha.sync.creates,type=counter,help=Sync session-create updates."`
+	Updates      uint64  `json:"updates"           metric:"name=ha.sync.updates,type=counter,help=Sync session-update updates."`
+	Deletes      uint64  `json:"deletes"           metric:"name=ha.sync.deletes,type=counter,help=Sync session-delete updates."`
+	BulkSyncs    uint64  `json:"bulk_syncs"        metric:"name=ha.sync.bulk_total,type=counter,help=Bulk sync operations."`
 }
 
 func (m *Manager) GetSyncStatus() []SyncSRGStatus {
@@ -994,4 +994,3 @@ func addrFamily(addr string) netbind.Family {
 	}
 	return netbind.FamilyV4
 }
-
