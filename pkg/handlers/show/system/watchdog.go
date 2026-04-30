@@ -7,8 +7,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
-	"github.com/veesix-networks/osvbng/pkg/state"
-	statepaths "github.com/veesix-networks/osvbng/pkg/state/paths"
+	"github.com/veesix-networks/osvbng/pkg/telemetry"
 )
 
 type WatchdogHandler struct {
@@ -16,26 +15,25 @@ type WatchdogHandler struct {
 }
 
 type WatchdogTargetInfo struct {
-	Name            string  `json:"name"`
-	State           string  `json:"state"`
+	Name            string  `json:"name"                  metric:"label"`
+	State           string  `json:"state"                 metric:"label"`
 	Critical        bool    `json:"critical"`
-	LastCheckOK     bool    `json:"last-check-ok"`
+	LastCheckOK     bool    `json:"last-check-ok"         metric:"name=watchdog.target.up,type=gauge,help=1 if the most recent health check succeeded."`
 	LastCheckError  string  `json:"last-check-error,omitempty"`
-	LastCheckMs     float64 `json:"last-check-ms"`
-	ConsecFailures  int64   `json:"consecutive-failures"`
-	TotalFailures   int64   `json:"total-failures"`
-	TotalRecoveries int64   `json:"total-recoveries"`
-	TotalRestarts   int64   `json:"total-restarts"`
+	LastCheckMs     float64 `json:"last-check-ms"         metric:"name=watchdog.target.health_check_ms,type=gauge,help=Duration of the most recent health check."`
+	ConsecFailures  int64   `json:"consecutive-failures"  metric:"name=watchdog.target.consecutive_failures,type=gauge,help=Consecutive failed health checks."`
+	TotalFailures   int64   `json:"total-failures"        metric:"name=watchdog.target.failures,type=counter,help=Total health-check failures."`
+	TotalRecoveries int64   `json:"total-recoveries"      metric:"name=watchdog.target.recoveries,type=counter,help=Total successful recoveries."`
+	TotalRestarts   int64   `json:"total-restarts"        metric:"name=watchdog.target.restarts,type=counter,help=Total target restarts."`
 	LastStateChange string  `json:"last-state-change"`
 	Uptime          string  `json:"uptime,omitempty"`
 }
 
 func init() {
-	state.RegisterMetric(statepaths.SystemWatchdog, paths.SystemWatchdog)
-
 	show.RegisterFactory(func(deps *deps.ShowDeps) show.ShowHandler {
 		return &WatchdogHandler{deps: deps}
 	})
+	telemetry.RegisterMetricMulti[WatchdogTargetInfo](paths.SystemWatchdog)
 }
 
 func (h *WatchdogHandler) Collect(ctx context.Context, req *show.Request) (interface{}, error) {

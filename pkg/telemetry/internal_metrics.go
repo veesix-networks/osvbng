@@ -5,14 +5,14 @@
 package telemetry
 
 const (
-	internalMetricCardinalityDrops   = "osvbng_telemetry_cardinality_drops_total"
-	internalMetricUnknownEmits       = "osvbng_telemetry_unknown_series_emits_total"
-	internalMetricStaleEmits         = "osvbng_telemetry_stale_handle_emits_total"
-	internalMetricRegistrationErrs   = "osvbng_telemetry_registration_errors_total"
-	internalMetricMetricsTotal       = "osvbng_telemetry_metrics_total"
-	internalMetricSeriesTotal        = "osvbng_telemetry_series_total"
-	internalMetricSubscriptionsTotal = "osvbng_telemetry_subscriptions_total"
-	internalMetricSubscriptionDrops  = "osvbng_telemetry_subscription_drops_total"
+	internalMetricCardinalityDrops   = "telemetry.cardinality_drops"
+	internalMetricUnknownEmits       = "telemetry.unknown_series_emits"
+	internalMetricStaleEmits         = "telemetry.stale_handle_emits"
+	internalMetricRegistrationErrs   = "telemetry.registration_errors"
+	internalMetricMetricsTotal       = "telemetry.metrics_total"
+	internalMetricSeriesTotal        = "telemetry.series_total"
+	internalMetricSubscriptionsTotal = "telemetry.subscriptions_total"
+	internalMetricSubscriptionDrops  = "telemetry.subscription_drops"
 )
 
 const internalLabelMetric = "metric"

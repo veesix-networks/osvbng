@@ -7,9 +7,9 @@ package ha
 import (
 	"testing"
 
-	hapb "github.com/veesix-networks/osvbng/api/proto/ha"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	hapb "github.com/veesix-networks/osvbng/api/proto/ha"
 )
 
 func makeReq(seq uint64) *hapb.SyncSessionRequest {

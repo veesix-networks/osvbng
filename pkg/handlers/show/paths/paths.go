@@ -67,6 +67,7 @@ const (
 
 	HAStatus      Path = "ha.status"
 	HASRGs        Path = "ha.srg"
+	HASRGState    Path = "ha.srg.state"
 	HAPeer        Path = "ha.peer"
 	HASRGCounters Path = "ha.srg.counters"
 	HASync        Path = "ha.sync"

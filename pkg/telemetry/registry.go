@@ -229,6 +229,32 @@ func (r *Registry) SeriesCount() int64 {
 	return total
 }
 
+// MustRegisterCounter panics on registration error. See package-level
+// MustRegisterCounter for intended use.
+func (r *Registry) MustRegisterCounter(opts CounterOpts) *Counter {
+	c, err := r.RegisterCounter(opts)
+	if err != nil {
+		panic(err)
+	}
+	return c
+}
+
+func (r *Registry) MustRegisterGauge(opts GaugeOpts) *Gauge {
+	g, err := r.RegisterGauge(opts)
+	if err != nil {
+		panic(err)
+	}
+	return g
+}
+
+func (r *Registry) MustRegisterHistogram(opts HistogramOpts) *Histogram {
+	h, err := r.RegisterHistogram(opts)
+	if err != nil {
+		panic(err)
+	}
+	return h
+}
+
 // Shutdown releases registry-internal resources. Safe to call multiple
 // times. Stops the tick goroutine if running and waits for it to exit.
 func (r *Registry) Shutdown(_ context.Context) error {

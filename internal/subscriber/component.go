@@ -15,11 +15,11 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/config/qos"
 	"github.com/veesix-networks/osvbng/pkg/events"
+	"github.com/veesix-networks/osvbng/pkg/ha"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/session"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
-	"github.com/veesix-networks/osvbng/pkg/ha"
 )
 
 type Component struct {
@@ -33,8 +33,8 @@ type Component struct {
 	cfgMgr    component.ConfigManager
 	cache     cache.Cache
 
-	lifecycleSub   events.Subscription
-	mutationResSub events.Subscription
+	lifecycleSub    events.Subscription
+	mutationResSub  events.Subscription
 	mutationWaiters sync.Map
 }
 
@@ -205,18 +205,20 @@ func (c *Component) GetSession(ctx context.Context, sessionID string) (*models.I
 	return &sess, nil
 }
 
-func (c *Component) GetStats(ctx context.Context) (map[string]uint32, error) {
+type SessionStats struct {
+	Total    uint64 `json:"total"    metric:"name=subscriber.sessions.total,type=gauge,help=Total subscriber sessions."`
+	IPoEV4   uint64 `json:"ipoe_v4"  metric:"name=subscriber.sessions.ipoe_v4,type=gauge,help=Active IPoE IPv4 sessions."`
+	IPoEV6   uint64 `json:"ipoe_v6"  metric:"name=subscriber.sessions.ipoe_v6,type=gauge,help=Active IPoE IPv6 sessions."`
+	PPP      uint64 `json:"ppp"      metric:"name=subscriber.sessions.ppp,type=gauge,help=Active PPPoE sessions."`
+	Active   uint64 `json:"active"   metric:"name=subscriber.sessions.active,type=gauge,help=Sessions currently in active state."`
+	Released uint64 `json:"released" metric:"name=subscriber.sessions.released,type=gauge,help=Sessions currently in released state."`
+}
+
+func (c *Component) GetStats(ctx context.Context) (*SessionStats, error) {
 	pattern := "osvbng:sessions:*"
 	var cursor uint64
 
-	stats := map[string]uint32{
-		"total":    0,
-		"ipoe_v4":  0,
-		"ipoe_v6":  0,
-		"ppp":      0,
-		"active":   0,
-		"released": 0,
-	}
+	stats := &SessionStats{}
 
 	for {
 		keys, nextCursor, err := c.cache.Scan(ctx, cursor, pattern, 100)
@@ -240,7 +242,7 @@ func (c *Component) GetStats(ctx context.Context) (map[string]uint32, error) {
 				continue
 			}
 
-			stats["total"]++
+			stats.Total++
 
 			accessType, _ := sessionData["AccessType"].(string)
 			state, _ := sessionData["State"].(string)
@@ -250,19 +252,19 @@ func (c *Component) GetStats(ctx context.Context) (map[string]uint32, error) {
 				v6Addr, _ := sessionData["IPv6Address"].(string)
 				v6Prefix, _ := sessionData["IPv6Prefix"].(string)
 				if v4Addr != "" {
-					stats["ipoe_v4"]++
+					stats.IPoEV4++
 				}
 				if v6Addr != "" || v6Prefix != "" {
-					stats["ipoe_v6"]++
+					stats.IPoEV6++
 				}
 			} else if accessType == "pppoe" {
-				stats["ppp"]++
+				stats.PPP++
 			}
 
 			if state == "active" {
-				stats["active"]++
+				stats.Active++
 			} else if state == "released" {
-				stats["released"]++
+				stats.Released++
 			}
 		}
 
@@ -321,6 +323,8 @@ func (c *Component) handleSessionLifecycle(event events.Event) {
 	sessionID := sess.GetSessionID()
 	outerVLAN := sess.GetOuterVLAN()
 	state := sess.GetState()
+
+	c.emitLifecycleCounter(sess)
 
 	if outerVLAN == 0 {
 		c.logger.Error("Session rejected: S-VLAN required", "session_id", sessionID)
@@ -604,7 +608,6 @@ func (c *Component) persistSession(sess models.SubscriberSession) error {
 
 	return nil
 }
-
 
 func (c *Component) buildLookupKey(sess models.SubscriberSession) string {
 	mac := sess.GetMAC()

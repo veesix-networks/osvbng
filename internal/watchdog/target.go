@@ -72,16 +72,16 @@ func (s TargetState) String() string {
 }
 
 type StateInfo struct {
-	Name             string        `json:"name"`
-	State            string        `json:"state"`
-	Critical         bool          `json:"critical"`
-	LastCheck        *HealthResult `json:"last-check,omitempty"`
-	ConsecFailures   int64         `json:"consecutive-failures"`
-	TotalFailures    int64         `json:"total-failures"`
-	TotalRecoveries  int64         `json:"total-recoveries"`
-	TotalRestarts    int64         `json:"total-restarts"`
-	LastStateChange  time.Time     `json:"last-state-change"`
-	Uptime           string        `json:"uptime,omitempty"`
+	Name            string        `json:"name"`
+	State           string        `json:"state"`
+	Critical        bool          `json:"critical"`
+	LastCheck       *HealthResult `json:"last-check,omitempty"`
+	ConsecFailures  int64         `json:"consecutive-failures"`
+	TotalFailures   int64         `json:"total-failures"`
+	TotalRecoveries int64         `json:"total-recoveries"`
+	TotalRestarts   int64         `json:"total-restarts"`
+	LastStateChange time.Time     `json:"last-state-change"`
+	Uptime          string        `json:"uptime,omitempty"`
 }
 
 type atomicState struct {

@@ -10,12 +10,14 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
+	"github.com/veesix-networks/osvbng/pkg/telemetry"
 )
 
 func init() {
 	show.RegisterFactory(func(d *deps.ShowDeps) show.ShowHandler {
 		return &PeerHandler{deps: d}
 	})
+	telemetry.RegisterMetricSingle[PeerDetail](paths.HAPeer)
 }
 
 type PeerHandler struct {
@@ -23,11 +25,11 @@ type PeerHandler struct {
 }
 
 type PeerDetail struct {
-	Connected     bool    `json:"connected"`
+	Connected     bool    `json:"connected"               metric:"name=ha.peer.connected,type=gauge,help=1 if the HA peer is connected."`
 	NodeID        string  `json:"node_id,omitempty"`
 	LastHeartbeat string  `json:"last_heartbeat,omitempty"`
-	RTTMs         float64 `json:"rtt_ms"`
-	ClockSkewMs   float64 `json:"clock_skew_ms"`
+	RTTMs         float64 `json:"rtt_ms"                  metric:"name=ha.peer.rtt_ms,type=gauge,help=Round-trip time to the HA peer."`
+	ClockSkewMs   float64 `json:"clock_skew_ms"           metric:"name=ha.peer.clock_skew_ms,type=gauge,help=Clock skew between this node and the HA peer."`
 }
 
 func (h *PeerHandler) Collect(_ context.Context, _ *show.Request) (interface{}, error) {

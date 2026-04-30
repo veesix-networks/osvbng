@@ -373,126 +373,6 @@ func (x *Session) GetFibId() uint32 {
 	return 0
 }
 
-type GetStatsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetStatsRequest) Reset() {
-	*x = GetStatsRequest{}
-	mi := &file_api_proto_bng_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetStatsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetStatsRequest) ProtoMessage() {}
-
-func (x *GetStatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[4]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetStatsRequest.ProtoReflect.Descriptor instead.
-func (*GetStatsRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{4}
-}
-
-type Stats struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	TotalSessions    uint32                 `protobuf:"varint,1,opt,name=total_sessions,json=totalSessions,proto3" json:"total_sessions,omitempty"`
-	IpoeV4Sessions   uint32                 `protobuf:"varint,2,opt,name=ipoe_v4_sessions,json=ipoeV4Sessions,proto3" json:"ipoe_v4_sessions,omitempty"`
-	IpoeV6Sessions   uint32                 `protobuf:"varint,3,opt,name=ipoe_v6_sessions,json=ipoeV6Sessions,proto3" json:"ipoe_v6_sessions,omitempty"`
-	PppSessions      uint32                 `protobuf:"varint,4,opt,name=ppp_sessions,json=pppSessions,proto3" json:"ppp_sessions,omitempty"`
-	ActiveSessions   uint32                 `protobuf:"varint,5,opt,name=active_sessions,json=activeSessions,proto3" json:"active_sessions,omitempty"`
-	ReleasedSessions uint32                 `protobuf:"varint,6,opt,name=released_sessions,json=releasedSessions,proto3" json:"released_sessions,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
-}
-
-func (x *Stats) Reset() {
-	*x = Stats{}
-	mi := &file_api_proto_bng_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Stats) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Stats) ProtoMessage() {}
-
-func (x *Stats) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Stats.ProtoReflect.Descriptor instead.
-func (*Stats) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *Stats) GetTotalSessions() uint32 {
-	if x != nil {
-		return x.TotalSessions
-	}
-	return 0
-}
-
-func (x *Stats) GetIpoeV4Sessions() uint32 {
-	if x != nil {
-		return x.IpoeV4Sessions
-	}
-	return 0
-}
-
-func (x *Stats) GetIpoeV6Sessions() uint32 {
-	if x != nil {
-		return x.IpoeV6Sessions
-	}
-	return 0
-}
-
-func (x *Stats) GetPppSessions() uint32 {
-	if x != nil {
-		return x.PppSessions
-	}
-	return 0
-}
-
-func (x *Stats) GetActiveSessions() uint32 {
-	if x != nil {
-		return x.ActiveSessions
-	}
-	return 0
-}
-
-func (x *Stats) GetReleasedSessions() uint32 {
-	if x != nil {
-		return x.ReleasedSessions
-	}
-	return 0
-}
-
 type TerminateSessionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
@@ -502,7 +382,7 @@ type TerminateSessionRequest struct {
 
 func (x *TerminateSessionRequest) Reset() {
 	*x = TerminateSessionRequest{}
-	mi := &file_api_proto_bng_proto_msgTypes[6]
+	mi := &file_api_proto_bng_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -514,7 +394,7 @@ func (x *TerminateSessionRequest) String() string {
 func (*TerminateSessionRequest) ProtoMessage() {}
 
 func (x *TerminateSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[6]
+	mi := &file_api_proto_bng_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -527,7 +407,7 @@ func (x *TerminateSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminateSessionRequest.ProtoReflect.Descriptor instead.
 func (*TerminateSessionRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{6}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *TerminateSessionRequest) GetSessionId() string {
@@ -547,7 +427,7 @@ type TerminateSessionResponse struct {
 
 func (x *TerminateSessionResponse) Reset() {
 	*x = TerminateSessionResponse{}
-	mi := &file_api_proto_bng_proto_msgTypes[7]
+	mi := &file_api_proto_bng_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -559,7 +439,7 @@ func (x *TerminateSessionResponse) String() string {
 func (*TerminateSessionResponse) ProtoMessage() {}
 
 func (x *TerminateSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[7]
+	mi := &file_api_proto_bng_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -572,7 +452,7 @@ func (x *TerminateSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminateSessionResponse.ProtoReflect.Descriptor instead.
 func (*TerminateSessionResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{7}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *TerminateSessionResponse) GetSuccess() bool {
@@ -597,7 +477,7 @@ type GetRunningConfigRequest struct {
 
 func (x *GetRunningConfigRequest) Reset() {
 	*x = GetRunningConfigRequest{}
-	mi := &file_api_proto_bng_proto_msgTypes[8]
+	mi := &file_api_proto_bng_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -609,7 +489,7 @@ func (x *GetRunningConfigRequest) String() string {
 func (*GetRunningConfigRequest) ProtoMessage() {}
 
 func (x *GetRunningConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[8]
+	mi := &file_api_proto_bng_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -622,7 +502,7 @@ func (x *GetRunningConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRunningConfigRequest.ProtoReflect.Descriptor instead.
 func (*GetRunningConfigRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{8}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{6}
 }
 
 type GetStartupConfigRequest struct {
@@ -633,7 +513,7 @@ type GetStartupConfigRequest struct {
 
 func (x *GetStartupConfigRequest) Reset() {
 	*x = GetStartupConfigRequest{}
-	mi := &file_api_proto_bng_proto_msgTypes[9]
+	mi := &file_api_proto_bng_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -645,7 +525,7 @@ func (x *GetStartupConfigRequest) String() string {
 func (*GetStartupConfigRequest) ProtoMessage() {}
 
 func (x *GetStartupConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[9]
+	mi := &file_api_proto_bng_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -658,7 +538,7 @@ func (x *GetStartupConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStartupConfigRequest.ProtoReflect.Descriptor instead.
 func (*GetStartupConfigRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{9}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{7}
 }
 
 type ConfigResponse struct {
@@ -670,7 +550,7 @@ type ConfigResponse struct {
 
 func (x *ConfigResponse) Reset() {
 	*x = ConfigResponse{}
-	mi := &file_api_proto_bng_proto_msgTypes[10]
+	mi := &file_api_proto_bng_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -682,7 +562,7 @@ func (x *ConfigResponse) String() string {
 func (*ConfigResponse) ProtoMessage() {}
 
 func (x *ConfigResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[10]
+	mi := &file_api_proto_bng_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -695,7 +575,7 @@ func (x *ConfigResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigResponse.ProtoReflect.Descriptor instead.
 func (*ConfigResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{10}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ConfigResponse) GetConfigYaml() string {
@@ -713,7 +593,7 @@ type ListVersionsRequest struct {
 
 func (x *ListVersionsRequest) Reset() {
 	*x = ListVersionsRequest{}
-	mi := &file_api_proto_bng_proto_msgTypes[11]
+	mi := &file_api_proto_bng_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -725,7 +605,7 @@ func (x *ListVersionsRequest) String() string {
 func (*ListVersionsRequest) ProtoMessage() {}
 
 func (x *ListVersionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[11]
+	mi := &file_api_proto_bng_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -738,7 +618,7 @@ func (x *ListVersionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListVersionsRequest.ProtoReflect.Descriptor instead.
 func (*ListVersionsRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{11}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{9}
 }
 
 type ListVersionsResponse struct {
@@ -750,7 +630,7 @@ type ListVersionsResponse struct {
 
 func (x *ListVersionsResponse) Reset() {
 	*x = ListVersionsResponse{}
-	mi := &file_api_proto_bng_proto_msgTypes[12]
+	mi := &file_api_proto_bng_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -762,7 +642,7 @@ func (x *ListVersionsResponse) String() string {
 func (*ListVersionsResponse) ProtoMessage() {}
 
 func (x *ListVersionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[12]
+	mi := &file_api_proto_bng_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -775,7 +655,7 @@ func (x *ListVersionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListVersionsResponse.ProtoReflect.Descriptor instead.
 func (*ListVersionsResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{12}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ListVersionsResponse) GetVersions() []*ConfigVersion {
@@ -794,7 +674,7 @@ type GetVersionRequest struct {
 
 func (x *GetVersionRequest) Reset() {
 	*x = GetVersionRequest{}
-	mi := &file_api_proto_bng_proto_msgTypes[13]
+	mi := &file_api_proto_bng_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -806,7 +686,7 @@ func (x *GetVersionRequest) String() string {
 func (*GetVersionRequest) ProtoMessage() {}
 
 func (x *GetVersionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[13]
+	mi := &file_api_proto_bng_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -819,7 +699,7 @@ func (x *GetVersionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetVersionRequest.ProtoReflect.Descriptor instead.
 func (*GetVersionRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{13}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GetVersionRequest) GetVersion() int32 {
@@ -838,7 +718,7 @@ type VersionResponse struct {
 
 func (x *VersionResponse) Reset() {
 	*x = VersionResponse{}
-	mi := &file_api_proto_bng_proto_msgTypes[14]
+	mi := &file_api_proto_bng_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -850,7 +730,7 @@ func (x *VersionResponse) String() string {
 func (*VersionResponse) ProtoMessage() {}
 
 func (x *VersionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[14]
+	mi := &file_api_proto_bng_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -863,7 +743,7 @@ func (x *VersionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VersionResponse.ProtoReflect.Descriptor instead.
 func (*VersionResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{14}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *VersionResponse) GetVersion() *ConfigVersion {
@@ -885,7 +765,7 @@ type ConfigVersion struct {
 
 func (x *ConfigVersion) Reset() {
 	*x = ConfigVersion{}
-	mi := &file_api_proto_bng_proto_msgTypes[15]
+	mi := &file_api_proto_bng_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -897,7 +777,7 @@ func (x *ConfigVersion) String() string {
 func (*ConfigVersion) ProtoMessage() {}
 
 func (x *ConfigVersion) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[15]
+	mi := &file_api_proto_bng_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -910,7 +790,7 @@ func (x *ConfigVersion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigVersion.ProtoReflect.Descriptor instead.
 func (*ConfigVersion) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{15}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ConfigVersion) GetVersion() int32 {
@@ -952,7 +832,7 @@ type ConfigChange struct {
 
 func (x *ConfigChange) Reset() {
 	*x = ConfigChange{}
-	mi := &file_api_proto_bng_proto_msgTypes[16]
+	mi := &file_api_proto_bng_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -964,7 +844,7 @@ func (x *ConfigChange) String() string {
 func (*ConfigChange) ProtoMessage() {}
 
 func (x *ConfigChange) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[16]
+	mi := &file_api_proto_bng_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -977,7 +857,7 @@ func (x *ConfigChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigChange.ProtoReflect.Descriptor instead.
 func (*ConfigChange) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{16}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ConfigChange) GetType() string {
@@ -1009,7 +889,7 @@ type ConfigEnterRequest struct {
 
 func (x *ConfigEnterRequest) Reset() {
 	*x = ConfigEnterRequest{}
-	mi := &file_api_proto_bng_proto_msgTypes[17]
+	mi := &file_api_proto_bng_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1021,7 +901,7 @@ func (x *ConfigEnterRequest) String() string {
 func (*ConfigEnterRequest) ProtoMessage() {}
 
 func (x *ConfigEnterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[17]
+	mi := &file_api_proto_bng_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1034,7 +914,7 @@ func (x *ConfigEnterRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigEnterRequest.ProtoReflect.Descriptor instead.
 func (*ConfigEnterRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{17}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{15}
 }
 
 type ConfigEnterResponse struct {
@@ -1046,7 +926,7 @@ type ConfigEnterResponse struct {
 
 func (x *ConfigEnterResponse) Reset() {
 	*x = ConfigEnterResponse{}
-	mi := &file_api_proto_bng_proto_msgTypes[18]
+	mi := &file_api_proto_bng_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1058,7 +938,7 @@ func (x *ConfigEnterResponse) String() string {
 func (*ConfigEnterResponse) ProtoMessage() {}
 
 func (x *ConfigEnterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[18]
+	mi := &file_api_proto_bng_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1071,7 +951,7 @@ func (x *ConfigEnterResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigEnterResponse.ProtoReflect.Descriptor instead.
 func (*ConfigEnterResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{18}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ConfigEnterResponse) GetSessionId() string {
@@ -1092,7 +972,7 @@ type ConfigSetRequest struct {
 
 func (x *ConfigSetRequest) Reset() {
 	*x = ConfigSetRequest{}
-	mi := &file_api_proto_bng_proto_msgTypes[19]
+	mi := &file_api_proto_bng_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1104,7 +984,7 @@ func (x *ConfigSetRequest) String() string {
 func (*ConfigSetRequest) ProtoMessage() {}
 
 func (x *ConfigSetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[19]
+	mi := &file_api_proto_bng_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1117,7 +997,7 @@ func (x *ConfigSetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigSetRequest.ProtoReflect.Descriptor instead.
 func (*ConfigSetRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{19}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ConfigSetRequest) GetSessionId() string {
@@ -1151,7 +1031,7 @@ type ConfigSetResponse struct {
 
 func (x *ConfigSetResponse) Reset() {
 	*x = ConfigSetResponse{}
-	mi := &file_api_proto_bng_proto_msgTypes[20]
+	mi := &file_api_proto_bng_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1163,7 +1043,7 @@ func (x *ConfigSetResponse) String() string {
 func (*ConfigSetResponse) ProtoMessage() {}
 
 func (x *ConfigSetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[20]
+	mi := &file_api_proto_bng_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1176,7 +1056,7 @@ func (x *ConfigSetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigSetResponse.ProtoReflect.Descriptor instead.
 func (*ConfigSetResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{20}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ConfigSetResponse) GetSuccess() bool {
@@ -1203,7 +1083,7 @@ type ConfigCommitRequest struct {
 
 func (x *ConfigCommitRequest) Reset() {
 	*x = ConfigCommitRequest{}
-	mi := &file_api_proto_bng_proto_msgTypes[21]
+	mi := &file_api_proto_bng_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1215,7 +1095,7 @@ func (x *ConfigCommitRequest) String() string {
 func (*ConfigCommitRequest) ProtoMessage() {}
 
 func (x *ConfigCommitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[21]
+	mi := &file_api_proto_bng_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1228,7 +1108,7 @@ func (x *ConfigCommitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigCommitRequest.ProtoReflect.Descriptor instead.
 func (*ConfigCommitRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{21}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ConfigCommitRequest) GetSessionId() string {
@@ -1256,7 +1136,7 @@ type ConfigCommitResponse struct {
 
 func (x *ConfigCommitResponse) Reset() {
 	*x = ConfigCommitResponse{}
-	mi := &file_api_proto_bng_proto_msgTypes[22]
+	mi := &file_api_proto_bng_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1268,7 +1148,7 @@ func (x *ConfigCommitResponse) String() string {
 func (*ConfigCommitResponse) ProtoMessage() {}
 
 func (x *ConfigCommitResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[22]
+	mi := &file_api_proto_bng_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1281,7 +1161,7 @@ func (x *ConfigCommitResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigCommitResponse.ProtoReflect.Descriptor instead.
 func (*ConfigCommitResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{22}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ConfigCommitResponse) GetSuccess() bool {
@@ -1314,7 +1194,7 @@ type ConfigDiscardRequest struct {
 
 func (x *ConfigDiscardRequest) Reset() {
 	*x = ConfigDiscardRequest{}
-	mi := &file_api_proto_bng_proto_msgTypes[23]
+	mi := &file_api_proto_bng_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1326,7 +1206,7 @@ func (x *ConfigDiscardRequest) String() string {
 func (*ConfigDiscardRequest) ProtoMessage() {}
 
 func (x *ConfigDiscardRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[23]
+	mi := &file_api_proto_bng_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1339,7 +1219,7 @@ func (x *ConfigDiscardRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigDiscardRequest.ProtoReflect.Descriptor instead.
 func (*ConfigDiscardRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{23}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ConfigDiscardRequest) GetSessionId() string {
@@ -1358,7 +1238,7 @@ type ConfigDiscardResponse struct {
 
 func (x *ConfigDiscardResponse) Reset() {
 	*x = ConfigDiscardResponse{}
-	mi := &file_api_proto_bng_proto_msgTypes[24]
+	mi := &file_api_proto_bng_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1370,7 +1250,7 @@ func (x *ConfigDiscardResponse) String() string {
 func (*ConfigDiscardResponse) ProtoMessage() {}
 
 func (x *ConfigDiscardResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[24]
+	mi := &file_api_proto_bng_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1383,7 +1263,7 @@ func (x *ConfigDiscardResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigDiscardResponse.ProtoReflect.Descriptor instead.
 func (*ConfigDiscardResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{24}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ConfigDiscardResponse) GetSuccess() bool {
@@ -1402,7 +1282,7 @@ type ConfigDiffRequest struct {
 
 func (x *ConfigDiffRequest) Reset() {
 	*x = ConfigDiffRequest{}
-	mi := &file_api_proto_bng_proto_msgTypes[25]
+	mi := &file_api_proto_bng_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1414,7 +1294,7 @@ func (x *ConfigDiffRequest) String() string {
 func (*ConfigDiffRequest) ProtoMessage() {}
 
 func (x *ConfigDiffRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[25]
+	mi := &file_api_proto_bng_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1427,7 +1307,7 @@ func (x *ConfigDiffRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigDiffRequest.ProtoReflect.Descriptor instead.
 func (*ConfigDiffRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{25}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ConfigDiffRequest) GetSessionId() string {
@@ -1448,7 +1328,7 @@ type ConfigDiffResponse struct {
 
 func (x *ConfigDiffResponse) Reset() {
 	*x = ConfigDiffResponse{}
-	mi := &file_api_proto_bng_proto_msgTypes[26]
+	mi := &file_api_proto_bng_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1460,7 +1340,7 @@ func (x *ConfigDiffResponse) String() string {
 func (*ConfigDiffResponse) ProtoMessage() {}
 
 func (x *ConfigDiffResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[26]
+	mi := &file_api_proto_bng_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1473,7 +1353,7 @@ func (x *ConfigDiffResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigDiffResponse.ProtoReflect.Descriptor instead.
 func (*ConfigDiffResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{26}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ConfigDiffResponse) GetAdded() []*DiffLine {
@@ -1507,7 +1387,7 @@ type DiffLine struct {
 
 func (x *DiffLine) Reset() {
 	*x = DiffLine{}
-	mi := &file_api_proto_bng_proto_msgTypes[27]
+	mi := &file_api_proto_bng_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1519,7 +1399,7 @@ func (x *DiffLine) String() string {
 func (*DiffLine) ProtoMessage() {}
 
 func (x *DiffLine) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[27]
+	mi := &file_api_proto_bng_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1532,7 +1412,7 @@ func (x *DiffLine) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiffLine.ProtoReflect.Descriptor instead.
 func (*DiffLine) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{27}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *DiffLine) GetPath() string {
@@ -1558,7 +1438,7 @@ type GetOperationalStatsRequest struct {
 
 func (x *GetOperationalStatsRequest) Reset() {
 	*x = GetOperationalStatsRequest{}
-	mi := &file_api_proto_bng_proto_msgTypes[28]
+	mi := &file_api_proto_bng_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1570,7 +1450,7 @@ func (x *GetOperationalStatsRequest) String() string {
 func (*GetOperationalStatsRequest) ProtoMessage() {}
 
 func (x *GetOperationalStatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[28]
+	mi := &file_api_proto_bng_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1583,7 +1463,7 @@ func (x *GetOperationalStatsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetOperationalStatsRequest.ProtoReflect.Descriptor instead.
 func (*GetOperationalStatsRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{28}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *GetOperationalStatsRequest) GetPath() string {
@@ -1602,7 +1482,7 @@ type GetOperationalStatsResponse struct {
 
 func (x *GetOperationalStatsResponse) Reset() {
 	*x = GetOperationalStatsResponse{}
-	mi := &file_api_proto_bng_proto_msgTypes[29]
+	mi := &file_api_proto_bng_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1614,7 +1494,7 @@ func (x *GetOperationalStatsResponse) String() string {
 func (*GetOperationalStatsResponse) ProtoMessage() {}
 
 func (x *GetOperationalStatsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[29]
+	mi := &file_api_proto_bng_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1627,7 +1507,7 @@ func (x *GetOperationalStatsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetOperationalStatsResponse.ProtoReflect.Descriptor instead.
 func (*GetOperationalStatsResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{29}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *GetOperationalStatsResponse) GetMetrics() map[string][]byte {
@@ -1647,7 +1527,7 @@ type ExecuteOperationRequest struct {
 
 func (x *ExecuteOperationRequest) Reset() {
 	*x = ExecuteOperationRequest{}
-	mi := &file_api_proto_bng_proto_msgTypes[30]
+	mi := &file_api_proto_bng_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1659,7 +1539,7 @@ func (x *ExecuteOperationRequest) String() string {
 func (*ExecuteOperationRequest) ProtoMessage() {}
 
 func (x *ExecuteOperationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[30]
+	mi := &file_api_proto_bng_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1672,7 +1552,7 @@ func (x *ExecuteOperationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteOperationRequest.ProtoReflect.Descriptor instead.
 func (*ExecuteOperationRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{30}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ExecuteOperationRequest) GetPath() string {
@@ -1698,7 +1578,7 @@ type ExecuteOperationResponse struct {
 
 func (x *ExecuteOperationResponse) Reset() {
 	*x = ExecuteOperationResponse{}
-	mi := &file_api_proto_bng_proto_msgTypes[31]
+	mi := &file_api_proto_bng_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1710,7 +1590,7 @@ func (x *ExecuteOperationResponse) String() string {
 func (*ExecuteOperationResponse) ProtoMessage() {}
 
 func (x *ExecuteOperationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_bng_proto_msgTypes[31]
+	mi := &file_api_proto_bng_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1723,7 +1603,7 @@ func (x *ExecuteOperationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteOperationResponse.ProtoReflect.Descriptor instead.
 func (*ExecuteOperationResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_bng_proto_rawDescGZIP(), []int{31}
+	return file_api_proto_bng_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ExecuteOperationResponse) GetData() []byte {
@@ -1779,15 +1659,7 @@ const file_api_proto_bng_proto_rawDesc = "" +
 	"\x05is_df\x18\x10 \x01(\bR\x04isDf\x12\x1e\n" +
 	"\vsw_if_index\x18\x12 \x01(\rR\tswIfIndex\x12\x1b\n" +
 	"\tadj_index\x18\x13 \x01(\rR\badjIndex\x12\x15\n" +
-	"\x06fib_id\x18\x14 \x01(\rR\x05fibId\"\x11\n" +
-	"\x0fGetStatsRequest\"\xfb\x01\n" +
-	"\x05Stats\x12%\n" +
-	"\x0etotal_sessions\x18\x01 \x01(\rR\rtotalSessions\x12(\n" +
-	"\x10ipoe_v4_sessions\x18\x02 \x01(\rR\x0eipoeV4Sessions\x12(\n" +
-	"\x10ipoe_v6_sessions\x18\x03 \x01(\rR\x0eipoeV6Sessions\x12!\n" +
-	"\fppp_sessions\x18\x04 \x01(\rR\vpppSessions\x12'\n" +
-	"\x0factive_sessions\x18\x05 \x01(\rR\x0eactiveSessions\x12+\n" +
-	"\x11released_sessions\x18\x06 \x01(\rR\x10releasedSessions\"8\n" +
+	"\x06fib_id\x18\x14 \x01(\rR\x05fibId\"8\n" +
 	"\x17TerminateSessionRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\"N\n" +
@@ -1863,13 +1735,12 @@ const file_api_proto_bng_proto_rawDesc = "" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
 	"\x04body\x18\x02 \x01(\fR\x04body\".\n" +
 	"\x18ExecuteOperationResponse\x12\x12\n" +
-	"\x04data\x18\x01 \x01(\fR\x04data2\xd7\t\n" +
+	"\x04data\x18\x01 \x01(\fR\x04data2\x9b\t\n" +
 	"\n" +
 	"BNGService\x12N\n" +
 	"\vGetSessions\x12\x1e.openbng.v1.GetSessionsRequest\x1a\x1f.openbng.v1.GetSessionsResponse\x12@\n" +
 	"\n" +
-	"GetSession\x12\x1d.openbng.v1.GetSessionRequest\x1a\x13.openbng.v1.Session\x12:\n" +
-	"\bGetStats\x12\x1b.openbng.v1.GetStatsRequest\x1a\x11.openbng.v1.Stats\x12]\n" +
+	"GetSession\x12\x1d.openbng.v1.GetSessionRequest\x1a\x13.openbng.v1.Session\x12]\n" +
 	"\x10TerminateSession\x12#.openbng.v1.TerminateSessionRequest\x1a$.openbng.v1.TerminateSessionResponse\x12f\n" +
 	"\x13GetOperationalStats\x12&.openbng.v1.GetOperationalStatsRequest\x1a'.openbng.v1.GetOperationalStatsResponse\x12]\n" +
 	"\x10ExecuteOperation\x12#.openbng.v1.ExecuteOperationRequest\x1a$.openbng.v1.ExecuteOperationResponse\x12S\n" +
@@ -1897,83 +1768,79 @@ func file_api_proto_bng_proto_rawDescGZIP() []byte {
 	return file_api_proto_bng_proto_rawDescData
 }
 
-var file_api_proto_bng_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
+var file_api_proto_bng_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_api_proto_bng_proto_goTypes = []any{
 	(*GetSessionsRequest)(nil),          // 0: openbng.v1.GetSessionsRequest
 	(*GetSessionsResponse)(nil),         // 1: openbng.v1.GetSessionsResponse
 	(*GetSessionRequest)(nil),           // 2: openbng.v1.GetSessionRequest
 	(*Session)(nil),                     // 3: openbng.v1.Session
-	(*GetStatsRequest)(nil),             // 4: openbng.v1.GetStatsRequest
-	(*Stats)(nil),                       // 5: openbng.v1.Stats
-	(*TerminateSessionRequest)(nil),     // 6: openbng.v1.TerminateSessionRequest
-	(*TerminateSessionResponse)(nil),    // 7: openbng.v1.TerminateSessionResponse
-	(*GetRunningConfigRequest)(nil),     // 8: openbng.v1.GetRunningConfigRequest
-	(*GetStartupConfigRequest)(nil),     // 9: openbng.v1.GetStartupConfigRequest
-	(*ConfigResponse)(nil),              // 10: openbng.v1.ConfigResponse
-	(*ListVersionsRequest)(nil),         // 11: openbng.v1.ListVersionsRequest
-	(*ListVersionsResponse)(nil),        // 12: openbng.v1.ListVersionsResponse
-	(*GetVersionRequest)(nil),           // 13: openbng.v1.GetVersionRequest
-	(*VersionResponse)(nil),             // 14: openbng.v1.VersionResponse
-	(*ConfigVersion)(nil),               // 15: openbng.v1.ConfigVersion
-	(*ConfigChange)(nil),                // 16: openbng.v1.ConfigChange
-	(*ConfigEnterRequest)(nil),          // 17: openbng.v1.ConfigEnterRequest
-	(*ConfigEnterResponse)(nil),         // 18: openbng.v1.ConfigEnterResponse
-	(*ConfigSetRequest)(nil),            // 19: openbng.v1.ConfigSetRequest
-	(*ConfigSetResponse)(nil),           // 20: openbng.v1.ConfigSetResponse
-	(*ConfigCommitRequest)(nil),         // 21: openbng.v1.ConfigCommitRequest
-	(*ConfigCommitResponse)(nil),        // 22: openbng.v1.ConfigCommitResponse
-	(*ConfigDiscardRequest)(nil),        // 23: openbng.v1.ConfigDiscardRequest
-	(*ConfigDiscardResponse)(nil),       // 24: openbng.v1.ConfigDiscardResponse
-	(*ConfigDiffRequest)(nil),           // 25: openbng.v1.ConfigDiffRequest
-	(*ConfigDiffResponse)(nil),          // 26: openbng.v1.ConfigDiffResponse
-	(*DiffLine)(nil),                    // 27: openbng.v1.DiffLine
-	(*GetOperationalStatsRequest)(nil),  // 28: openbng.v1.GetOperationalStatsRequest
-	(*GetOperationalStatsResponse)(nil), // 29: openbng.v1.GetOperationalStatsResponse
-	(*ExecuteOperationRequest)(nil),     // 30: openbng.v1.ExecuteOperationRequest
-	(*ExecuteOperationResponse)(nil),    // 31: openbng.v1.ExecuteOperationResponse
-	nil,                                 // 32: openbng.v1.GetOperationalStatsResponse.MetricsEntry
+	(*TerminateSessionRequest)(nil),     // 4: openbng.v1.TerminateSessionRequest
+	(*TerminateSessionResponse)(nil),    // 5: openbng.v1.TerminateSessionResponse
+	(*GetRunningConfigRequest)(nil),     // 6: openbng.v1.GetRunningConfigRequest
+	(*GetStartupConfigRequest)(nil),     // 7: openbng.v1.GetStartupConfigRequest
+	(*ConfigResponse)(nil),              // 8: openbng.v1.ConfigResponse
+	(*ListVersionsRequest)(nil),         // 9: openbng.v1.ListVersionsRequest
+	(*ListVersionsResponse)(nil),        // 10: openbng.v1.ListVersionsResponse
+	(*GetVersionRequest)(nil),           // 11: openbng.v1.GetVersionRequest
+	(*VersionResponse)(nil),             // 12: openbng.v1.VersionResponse
+	(*ConfigVersion)(nil),               // 13: openbng.v1.ConfigVersion
+	(*ConfigChange)(nil),                // 14: openbng.v1.ConfigChange
+	(*ConfigEnterRequest)(nil),          // 15: openbng.v1.ConfigEnterRequest
+	(*ConfigEnterResponse)(nil),         // 16: openbng.v1.ConfigEnterResponse
+	(*ConfigSetRequest)(nil),            // 17: openbng.v1.ConfigSetRequest
+	(*ConfigSetResponse)(nil),           // 18: openbng.v1.ConfigSetResponse
+	(*ConfigCommitRequest)(nil),         // 19: openbng.v1.ConfigCommitRequest
+	(*ConfigCommitResponse)(nil),        // 20: openbng.v1.ConfigCommitResponse
+	(*ConfigDiscardRequest)(nil),        // 21: openbng.v1.ConfigDiscardRequest
+	(*ConfigDiscardResponse)(nil),       // 22: openbng.v1.ConfigDiscardResponse
+	(*ConfigDiffRequest)(nil),           // 23: openbng.v1.ConfigDiffRequest
+	(*ConfigDiffResponse)(nil),          // 24: openbng.v1.ConfigDiffResponse
+	(*DiffLine)(nil),                    // 25: openbng.v1.DiffLine
+	(*GetOperationalStatsRequest)(nil),  // 26: openbng.v1.GetOperationalStatsRequest
+	(*GetOperationalStatsResponse)(nil), // 27: openbng.v1.GetOperationalStatsResponse
+	(*ExecuteOperationRequest)(nil),     // 28: openbng.v1.ExecuteOperationRequest
+	(*ExecuteOperationResponse)(nil),    // 29: openbng.v1.ExecuteOperationResponse
+	nil,                                 // 30: openbng.v1.GetOperationalStatsResponse.MetricsEntry
 }
 var file_api_proto_bng_proto_depIdxs = []int32{
 	3,  // 0: openbng.v1.GetSessionsResponse.sessions:type_name -> openbng.v1.Session
-	15, // 1: openbng.v1.ListVersionsResponse.versions:type_name -> openbng.v1.ConfigVersion
-	15, // 2: openbng.v1.VersionResponse.version:type_name -> openbng.v1.ConfigVersion
-	16, // 3: openbng.v1.ConfigVersion.changes:type_name -> openbng.v1.ConfigChange
-	27, // 4: openbng.v1.ConfigDiffResponse.added:type_name -> openbng.v1.DiffLine
-	27, // 5: openbng.v1.ConfigDiffResponse.deleted:type_name -> openbng.v1.DiffLine
-	27, // 6: openbng.v1.ConfigDiffResponse.modified:type_name -> openbng.v1.DiffLine
-	32, // 7: openbng.v1.GetOperationalStatsResponse.metrics:type_name -> openbng.v1.GetOperationalStatsResponse.MetricsEntry
+	13, // 1: openbng.v1.ListVersionsResponse.versions:type_name -> openbng.v1.ConfigVersion
+	13, // 2: openbng.v1.VersionResponse.version:type_name -> openbng.v1.ConfigVersion
+	14, // 3: openbng.v1.ConfigVersion.changes:type_name -> openbng.v1.ConfigChange
+	25, // 4: openbng.v1.ConfigDiffResponse.added:type_name -> openbng.v1.DiffLine
+	25, // 5: openbng.v1.ConfigDiffResponse.deleted:type_name -> openbng.v1.DiffLine
+	25, // 6: openbng.v1.ConfigDiffResponse.modified:type_name -> openbng.v1.DiffLine
+	30, // 7: openbng.v1.GetOperationalStatsResponse.metrics:type_name -> openbng.v1.GetOperationalStatsResponse.MetricsEntry
 	0,  // 8: openbng.v1.BNGService.GetSessions:input_type -> openbng.v1.GetSessionsRequest
 	2,  // 9: openbng.v1.BNGService.GetSession:input_type -> openbng.v1.GetSessionRequest
-	4,  // 10: openbng.v1.BNGService.GetStats:input_type -> openbng.v1.GetStatsRequest
-	6,  // 11: openbng.v1.BNGService.TerminateSession:input_type -> openbng.v1.TerminateSessionRequest
-	28, // 12: openbng.v1.BNGService.GetOperationalStats:input_type -> openbng.v1.GetOperationalStatsRequest
-	30, // 13: openbng.v1.BNGService.ExecuteOperation:input_type -> openbng.v1.ExecuteOperationRequest
-	8,  // 14: openbng.v1.BNGService.GetRunningConfig:input_type -> openbng.v1.GetRunningConfigRequest
-	9,  // 15: openbng.v1.BNGService.GetStartupConfig:input_type -> openbng.v1.GetStartupConfigRequest
-	11, // 16: openbng.v1.BNGService.ListVersions:input_type -> openbng.v1.ListVersionsRequest
-	13, // 17: openbng.v1.BNGService.GetVersion:input_type -> openbng.v1.GetVersionRequest
-	17, // 18: openbng.v1.BNGService.ConfigEnter:input_type -> openbng.v1.ConfigEnterRequest
-	19, // 19: openbng.v1.BNGService.ConfigSet:input_type -> openbng.v1.ConfigSetRequest
-	21, // 20: openbng.v1.BNGService.ConfigCommit:input_type -> openbng.v1.ConfigCommitRequest
-	23, // 21: openbng.v1.BNGService.ConfigDiscard:input_type -> openbng.v1.ConfigDiscardRequest
-	25, // 22: openbng.v1.BNGService.ConfigDiff:input_type -> openbng.v1.ConfigDiffRequest
-	1,  // 23: openbng.v1.BNGService.GetSessions:output_type -> openbng.v1.GetSessionsResponse
-	3,  // 24: openbng.v1.BNGService.GetSession:output_type -> openbng.v1.Session
-	5,  // 25: openbng.v1.BNGService.GetStats:output_type -> openbng.v1.Stats
-	7,  // 26: openbng.v1.BNGService.TerminateSession:output_type -> openbng.v1.TerminateSessionResponse
-	29, // 27: openbng.v1.BNGService.GetOperationalStats:output_type -> openbng.v1.GetOperationalStatsResponse
-	31, // 28: openbng.v1.BNGService.ExecuteOperation:output_type -> openbng.v1.ExecuteOperationResponse
-	10, // 29: openbng.v1.BNGService.GetRunningConfig:output_type -> openbng.v1.ConfigResponse
-	10, // 30: openbng.v1.BNGService.GetStartupConfig:output_type -> openbng.v1.ConfigResponse
-	12, // 31: openbng.v1.BNGService.ListVersions:output_type -> openbng.v1.ListVersionsResponse
-	14, // 32: openbng.v1.BNGService.GetVersion:output_type -> openbng.v1.VersionResponse
-	18, // 33: openbng.v1.BNGService.ConfigEnter:output_type -> openbng.v1.ConfigEnterResponse
-	20, // 34: openbng.v1.BNGService.ConfigSet:output_type -> openbng.v1.ConfigSetResponse
-	22, // 35: openbng.v1.BNGService.ConfigCommit:output_type -> openbng.v1.ConfigCommitResponse
-	24, // 36: openbng.v1.BNGService.ConfigDiscard:output_type -> openbng.v1.ConfigDiscardResponse
-	26, // 37: openbng.v1.BNGService.ConfigDiff:output_type -> openbng.v1.ConfigDiffResponse
-	23, // [23:38] is the sub-list for method output_type
-	8,  // [8:23] is the sub-list for method input_type
+	4,  // 10: openbng.v1.BNGService.TerminateSession:input_type -> openbng.v1.TerminateSessionRequest
+	26, // 11: openbng.v1.BNGService.GetOperationalStats:input_type -> openbng.v1.GetOperationalStatsRequest
+	28, // 12: openbng.v1.BNGService.ExecuteOperation:input_type -> openbng.v1.ExecuteOperationRequest
+	6,  // 13: openbng.v1.BNGService.GetRunningConfig:input_type -> openbng.v1.GetRunningConfigRequest
+	7,  // 14: openbng.v1.BNGService.GetStartupConfig:input_type -> openbng.v1.GetStartupConfigRequest
+	9,  // 15: openbng.v1.BNGService.ListVersions:input_type -> openbng.v1.ListVersionsRequest
+	11, // 16: openbng.v1.BNGService.GetVersion:input_type -> openbng.v1.GetVersionRequest
+	15, // 17: openbng.v1.BNGService.ConfigEnter:input_type -> openbng.v1.ConfigEnterRequest
+	17, // 18: openbng.v1.BNGService.ConfigSet:input_type -> openbng.v1.ConfigSetRequest
+	19, // 19: openbng.v1.BNGService.ConfigCommit:input_type -> openbng.v1.ConfigCommitRequest
+	21, // 20: openbng.v1.BNGService.ConfigDiscard:input_type -> openbng.v1.ConfigDiscardRequest
+	23, // 21: openbng.v1.BNGService.ConfigDiff:input_type -> openbng.v1.ConfigDiffRequest
+	1,  // 22: openbng.v1.BNGService.GetSessions:output_type -> openbng.v1.GetSessionsResponse
+	3,  // 23: openbng.v1.BNGService.GetSession:output_type -> openbng.v1.Session
+	5,  // 24: openbng.v1.BNGService.TerminateSession:output_type -> openbng.v1.TerminateSessionResponse
+	27, // 25: openbng.v1.BNGService.GetOperationalStats:output_type -> openbng.v1.GetOperationalStatsResponse
+	29, // 26: openbng.v1.BNGService.ExecuteOperation:output_type -> openbng.v1.ExecuteOperationResponse
+	8,  // 27: openbng.v1.BNGService.GetRunningConfig:output_type -> openbng.v1.ConfigResponse
+	8,  // 28: openbng.v1.BNGService.GetStartupConfig:output_type -> openbng.v1.ConfigResponse
+	10, // 29: openbng.v1.BNGService.ListVersions:output_type -> openbng.v1.ListVersionsResponse
+	12, // 30: openbng.v1.BNGService.GetVersion:output_type -> openbng.v1.VersionResponse
+	16, // 31: openbng.v1.BNGService.ConfigEnter:output_type -> openbng.v1.ConfigEnterResponse
+	18, // 32: openbng.v1.BNGService.ConfigSet:output_type -> openbng.v1.ConfigSetResponse
+	20, // 33: openbng.v1.BNGService.ConfigCommit:output_type -> openbng.v1.ConfigCommitResponse
+	22, // 34: openbng.v1.BNGService.ConfigDiscard:output_type -> openbng.v1.ConfigDiscardResponse
+	24, // 35: openbng.v1.BNGService.ConfigDiff:output_type -> openbng.v1.ConfigDiffResponse
+	22, // [22:36] is the sub-list for method output_type
+	8,  // [8:22] is the sub-list for method input_type
 	8,  // [8:8] is the sub-list for extension type_name
 	8,  // [8:8] is the sub-list for extension extendee
 	0,  // [0:8] is the sub-list for field type_name
@@ -1990,7 +1857,7 @@ func file_api_proto_bng_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_bng_proto_rawDesc), len(file_api_proto_bng_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   33,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
