@@ -19,13 +19,13 @@ func init() {
 	show.RegisterFactory(func(d *deps.ShowDeps) show.ShowHandler {
 		return &SRGStateHandler{deps: d}
 	})
-	telemetry.RegisterMetricMulti[SRGStateInfo](paths.HASRGState)
+	telemetry.RegisterMetric[SRGStateInfo](paths.HASRGState)
 }
 
 type SRGStateInfo struct {
 	SRG    string `json:"srg"    metric:"label"`
 	State  string `json:"state"  metric:"label"`
-	Active uint64 `json:"active" metric:"name=ha.srg.state,type=gauge,help=1 if the SRG is currently in this state on this peer."`
+	Active uint64 `json:"active" metric:"name=ha.srg.state,type=gauge,help=1 if the SRG is currently in this state on this peer.,retain_stale"`
 }
 
 type SRGStateHandler struct {

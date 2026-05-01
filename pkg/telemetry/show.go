@@ -6,6 +6,7 @@ package telemetry
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"sync"
 	"time"
@@ -34,58 +35,82 @@ type Logger interface {
 	Warn(msg string, args ...any)
 }
 
-type pendingShowMetric struct {
-	build func(reg *Registry) emitFn
+// RegisterOption configures RegisterMetric registration. Currently only
+// WithDecoder is exposed; future shape-specific options can be added here
+// without changing the call signature for existing callers.
+type RegisterOption func(*registration)
+
+type registration struct {
+	decoder func(any) (any, error)
 }
 
-type emitFn func(snap any)
+// WithDecoder adapts a show handler that returns interface{} or
+// json.RawMessage. The decoder runs before the walker each poll; its
+// return must be a value the walker can iterate as T (or a collection
+// thereof). Panics from decoder OR walker are recovered per poll with a
+// one-shot warn log; the ticker survives. Documented as a stop-gap for
+// handlers awaiting a typed-return refactor.
+func WithDecoder(fn func(any) (any, error)) RegisterOption {
+	return func(r *registration) { r.decoder = fn }
+}
+
+type pendingShowMetric struct {
+	typ     reflect.Type
+	metrics *structMetrics
+	decoder func(any) (any, error)
+
+	lifecycleMu sync.Mutex
+	prev        *pollState
+}
 
 var (
 	pendingShowMu sync.Mutex
-	pendingShows  = make(map[string]pendingShowMetric)
+	pendingShows  = make(map[string]*pendingShowMetric)
 )
 
-// RegisterMetricSingle binds metrics for T (carrying `metric:"..."` tags)
-// to the show handler at path. The handler's snapshot is emitted as a
-// single, no-label instance every time the owning component polls.
+// RegisterMetric binds metrics for T to the show handler at path. T is
+// always the element type; the walker auto-detects the handler's return
+// shape (struct, pointer, slice, slice-of-pointer, map[K]V, map[K][]V).
 //
 // Plugin authors call this from their show handler's init(). Polling is
-// driven separately by the owning component's PollShowPath call once
-// the component is started.
-func RegisterMetricSingle[T any](path pathLike) {
-	p := path.String()
-	pendingShowMu.Lock()
-	pendingShows[p] = pendingShowMetric{
-		build: func(reg *Registry) emitFn {
-			sm := MustRegisterStructWith[T](reg, RegisterOpts{})
-			h := sm.WithLabelValues()
-			return func(snap any) {
-				t, ok := coerceTo[T](snap)
-				if !ok {
-					return
-				}
-				sm.EmitFrom(h, t)
-			}
-		},
+// driven separately by StartShowPollers (one call from main.go).
+//
+// Programmer errors panic at registration time:
+//   - Calling RegisterMetric twice for the same path with a different T
+//     panics with ErrTypeMismatch.
+//   - Idempotent re-registration with the same T is a no-op.
+//   - Tag conflicts, label-name collisions, duplicate metric names across
+//     flatten paths, cyclic flatten types, dual map_key fields, and
+//     invalid flatten kinds all panic via bindShowType.
+func RegisterMetric[T any](path pathLike, opts ...RegisterOption) {
+	var reg registration
+	for _, o := range opts {
+		o(&reg)
 	}
-	pendingShowMu.Unlock()
-}
 
-// RegisterMetricMulti binds metrics for T to a show handler that returns
-// []T or []*T. T's `metric:"label"` fields supply per-instance label
-// values; remaining tagged fields supply per-instance values.
-func RegisterMetricMulti[T any](path pathLike) {
+	var zero T
+	typ := reflect.TypeOf(zero)
+	if typ == nil || typ.Kind() != reflect.Struct {
+		panic(fmt.Errorf("telemetry: RegisterMetric: T must be a struct, got %T", zero))
+	}
+
 	p := path.String()
 	pendingShowMu.Lock()
-	pendingShows[p] = pendingShowMetric{
-		build: func(reg *Registry) emitFn {
-			sm := MustRegisterStructWith[T](reg, RegisterOpts{})
-			return func(snap any) {
-				forEachAs(snap, sm.EmitInstance)
-			}
-		},
+	defer pendingShowMu.Unlock()
+
+	if existing, ok := pendingShows[p]; ok {
+		if existing.typ != typ {
+			panic(fmt.Errorf("%w: path=%q existing=%s new=%s", ErrTypeMismatch, p, existing.typ, typ))
+		}
+		return
 	}
-	pendingShowMu.Unlock()
+
+	sm := bindShowType(defaultRegistry, typ)
+	pendingShows[p] = &pendingShowMetric{
+		typ:     typ,
+		metrics: sm,
+		decoder: reg.decoder,
+	}
 }
 
 // showPollInterval is the SDK's fixed cadence for show-handler polls.
@@ -93,33 +118,35 @@ func RegisterMetricMulti[T any](path pathLike) {
 // as an operator knob; this is the baseline behaviour of the platform.
 const showPollInterval = 10 * time.Second
 
-// StartShowPollers wires every queued RegisterMetricSingle / RegisterMetricMulti
-// to a poll loop against src, and ticks them at the SDK's fixed cadence.
-// cmd/osvbngd/main.go calls this once after the show registry is fully
-// populated; plugin authors never call it.
+// StartShowPollers wires every queued RegisterMetric to a poll loop
+// against src and ticks them at the SDK's fixed cadence. cmd/osvbngd/main.go
+// calls this once after the show registry is fully populated; plugin
+// authors never call it.
 //
 // Show handlers whose underlying component is disabled return (nil, nil)
 // or empty slices, and the SDK silently skips emit on those. Real
-// Snapshot errors are logged at warn through log; pass log=nil to disable.
+// Snapshot errors and decoder errors log warn through log; pass log=nil
+// to disable. Panics in decoder, walker, or any reflection step are
+// recovered per poll with a one-shot warn; the ticker survives.
 func StartShowPollers(ctx context.Context, src ShowSource, log Logger) {
 	pendingShowMu.Lock()
-	pending := make(map[string]pendingShowMetric, len(pendingShows))
+	pending := make([]*pendingShowMetric, 0, len(pendingShows))
+	paths := make([]string, 0, len(pendingShows))
 	for p, m := range pendingShows {
-		pending[p] = m
+		pending = append(pending, m)
+		paths = append(paths, p)
 	}
 	pendingShowMu.Unlock()
 
-	for path, m := range pending {
-		emit := m.build(defaultRegistry)
-		path := path
-		go pollLoop(ctx, src, path, emit, log)
+	for i := range pending {
+		m := pending[i]
+		path := paths[i]
+		go pollLoop(ctx, src, path, m, log)
 	}
 }
 
-func pollLoop(ctx context.Context, src ShowSource, path string, emit emitFn, log Logger) {
-	defer func() { _ = recover() }()
-
-	pollOnce(ctx, src, path, emit, log)
+func pollLoop(ctx context.Context, src ShowSource, path string, m *pendingShowMetric, log Logger) {
+	pollOnce(ctx, src, path, m, log)
 
 	ticker := time.NewTicker(showPollInterval)
 	defer ticker.Stop()
@@ -128,26 +155,53 @@ func pollLoop(ctx context.Context, src ShowSource, path string, emit emitFn, log
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			pollOnce(ctx, src, path, emit, log)
+			pollOnce(ctx, src, path, m, log)
 		}
 	}
 }
 
-func pollOnce(ctx context.Context, src ShowSource, path string, emit emitFn, log Logger) {
+func pollOnce(ctx context.Context, src ShowSource, path string, m *pendingShowMetric, log Logger) {
+	defer func() {
+		if r := recover(); r != nil {
+			warnOnce(path, "panic", log, "telemetry: show poll panicked", "panic", fmt.Sprintf("%v", r))
+		}
+	}()
+
 	snap, err := src.Snapshot(ctx, path)
 	if err != nil {
 		if ctx.Err() != nil {
 			return
 		}
-		if log != nil {
-			log.Warn("telemetry: show poll failed", "path", path, "error", err)
-		}
+		warnOnce(path, "snapshot_error", log, "telemetry: show poll failed", "error", err)
 		return
 	}
 	if isNilOrEmpty(snap) {
 		return
 	}
-	emit(snap)
+
+	if m.decoder != nil {
+		decoded, derr := m.decoder(snap)
+		if derr != nil {
+			warnOnce(path, "decoder_error", log, "telemetry: show decoder failed", "error", derr)
+			return
+		}
+		if isNilOrEmpty(decoded) {
+			return
+		}
+		snap = decoded
+	}
+
+	rv := reflect.ValueOf(snap)
+	if !rv.IsValid() {
+		return
+	}
+
+	current := newPollState()
+	m.metrics.walk(rv, current)
+
+	m.lifecycleMu.Lock()
+	m.prev = reconcile(m.prev, current)
+	m.lifecycleMu.Unlock()
 }
 
 func isNilOrEmpty(v any) bool {
@@ -164,69 +218,21 @@ func isNilOrEmpty(v any) bool {
 	return false
 }
 
-func coerceTo[T any](v any) (*T, bool) {
-	if t, ok := v.(*T); ok {
-		return t, true
-	}
-	if t, ok := v.(T); ok {
-		return &t, true
-	}
-	rv := reflect.ValueOf(v)
-	for rv.Kind() == reflect.Ptr {
-		if rv.IsNil() {
-			return nil, false
-		}
-		rv = rv.Elem()
-	}
-	if t, ok := rv.Interface().(T); ok {
-		return &t, true
-	}
-	return nil, false
-}
+// warnOnce emits a warn log for (path, kind) at most once per process.
+// kind is a short tag like "snapshot_error", "decoder_error", "panic" so
+// distinct failure modes against the same path are each surfaced once.
+var warnLogged sync.Map // key: path+"|"+kind, value: struct{}
 
-func forEachAs[T any](v any, fn func(*T)) {
-	if vs, ok := v.([]T); ok {
-		for i := range vs {
-			fn(&vs[i])
-		}
+func warnOnce(path, kind string, log Logger, msg string, kv ...any) {
+	if log == nil {
 		return
 	}
-	if vs, ok := v.([]*T); ok {
-		for _, p := range vs {
-			if p != nil {
-				fn(p)
-			}
-		}
+	key := path + "|" + kind
+	if _, loaded := warnLogged.LoadOrStore(key, struct{}{}); loaded {
 		return
 	}
-	rv := reflect.ValueOf(v)
-	for rv.Kind() == reflect.Ptr {
-		if rv.IsNil() {
-			return
-		}
-		rv = rv.Elem()
-	}
-	if rv.Kind() != reflect.Slice {
-		return
-	}
-	for i := 0; i < rv.Len(); i++ {
-		el := rv.Index(i)
-		for el.Kind() == reflect.Ptr {
-			if el.IsNil() {
-				goto next
-			}
-			el = el.Elem()
-		}
-		if el.Kind() == reflect.Struct {
-			if !el.CanAddr() {
-				cp := reflect.New(el.Type()).Elem()
-				cp.Set(el)
-				el = cp
-			}
-			if t, ok := el.Addr().Interface().(*T); ok {
-				fn(t)
-			}
-		}
-	next:
-	}
+	args := make([]any, 0, len(kv)+2)
+	args = append(args, "path", path)
+	args = append(args, kv...)
+	log.Warn(msg, args...)
 }

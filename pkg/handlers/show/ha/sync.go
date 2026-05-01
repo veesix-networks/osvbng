@@ -18,7 +18,7 @@ func init() {
 	show.RegisterFactory(func(d *deps.ShowDeps) show.ShowHandler {
 		return &SyncHandler{deps: d}
 	})
-	telemetry.RegisterMetricMulti[ha.SyncSRGStatus](paths.HASync)
+	telemetry.RegisterMetric[ha.SyncSRGStatus](paths.HASync)
 }
 
 type SyncHandler struct {

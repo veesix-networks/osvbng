@@ -12,7 +12,7 @@ import (
 
 func init() {
 	show.RegisterFactory(NewBuffersHandler)
-	telemetry.RegisterMetricMulti[southbound.BufferStats](paths.SystemDataplaneBuffers)
+	telemetry.RegisterMetric[southbound.BufferStats](paths.SystemDataplaneBuffers)
 }
 
 type BuffersHandler struct {

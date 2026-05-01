@@ -386,6 +386,9 @@ func (h *StructHandles) Histogram(goFieldName string) *HistogramHandle {
 type metricSpec struct {
 	isLabel       bool
 	labelName     string // explicit label wire name, optional
+	mapKey        bool   // field receives the map key when source is map[K]V; implies isLabel
+	flatten       bool   // descend into struct/slice/map/pointer-to-those at emit
+	retainStale   bool   // skip default clear_on_absent unregister for this value-metric (D11)
 	name          string
 	kind          string // "counter", "gauge", "histogram"
 	help          string
@@ -438,6 +441,13 @@ func parseMetricTag(tag string) metricSpec {
 		switch {
 		case !hasEq && key == "label":
 			spec.isLabel = true
+		case !hasEq && key == "map_key":
+			spec.isLabel = true
+			spec.mapKey = true
+		case !hasEq && key == "flatten":
+			spec.flatten = true
+		case !hasEq && key == "retain_stale":
+			spec.retainStale = true
 		case !hasEq && (key == "counter" || key == "gauge" || key == "histogram"):
 			spec.kind = key
 		case !hasEq && key == "streaming_only":

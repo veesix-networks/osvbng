@@ -12,7 +12,7 @@ import (
 
 func init() {
 	show.RegisterFactory(NewMemoryHandler)
-	telemetry.RegisterMetricMulti[southbound.MemoryStats](paths.SystemDataplaneMemory)
+	telemetry.RegisterMetric[southbound.MemoryStats](paths.SystemDataplaneMemory)
 }
 
 type MemoryHandler struct {

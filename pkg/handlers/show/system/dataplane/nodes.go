@@ -12,7 +12,7 @@ import (
 
 func init() {
 	show.RegisterFactory(NewNodesHandler)
-	telemetry.RegisterMetricMulti[southbound.NodeStats](paths.SystemDataplaneNodes)
+	telemetry.RegisterMetric[southbound.NodeStats](paths.SystemDataplaneNodes)
 }
 
 type NodesHandler struct {

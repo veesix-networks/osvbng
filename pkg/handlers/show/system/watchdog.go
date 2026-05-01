@@ -33,7 +33,7 @@ func init() {
 	show.RegisterFactory(func(deps *deps.ShowDeps) show.ShowHandler {
 		return &WatchdogHandler{deps: deps}
 	})
-	telemetry.RegisterMetricMulti[WatchdogTargetInfo](paths.SystemWatchdog)
+	telemetry.RegisterMetric[WatchdogTargetInfo](paths.SystemWatchdog)
 }
 
 func (h *WatchdogHandler) Collect(ctx context.Context, req *show.Request) (interface{}, error) {
