@@ -17,7 +17,7 @@ func init() {
 	show.RegisterFactory(func(d *deps.ShowDeps) show.ShowHandler {
 		return &PeerHandler{deps: d}
 	})
-	telemetry.RegisterMetricSingle[PeerDetail](paths.HAPeer)
+	telemetry.RegisterMetric[PeerDetail](paths.HAPeer)
 }
 
 type PeerHandler struct {

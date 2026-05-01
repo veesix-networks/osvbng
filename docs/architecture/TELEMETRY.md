@@ -146,4 +146,162 @@ The registry is per-process. In dual-active SRG deployments, each peer publishes
 
 ## Integration points
 
-The poller pool, Prometheus exporter rewrite, gRPC streaming exporter, FRR migration, and gNMI gateway are separate work items that build on this SDK. The exporters all consume the registry through `AppendSnapshot` or `Subscribe`; plugin authors emit through the typed primitives without knowing the wire formats.
+Exporters consume the registry through one of two interfaces:
+
+- **Pull** via `AppendSnapshot(dst, opts)`. The Prometheus exporter calls this on every scrape and renders the result. The caller owns the destination buffer; counter and gauge samples are allocation-free, histograms allocate one bucket slice per series.
+- **Push** via `Subscribe(opts)`. A streaming consumer receives only the metrics whose dirty flag was set since the last tick, on a single registry-internal goroutine. Per-subscriber channels are bounded with drop-only overflow.
+
+Plugin authors emit through the typed primitives (or the higher-level `MustRegisterStruct[T]` / `RegisterMetric[T]` helpers) without knowing which exporter is reading.
+
+## Show-handler-driven metrics: `RegisterMetric[T]`
+
+State-shaped data already exposed via a show handler can register metrics in one line. The plugin author tags the show handler's return type and adds a single call in `init()`:
+
+```go
+func init() {
+    show.RegisterFactory(NewSystemHandler)
+    telemetry.RegisterMetric[southbound.SystemStats](paths.SystemDataplaneSystem)
+}
+```
+
+`T` is always the element type. The walker auto-detects the handler's return shape from the snapshot's `reflect.Kind`:
+
+| Handler return | Walker action |
+|---|---|
+| `T`, `*T`, `**T` | single instance |
+| `[]T`, `[]*T` | iterate, emit per element |
+| `map[K]T`, `map[K]*T` | iterate, key projects into the `metric:"map_key"` field |
+| `map[K][]T`, `map[K][]*T` | iterate, flatten elements, key projects into the `metric:"map_key"` field |
+
+### Tag reference
+
+| Tag fragment | Effect |
+|---|---|
+| `label` | field is a label (wire name = lowercased Go field by default) |
+| `label=area` | label, explicit wire name |
+| `label,map_key` | label that receives the map key when the source is a map |
+| `name=domain.metric,type=counter,help=...` | value-metric (counter) |
+| `name=...,type=gauge,help=...` | value-metric (gauge) |
+| `name=...,type=histogram,help=...,buckets=0.01;0.05;0.1;0.5;1` | value-metric (histogram) |
+| `flatten` | descend into a nested struct/slice/array/map field |
+| `retain_stale` | skip the default clear-on-absent unregister for this value-metric |
+| `streaming_only` | exclude from default Snapshot (Prometheus-safe) |
+
+### Handler ownership contract
+
+Show handlers MUST return an immutable, handler-owned snapshot for any map, slice, or nested collection. The SDK does NOT copy. Reflective iteration races with concurrent writes the same way native map iteration does, so handler returns must be immutable from the moment the handler returns.
+
+### Series lifecycle
+
+Default `clear_on_absent`: the walker tracks every emitted `(metric, label-tuple)` pair per poll. After a successful poll, tuples that were present in the previous successful poll but absent in the new poll are unregistered. Snapshot or decoder errors do NOT advance the previous set, so transient FRR/VPP failures do not trigger mass unregister.
+
+Opt-in `metric:"retain_stale"` on a value-metric field: the SDK never unregisters tuples for that field. Use this when the desired Prometheus query semantic is "this thing existed historically and I want to see its last state", such as the HA SRG-state gauge that emits `Active=0` for prior states. The plugin author is then responsible for re-emitting sentinel values for stale tuples.
+
+### Two emission models
+
+| Pattern | When to use |
+|---|---|
+| Hot-path push (`MustRegisterStruct[T]` + `handle.Inc/Set`) | per-packet, per-session, per-request counters where every event is on the critical path. Example: `internal/aaa/stats.go`. |
+| Show-driven pull (`RegisterMetric[T](path)`) | state-shaped data already exposed via a show handler. Example: VPP system/interface/node stats, HA peer status, watchdog target health. |
+
+The two coexist. Hot-path push gives the hottest possible loop with no reflection at emit time. Show-driven pull keeps plugin folders self-contained: registration, tagging, and component lifecycle live in the same package as the show handler.
+
+### Examples
+
+Single instance, no labels:
+
+```go
+type Stats struct {
+    PeerCount uint64 `metric:"name=bgp.peers,type=gauge,help=Total BGP peers."`
+    Routes    uint64 `metric:"name=bgp.routes,type=gauge,help=Total BGP routes."`
+}
+
+func init() {
+    show.RegisterFactory(NewStatisticsHandler)
+    telemetry.RegisterMetric[Stats](paths.ProtocolsBGPStatistics)
+}
+```
+
+Multi-instance from a slice:
+
+```go
+type Session struct {
+    AccessType string `json:"access_type" metric:"label"`
+    Protocol   string `json:"protocol"    metric:"label"`
+    RxBytes    uint64 `json:"rx_bytes"    metric:"name=subscriber.session.rx_bytes,type=counter,help=..."`
+}
+
+func init() {
+    show.RegisterFactory(NewSessionsHandler)
+    telemetry.RegisterMetric[Session](paths.SubscriberSessions)
+}
+```
+
+Multi-instance from a map (key projects to a label):
+
+```go
+type Neighbor struct {
+    Area   string `json:"area"    metric:"label,map_key"`
+    PeerID string `json:"peer_id" metric:"label"`
+    UpSecs uint64 `json:"up_secs" metric:"name=ospf.neighbor.up_seconds,type=gauge,help=..."`
+}
+
+// Handler returns map[string][]Neighbor keyed by area.
+func init() {
+    show.RegisterFactory(NewOSPFNeighborsHandler)
+    telemetry.RegisterMetric[Neighbor](paths.ProtocolsOSPFNeighbors)
+}
+```
+
+Nested via `metric:"flatten"`:
+
+```go
+type Pool struct {
+    Name  string `metric:"label"`
+    InUse uint64 `metric:"name=cgnat.pool.in_use,type=gauge,help=..."`
+}
+
+type Stats struct {
+    ActiveSessions uint64 `metric:"name=cgnat.sessions.active,type=gauge,help=..."`
+    Pools          []Pool `metric:"flatten"`
+}
+
+func init() {
+    show.RegisterFactory(NewStatsHandler)
+    telemetry.RegisterMetric[Stats](paths.CGNATStatistics)
+}
+```
+
+Outer struct's labels propagate inward. Multiple flatten siblings emit independently.
+
+Opaque return via `WithDecoder` (stop-gap for handlers awaiting a typed-return refactor):
+
+```go
+telemetry.RegisterMetric[BGPNeighbor](
+    paths.ProtocolsBGPNeighbors,
+    telemetry.WithDecoder(func(v any) (any, error) {
+        raw, ok := v.(json.RawMessage)
+        if !ok {
+            return nil, fmt.Errorf("expected json.RawMessage, got %T", v)
+        }
+        var out []BGPNeighbor
+        return out, json.Unmarshal(raw, &out)
+    }),
+)
+```
+
+Documented as a stop-gap. The preferred long-term answer is to refactor the handler to return a typed value directly; the decoder then collapses to a plain `RegisterMetric[T](path)` call.
+
+### Registration errors (panic at process start)
+
+A misconfigured plugin fails to start rather than silently emitting wrong data. The walker validates everything at `RegisterMetric` time, not first poll:
+
+- Two `RegisterMetric` calls for the same path with different `T` (returns `ErrTypeMismatch`).
+- Tag conflicts (`flatten` combined with a value-metric tag).
+- `flatten` on a non-{struct, slice, array, map, pointer-to-those} kind.
+- Cyclic flatten paths.
+- Two `map_key` fields on the same `T`.
+- `map_key` on a kind that is not string, signed integer, unsigned integer, or bool.
+- Combined inherited + local label wire names not unique for any leaf metric.
+- Two flatten paths producing the same fully-qualified metric name (`ErrSchemaMismatch`).
+- Nested map shapes (`map[K1]map[K2]V`, `*map[K]V`, `[]map[K]V`).

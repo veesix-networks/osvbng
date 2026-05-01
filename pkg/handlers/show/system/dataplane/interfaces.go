@@ -12,7 +12,7 @@ import (
 
 func init() {
 	show.RegisterFactory(NewInterfacesHandler)
-	telemetry.RegisterMetricMulti[southbound.InterfaceStats](paths.SystemDataplaneInterfaces)
+	telemetry.RegisterMetric[southbound.InterfaceStats](paths.SystemDataplaneInterfaces)
 }
 
 type InterfacesHandler struct {

@@ -58,7 +58,6 @@ nav:
     - High Availability: configuration/ha.md
     - System: configuration/system.md
     - Monitoring: configuration/monitoring.md
-    - Telemetry SDK: configuration/telemetry.md
     - Plugins:
       - Overview: configuration/plugins.md
       - subscriber.auth.local: configuration/plugins/auth-local.md

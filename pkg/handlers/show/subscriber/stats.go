@@ -12,7 +12,7 @@ import (
 
 func init() {
 	show.RegisterFactory(NewStatsHandler)
-	telemetry.RegisterMetricSingle[subscriberComp.SessionStats](paths.SubscriberStats)
+	telemetry.RegisterMetric[subscriberComp.SessionStats](paths.SubscriberStats)
 }
 
 type StatsHandler struct {
