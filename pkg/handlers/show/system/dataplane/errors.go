@@ -12,7 +12,7 @@ import (
 
 func init() {
 	show.RegisterFactory(NewErrorsHandler)
-	telemetry.RegisterMetricMulti[southbound.ErrorStats](paths.SystemDataplaneErrors)
+	telemetry.RegisterMetric[southbound.ErrorStats](paths.SystemDataplaneErrors)
 }
 
 type ErrorsHandler struct {
