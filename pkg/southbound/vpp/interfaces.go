@@ -326,7 +326,7 @@ func (v *VPP) SetInterfacePromiscuous(ifaceName string, on bool) error {
 		if vppErr := v.setInterfacePromiscVPP(ifaceName, on); vppErr != nil {
 			return fmt.Errorf("set promiscuous on %s: find linux interface: %w; vpp: %v", ifaceName, err, vppErr)
 		}
-		v.logger.Info("Set interface promiscuous via VPP (linux link unavailable)", "interface", ifaceName, "on", on)
+		v.logger.Warn("Set interface promiscuous via VPP (linux link unavailable)", "interface", ifaceName, "on", on)
 		return nil
 	}
 	if h != nil {
