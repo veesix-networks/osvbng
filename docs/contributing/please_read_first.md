@@ -12,6 +12,9 @@
 - [golangci-lint](https://golangci-lint.run/docs/welcome/install/local/)
 - Docker & Docker Compose (for local testing)
 
+!!! tip "Prefer a sandboxed VM?"
+    If you'd rather not install Go, VPP, FRR, or Docker on your host directly, see [Development VM (QEMU/KVM)](#development-vm-qemukvm) — `make dev-vm` provisions a Debian 12 VM with the full toolchain pre-installed.
+
 ## Clone and Build
 
 ```bash
@@ -31,6 +34,98 @@ cd docker/dev
 ```
 
 This builds the Docker image, creates the network topology, and starts osvbng.
+
+## Development VM (QEMU/KVM)
+
+For QEMU image work, dataplane changes, or to keep your host clean of VPP/FRR/kernel-module tweaks, `make dev-vm` provisions a Debian 12 VM via libvirt with the full toolchain (Go, VPP, FRR, Docker, containerlab, packer) pre-installed and your SSH key authorised. The Docker smoke test in `docker/dev/` runs unchanged inside the VM.
+
+### Host prerequisites (Debian / Ubuntu / Pop!_OS)
+
+```bash
+sudo apt install -y \
+    virtinst \
+    libvirt-daemon-system \
+    cloud-image-utils \
+    qemu-utils \
+    whiptail \
+    rsync
+
+sudo usermod -aG libvirt $USER
+newgrp libvirt           # or log out and back in
+```
+
+You also need an SSH public key in `~/.ssh/`. If you don't have one: `ssh-keygen`.
+
+!!! warning "Don't run `make dev-vm` with sudo"
+    The script issues its own `sudo` calls where needed and resolves your SSH key via `$HOME`. Running the whole thing with `sudo` makes it search `/root/.ssh/` and fail with `No SSH public keys found`.
+
+### Create the VM
+
+```bash
+make dev-vm
+```
+
+Downloads the Debian 12 cloud image (~400 MB, cached), creates a 30 GB qcow2 disk, defines a 6 GB / 4 vCPU domain named `osvbng-dev`, then SSHes in and runs the provisioner. First run takes ~10 minutes; subsequent recreates are faster. Override defaults via env: `VM_MEMORY=8192 make dev-vm`.
+
+### Sync your code
+
+```bash
+make dev-vm-sync
+```
+
+Rsyncs the working tree into `/home/dev/osvbng/` in the VM (excludes `.git/`, `bin/`, `output/`, `*.qcow2`).
+
+### Reprovision after `versions.env` changes
+
+```bash
+make dev-vm-provision
+```
+
+Re-runs the provisioner with the current `versions.env` so VPP / FRR / Go versions match the project pin.
+
+### Connecting to the VM
+
+The VM gets a libvirt-DHCP lease on the `default` network (typically `192.168.122.0/24`); the IP can change on recreate. Look it up:
+
+```bash
+virsh -c qemu:///system domifaddr osvbng-dev | awk '/ipv4/ {split($4,a,"/"); print a[1]}'
+```
+
+Add a host alias once and update the IP after each recreate:
+
+```sshconfig
+# ~/.ssh/config
+Host osvbng-dev
+    HostName 192.168.122.X
+    User dev
+    StrictHostKeyChecking accept-new
+    UserKnownHostsFile /dev/null
+    LogLevel ERROR
+```
+
+Then: `ssh osvbng-dev`.
+
+### Reaching osvbng services from your host browser
+
+When you run the in-VM Docker smoke test (`docker/dev/dev.sh start`), osvbng listens on a Docker bridge *inside* the VM (`172.30.0.2:8080/9090/50050`), so it isn't directly reachable from the host. Forward the ports over SSH:
+
+```bash
+ssh -L 8080:172.30.0.2:8080 \
+    -L 9090:172.30.0.2:9090 \
+    -L 50050:172.30.0.2:50050 \
+    osvbng-dev
+```
+
+Leave that session open and open `http://localhost:8080/api/docs` on the host. Grafana is already published to the VM's `eth0:3000`, so it's reachable directly at `http://<vm-ip>:3000` (admin/admin).
+
+### VM lifecycle
+
+```bash
+virsh start osvbng-dev
+virsh shutdown osvbng-dev
+virsh destroy osvbng-dev                              # force stop
+virsh undefine osvbng-dev --remove-all-storage        # delete entirely
+```
 
 ## Development
 
