@@ -1,0 +1,26 @@
+{{- if .Values.multus.enabled }}
+---
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: osvbng-access
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.1",
+      "type": "host-device",
+      "device": "{{ .Values.multus.osvbng.devices.accessHostDevice }}"
+    }
+---
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: osvbng-core
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.1",
+      "type": "host-device",
+      "device": "{{ .Values.multus.osvbng.devices.coreHostDevice }}"
+    }
+{{- end }}

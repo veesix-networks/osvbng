@@ -1,0 +1,5 @@
+apiVersion: v2
+name: osvbng
+version: 0.1.0
+type: application
+appVersion: v0.0.3
