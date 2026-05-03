@@ -39,7 +39,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -s https://packagecloud.io/install/repositories/fdio/release/script.deb.sh | bash
 
 ARG VPP_INSTALL_SKIP_SYSCTL=true
-ARG DATAPLANE_VERSION=25.10-release
+ARG DATAPLANE_VERSION=26.02-release
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     numactl \
