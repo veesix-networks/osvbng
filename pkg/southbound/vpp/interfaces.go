@@ -321,21 +321,63 @@ func (v *VPP) GetInterfaceIndex(name string) (int, error) {
 }
 
 func (v *VPP) SetInterfacePromiscuous(ifaceName string, on bool) error {
-	link, err := netlink.LinkByName(ifaceName)
+	link, h, err := v.findLink(ifaceName)
 	if err != nil {
-		return fmt.Errorf("find linux interface %s: %w", ifaceName, err)
+		if vppErr := v.setInterfacePromiscVPP(ifaceName, on); vppErr != nil {
+			return fmt.Errorf("set promiscuous on %s: find linux interface: %w; vpp: %v", ifaceName, err, vppErr)
+		}
+		v.logger.Warn("Set interface promiscuous via VPP (linux link unavailable)", "interface", ifaceName, "on", on)
+		return nil
 	}
-	if on {
-		if err := netlink.SetPromiscOn(link); err != nil {
-			return fmt.Errorf("set promiscuous on %s: %w", ifaceName, err)
+	if h != nil {
+		if on {
+			if err := h.SetPromiscOn(link); err != nil {
+				return fmt.Errorf("set promiscuous on %s: %w", ifaceName, err)
+			}
+		} else {
+			if err := h.SetPromiscOff(link); err != nil {
+				return fmt.Errorf("set promiscuous off %s: %w", ifaceName, err)
+			}
 		}
 	} else {
-		if err := netlink.SetPromiscOff(link); err != nil {
-			return fmt.Errorf("set promiscuous off %s: %w", ifaceName, err)
+		if on {
+			if err := netlink.SetPromiscOn(link); err != nil {
+				return fmt.Errorf("set promiscuous on %s: %w", ifaceName, err)
+			}
+		} else {
+			if err := netlink.SetPromiscOff(link); err != nil {
+				return fmt.Errorf("set promiscuous off %s: %w", ifaceName, err)
+			}
 		}
 	}
 
 	v.logger.Debug("Set interface promiscuous", "interface", ifaceName, "on", on)
+	return nil
+}
+
+func (v *VPP) setInterfacePromiscVPP(ifaceName string, on bool) error {
+	idx, err := v.GetInterfaceIndex(ifaceName)
+	if err != nil {
+		return fmt.Errorf("get interface index: %w", err)
+	}
+
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	req := &vppinterfaces.SwInterfaceSetPromisc{
+		SwIfIndex: interface_types.InterfaceIndex(idx),
+		PromiscOn: on,
+	}
+	reply := &vppinterfaces.SwInterfaceSetPromiscReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("sw_interface_set_promisc: %w", err)
+	}
+	if reply.Retval != 0 {
+		return fmt.Errorf("sw_interface_set_promisc: retval=%d", reply.Retval)
+	}
 	return nil
 }
 
@@ -473,7 +515,6 @@ func (v *VPP) getInterfaceAddresses(swIfIndex interface_types.InterfaceIndex) (m
 
 	return addrs, nil
 }
-
 
 func (v *VPP) DumpInterfaces() ([]southbound.InterfaceInfo, error) {
 	ch, err := v.conn.NewAPIChannel()
