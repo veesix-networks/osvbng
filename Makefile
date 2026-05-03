@@ -2,7 +2,7 @@
 # Licensed under the GNU General Public License v3.0 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-.PHONY: all build generate generate-proto clean run test cli build-cli docker-local docker-kea-local lint fmt robot-test clean-branches
+.PHONY: all build generate generate-proto clean run test cli build-cli docker-local docker-kea-local lint fmt robot-test clean-branches dev-vm dev-vm-sync
 
 all: generate build
 
@@ -78,5 +78,14 @@ clean-branches:
 	git branch --format='%(refname:short)' | grep -v '^main$$' | while read branch; do \
 		git show-ref --verify --quiet "refs/remotes/origin/$$branch" || git branch -D "$$branch"; \
 	done
+
+dev-vm:
+	@scripts/dev/dev-vm.sh
+
+dev-vm-sync:
+	@scripts/dev/sync-vm.sh
+
+dev-vm-provision:
+	@scripts/dev/reprovision-vm.sh
 
 .DEFAULT_GOAL := all
