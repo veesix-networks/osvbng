@@ -388,7 +388,7 @@ type metricSpec struct {
 	labelName     string // explicit label wire name, optional
 	mapKey        bool   // field receives the map key when source is map[K]V; implies isLabel
 	flatten       bool   // descend into struct/slice/map/pointer-to-those at emit
-	retainStale   bool   // skip default clear_on_absent unregister for this value-metric (D11)
+	retainStale   bool   // skip default clear_on_absent unregister for this value-metric
 	name          string
 	kind          string // "counter", "gauge", "histogram"
 	help          string

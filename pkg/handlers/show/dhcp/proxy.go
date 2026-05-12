@@ -12,14 +12,12 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/dhcp6"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
-	"github.com/veesix-networks/osvbng/pkg/state"
-	statepaths "github.com/veesix-networks/osvbng/pkg/state/paths"
+	"github.com/veesix-networks/osvbng/pkg/telemetry"
 )
 
 func init() {
 	show.RegisterFactory(NewProxyHandler)
-
-	state.RegisterMetric(statepaths.DHCPProxy, paths.DHCPProxy)
+	telemetry.RegisterMetric[ProxyInfo](paths.DHCPProxy)
 }
 
 type ProxyHandler struct {
@@ -35,8 +33,8 @@ func NewProxyHandler(d *deps.ShowDeps) show.ShowHandler {
 }
 
 type ProxyInfo struct {
-	V4Bindings int `json:"v4Bindings" prometheus:"name=osvbng_dhcp_proxy_bindings_v4,help=Active DHCPv4 proxy bindings,type=gauge"`
-	V6Bindings int `json:"v6Bindings" prometheus:"name=osvbng_dhcp_proxy_bindings_v6,help=Active DHCPv6 proxy bindings,type=gauge"`
+	V4Bindings int `json:"v4Bindings" metric:"name=dhcp.proxy.bindings_v4,type=gauge,help=Active DHCPv4 proxy bindings."`
+	V6Bindings int `json:"v6Bindings" metric:"name=dhcp.proxy.bindings_v6,type=gauge,help=Active DHCPv6 proxy bindings."`
 }
 
 func (h *ProxyHandler) Collect(_ context.Context, _ *show.Request) (interface{}, error) {

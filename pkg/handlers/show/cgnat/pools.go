@@ -11,16 +11,14 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
 	"github.com/veesix-networks/osvbng/pkg/models"
-	"github.com/veesix-networks/osvbng/pkg/state"
-	statepaths "github.com/veesix-networks/osvbng/pkg/state/paths"
+	"github.com/veesix-networks/osvbng/pkg/telemetry"
 )
 
 func init() {
 	show.RegisterFactory(func(d *deps.ShowDeps) show.ShowHandler {
 		return &PoolsHandler{deps: d}
 	})
-
-	state.RegisterMetric(statepaths.CGNATPools, paths.CGNATPools)
+	telemetry.RegisterMetric[models.CGNATPoolStats](paths.CGNATPools)
 }
 
 type PoolsHandler struct {

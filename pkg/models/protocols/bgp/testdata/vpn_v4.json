@@ -1,0 +1,10 @@
+{
+ "vrfId": 0,
+ "vrfName": "default",
+ "tableVersion": 1,
+ "routerId": "10.254.0.1",
+ "defaultLocPrf": 100,
+ "localAS": 65000,
+ "routes": {  "routeDistinguishers" : { "65000:100" : { "192.168.123.1/32": [{"valid":true,"bestpath":true,"selectionReason":"First path received","pathFrom":"external","prefix":"192.168.123.1","prefixLen":32,"network":"192.168.123.1/32","version":1,"metric":0,"weight":32768,"peerId":"(unspec)","path":"","origin":"incomplete","announceNexthopSelf":true,"nhVrfName":"CUSTOMER-A","nhVrfId":2,"nexthops":[{"ip":"0.0.0.0","hostname":"093905e1f3a6","afi":"ipv4","used":true}]}]
+ },  "65000:200" : { "192.168.100.0/24": [{"valid":true,"bestpath":true,"selectionReason":"First path received","pathFrom":"internal","prefix":"192.168.100.0","prefixLen":24,"network":"192.168.100.0/24","version":1,"metric":0,"locPrf":100,"weight":0,"peerId":"10.254.0.2","path":"","origin":"incomplete","nexthops":[{"ip":"10.254.0.2","hostname":"9e7f7054fe54","afi":"ipv4","used":true}]}]
+ }  }  } , "totalRoutes": 2, "totalPaths": 2 } 

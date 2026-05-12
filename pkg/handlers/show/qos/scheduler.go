@@ -11,16 +11,15 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
-	"github.com/veesix-networks/osvbng/pkg/state"
-	statepaths "github.com/veesix-networks/osvbng/pkg/state/paths"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/telemetry"
 )
 
 func init() {
 	show.RegisterFactory(func(d *deps.ShowDeps) show.ShowHandler {
 		return &SchedulerHandler{deps: d}
 	})
-
-	state.RegisterMetric(statepaths.QoSScheduler, paths.QoSScheduler)
+	telemetry.RegisterMetric[southbound.SchedulerState](paths.QoSScheduler)
 }
 
 type SchedulerHandler struct {

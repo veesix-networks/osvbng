@@ -8,14 +8,13 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
-	"github.com/veesix-networks/osvbng/pkg/state"
-	statepaths "github.com/veesix-networks/osvbng/pkg/state/paths"
 )
 
+// subscriber.sessions is intentionally not registered for telemetry:
+// SubscriberSession is an interface, and per-session series would carry
+// unbounded cardinality. Aggregates emit via subscriber.stats.
 func init() {
 	show.RegisterFactory(NewSessionsHandler)
-
-	state.RegisterMetric(statepaths.SubscriberSessions, paths.SubscriberSessions)
 }
 
 type SessionsHandler struct {

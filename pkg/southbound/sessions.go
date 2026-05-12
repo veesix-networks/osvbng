@@ -35,19 +35,19 @@ type Sessions interface {
 }
 
 type SchedulerTinState struct {
-	Packets     uint64 `json:"packets"`
-	Drops       uint64 `json:"drops"`
-	ECNMarks    uint64 `json:"ecn_marks"`
-	SparseFlows uint32 `json:"sparse_flows"`
-	BulkFlows   uint32 `json:"bulk_flows"`
+	Packets     uint64 `json:"packets"      metric:"name=qos.scheduler.tin.packets,type=counter,help=Packets through this QoS tin."`
+	Drops       uint64 `json:"drops"        metric:"name=qos.scheduler.tin.drops,type=counter,help=Packets dropped at this QoS tin."`
+	ECNMarks    uint64 `json:"ecn_marks"    metric:"name=qos.scheduler.tin.ecn_marks,type=counter,help=ECN-marked packets at this QoS tin."`
+	SparseFlows uint32 `json:"sparse_flows" metric:"name=qos.scheduler.tin.sparse_flows,type=gauge,help=Sparse flows tracked at this QoS tin."`
+	BulkFlows   uint32 `json:"bulk_flows"   metric:"name=qos.scheduler.tin.bulk_flows,type=gauge,help=Bulk flows tracked at this QoS tin."`
 }
 
 type SchedulerState struct {
-	SwIfIndex   uint32              `json:"sw_if_index"`
-	RateKbps    uint64              `json:"rate_kbps"`
-	TinMode     string              `json:"tin_mode"`
-	TinCount    uint8               `json:"tin_count"`
-	BufferUsage uint32              `json:"buffer_usage"`
-	BufferLimit uint32              `json:"buffer_limit"`
-	Tins        []SchedulerTinState `json:"tins,omitempty"`
+	SwIfIndex   uint32              `json:"sw_if_index"     metric:"label"`
+	RateKbps    uint64              `json:"rate_kbps"       metric:"name=qos.scheduler.rate_kbps,type=gauge,help=QoS scheduler shaping rate in kbps."`
+	TinMode     string              `json:"tin_mode"        metric:"label"`
+	TinCount    uint8               `json:"tin_count"       metric:"name=qos.scheduler.tin_count,type=gauge,help=Configured tin count on this QoS scheduler."`
+	BufferUsage uint32              `json:"buffer_usage"    metric:"name=qos.scheduler.buffer_usage,type=gauge,help=Current scheduler buffer usage."`
+	BufferLimit uint32              `json:"buffer_limit"    metric:"name=qos.scheduler.buffer_limit,type=gauge,help=Scheduler buffer limit."`
+	Tins        []SchedulerTinState `json:"tins,omitempty"  metric:"flatten"`
 }
