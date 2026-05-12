@@ -10,10 +10,6 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
 )
 
-// The wildcard `protocols.bgp.neighbors.<*:ip>` show path is CLI-only.
-// Metric registration moved to the aggregate `protocols.bgp.neighbors`
-// path (see neighbors_aggregate.go) per spec D11, because the new
-// telemetry poller does not perform config-backed wildcard expansion.
 func init() {
 	show.RegisterFactory(NewBGPNeighborsHandler)
 }

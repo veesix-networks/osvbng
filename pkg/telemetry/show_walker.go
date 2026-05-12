@@ -205,8 +205,7 @@ func (bc *bindContext) bindStruct(t reflect.Type) *structMetrics {
 }
 
 // unwrapFlatten resolves the inner struct type of a `metric:"flatten"`
-// field. Pointer-to-supported-kind is unwrapped; map handling lives in
-// Phase 3 and is rejected here for non-map shapes.
+// field. Pointer-to-supported-kind is unwrapped.
 func unwrapFlatten(parent reflect.Type, f reflect.StructField) reflect.Type {
 	t := f.Type
 	for t.Kind() == reflect.Pointer {
@@ -225,9 +224,6 @@ func unwrapFlatten(parent reflect.Type, f reflect.StructField) reflect.Type {
 		}
 		return elem
 	case reflect.Map:
-		// Phase 3 adds map iteration. For now, accept maps so the walker
-		// builds; Phase 3 will introduce nested-map rejection and the
-		// emit-time iteration logic.
 		elem := t.Elem()
 		for elem.Kind() == reflect.Pointer {
 			elem = elem.Elem()
@@ -250,7 +246,7 @@ func unwrapFlatten(parent reflect.Type, f reflect.StructField) reflect.Type {
 // pollState records every (value-metric field, label-tuple) pair the
 // walker emits within one poll. The poll loop diffs the new pollState
 // against the previous successful poll's pollState and unregisters any
-// tuple absent from the new set (D11 default clear_on_absent). Fields
+// tuple absent from the new set (default clear_on_absent). Fields
 // tagged metric:"retain_stale" are not tracked.
 type pollState struct {
 	seen map[*walkerField]map[string][]string
@@ -305,9 +301,8 @@ func reconcile(prev, current *pollState) *pollState {
 
 // walk dispatches on the top-level reflect.Kind of the show handler's
 // snapshot value. Pointers are unwrapped; struct/slice/array iterate the
-// flat case via emit; maps iterate via emitMap. Phase 4's RegisterMetric
-// poll loop calls this once per poll with the result of Snapshot. ps may
-// be nil for tests that bypass the lifecycle path.
+// flat case via emit; maps iterate via emitMap. ps may be nil for tests
+// that bypass the lifecycle path.
 func (sm *structMetrics) walk(rv reflect.Value, ps *pollState) {
 	for rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
@@ -340,9 +335,6 @@ func (sm *structMetrics) walk(rv reflect.Value, ps *pollState) {
 // emit walks rv and writes every leaf value field into the registry.
 // inheritedLabels is the resolved label tuple from outer scopes; this
 // struct's local labels append to it before each leaf emission.
-//
-// Phase 2 supports struct, slice, array, and pointer-to-those for flatten.
-// Phase 3 adds map iteration with map_key projection.
 func (sm *structMetrics) emit(rv reflect.Value, inheritedLabels []string, ps *pollState) {
 	for rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
