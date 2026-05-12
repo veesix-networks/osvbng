@@ -12,8 +12,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/dhcp/relay"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
-	"github.com/veesix-networks/osvbng/pkg/state"
-	statepaths "github.com/veesix-networks/osvbng/pkg/state/paths"
+	"github.com/veesix-networks/osvbng/pkg/telemetry"
 )
 
 const defaultDeadTime = 30 * time.Second
@@ -22,15 +21,14 @@ func init() {
 	show.RegisterFactory(func(d *deps.ShowDeps) show.ShowHandler {
 		return &RelayHandler{}
 	})
-
-	state.RegisterMetric(statepaths.DHCPRelay, paths.DHCPRelay)
+	telemetry.RegisterMetric[RelayInfo](paths.DHCPRelay)
 }
 
 type RelayHandler struct{}
 
 type RelayInfo struct {
-	Stats   relay.ClientStats    `json:"stats"`
-	Servers []relay.ServerStatus `json:"servers"`
+	Stats   relay.ClientStats    `json:"stats"   metric:"flatten"`
+	Servers []relay.ServerStatus `json:"servers" metric:"flatten"`
 }
 
 func (h *RelayHandler) Collect(_ context.Context, _ *show.Request) (interface{}, error) {

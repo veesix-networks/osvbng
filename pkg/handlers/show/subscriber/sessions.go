@@ -8,14 +8,14 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
-	"github.com/veesix-networks/osvbng/pkg/state"
-	statepaths "github.com/veesix-networks/osvbng/pkg/state/paths"
 )
 
+// subscriber.sessions is intentionally not registered for telemetry.
+// SubscriberSession is a Go interface (not a struct), and per-session
+// metric series would carry unbounded cardinality (session ID, IP, MAC).
+// Aggregate session counts are emitted via subscriber.stats (#58 D11).
 func init() {
 	show.RegisterFactory(NewSessionsHandler)
-
-	state.RegisterMetric(statepaths.SubscriberSessions, paths.SubscriberSessions)
 }
 
 type SessionsHandler struct {

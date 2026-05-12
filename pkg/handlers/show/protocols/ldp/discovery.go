@@ -8,13 +8,13 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
-	"github.com/veesix-networks/osvbng/pkg/state"
-	statepaths "github.com/veesix-networks/osvbng/pkg/state/paths"
+	"github.com/veesix-networks/osvbng/pkg/models/protocols/ldp"
+	"github.com/veesix-networks/osvbng/pkg/telemetry"
 )
 
 func init() {
 	show.RegisterFactory(NewLDPDiscoveryHandler)
-	state.RegisterMetric(statepaths.ProtocolsLDPDiscovery, paths.ProtocolsLDPDiscovery)
+	telemetry.RegisterMetric[ldp.Discovery](paths.ProtocolsLDPDiscovery)
 }
 
 type LDPDiscoveryHandler struct {

@@ -6,15 +6,13 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
-	"github.com/veesix-networks/osvbng/pkg/state"
+	"github.com/veesix-networks/osvbng/pkg/telemetry"
 	"github.com/veesix-networks/osvbng/plugins/community/hello"
-	"github.com/veesix-networks/osvbng/plugins/exporter/prometheus/metrics"
 )
 
 func init() {
 	show.RegisterFactory(NewStatusHandler)
-	state.RegisterMetric(hello.StateStatusPath, hello.ShowStatusPath)
-	metrics.RegisterMetricSingle[Status](hello.StateStatusPath)
+	telemetry.RegisterMetric[Status](hello.ShowStatusPath)
 }
 
 type StatusHandler struct {
@@ -22,8 +20,8 @@ type StatusHandler struct {
 }
 
 type Status struct {
-	Message string `json:"message" prometheus:"label"`
-	Enabled uint8  `json:"enabled" prometheus:"name=hello_plugin_enabled,help=Plugin enabled status,type=gauge"`
+	Message string `json:"message" metric:"label"`
+	Enabled uint8  `json:"enabled" metric:"name=hello_plugin.enabled,type=gauge,help=Hello plugin enabled status."`
 }
 
 func NewStatusHandler(deps *deps.ShowDeps) show.ShowHandler {
