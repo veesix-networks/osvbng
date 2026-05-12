@@ -1,0 +1,11 @@
+{
+  "adjacencies":[
+    {
+      "addressFamily":"ipv4",
+      "neighborId":"10.254.0.2",
+      "type":"link",
+      "interface":"eth2",
+      "helloHoldtime":15
+    }
+  ]
+}
