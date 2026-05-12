@@ -1,90 +1,40 @@
+// Copyright 2026 The osvbng Authors
+// Licensed under the GNU General Public License v3.0 or later.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package monitor
 
 import (
 	"context"
-	"fmt"
-	"github.com/veesix-networks/osvbng/pkg/cache"
+
 	"github.com/veesix-networks/osvbng/pkg/component"
-	"github.com/veesix-networks/osvbng/pkg/configmgr"
-	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/logger"
-	"github.com/veesix-networks/osvbng/pkg/state"
 )
 
+// Component is the monitoring lifecycle owner. Metric emission flows
+// through pkg/telemetry.RegisterMetric in the show handlers themselves.
 type Component struct {
 	*component.Base
-
 	logger *logger.Logger
-
-	cache              cache.Cache
-	collectorRegistry  *state.CollectorRegistry
-	collectors         []state.MetricCollector
-	collectorConfig    state.CollectorConfig
-	disabledCollectors []string
-	showRegistry       show.Registry
-	configMgr          *configmgr.ConfigManager
 }
 
-type Config struct {
-	Cache              cache.Cache
-	CollectorRegistry  *state.CollectorRegistry
-	CollectorConfig    state.CollectorConfig
-	DisabledCollectors []string
-	ShowRegistry       show.Registry
-	ConfigMgr          *configmgr.ConfigManager
-}
+type Config struct{}
 
 func New(cfg Config) *Component {
 	return &Component{
-		Base:               component.NewBase("monitor"),
-		logger:             logger.Get("monitor"),
-		cache:              cfg.Cache,
-		collectorRegistry:  cfg.CollectorRegistry,
-		collectorConfig:    cfg.CollectorConfig,
-		disabledCollectors: cfg.DisabledCollectors,
-		showRegistry:       cfg.ShowRegistry,
-		configMgr:          cfg.ConfigMgr,
+		Base:   component.NewBase("monitor"),
+		logger: logger.Get("monitor"),
 	}
 }
 
 func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
 	c.logger.Info("Starting monitoring component")
-
-	if c.collectorRegistry != nil && c.cache != nil {
-		collectors, err := c.collectorRegistry.CreateCollectors(&state.CollectorDeps{
-			Cache:        c.cache,
-			Config:       c.collectorConfig,
-			Logger:       c.logger,
-			ShowRegistry: c.showRegistry,
-			ConfigMgr:    c.configMgr,
-		}, c.disabledCollectors)
-		if err != nil {
-			return fmt.Errorf("failed to create state collectors: %w", err)
-		}
-
-		c.collectors = collectors
-		for _, collector := range c.collectors {
-			if err := collector.Start(ctx); err != nil {
-				return fmt.Errorf("failed to start collector %s: %w", collector.Name(), err)
-			}
-			c.logger.Info("Started state collector", "name", collector.Name())
-		}
-	}
-
 	return nil
 }
 
 func (c *Component) Stop(ctx context.Context) error {
 	c.logger.Info("Stopping monitoring component")
-
-	for _, collector := range c.collectors {
-		if err := collector.Stop(); err != nil {
-			c.logger.Warn("Failed to stop collector", "name", collector.Name(), "error", err)
-		}
-	}
-
 	c.StopContext()
-
 	return nil
 }

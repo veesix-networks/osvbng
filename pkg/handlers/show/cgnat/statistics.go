@@ -11,16 +11,15 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
 	"github.com/veesix-networks/osvbng/pkg/models"
-	"github.com/veesix-networks/osvbng/pkg/state"
-	statepaths "github.com/veesix-networks/osvbng/pkg/state/paths"
 )
 
+// cgnat.statistics is a CLI-only aggregator. The same pool data is
+// already exposed as metrics through cgnat.pools (one series per pool).
+// Registering this path too would collide on cgnat.pool.* metric names.
 func init() {
 	show.RegisterFactory(func(d *deps.ShowDeps) show.ShowHandler {
 		return &StatisticsHandler{deps: d}
 	})
-
-	state.RegisterMetric(statepaths.CGNATStatistics, paths.CGNATStatistics)
 }
 
 type StatisticsHandler struct {

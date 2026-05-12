@@ -8,13 +8,12 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
-	"github.com/veesix-networks/osvbng/pkg/state"
-	statepaths "github.com/veesix-networks/osvbng/pkg/state/paths"
+	"github.com/veesix-networks/osvbng/pkg/telemetry"
 )
 
 func init() {
 	show.RegisterFactory(NewMPLSInterfacesHandler)
-	state.RegisterMetric(statepaths.ProtocolsMPLSInterfaces, paths.ProtocolsMPLSInterfaces)
+	telemetry.RegisterMetric[southbound.MPLSInterfaceInfo](paths.ProtocolsMPLSInterfaces)
 }
 
 type MPLSInterfacesHandler struct {

@@ -8,14 +8,13 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
-	"github.com/veesix-networks/osvbng/pkg/state"
-	statepaths "github.com/veesix-networks/osvbng/pkg/state/paths"
+	"github.com/veesix-networks/osvbng/pkg/models/protocols/ospf"
+	"github.com/veesix-networks/osvbng/pkg/telemetry"
 )
 
 func init() {
 	show.RegisterFactory(NewOSPFNeighborsHandler)
-
-	state.RegisterMetric(statepaths.ProtocolsOSPFNeighbors, paths.ProtocolsOSPFNeighbors)
+	telemetry.RegisterMetric[ospf.Neighbor](paths.ProtocolsOSPFNeighbors)
 }
 
 type OSPFNeighborsHandler struct {

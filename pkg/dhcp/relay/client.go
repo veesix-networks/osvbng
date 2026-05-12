@@ -27,12 +27,12 @@ var (
 )
 
 type ClientStats struct {
-	Requests4 uint64 `json:"requests4" prometheus:"name=osvbng_dhcp_relay_requests_v4,help=DHCPv4 relay requests forwarded,type=counter"`
-	Replies4  uint64 `json:"replies4" prometheus:"name=osvbng_dhcp_relay_replies_v4,help=DHCPv4 relay replies received,type=counter"`
-	Timeouts4 uint64 `json:"timeouts4" prometheus:"name=osvbng_dhcp_relay_timeouts_v4,help=DHCPv4 relay server timeouts,type=counter"`
-	Requests6 uint64 `json:"requests6" prometheus:"name=osvbng_dhcp_relay_requests_v6,help=DHCPv6 relay requests forwarded,type=counter"`
-	Replies6  uint64 `json:"replies6" prometheus:"name=osvbng_dhcp_relay_replies_v6,help=DHCPv6 relay replies received,type=counter"`
-	Timeouts6 uint64 `json:"timeouts6" prometheus:"name=osvbng_dhcp_relay_timeouts_v6,help=DHCPv6 relay server timeouts,type=counter"`
+	Requests4 uint64 `json:"requests4" metric:"name=dhcp.relay.requests_v4,type=counter,help=DHCPv4 relay requests forwarded."`
+	Replies4  uint64 `json:"replies4"  metric:"name=dhcp.relay.replies_v4,type=counter,help=DHCPv4 relay replies received."`
+	Timeouts4 uint64 `json:"timeouts4" metric:"name=dhcp.relay.timeouts_v4,type=counter,help=DHCPv4 relay server timeouts."`
+	Requests6 uint64 `json:"requests6" metric:"name=dhcp.relay.requests_v6,type=counter,help=DHCPv6 relay requests forwarded."`
+	Replies6  uint64 `json:"replies6"  metric:"name=dhcp.relay.replies_v6,type=counter,help=DHCPv6 relay replies received."`
+	Timeouts6 uint64 `json:"timeouts6" metric:"name=dhcp.relay.timeouts_v6,type=counter,help=DHCPv6 relay server timeouts."`
 }
 
 type v4PendingKey struct {

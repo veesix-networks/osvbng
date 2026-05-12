@@ -51,7 +51,6 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/northbound"
 	"github.com/veesix-networks/osvbng/pkg/opdb/sqlite"
 	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
-	"github.com/veesix-networks/osvbng/pkg/state"
 	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/telemetry"
 	"github.com/veesix-networks/osvbng/pkg/version"
@@ -449,25 +448,7 @@ func main() {
 		log.Fatalf("Failed to create gateway component: %v", err)
 	}
 
-	collectorRegistry := state.DefaultRegistry()
-
-	collectInterval := 5 * time.Second
-	if cfg.Monitoring.CollectInterval > 0 {
-		collectInterval = cfg.Monitoring.CollectInterval
-	}
-
-	monitorComp := monitor.New(monitor.Config{
-		Cache:             cache,
-		CollectorRegistry: collectorRegistry,
-		CollectorConfig: state.CollectorConfig{
-			Interval:   collectInterval,
-			TTL:        30 * time.Second,
-			PathPrefix: "osvbng:state:",
-		},
-		DisabledCollectors: cfg.Monitoring.DisabledCollectors,
-		ShowRegistry:       *showRegistry,
-		ConfigMgr:          configd,
-	})
+	monitorComp := monitor.New(monitor.Config{})
 
 	orch := component.NewOrchestrator()
 	if haMgr != nil {
