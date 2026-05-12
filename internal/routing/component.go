@@ -279,9 +279,6 @@ func (c *Component) GetBGPStatistics(ipv4 bool) (*bgp.Statistics, error) {
 	return result, nil
 }
 
-// GetBGPNeighbors returns the typed neighbor list for the aggregate
-// metric path. See spec #59 D11: telemetry uses this non-wildcard path,
-// the per-peer GetBGPNeighbor stays for CLI lookups.
 func (c *Component) GetBGPNeighbors() ([]bgp.Neighbor, error) {
 	output, err := c.execVtysh("-c", "show bgp neighbors json")
 	if err != nil {

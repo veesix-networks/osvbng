@@ -11,10 +11,8 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/logger"
 )
 
-// Component is the monitoring lifecycle owner. The legacy CollectorRegistry
-// / CachedShowCollector pipeline was retired in osvbng-context #59;
-// metric emission now flows through pkg/telemetry.RegisterMetric in the
-// show handlers themselves.
+// Component is the monitoring lifecycle owner. Metric emission flows
+// through pkg/telemetry.RegisterMetric in the show handlers themselves.
 type Component struct {
 	*component.Base
 	logger *logger.Logger
