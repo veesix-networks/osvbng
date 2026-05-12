@@ -79,13 +79,13 @@ func (s *Server) bindingKey() bindingKey {
 }
 
 type ServerStatus struct {
-	Address  string `json:"address" prometheus:"label"`
-	VRF      string `json:"vrf,omitempty" prometheus:"label"`
+	Address  string `json:"address"        metric:"label"`
+	VRF      string `json:"vrf,omitempty"  metric:"label"`
 	Priority int    `json:"priority"`
-	Dead     bool   `json:"dead"`
-	Failures int    `json:"failures"`
-	Requests uint64 `json:"requests" prometheus:"name=osvbng_dhcp_relay_server_requests,help=Requests sent to DHCP relay server,type=counter"`
-	Timeouts uint64 `json:"timeouts" prometheus:"name=osvbng_dhcp_relay_server_timeouts,help=Timeouts from DHCP relay server,type=counter"`
+	Dead     bool   `json:"dead"           metric:"name=dhcp.relay.server.dead,type=gauge,help=1 if this DHCP relay server is currently marked dead."`
+	Failures int    `json:"failures"       metric:"name=dhcp.relay.server.failures,type=counter,help=Consecutive failures observed for this DHCP relay server."`
+	Requests uint64 `json:"requests"       metric:"name=dhcp.relay.server.requests,type=counter,help=Requests sent to this DHCP relay server."`
+	Timeouts uint64 `json:"timeouts"       metric:"name=dhcp.relay.server.timeouts,type=counter,help=Timeouts from this DHCP relay server."`
 }
 
 func (s *Server) GetStatus(deadTime time.Duration) ServerStatus {

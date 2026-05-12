@@ -246,99 +246,124 @@ func (c *Component) CreateVRF() (vrf.VRF, error) {
 }
 
 func (c *Component) GetBGPStatistics(ipv4 bool) (*bgp.Statistics, error) {
-	var output []byte
-	var err error
-
+	var (
+		cmd          string
+		af           string
+		wrapperKey   string
+	)
 	if ipv4 {
-		output, err = c.execVtysh("-c", "show ip bgp statistics json")
+		cmd = "show ip bgp statistics json"
+		af = "ipv4"
+		wrapperKey = "ipv4Unicast"
 	} else {
-		output, err = c.execVtysh("-c", "show bgp statistics json")
+		cmd = "show bgp statistics json"
+		af = "ipv6"
+		wrapperKey = "ipv6Unicast"
 	}
+
+	output, err := c.execVtysh("-c", cmd)
 	if err != nil {
 		return nil, err
 	}
 
-	var stats map[string][]bgpStatisticsEntry
-	if err := json.Unmarshal(output, &stats); err != nil {
+	var wrapper map[string][]bgp.Statistics
+	if err := json.Unmarshal(output, &wrapper); err != nil {
 		return nil, fmt.Errorf("parse BGP statistics: %w", err)
 	}
 
-	result := &bgp.Statistics{}
-
-	if ipv4 {
-		if ipv4Stats, ok := stats["ipv4Unicast"]; ok && len(ipv4Stats) > 0 {
-			result.Instance = ipv4Stats[0].Instance
-			result.TotalPrefixes = ipv4Stats[0].TotalPrefixes
-			result.TotalAdvertisements = ipv4Stats[0].TotalAdvertisements
-			result.AveragePrefixLength = ipv4Stats[0].AveragePrefixLength
-		}
-	} else {
-		if ipv6Stats, ok := stats["ipv6Unicast"]; ok && len(ipv6Stats) > 0 {
-			result.Instance = ipv6Stats[0].Instance
-			result.TotalPrefixes = ipv6Stats[0].TotalPrefixes
-			result.TotalAdvertisements = ipv6Stats[0].TotalAdvertisements
-			result.AveragePrefixLength = ipv6Stats[0].AveragePrefixLength
-		}
+	result := &bgp.Statistics{AddressFamily: af}
+	if entries, ok := wrapper[wrapperKey]; ok && len(entries) > 0 {
+		entries[0].AddressFamily = af
+		*result = entries[0]
 	}
-
 	return result, nil
 }
 
-func (c *Component) GetBGPNeighbor(neighborIP string) (interface{}, error) {
+// GetBGPNeighbors returns the typed neighbor list for the aggregate
+// metric path. See spec #59 D11: telemetry uses this non-wildcard path,
+// the per-peer GetBGPNeighbor stays for CLI lookups.
+func (c *Component) GetBGPNeighbors() ([]bgp.Neighbor, error) {
+	output, err := c.execVtysh("-c", "show bgp neighbors json")
+	if err != nil {
+		return nil, err
+	}
+
+	var raw map[string]bgp.Neighbor
+	if err := json.Unmarshal(output, &raw); err != nil {
+		return nil, fmt.Errorf("parse BGP neighbors: %w", err)
+	}
+
+	out := make([]bgp.Neighbor, 0, len(raw))
+	for addr, n := range raw {
+		if n.NeighborAddr == "" {
+			n.NeighborAddr = addr
+		}
+		out = append(out, n)
+	}
+	return out, nil
+}
+
+// GetBGPNeighbor returns the per-peer detail for CLI lookups. The
+// wildcard show path (protocols.bgp.neighbors.<*:ip>) calls this; the
+// aggregate metric path uses GetBGPNeighbors instead.
+func (c *Component) GetBGPNeighbor(neighborIP string) (*bgp.Neighbor, error) {
 	output, err := c.execVtysh("-c", fmt.Sprintf("show bgp neighbors %s json", neighborIP))
 	if err != nil {
 		return nil, err
 	}
 
-	var resultMap map[string]interface{}
-	if err := json.Unmarshal(output, &resultMap); err != nil {
+	var raw map[string]bgp.Neighbor
+	if err := json.Unmarshal(output, &raw); err != nil {
 		return nil, fmt.Errorf("parse BGP neighbor: %w", err)
 	}
 
-	if neighbor, ok := resultMap[neighborIP]; ok {
-		return neighbor, nil
+	if n, ok := raw[neighborIP]; ok {
+		if n.NeighborAddr == "" {
+			n.NeighborAddr = neighborIP
+		}
+		return &n, nil
 	}
-
-	return resultMap, nil
+	return nil, nil
 }
 
-func (c *Component) GetBGPVPNv4Routes() (json.RawMessage, error) {
-	output, err := c.execVtysh("-c", "show bgp ipv4 vpn json")
+func (c *Component) GetBGPVPNv4Routes() (*bgp.VPNRoutes, error) {
+	return c.fetchVPNRoutes("show bgp ipv4 vpn json", "ipv4")
+}
+
+func (c *Component) GetBGPVPNv6Routes() (*bgp.VPNRoutes, error) {
+	return c.fetchVPNRoutes("show bgp ipv6 vpn json", "ipv6")
+}
+
+func (c *Component) GetBGPVPNv4Summary() (*bgp.VPNSummary, error) {
+	return c.fetchVPNSummary("show bgp ipv4 vpn summary json", "ipv4")
+}
+
+func (c *Component) GetBGPVPNv6Summary() (*bgp.VPNSummary, error) {
+	return c.fetchVPNSummary("show bgp ipv6 vpn summary json", "ipv6")
+}
+
+func (c *Component) fetchVPNRoutes(cmd, af string) (*bgp.VPNRoutes, error) {
+	output, err := c.execVtysh("-c", cmd)
 	if err != nil {
 		return nil, err
 	}
-	return json.RawMessage(output), nil
+	var routes bgp.VPNRoutes
+	if err := json.Unmarshal(output, &routes); err != nil {
+		return nil, fmt.Errorf("parse %q: %w", cmd, err)
+	}
+	routes.AddressFamily = af
+	return &routes, nil
 }
 
-func (c *Component) GetBGPVPNv6Routes() (json.RawMessage, error) {
-	output, err := c.execVtysh("-c", "show bgp ipv6 vpn json")
+func (c *Component) fetchVPNSummary(cmd, af string) (*bgp.VPNSummary, error) {
+	output, err := c.execVtysh("-c", cmd)
 	if err != nil {
 		return nil, err
 	}
-	return json.RawMessage(output), nil
-}
-
-func (c *Component) GetBGPVPNv4Summary() (json.RawMessage, error) {
-	output, err := c.execVtysh("-c", "show bgp ipv4 vpn summary json")
-	if err != nil {
-		return nil, err
+	var summary bgp.VPNSummary
+	if err := json.Unmarshal(output, &summary); err != nil {
+		return nil, fmt.Errorf("parse %q: %w", cmd, err)
 	}
-	return json.RawMessage(output), nil
-}
-
-func (c *Component) GetBGPVPNv6Summary() (json.RawMessage, error) {
-	output, err := c.execVtysh("-c", "show bgp ipv6 vpn summary json")
-	if err != nil {
-		return nil, err
-	}
-	return json.RawMessage(output), nil
-}
-
-type bgpStatisticsEntry struct {
-	Instance                string  `json:"instance"`
-	TotalPrefixes           int     `json:"totalPrefixes"`
-	TotalAdvertisements     int     `json:"totalAdvertisements"`
-	AveragePrefixLength     float64 `json:"averagePrefixLength"`
-	LongestAsPath           int     `json:"longestAsPath"`
-	AverageAsPathLengthHops float64 `json:"averageAsPathLengthHops"`
+	summary.AddressFamily = af
+	return &summary, nil
 }

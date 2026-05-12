@@ -19,15 +19,15 @@ type CGNATMapping struct {
 }
 
 type CGNATPoolStats struct {
-	Name               string  `json:"name"`
-	Mode               string  `json:"mode"`
-	TotalAddresses     uint32  `json:"total_addresses"`
-	AllocatedAddresses uint32  `json:"allocated_addresses"`
-	FreeBlocks         uint32  `json:"free_blocks"`
-	TotalBlocks        uint32  `json:"total_blocks"`
-	ExcludedAddresses  uint32  `json:"excluded_addresses"`
-	SubscriberCount    uint32  `json:"subscriber_count"`
-	Utilization        float64 `json:"utilization"`
+	Name               string  `json:"name"               metric:"label"`
+	Mode               string  `json:"mode"               metric:"label"`
+	TotalAddresses     uint32  `json:"total_addresses"    metric:"name=cgnat.pool.addresses_total,type=gauge,help=Total addresses in this CGNAT pool."`
+	AllocatedAddresses uint32  `json:"allocated_addresses" metric:"name=cgnat.pool.addresses_allocated,type=gauge,help=Allocated addresses in this CGNAT pool."`
+	FreeBlocks         uint32  `json:"free_blocks"        metric:"name=cgnat.pool.blocks_free,type=gauge,help=Free port-blocks in this CGNAT pool."`
+	TotalBlocks        uint32  `json:"total_blocks"       metric:"name=cgnat.pool.blocks_total,type=gauge,help=Total port-blocks in this CGNAT pool."`
+	ExcludedAddresses  uint32  `json:"excluded_addresses" metric:"name=cgnat.pool.addresses_excluded,type=gauge,help=Excluded addresses in this CGNAT pool."`
+	SubscriberCount    uint32  `json:"subscriber_count"   metric:"name=cgnat.pool.subscribers,type=gauge,help=Subscribers mapped to this CGNAT pool."`
+	Utilization        float64 `json:"utilization"        metric:"name=cgnat.pool.utilization,type=gauge,help=CGNAT pool utilization (0.0 to 1.0)."`
 }
 
 type CGNATSessionInfo struct {

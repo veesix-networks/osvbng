@@ -89,25 +89,25 @@ type MPLSTableInfo struct {
 }
 
 type MPLSRouteEntry struct {
-	Label       uint32          `json:"label"`
-	Eos         bool            `json:"eos"`
-	EosProto    uint8           `json:"eos_proto"`
-	IsMulticast bool            `json:"is_multicast"`
-	Paths       []MPLSRoutePath `json:"paths"`
+	Label       uint32          `json:"label"        metric:"label=label"`
+	Eos         bool            `json:"eos"          metric:"label"`
+	EosProto    uint8           `json:"eos_proto"    metric:"name=protocols.mpls.route.eos_proto,type=gauge,help=MPLS EOS next-protocol identifier."`
+	IsMulticast bool            `json:"is_multicast" metric:"name=protocols.mpls.route.is_multicast,type=gauge,help=1 if this MPLS route is multicast."`
+	Paths       []MPLSRoutePath `json:"paths"        metric:"flatten"`
 }
 
 type MPLSRoutePath struct {
-	SwIfIndex  uint32   `json:"sw_if_index"`
-	Interface  string   `json:"interface,omitempty"`
-	NextHop    string   `json:"next_hop,omitempty"`
-	Weight     uint8    `json:"weight"`
-	Preference uint8    `json:"preference"`
+	SwIfIndex  uint32   `json:"sw_if_index"           metric:"name=protocols.mpls.path.sw_if_index,type=gauge,help=VPP sw_if_index of the MPLS path."`
+	Interface  string   `json:"interface,omitempty"   metric:"label"`
+	NextHop    string   `json:"next_hop,omitempty"    metric:"label"`
+	Weight     uint8    `json:"weight"                metric:"name=protocols.mpls.path.weight,type=gauge,help=MPLS path weight."`
+	Preference uint8    `json:"preference"            metric:"name=protocols.mpls.path.preference,type=gauge,help=MPLS path preference."`
 	Labels     []uint32 `json:"labels,omitempty"`
 }
 
 type MPLSInterfaceInfo struct {
-	SwIfIndex uint32 `json:"sw_if_index"`
-	Name      string `json:"name,omitempty"`
+	SwIfIndex uint32 `json:"sw_if_index"     metric:"name=protocols.mpls.interface.sw_if_index,type=gauge,help=VPP sw_if_index for this MPLS-enabled interface."`
+	Name      string `json:"name,omitempty"  metric:"label"`
 }
 
 type SystemStats struct {
