@@ -1,0 +1,42 @@
+{
+  "ipv4Unicast":[
+    {
+      "instance":"VRF default",
+      "bgpBestPathCalls":0,
+      "bgpNodeOnQueue":2,
+      "bgpNodeDeferredOnQueue":0,
+      "totalAdvertisements":5,
+      "totalPrefixes":5,
+      "averagePrefixLength":26.800000000000001,
+      "unaggregateablePrefixes":4,
+      "maximumAggregateablePrefixes":1,
+      "bgpAggregateAdvertisements":0,
+      "addressSpaceAdvertised":65797.0,
+      "%announced":0.001531955786049366,
+      "/8equivalent":0.003921806812286377,
+      "/24equivalent":257.01953125,
+      "advertisementsWithPaths":5,
+      "longestAsPath":0,
+      "averageAsPathLengthHops":0.0,
+      "largestAsPath":0,
+      "averageAsPathSizeBytes":0.0,
+      "highestPublicAsn":0,
+      "totalRedistributed":4,
+      "totalLocalAggregates":0,
+      "prefixLength":[
+        {
+          "16":1
+        },
+        {
+          "24":1
+        },
+        {
+          "30":1
+        },
+        {
+          "32":2
+        }
+      ]
+    }
+  ]
+}
