@@ -186,6 +186,37 @@ type PPPSession struct {
 	// to in LAC mode. Populated only when State == SessionStateTunneled;
 	// nil for terminating PPPoE sessions.
 	TunneledToLNS net.IP
+
+	// L2TP is the LAC binding for this subscriber. Non-nil only when
+	// the session is in `tunneled` state. Marshaled with `omitempty`
+	// so non-LAC sessions render the same JSON as before.
+	L2TP *L2TPBinding `json:"L2TP,omitempty"`
+}
+
+// L2TPBinding is the L2TPv2 session metadata for a LAC-bridged
+// PPPoE subscriber. The PeerTunnelID/PeerSessionID are what the LNS
+// sees as its local IDs.
+type L2TPBinding struct {
+	LocalTunnelID  uint16 `json:"LocalTunnelID"`
+	PeerTunnelID   uint16 `json:"PeerTunnelID"`
+	LocalSessionID uint16 `json:"LocalSessionID"`
+	PeerSessionID  uint16 `json:"PeerSessionID"`
+}
+
+// L2TPTunnelSummary is the tunnel-level snapshot returned by
+// `show l2tp tunnels`. One row per active tunnel; sessions are
+// surfaced through the per-subscriber view.
+type L2TPTunnelSummary struct {
+	LocalIP       string    `json:"LocalIP"`
+	PeerIP        string    `json:"PeerIP"`
+	LocalID       uint16    `json:"LocalID"`
+	PeerID        uint16    `json:"PeerID"`
+	LocalHostname string    `json:"LocalHostname,omitempty"`
+	PeerHostname  string    `json:"PeerHostname,omitempty"`
+	Role          string    `json:"Role"`
+	State         string    `json:"State"`
+	SessionCount  int       `json:"SessionCount"`
+	CreatedAt     time.Time `json:"CreatedAt"`
 }
 
 func (s *PPPSession) GetSessionID() string      { return s.SessionID }

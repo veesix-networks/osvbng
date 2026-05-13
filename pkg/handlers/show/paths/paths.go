@@ -76,6 +76,9 @@ const (
 	DHCPRelay Path = "dhcp.relay"
 	DHCPProxy Path = "dhcp.proxy"
 
+	L2TPTunnels Path = "l2tp.tunnels"
+	L2TPTunnel  Path = "l2tp.tunnels.<*>"
+
 	CGNATSessions   Path = "cgnat.sessions"
 	CGNATPools      Path = "cgnat.pools"
 	CGNATStatistics Path = "cgnat.statistics"

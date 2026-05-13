@@ -579,6 +579,7 @@ func main() {
 		DHCPv4Providers:  dhcp4Providers,
 		DHCPv6Providers:  dhcp6Providers,
 		CGNAT:            cgnat,
+		L2TP:             l2tpComp,
 		RunningConfig:    configd,
 	})
 

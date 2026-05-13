@@ -157,6 +157,12 @@ type SessionState struct {
 	allocatedPool     string
 	allocatedIANAPool string
 
+	// l2tpBinding is set when this PPPoE session has been handed off to
+	// LAC mode and the L2TPv2 tunnel/session IDs are known. Non-nil
+	// only while Phase == PhaseLACTunneled. Surfaced through the
+	// SubscriberSession API as the L2TP sub-struct.
+	l2tpBinding *models.L2TPBinding
+
 	component *Component
 	mu        sync.Mutex
 }
@@ -1549,6 +1555,13 @@ func (c *Component) buildModelSnapshot(sess *SessionState) *models.PPPSession {
 	}
 	if sess.ipv6cp != nil {
 		snapshot.IPv6CPState = sess.ipv6cp.FSM().State().String()
+	}
+	if sess.Phase == ppp.PhaseLACTunneled {
+		snapshot.State = models.SessionStateTunneled
+		if sess.l2tpBinding != nil {
+			binding := *sess.l2tpBinding
+			snapshot.L2TP = &binding
+		}
 	}
 	return snapshot
 }

@@ -128,6 +128,12 @@ func (c *Component) handleLACDecision(event events.Event) {
 		if data.PeerIP != "" {
 			tunneledTo = net.ParseIP(data.PeerIP)
 		}
+		sess.l2tpBinding = &models.L2TPBinding{
+			LocalTunnelID:  data.LocalTunnelID,
+			PeerTunnelID:   data.PeerTunnelID,
+			LocalSessionID: data.LocalSessionID,
+			PeerSessionID:  data.PeerSessionID,
+		}
 		c.checkpointSession(sess)
 		_ = c.publishSessionLifecycle(&models.PPPSession{
 			SessionID:     sess.SessionID,
@@ -143,6 +149,7 @@ func (c *Component) handleLACDecision(event events.Event) {
 			AAASessionID:  sess.AcctSessionID,
 			ActivatedAt:   sess.BoundAt,
 			TunneledToLNS: tunneledTo,
+			L2TP:          sess.l2tpBinding,
 		})
 		return
 	}

@@ -14,7 +14,9 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
 	"github.com/veesix-networks/osvbng/pkg/events"
+	l2tppkt "github.com/veesix-networks/osvbng/pkg/l2tp"
 	"github.com/veesix-networks/osvbng/pkg/logger"
+	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
@@ -292,6 +294,51 @@ func (c *Component) allocateTunnelID(peerIP net.IP) (uint16, error) {
 	}
 	c.mu.Unlock()
 	return alloc.Allocate()
+}
+
+// SnapshotTunnels returns a stable, copy-safe summary of every tunnel
+// currently registered with the component. Used by show handlers and
+// HA sync. Reads are RLocked; per-tunnel state is read under each
+// tunnel's own mutex.
+func (c *Component) SnapshotTunnels() []models.L2TPTunnelSummary {
+	c.mu.RLock()
+	tunnels := make([]*Tunnel, 0, len(c.tunnels))
+	for _, t := range c.tunnels {
+		tunnels = append(tunnels, t)
+	}
+	c.mu.RUnlock()
+
+	out := make([]models.L2TPTunnelSummary, 0, len(tunnels))
+	for _, t := range tunnels {
+		t.mu.Lock()
+		role := "LAC"
+		if t.Role == l2tppkt.RoleResponder {
+			role = "LNS"
+		}
+		state := ""
+		if t.FSM != nil {
+			state = t.FSM.State().String()
+		}
+		s := models.L2TPTunnelSummary{
+			LocalID:       t.LocalID,
+			PeerID:        t.PeerID,
+			LocalHostname: t.LocalHostname,
+			PeerHostname:  t.PeerHostname,
+			Role:          role,
+			State:         state,
+			SessionCount:  len(t.Sessions),
+			CreatedAt:     t.CreatedAt,
+		}
+		if t.LocalIP != nil {
+			s.LocalIP = t.LocalIP.String()
+		}
+		if t.PeerIP != nil {
+			s.PeerIP = t.PeerIP.String()
+		}
+		t.mu.Unlock()
+		out = append(out, s)
+	}
+	return out
 }
 
 func (c *Component) releaseTunnelID(peerIP net.IP, id uint16) {
