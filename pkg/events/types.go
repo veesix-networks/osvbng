@@ -80,3 +80,27 @@ type SubscriberTerminateEvent struct {
 	FramedIPv6    string
 	Reason        string
 }
+
+// L2TPLACDecisionEvent communicates the LAC bring-up outcome back to
+// the PPPoE component. Published on TopicL2TPLACDecision once the L2TP
+// component has either established the tunneled session or exhausted
+// its candidate list.
+//
+// `PPPoESessionID` keys the PPPoE-side session lookup. On success,
+// `LocalIP / PeerIP / LocalTunnelID / PeerSessionID / LACL2TPSessionIndex`
+// describe the dataplane binding the PPPoE plugin needs to set the
+// `is_lac_tunneled` flag and the L2TP opaque on the PPPoE session
+// struct. On failure, `Error` carries the reason and the PPPoE side
+// must respond to the subscriber with PAP-Nak / CHAP-Failure.
+type L2TPLACDecisionEvent struct {
+	PPPoESessionID       uint16
+	Success              bool
+	Error                string
+	LocalIP              string
+	PeerIP               string
+	LocalTunnelID        uint16
+	PeerTunnelID         uint16
+	LocalSessionID       uint16
+	PeerSessionID        uint16
+	LACL2TPSessionIndex  uint32
+}

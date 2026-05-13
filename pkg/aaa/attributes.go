@@ -47,3 +47,21 @@ const (
 	AttrRemoteID  = "remote_id"
 	AttrHostname  = "hostname"
 )
+
+// L2TP tunnel attributes (RFC 2868 and RFC 2867 — see
+// components/l2tp/60-l2tpv2/IMPLEMENTATION_SPEC.md §"Attribute Mappings").
+// Names are osvbng-internal semantic names; RADIUS providers map the
+// RFC 2868 attribute numbers to these on receive.
+const (
+	AttrTunnelType            = "tunnel.type"
+	AttrTunnelMediumType      = "tunnel.medium-type"
+	AttrTunnelClientEndpoint  = "tunnel.client-endpoint"
+	AttrTunnelServerEndpoint  = "tunnel.server-endpoint"
+	AttrTunnelPassword        = "tunnel.password"
+	AttrTunnelAssignmentID    = "tunnel.assignment-id"
+	AttrTunnelPreference      = "tunnel.preference"
+	AttrTunnelClientAuthID    = "tunnel.client-auth-id"
+	AttrTunnelServerAuthID    = "tunnel.server-auth-id"
+	AttrTunnelAcctConnection  = "tunnel.acct-connection"
+	AttrTunnelAcctPacketsLost = "tunnel.acct-packets-lost"
+)
