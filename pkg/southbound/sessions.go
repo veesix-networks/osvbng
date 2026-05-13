@@ -32,6 +32,13 @@ type Sessions interface {
 	ApplyScheduler(swIfIndex uint32, rateKbps uint32, cfg *qos.SchedulerConfig) error
 	RemoveScheduler(swIfIndex uint32) error
 	DumpSchedulers() ([]SchedulerState, error)
+
+	// L2TPv2 tunnels and sessions. IDs are passed in HOST byte order.
+	AddL2TPTunnel(local, peer net.IP, localID, peerID, localPort, peerPort uint16, dfBit bool) (uint32, error)
+	DeleteL2TPTunnel(local, peer net.IP, localID uint16) error
+	AddL2TPSessionIP(local, peer net.IP, localTunnelID, localSessionID, peerSessionID uint16, decapVrfID uint32, encapIfIndex uint32) (uint32, error)
+	AddL2TPSessionRaw(local, peer net.IP, localTunnelID, localSessionID, peerSessionID uint16, rawNextNode string, rawOpaque uint32, encapIfIndex uint32) error
+	DeleteL2TPSession(local, peer net.IP, localTunnelID, localSessionID uint16) error
 }
 
 type SchedulerTinState struct {
