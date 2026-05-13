@@ -326,17 +326,7 @@ func (s *SessionState) onAuthResult(allowed bool, attributes map[string]interfac
 			s.component.logger.Info("Handing subscriber off to LAC",
 				"session_id", s.SessionID, "username", s.Username)
 			s.Phase = ppp.PhaseLACTunnelPending
-			if err := s.component.lacTrigger(buildLACBringUpAttrs(s)); err != nil {
-				s.component.logger.Warn("LAC trigger failed; rejecting subscriber",
-					"session_id", s.SessionID, "error", err)
-				switch s.pendingAuthType {
-				case "pap":
-					s.sendPAPNak(s.pendingPAPID)
-				case "chap":
-					s.sendCHAPFailure(s.pendingCHAPID)
-				}
-				s.lcp.FSM().Close()
-			}
+			s.startLACVPPSessionAdd()
 			s.pendingAuthType = ""
 			s.pendingAuthRequestID = ""
 			return

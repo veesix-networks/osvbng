@@ -348,17 +348,21 @@ func (c *Component) handleICRP(s *Session, avps []l2tppkt.AVP) error {
 	}
 
 	if c.vpp != nil {
-		if err := c.vpp.AddL2TPSessionRaw(
+		poolIndex, err := c.vpp.AddL2TPSessionRaw(
 			t.LocalIP, t.PeerIP,
 			t.LocalID, s.LocalID, s.PeerID,
 			lacRawNextNode, req.PPPoESwIfIndex, req.EncapIfIndex,
-		); err != nil {
+		)
+		if err != nil {
 			c.log.Error("AddL2TPSessionRaw failed; aborting LAC bring-up",
 				"session_id", s.SessionID, "error", err)
 			c.clearLACPending(t.PeerIP, t.LocalID)
 			c.publishLACDecision(req.PPPoESessionID, nil, nil, err)
 			return err
 		}
+		s.mu.Lock()
+		s.SwIfIndex = poolIndex
+		s.mu.Unlock()
 	}
 
 	s.mu.Lock()

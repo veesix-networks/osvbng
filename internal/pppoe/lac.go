@@ -5,8 +5,11 @@
 package pppoe
 
 import (
+	"net"
+
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/ppp"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
 
 // LACBringUpAttrs is the PPPoE-side handoff payload passed to the
@@ -86,7 +89,27 @@ func (c *Component) handleLACDecision(event events.Event) {
 			"session_id", sess.SessionID,
 			"peer_ip", data.PeerIP,
 			"local_tunnel_id", data.LocalTunnelID,
-			"local_session_id", data.LocalSessionID)
+			"local_session_id", data.LocalSessionID,
+			"l2tp_session_index", data.LACL2TPSessionIndex)
+
+		if c.vpp != nil && sess.SwIfIndex != 0 {
+			if err := c.vpp.SetPPPoESessionLACTunneled(
+				sess.SwIfIndex, data.LACL2TPSessionIndex, true,
+			); err != nil {
+				c.logger.Error("SetPPPoESessionLACTunneled failed; rejecting subscriber",
+					"session_id", sess.SessionID, "error", err)
+				switch sess.pendingAuthType {
+				case "pap":
+					sess.sendPAPNak(sess.pendingPAPID)
+				case "chap":
+					sess.sendCHAPFailure(sess.pendingCHAPID)
+				}
+				sess.pendingAuthType = ""
+				sess.pendingAuthRequestID = ""
+				sess.lcp.FSM().Close()
+				return
+			}
+		}
 
 		switch sess.pendingAuthType {
 		case "pap":
@@ -97,11 +120,6 @@ func (c *Component) handleLACDecision(event events.Event) {
 		sess.Phase = ppp.PhaseLACTunneled
 		sess.pendingAuthType = ""
 		sess.pendingAuthRequestID = ""
-		// Programming the `is_lac_tunneled` flag + L2TP opaque on the
-		// PPPoE session struct in VPP is the dataplane bridge wire-up
-		// owned by the southbound. The southbound API for that bridge
-		// is not yet defined; once it lands, this call site is where
-		// it slots in.
 		return
 	}
 
@@ -174,6 +192,99 @@ func equalFold(a, b string) bool {
 		}
 	}
 	return true
+}
+
+// startLACVPPSessionAdd kicks off the dataplane bring-up for a LAC
+// subscriber. Unlike the local-termination path which adds the PPPoE
+// session in VPP only after IPCP converges, LAC mode needs the session
+// (and its sw_if_index) installed at handoff time — the L2TP plugin
+// stashes that sw_if_index as the opaque the LNS→subscriber bridge
+// node uses for session lookup. Called with s.mu held.
+func (s *SessionState) startLACVPPSessionAdd() {
+	if s.component.vpp == nil {
+		// No southbound wired (test environment) — fall straight to
+		// the LAC trigger so the FSM can be exercised without VPP.
+		s.triggerLACBringUp()
+		return
+	}
+
+	var localMAC net.HardwareAddr
+	if s.component.ifMgr != nil {
+		if iface := s.component.ifMgr.Get(s.EncapIfIndex); iface != nil && len(iface.MAC) >= 6 {
+			localMAC = net.HardwareAddr(iface.MAC[:6])
+		}
+	}
+	if localMAC == nil {
+		s.component.logger.Error("LAC: cannot resolve local MAC; rejecting subscriber",
+			"session_id", s.SessionID, "sw_if_index", s.EncapIfIndex)
+		s.failLACBringUp()
+		return
+	}
+
+	// LAC subscribers have no local IP assignment — pass net.IPv4zero.
+	// The plugin's reverse-route to 0.0.0.0/32 is dead-end and never
+	// hit because the punt plugin's LAC dispatch diverts subscriber→LNS
+	// traffic before it can reach the IP-decap path.
+	s.component.vpp.AddPPPoESessionAsync(
+		s.PPPoESessionID,
+		net.IPv4zero,
+		s.MAC,
+		localMAC,
+		s.EncapIfIndex,
+		s.OuterVLAN,
+		s.InnerVLAN,
+		0, /* decapVrfID — irrelevant for LAC */
+		1500,
+		southbound.MSSClampPolicy{}, /* disabled */
+		s.onLACVPPSessionCreated,
+	)
+}
+
+// onLACVPPSessionCreated is the AddPPPoESessionAsync callback for the
+// LAC handoff path. On success it stores the sw_if_index and fires the
+// LAC trigger; on failure it rejects the subscriber.
+func (s *SessionState) onLACVPPSessionCreated(swIfIndex uint32, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err != nil {
+		s.component.logger.Error("LAC: AddPPPoESession failed; rejecting subscriber",
+			"session_id", s.SessionID, "error", err)
+		s.failLACBringUp()
+		return
+	}
+	s.SwIfIndex = swIfIndex
+	s.triggerLACBringUp()
+}
+
+// triggerLACBringUp fires the registered LAC trigger callback. On a
+// synchronous error from the trigger the subscriber is rejected. Called
+// with s.mu held.
+func (s *SessionState) triggerLACBringUp() {
+	if s.component.lacTrigger == nil {
+		s.component.logger.Error("LAC: no trigger wired; rejecting subscriber",
+			"session_id", s.SessionID)
+		s.failLACBringUp()
+		return
+	}
+	if err := s.component.lacTrigger(buildLACBringUpAttrs(s)); err != nil {
+		s.component.logger.Warn("LAC trigger failed; rejecting subscriber",
+			"session_id", s.SessionID, "error", err)
+		s.failLACBringUp()
+	}
+}
+
+// failLACBringUp rejects the subscriber's PPPoE auth. Called with
+// s.mu held.
+func (s *SessionState) failLACBringUp() {
+	switch s.pendingAuthType {
+	case "pap":
+		s.sendPAPNak(s.pendingPAPID)
+	case "chap":
+		s.sendCHAPFailure(s.pendingCHAPID)
+	}
+	s.pendingAuthType = ""
+	s.pendingAuthRequestID = ""
+	s.lcp.FSM().Close()
 }
 
 // buildLACBringUpAttrs assembles the handoff payload from a PPPoE
