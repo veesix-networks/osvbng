@@ -22,6 +22,7 @@ l2tp:
             lns:
                 - name: bngblaster-lns
                   ipv4: 10.0.0.2
+                  source-ipv4: 10.0.0.1
                   secret: shared
                   preference: 100
     profiles:
@@ -106,6 +107,7 @@ logging:
         pppoe: debug
         l2tp: debug
         dataplane: debug
+        southbound: debug
 
 dataplane:
     lcp-netns: dataplane

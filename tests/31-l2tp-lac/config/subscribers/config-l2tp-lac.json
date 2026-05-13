@@ -55,8 +55,7 @@
       "address": "10.0.0.2",
       "secret": "shared",
       "receive-window-size": 16,
-      "hello-interval": 60,
-      "session-limit": 1000
+      "hello-interval": 60
     }
   ],
   "sessions": {
