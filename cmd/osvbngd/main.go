@@ -21,6 +21,7 @@ import (
 	"github.com/veesix-networks/osvbng/internal/dataplane"
 	"github.com/veesix-networks/osvbng/internal/gateway"
 	"github.com/veesix-networks/osvbng/internal/ipoe"
+	"github.com/veesix-networks/osvbng/internal/l2tp"
 	"github.com/veesix-networks/osvbng/internal/monitor"
 	"github.com/veesix-networks/osvbng/internal/pppoe"
 	"github.com/veesix-networks/osvbng/internal/routing"
@@ -359,6 +360,64 @@ func main() {
 		log.Fatalf("Failed to create pppoe component: %v", err)
 	}
 
+	var l2tpComp *l2tp.Component
+	if cfg.L2TP != nil {
+		l2tpComp = l2tp.New(logger.Get(logger.L2TP))
+		l2tpComp.SetPuntChannel(dataplaneComp.L2TPChan)
+		l2tpComp.SetEventBus(coreDeps.EventBus)
+		l2tpComp.SetConfigManager(coreDeps.ConfigManager)
+		l2tpComp.SetSouthbound(coreDeps.Southbound)
+		l2tpComp.SetVRFManager(vrfMgr)
+		l2tpComp.SetServiceGroupResolver(svcGroupResolver)
+		l2tpComp.SetLocalHostname("osvbng")
+		if reg := allocator.GetGlobalRegistry(); reg != nil {
+			l2tpComp.SetAllocator(reg)
+		}
+
+		l2tpCfg := cfg.L2TP
+		l2tpComp.SetLNSConfigResolver(func(hostname string) (l2tp.LNSConfig, bool) {
+			policy := l2tpCfg.GetPeerPolicyByHostname(hostname)
+			if policy == nil {
+				return l2tp.LNSConfig{}, false
+			}
+			profile := l2tpCfg.GetProfile(policy.Profile)
+			cfg := l2tp.LNSConfig{
+				LocalHostname:     "osvbng",
+				ReceiveWindowSize: 16,
+				Secret:            []byte(policy.Secret),
+			}
+			if profile != nil {
+				cfg.ChallengeRequired = profile.ChallengeRequired
+				cfg.HelloInterval = profile.HelloInterval
+				if profile.ReceiveWindowSize > 0 {
+					cfg.ReceiveWindowSize = uint16(profile.ReceiveWindowSize)
+				}
+			}
+			return cfg, true
+		})
+
+		l2tpTransport, err := l2tp.NewKernelUDPTransport(nil)
+		if err != nil {
+			log.Fatalf("Failed to open L2TP kernel UDP socket: %v", err)
+		}
+		l2tpComp.SetSendControlFn(l2tpTransport.Send)
+		go l2tpTransport.Feed(context.Background(), nil, dataplaneComp.L2TPChan)
+		mainLog.Info("L2TP component created (kernel UDP control transport)")
+
+		pppoeComp.SetLACTrigger(func(attrs pppoe.LACBringUpAttrs) error {
+			specs := l2tp.ParseTunnelSpecs(attrs.AAAAttrs)
+			return l2tpComp.StartLACSession(l2tp.LACBringUpRequest{
+				PPPoESessionID:       attrs.PPPoESessionID,
+				Username:             attrs.Username,
+				TunnelSpecs:          specs,
+				ProxyAuthenType:      attrs.ProxyAuthenType,
+				ProxyAuthenName:      attrs.ProxyAuthenName,
+				ProxyAuthenChallenge: attrs.ProxyAuthenChallenge,
+				ProxyAuthenResponse:  attrs.ProxyAuthenResponse,
+			})
+		})
+	}
+
 	var cgnat *cgnatcomp.Component
 	if cfg.CGNAT != nil && len(cfg.CGNAT.Pools) > 0 {
 		cgnat, err = cgnatcomp.NewComponent(coreDeps, ifMgr, vrfMgr)
@@ -461,6 +520,9 @@ func main() {
 	orch.Register(subscriberComp)
 	orch.Register(arpComp)
 	orch.Register(pppoeComp)
+	if l2tpComp != nil {
+		orch.Register(l2tpComp)
+	}
 	if cgnat != nil {
 		orch.Register(cgnat)
 	}

@@ -16,6 +16,7 @@ import (
 	"github.com/google/gopacket/layers"
 	"github.com/google/uuid"
 	hapb "github.com/veesix-networks/osvbng/api/proto/ha"
+	pppdisp "github.com/veesix-networks/osvbng/internal/ppp"
 	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
@@ -72,11 +73,19 @@ type Component struct {
 
 	registry *allocator.Registry
 
-	aaaRespSub    events.Subscription
-	haStateSub    events.Subscription
-	mutationSub   events.Subscription
-	terminateSub  events.Subscription
-	pppoeChan     <-chan *dataplane.ParsedPacket
+	aaaRespSub     events.Subscription
+	haStateSub     events.Subscription
+	mutationSub    events.Subscription
+	terminateSub   events.Subscription
+	lacDecisionSub events.Subscription
+
+	// lacTrigger is the cmd-installed callback that asks the L2TP
+	// component to bring up a LAC tunnel + session for the supplied
+	// subscriber. nil disables LAC handoff entirely; subscribers with
+	// `access-type: lac` then fail back to local PPP termination.
+	lacTrigger LACTrigger
+
+	pppoeChan <-chan *dataplane.ParsedPacket
 
 	nextSessionID uint16
 	sidMu         sync.Mutex
@@ -117,12 +126,15 @@ type SessionState struct {
 	ipcp   *ppp.IPCP
 	ipv6cp *ppp.IPv6CP
 
+	dispatcher *pppdisp.Dispatcher
+
 	ipcpOpen   bool
 	ipv6cpOpen bool
 
 	pap            *ppp.PAPHandler
 	chap           *ppp.CHAPHandler
 	chapChallenge  []byte
+	chapResponse   []byte
 	chapID         uint8
 	chapRetryTimer *time.Timer
 	chapRetryCount int
@@ -312,6 +324,7 @@ func (c *Component) Start(ctx context.Context) error {
 	c.haStateSub = c.eventBus.Subscribe(events.TopicHAStateChange, c.handleHAStateChange)
 	c.mutationSub = c.eventBus.Subscribe(events.TopicSubscriberMutation, c.handleSubscriberMutation)
 	c.terminateSub = c.eventBus.Subscribe(events.TopicSubscriberTerminate, c.handleSubscriberTerminate)
+	c.lacDecisionSub = c.eventBus.Subscribe(events.TopicL2TPLACDecision, c.handleLACDecision)
 
 	c.echoGen.Start()
 	c.Go(c.consumePPPoEPackets)
@@ -325,6 +338,9 @@ func (c *Component) Stop(ctx context.Context) error {
 	c.haStateSub.Unsubscribe()
 	c.mutationSub.Unsubscribe()
 	c.terminateSub.Unsubscribe()
+	if c.lacDecisionSub != nil {
+		c.lacDecisionSub.Unsubscribe()
+	}
 	c.echoGen.Stop()
 	c.StopContext()
 	return nil
