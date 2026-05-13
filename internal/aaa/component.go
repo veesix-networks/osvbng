@@ -219,6 +219,8 @@ func (c *Component) publishResponse(requestID, sessionID string, accessType mode
 		topic = events.TopicAAAResponseIPoE
 	case models.AccessTypePPPoE:
 		topic = events.TopicAAAResponsePPPoE
+	case models.AccessTypeL2TP:
+		topic = events.TopicAAAResponseL2TP
 	default:
 		topic = events.TopicAAAResponse
 	}
