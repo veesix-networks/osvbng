@@ -150,10 +150,15 @@ aaa:
 ## Show commands
 
 ```
-$ osvbngcli show l2tp tunnels
-$ osvbngcli show l2tp sessions
-$ osvbngcli show subscriber sessions   # state=tunneled for LAC subscribers
+$ osvbngcli show l2tp tunnels        # tunnel-level: local/peer IPs, state, session count
+$ osvbngcli show subscriber sessions # subscriber-level; LAC rows have State=tunneled
+                                     # plus an L2TP sub-object with tunnel/session IDs
 ```
+
+The subscriber view embeds an `L2TP` object only when the session is
+tunneled (LAC mode), so IPoE and non-LAC PPPoE subscribers render the
+same JSON shape they always have. Per-subscriber L2TP details appear
+alongside the existing PPPoE fields rather than as a separate listing.
 
 ## See also
 

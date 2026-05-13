@@ -96,8 +96,8 @@ Verify Subscriber Got IP From LNS
 
 Verify L2TP Data Flowed
     [Documentation]    bngblaster's tunnel counters reflect data packets in
-    ...                both directions — confirming the VPP LAC bridge
-    ...                (PPPoE → l2tpv2-encap-raw and l2tpv2-input →
+    ...                both directions, confirming the VPP LAC bridge
+    ...                (PPPoE to l2tpv2-encap-raw and l2tpv2-input to
     ...                osvbng-pppoe-lac-tx) is forwarding PPP frames.
     ${rc}    ${output} =    BNG Blaster CLI Command    ${subscribers}    l2tp-tunnels
     Should Be Equal As Integers    ${rc}    0
@@ -107,6 +107,24 @@ Verify L2TP Data Flowed
     @{parts} =    Split String    ${counts}
     Should Be True    ${parts}[0] > 0    Expected non-zero L2TP data-packets-rx on LNS
     Should Be True    ${parts}[1] > 0    Expected non-zero L2TP data-packets-tx on LNS
+
+Verify Show L2TP Tunnels
+    [Documentation]    osvbng's show handler returns the tunnel-level view
+    ...                with local/peer IPs, state, role and bound session
+    ...                count populated.
+    ${output} =    Get osvbng API Response    ${bng1}    /api/show/l2tp/tunnels
+    Should Contain    ${output}    Established
+    Should Contain    ${output}    "Role":"LAC"
+    Should Contain    ${output}    "PeerIP":"${lns-ipv4}"
+
+Verify Subscriber Session Has L2TP Binding
+    [Documentation]    A tunneled PPPoE subscriber surfaces an L2TP sub-
+    ...                object with tunnel and session IDs alongside the
+    ...                normal subscriber fields. Non-LAC sessions omit it.
+    ${output} =    Get osvbng API Response    ${bng1}    /api/show/subscriber/sessions
+    Should Contain    ${output}    "L2TP":{
+    Should Contain    ${output}    "LocalTunnelID":1
+    Should Contain    ${output}    "PeerTunnelID":1
 
 *** Keywords ***
 LAC Session Is Tunneled
