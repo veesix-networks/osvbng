@@ -99,10 +99,12 @@ func (v *VPP) AddL2TPSessionIP(local, peer net.IP, localTunnelID, localSessionID
 // AddL2TPSessionRaw installs a DECAP_RAW session. PPP frames decapsulated
 // from this session are forwarded to `rawNextNode` (resolved at session-
 // add time by the plugin) with `rawOpaque` stashed in the buffer for the
-// downstream node to interpret.
-func (v *VPP) AddL2TPSessionRaw(local, peer net.IP, localTunnelID, localSessionID, peerSessionID uint16, rawNextNode string, rawOpaque uint32, encapIfIndex uint32) error {
-	_, err := v.addL2TPSession(local, peer, localTunnelID, localSessionID, peerSessionID, l2tpDecapModeRaw, rawNextNode, rawOpaque, 0, encapIfIndex)
-	return err
+// downstream node to interpret. The returned uint32 is the L2TPv2 plugin's
+// session pool index — the consumer (LAC bridge) stashes it on the partner
+// PPPoE session struct so the subscriber→LNS path can stash it back into
+// `vnet_buffer_l2tpv2_opaque` for l2tpv2-encap-raw to look up the session.
+func (v *VPP) AddL2TPSessionRaw(local, peer net.IP, localTunnelID, localSessionID, peerSessionID uint16, rawNextNode string, rawOpaque uint32, encapIfIndex uint32) (uint32, error) {
+	return v.addL2TPSession(local, peer, localTunnelID, localSessionID, peerSessionID, l2tpDecapModeRaw, rawNextNode, rawOpaque, 0, encapIfIndex)
 }
 
 func (v *VPP) addL2TPSession(local, peer net.IP, localTunnelID, localSessionID, peerSessionID uint16, mode uint8, rawNextNode string, rawOpaque, decapVrfID, encapIfIndex uint32) (uint32, error) {
