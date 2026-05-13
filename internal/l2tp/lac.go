@@ -1,0 +1,395 @@
+// Copyright 2026 The osvbng Authors
+// Licensed under the GNU General Public License v3.0 or later.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+package l2tp
+
+import (
+	"errors"
+	"net"
+	"sync/atomic"
+	"time"
+
+	"github.com/veesix-networks/osvbng/pkg/events"
+	l2tppkt "github.com/veesix-networks/osvbng/pkg/l2tp"
+)
+
+// LACBringUpRequest is the PPPoE → L2TP handoff request. The PPPoE
+// component builds one from the AAA Access-Accept attributes
+// (Tunnel-* fields parsed into TunnelSpecs, Username, etc.) plus
+// per-session identity (PPPoESessionID for the dataplane binding) and
+// the proxy LCP / proxy-auth AVPs the LNS will replay against its PPP
+// FSM.
+//
+// `LocalName` is the Host Name AVP we put on outbound SCCRQ; defaults
+// to the LNSConfig hostname configured on the component.
+type LACBringUpRequest struct {
+	PPPoESessionID         uint16
+	Username               string
+	TunnelSpecs            []TunnelSpec
+	LocalName              string
+	LocalIP                net.IP
+
+	// Proxy LCP / proxy auth replay material, copied into ICCN per
+	// RFC 3437.
+	LastSentLCPConfReq     []byte
+	LastReceivedLCPConfReq []byte
+	ProxyAuthenType        uint16
+	ProxyAuthenName        string
+	ProxyAuthenChallenge   []byte
+	ProxyAuthenResponse    []byte
+}
+
+// lacCallSerial is the monotonically increasing Call Serial Number
+// stamped on outbound ICRQ messages. RFC 2661 §4.4.13 requires
+// uniqueness across the lifetime of the LAC; a process-wide counter is
+// sufficient since LAC restart implies fresh state.
+var lacCallSerial atomic.Uint32
+
+// StartLACSession kicks off LAC bring-up for one PPPoE subscriber. The
+// first non-denylisted TunnelSpec in `req` is tried; the outcome is
+// reported asynchronously on TopicL2TPLACDecision once the session has
+// either reached SessionEstablished or the candidate list is exhausted.
+//
+// Returns an error synchronously only if the request is malformed (no
+// candidates, missing fields, send transport not configured); transient
+// LNS failures are reported via the decision event so the caller does
+// not need to subscribe twice.
+func (c *Component) StartLACSession(req LACBringUpRequest) error {
+	if len(req.TunnelSpecs) == 0 {
+		return ErrNoTunnelCandidates
+	}
+	if c.send == nil {
+		return ErrSendNotConfigured
+	}
+
+	skipped := 0
+	for i := range req.TunnelSpecs {
+		spec := req.TunnelSpecs[i]
+		if spec.ServerIP == nil {
+			continue
+		}
+		if c.denylist != nil && c.denylist.IsDenied(spec.ServerIP) {
+			skipped++
+			c.log.Debug("LAC candidate skipped (denylisted)",
+				"peer_ip", spec.ServerIP.String(),
+				"reason", c.denylist.Reason(spec.ServerIP))
+			continue
+		}
+		if err := c.tryLACTunnel(req, spec); err == nil {
+			return nil
+		} else {
+			c.log.Debug("LAC tunnel candidate failed, trying next",
+				"peer_ip", spec.ServerIP.String(), "error", err)
+		}
+	}
+	if skipped > 0 && skipped == len(req.TunnelSpecs) {
+		c.publishLACDecision(req.PPPoESessionID, nil, nil, ErrAllCandidatesDenied)
+		return ErrAllCandidatesDenied
+	}
+	c.publishLACDecision(req.PPPoESessionID, nil, nil, ErrNoTunnelCandidates)
+	return ErrNoTunnelCandidates
+}
+
+// tryLACTunnel attempts to bring up a tunnel + session against one
+// LNS candidate. Returns nil on success once the SCCRQ has been sent
+// (the rest of the bring-up runs asynchronously through Dispatch);
+// returns an error if local state setup failed and the caller should
+// move to the next candidate.
+func (c *Component) tryLACTunnel(req LACBringUpRequest, spec TunnelSpec) error {
+	peerIP := spec.ServerIP
+	localIP := req.LocalIP
+	if localIP == nil {
+		localIP = spec.ClientIP
+	}
+
+	localTunnelID, err := c.allocateTunnelID(peerIP)
+	if err != nil {
+		return ErrTunnelExhaustion
+	}
+
+	hostName := req.LocalName
+	if hostName == "" {
+		hostName = c.localHostname
+	}
+
+	var ourChallenge []byte
+	if len(spec.Password) > 0 {
+		ourChallenge, err = l2tppkt.NewChallenge()
+		if err != nil {
+			c.releaseTunnelID(peerIP, localTunnelID)
+			return err
+		}
+	}
+
+	t := &Tunnel{
+		LocalIP:              localIP,
+		PeerIP:               peerIP,
+		LocalID:              localTunnelID,
+		LocalPort:            1701,
+		PeerPort:             1701,
+		Role:                 l2tppkt.RoleInitiator,
+		FSM:                  l2tppkt.NewTunnelFSM(l2tppkt.RoleInitiator),
+		LocalHostname:        hostName,
+		Secret:               []byte(spec.Password),
+		Sessions:             make(map[uint16]*Session),
+		CreatedAt:            time.Now(),
+		outstandingChallenge: ourChallenge,
+	}
+	if err := t.FSM.SendSCCRQ(); err != nil {
+		c.releaseTunnelID(peerIP, localTunnelID)
+		return err
+	}
+	if err := c.registerTunnel(t); err != nil {
+		c.releaseTunnelID(peerIP, localTunnelID)
+		return err
+	}
+
+	c.startTunnelRunner(t, 60*time.Second)
+
+	// Stash the bring-up request on the tunnel under the LAC mutex
+	// so the SCCRP handler can find it when the tunnel reaches
+	// Established and the LAC session needs to be opened.
+	c.lacMu.Lock()
+	if c.lacPending == nil {
+		c.lacPending = make(map[tunnelKey]*LACBringUpRequest)
+	}
+	c.lacPending[makeTunnelKey(peerIP, localTunnelID)] = &req
+	c.lacMu.Unlock()
+
+	sccrqBody := l2tppkt.BuildSCCRQ(l2tppkt.SCCRQParams{
+		LocalTunnelID:     localTunnelID,
+		ReceiveWindowSize: 16,
+		HostName:          hostName,
+		FramingCaps:       l2tppkt.FramingSync,
+		BearerCaps:        l2tppkt.BearerDigital,
+		Challenge:         ourChallenge,
+	})
+	if err := t.Channel.Send(sccrqBody, time.Now()); err != nil {
+		c.stopTunnelRunner(peerIP, localTunnelID)
+		c.unregisterTunnel(peerIP, localTunnelID)
+		c.releaseTunnelID(peerIP, localTunnelID)
+		c.clearLACPending(peerIP, localTunnelID)
+		return err
+	}
+	return nil
+}
+
+// handleSCCRP processes an inbound SCCRP on a LAC-side tunnel. It
+// learns the peer Tunnel-ID, verifies our challenge if we issued one,
+// computes a Challenge-Response if the peer challenged us, and sends
+// SCCCN. The tunnel FSM advances to Established and the pending LAC
+// session is opened with an ICRQ.
+func (c *Component) handleSCCRP(t *Tunnel, avps []l2tppkt.AVP) error {
+	if l2tppkt.DecodeMessageType(avps) != l2tppkt.MsgTypeSCCRP {
+		return ErrNotSCCRP
+	}
+	if t.Role != l2tppkt.RoleInitiator {
+		return ErrUnexpectedSCCRP
+	}
+
+	assigned := l2tppkt.FindFirst(avps, 0, l2tppkt.AVPAssignedTunnelID)
+	if assigned == nil || len(assigned.Value) < 2 {
+		return ErrMissingAssignedTunnelID
+	}
+	peerTunnelID := l2tppkt.DecodeUint16(assigned)
+
+	if hostName := l2tppkt.FindFirst(avps, 0, l2tppkt.AVPHostName); hostName != nil {
+		t.PeerHostname = l2tppkt.DecodeString(hostName)
+	}
+
+	t.mu.Lock()
+	t.PeerID = peerTunnelID
+	outstanding := t.outstandingChallenge
+	t.mu.Unlock()
+
+	// Verify the LNS's response to our Challenge, if any.
+	if len(outstanding) > 0 {
+		respAVP := l2tppkt.FindFirst(avps, 0, l2tppkt.AVPChallengeResponse)
+		if respAVP == nil {
+			return ErrMissingChallengeResponse
+		}
+		if err := l2tppkt.VerifyChallengeResponse(
+			byte(l2tppkt.MsgTypeSCCRP), t.Secret, outstanding, respAVP.Value,
+		); err != nil {
+			return err
+		}
+		t.mu.Lock()
+		t.outstandingChallenge = nil
+		t.mu.Unlock()
+	}
+
+	// Compute a Challenge-Response for the LNS's challenge, if any.
+	var peerResp []byte
+	if peerChallenge := l2tppkt.FindFirst(avps, 0, l2tppkt.AVPChallenge); peerChallenge != nil {
+		if len(t.Secret) == 0 {
+			return ErrChallengeWithoutSecret
+		}
+		peerResp = l2tppkt.ComputeChallengeResponse(
+			byte(l2tppkt.MsgTypeSCCCN), t.Secret, peerChallenge.Value,
+		)
+	}
+
+	if err := t.FSM.RecvSCCRP(); err != nil {
+		return err
+	}
+
+	sccccnBody := l2tppkt.BuildSCCCN(peerResp)
+	if err := t.Channel.Send(sccccnBody, time.Now()); err != nil {
+		return err
+	}
+
+	// Tunnel is now Established. Open the pending LAC session.
+	c.lacMu.Lock()
+	req := c.lacPending[makeTunnelKey(t.PeerIP, t.LocalID)]
+	c.lacMu.Unlock()
+	if req == nil {
+		return ErrLACRequestMissing
+	}
+	return c.openLACSession(t, req)
+}
+
+// openLACSession allocates a session ID under the tunnel, registers
+// the session, and sends ICRQ. The ICRP handler completes the bring-up.
+func (c *Component) openLACSession(t *Tunnel, req *LACBringUpRequest) error {
+	t.mu.Lock()
+	if t.Sessions == nil {
+		t.Sessions = make(map[uint16]*Session)
+	}
+	var localID uint16
+	for try := uint16(1); try != 0; try++ {
+		if _, used := t.Sessions[try]; !used {
+			localID = try
+			break
+		}
+	}
+	if localID == 0 {
+		t.mu.Unlock()
+		return ErrSessionExhaustion
+	}
+	t.mu.Unlock()
+
+	s := &Session{
+		SessionID:      makeSessionID(t.PeerIP, t.LocalID, localID),
+		Tunnel:         t,
+		LocalID:        localID,
+		Role:           l2tppkt.SessionRoleLAC,
+		FSM:            l2tppkt.NewSessionFSM(l2tppkt.SessionRoleLAC),
+		Username:       req.Username,
+		PPPoESessionID: req.PPPoESessionID,
+		Attributes:     make(map[string]string),
+	}
+	if err := s.FSM.SendICRQ(); err != nil {
+		return err
+	}
+	t.addSession(s)
+
+	icrqBody := l2tppkt.BuildICRQ(l2tppkt.ICRQParams{
+		LocalSessionID:   localID,
+		CallSerialNumber: lacCallSerial.Add(1),
+	})
+	return t.Channel.Send(icrqBody, time.Now())
+}
+
+// handleICRP processes the LNS's reply to our ICRQ. The peer Session-ID
+// is learned, the FSM advances, and ICCN is sent to complete the
+// session bring-up.
+func (c *Component) handleICRP(s *Session, avps []l2tppkt.AVP) error {
+	if l2tppkt.DecodeMessageType(avps) != l2tppkt.MsgTypeICRP {
+		return ErrNotICRP
+	}
+	if s.Role != l2tppkt.SessionRoleLAC {
+		return ErrUnexpectedICRP
+	}
+	assigned := l2tppkt.FindFirst(avps, 0, l2tppkt.AVPAssignedSessionID)
+	if assigned == nil || len(assigned.Value) < 2 {
+		return ErrMissingAssignedSessionID
+	}
+
+	s.mu.Lock()
+	s.PeerID = l2tppkt.DecodeUint16(assigned)
+	s.mu.Unlock()
+
+	if err := s.FSM.RecvICRP(); err != nil {
+		return err
+	}
+
+	t := s.Tunnel
+	c.lacMu.Lock()
+	req := c.lacPending[makeTunnelKey(t.PeerIP, t.LocalID)]
+	c.lacMu.Unlock()
+	if req == nil {
+		return ErrLACRequestMissing
+	}
+
+	iccnBody := l2tppkt.BuildICCN(l2tppkt.ICCNParams{
+		Framing:                l2tppkt.FramingSync,
+		LastSentLCPConfReq:     req.LastSentLCPConfReq,
+		LastReceivedLCPConfReq: req.LastReceivedLCPConfReq,
+		ProxyAuthenType:        req.ProxyAuthenType,
+		ProxyAuthenName:        req.ProxyAuthenName,
+		ProxyAuthenChallenge:   req.ProxyAuthenChallenge,
+		ProxyAuthenResponse:    req.ProxyAuthenResponse,
+	})
+	if err := t.Channel.Send(iccnBody, time.Now()); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	s.ActivatedAt = time.Now()
+	s.mu.Unlock()
+	c.clearLACPending(t.PeerIP, t.LocalID)
+	c.publishLACDecision(req.PPPoESessionID, t, s, nil)
+	return nil
+}
+
+// publishLACDecision emits the TopicL2TPLACDecision event the PPPoE
+// component subscribes to. On success `t`/`s` describe the bound
+// session; on failure they are nil and `err` carries the reason.
+func (c *Component) publishLACDecision(pppoeSessionID uint16, t *Tunnel, s *Session, err error) {
+	if c.eventBus == nil {
+		return
+	}
+	evt := &events.L2TPLACDecisionEvent{
+		PPPoESessionID: pppoeSessionID,
+		Success:        err == nil,
+	}
+	if err != nil {
+		evt.Error = err.Error()
+	}
+	if t != nil {
+		if t.LocalIP != nil {
+			evt.LocalIP = t.LocalIP.String()
+		}
+		if t.PeerIP != nil {
+			evt.PeerIP = t.PeerIP.String()
+		}
+		evt.LocalTunnelID = t.LocalID
+		evt.PeerTunnelID = t.PeerID
+	}
+	if s != nil {
+		evt.LocalSessionID = s.LocalID
+		evt.PeerSessionID = s.PeerID
+		evt.LACL2TPSessionIndex = s.SwIfIndex
+	}
+	c.eventBus.Publish(events.TopicL2TPLACDecision, events.Event{
+		Source: c.Name(),
+		Data:   evt,
+	})
+}
+
+func (c *Component) clearLACPending(peerIP net.IP, localTunnelID uint16) {
+	c.lacMu.Lock()
+	delete(c.lacPending, makeTunnelKey(peerIP, localTunnelID))
+	c.lacMu.Unlock()
+}
+
+var (
+	ErrNoTunnelCandidates  = errors.New("l2tp: no LAC tunnel candidates")
+	ErrAllCandidatesDenied = errors.New("l2tp: all LAC candidates denylisted")
+	ErrNotSCCRP           = errors.New("l2tp: expected SCCRP")
+	ErrNotICRP            = errors.New("l2tp: expected ICRP")
+	ErrUnexpectedSCCRP    = errors.New("l2tp: SCCRP on non-initiator tunnel")
+	ErrUnexpectedICRP     = errors.New("l2tp: ICRP on non-LAC session")
+	ErrLACRequestMissing  = errors.New("l2tp: LAC bring-up request lost")
+)
