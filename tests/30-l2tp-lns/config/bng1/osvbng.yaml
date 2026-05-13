@@ -1,0 +1,65 @@
+# Copyright 2026 The osvbng Authors
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+interfaces:
+  eth1:
+    description: "L2TP transport (toward LAC)"
+    ipv4-addresses:
+      - 10.0.0.1/30
+  eth2:
+    description: "Core uplink"
+    ipv4-addresses:
+      - 10.1.0.1/30
+
+ipv4-profiles:
+  default:
+    gateway: 100.64.0.1
+    dns:
+      - 8.8.8.8
+    pools:
+      - name: lns-subscribers
+        network: 100.64.0.0/16
+        priority: 1
+
+ipv6-profiles:
+  default-v6:
+    iana-pools:
+      - name: lns-wan-link
+        network: 2001:db8:1::/64
+        range_start: 2001:db8:1::1000
+        range_end: 2001:db8:1::ffff
+    pd-pools:
+      - name: lns-pd
+        network: 2001:db8:2::/40
+        prefix-length: 56
+
+aaa:
+  policy:
+    - name: lns-policy
+      type: ppp
+      authenticate: true
+
+l2tp:
+  profiles:
+    LNS_DEFAULT:
+      receive-window-size: 16
+      hello-interval: 60s
+      challenge-required: false
+      proxy-lcp-mode: accept-only
+
+  peer-policies:
+    blaster-lac:
+      hostname: "bngblaster-lac"
+      secret: ""
+      profile: LNS_DEFAULT
+
+subscriber-groups:
+  groups:
+    lns:
+      access-type: lns
+      ipv4-profile: default
+      ipv6-profile: default-v6
+      aaa-policy: lns-policy
+      l2tp:
+        profile: LNS_DEFAULT

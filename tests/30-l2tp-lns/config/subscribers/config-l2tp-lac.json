@@ -1,0 +1,63 @@
+{
+  "interfaces": {
+    "network": [
+      {
+        "interface": "eth1",
+        "address": "10.0.0.2/30",
+        "gateway": "10.0.0.1"
+      }
+    ],
+    "access": [
+      {
+        "interface": "eth1",
+        "type": "pppoe",
+        "vlan-mode": "1:1",
+        "outer-vlan-min": 100,
+        "outer-vlan-max": 100,
+        "inner-vlan-min": 1,
+        "inner-vlan-max": 10
+      }
+    ]
+  },
+  "pppoe": {
+    "reconnect": false,
+    "discovery-timeout": 5,
+    "discovery-retry": 10
+  },
+  "ppp": {
+    "authentication": {
+      "username": "user{session-global}",
+      "password": "test",
+      "timeout": 10,
+      "retry": 10,
+      "protocol": "CHAP"
+    },
+    "lcp": {
+      "conf-request-timeout": 5,
+      "conf-request-retry": 10,
+      "keepalive-retry": 5
+    },
+    "ipcp": {
+      "enable": true
+    },
+    "ip6cp": {
+      "enable": true
+    }
+  },
+  "l2tp-server": [
+    {
+      "name": "bngblaster-lac",
+      "address": "10.0.0.1",
+      "secret": "",
+      "receive-window-size": 16,
+      "hello-interval": 60,
+      "session-limit": 1000
+    }
+  ],
+  "sessions": {
+    "count": 1,
+    "max-outstanding": 1,
+    "start-rate": 1,
+    "stop-rate": 1
+  }
+}
