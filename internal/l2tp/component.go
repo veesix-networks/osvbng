@@ -302,3 +302,51 @@ func (c *Component) releaseTunnelID(peerIP net.IP, id uint16) {
 		alloc.Release(id)
 	}
 }
+
+// installTunnelVPP registers a freshly Established tunnel in the VPP
+// L2TPv2 plugin so subsequent AddL2TPSession{IP,Raw} calls can resolve
+// it. Idempotent at the call sites: both LAC (handleSCCRP) and LNS
+// (HandleSCCCN) drive a tunnel into Established exactly once.
+func (c *Component) installTunnelVPP(t *Tunnel) error {
+	if c.vpp == nil {
+		return nil
+	}
+	t.mu.Lock()
+	installed := t.installedInVPP
+	t.mu.Unlock()
+	if installed {
+		return nil
+	}
+	if _, err := c.vpp.AddL2TPTunnel(
+		t.LocalIP, t.PeerIP, t.LocalID, t.PeerID,
+		t.LocalPort, t.PeerPort, false,
+	); err != nil {
+		return err
+	}
+	t.mu.Lock()
+	t.installedInVPP = true
+	t.mu.Unlock()
+	return nil
+}
+
+// uninstallTunnelVPP removes a tunnel from the VPP L2TPv2 plugin. Must
+// be called only after every bound session has been removed (the plugin
+// returns INSTANCE_IN_USE otherwise). Idempotent.
+func (c *Component) uninstallTunnelVPP(t *Tunnel) {
+	if c.vpp == nil {
+		return
+	}
+	t.mu.Lock()
+	installed := t.installedInVPP
+	t.installedInVPP = false
+	t.mu.Unlock()
+	if !installed {
+		return
+	}
+	if err := c.vpp.DeleteL2TPTunnel(t.LocalIP, t.PeerIP, t.LocalID); err != nil {
+		c.log.Warn("DeleteL2TPTunnel failed",
+			"peer_ip", t.PeerIP.String(),
+			"local_tunnel_id", t.LocalID,
+			"error", err)
+	}
+}

@@ -171,15 +171,23 @@ type ICCNParams struct {
 // pre-state the LNS's PPP termination.
 func BuildICCN(p ICCNParams) []byte {
 	body := appendMessageTypeAVP(nil, MsgTypeICCN)
-	if p.TxConnectSpeed != 0 {
-		var v [4]byte
-		v[0] = byte(p.TxConnectSpeed >> 24)
-		v[1] = byte(p.TxConnectSpeed >> 16)
-		v[2] = byte(p.TxConnectSpeed >> 8)
-		v[3] = byte(p.TxConnectSpeed)
-		body = AppendAVP(body, true, false, VendorIETF, AVPTxConnectSpeed, v[:])
+	// RFC 2661 §6.10: (Tx) Connect Speed and Framing Type are REQUIRED
+	// AVPs in ICCN. Default the speed to 1 Gbps when the caller leaves
+	// it at zero; LNS implementations (e.g. bngblaster) reject ICCN
+	// with CDN ResultCode=2 (general error) if the AVP is missing.
+	speed := p.TxConnectSpeed
+	if speed == 0 {
+		speed = 1000000000
 	}
-	body = appendFramingCapabilitiesAVP(body, p.Framing)
+	var sv [4]byte
+	sv[0] = byte(speed >> 24)
+	sv[1] = byte(speed >> 16)
+	sv[2] = byte(speed >> 8)
+	sv[3] = byte(speed)
+	body = AppendAVP(body, true, false, VendorIETF, AVPTxConnectSpeed, sv[:])
+	// Framing Type (AVP 19) NOT Framing Capabilities (AVP 3) — the
+	// capabilities AVP belongs on SCCRQ/SCCRP.
+	body = appendFramingTypeAVP(body, p.Framing)
 	// ICCN requires Call Errors and ACCM AVPs per RFC 2661 §4.4.28 /
 	// §4.4.29; emit them zero-padded.
 	body = appendCallErrorsAVP(body)

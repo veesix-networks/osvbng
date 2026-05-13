@@ -160,6 +160,15 @@ func appendFramingCapabilitiesAVP(dst []byte, caps uint32) []byte {
 	return AppendAVP(dst, true, false, VendorIETF, AVPFramingCapabilities, v[:])
 }
 
+// appendFramingTypeAVP emits the Framing Type AVP (Type 19) carried on
+// ICCN per RFC 2661 §6.10 / §4.4.16. The 4-byte value uses the same
+// bit assignments as Framing Capabilities (sync / async).
+func appendFramingTypeAVP(dst []byte, framing uint32) []byte {
+	var v [4]byte
+	binary.BigEndian.PutUint32(v[:], framing)
+	return AppendAVP(dst, true, false, VendorIETF, AVPFramingType, v[:])
+}
+
 func appendBearerCapabilitiesAVP(dst []byte, caps uint32) []byte {
 	var v [4]byte
 	binary.BigEndian.PutUint32(v[:], caps)
@@ -213,19 +222,21 @@ func appendCallSerialNumberAVP(dst []byte, serial uint32) []byte {
 }
 
 func appendCallErrorsAVP(dst []byte) []byte {
-	// RFC 2661 §4.4.6 / §4.4.28: ICCN MUST include Call Errors.
-	// We emit it zero-padded (no errors yet) for spec compliance per
-	// spec-finalize finding G2. Body is 2 reserved bytes + 6 u32
-	// counters.
+	// RFC 2661 §4.4.28: M-bit SHOULD be 0 — receivers may ignore this
+	// AVP. Setting M=1 trips strict LNS decoders (bngblaster rejects
+	// the ICCN with CDN 2/6 "decode error" because it doesn't have
+	// this AVP in its mandatory-known list). Body is 2 reserved
+	// bytes + 6 u32 counters.
 	v := make([]byte, 2+6*4)
-	return AppendAVP(dst, true, false, VendorIETF, AVPCallErrors, v)
+	return AppendAVP(dst, false, false, VendorIETF, AVPCallErrors, v)
 }
 
 func appendACCMAVP(dst []byte) []byte {
-	// RFC 1662: ACCM for sync framing is all zeros (no escaping).
-	// Spec-finalize G2 calls this out as required in ICCN.
+	// RFC 2661 §4.4.29: M-bit SHOULD be 0. RFC 1662 ACCM for sync
+	// framing is all zeros. Setting M=1 trips strict decoders (same
+	// failure mode as appendCallErrorsAVP).
 	v := make([]byte, 2+4+4) // reserved(2) + send-accm(4) + recv-accm(4)
-	return AppendAVP(dst, true, false, VendorIETF, AVPACCM, v)
+	return AppendAVP(dst, false, false, VendorIETF, AVPACCM, v)
 }
 
 func appendProxyAuthenTypeAVP(dst []byte, authType uint16) []byte {

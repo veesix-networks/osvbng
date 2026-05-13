@@ -114,6 +114,16 @@ func (c *Component) tryLACTunnel(req LACBringUpRequest, spec TunnelSpec) error {
 	if localIP == nil {
 		localIP = spec.ClientIP
 	}
+	if localIP == nil {
+		// Vendor pattern: pool-config `source-ipv4` per-LNS (Cisco
+		// `source-ip`, RTBrick `client-ipv4`). Look up the running
+		// config and find the LNS entry whose IPv4 matches the peer,
+		// then use its SourceIPv4 as the L2TP local IP.
+		localIP = c.lookupConfiguredSourceIP(peerIP)
+	}
+	if localIP == nil {
+		return ErrNoLocalIP
+	}
 
 	localTunnelID, err := c.allocateTunnelID(peerIP)
 	if err != nil {
@@ -251,7 +261,18 @@ func (c *Component) handleSCCRP(t *Tunnel, avps []l2tppkt.AVP) error {
 		return err
 	}
 
-	// Tunnel is now Established. Open the pending LAC session.
+	// Tunnel is now Established. Install it in the VPP L2TPv2 plugin so
+	// subsequent session-add binapi calls can resolve the tunnel.
+	if err := c.installTunnelVPP(t); err != nil {
+		c.log.Error("AddL2TPTunnel failed; aborting LAC bring-up",
+			"peer_ip", t.PeerIP.String(),
+			"local_tunnel_id", t.LocalID,
+			"peer_tunnel_id", t.PeerID,
+			"error", err)
+		return err
+	}
+
+	// Open the pending LAC session.
 	c.lacMu.Lock()
 	req := c.lacPending[makeTunnelKey(t.PeerIP, t.LocalID)]
 	c.lacMu.Unlock()
@@ -343,7 +364,10 @@ func (c *Component) handleICRP(s *Session, avps []l2tppkt.AVP) error {
 		ProxyAuthenChallenge:   req.ProxyAuthenChallenge,
 		ProxyAuthenResponse:    req.ProxyAuthenResponse,
 	})
-	if err := t.Channel.Send(iccnBody, time.Now()); err != nil {
+	// RFC 2661 §3.1, §5.1: session-scoped messages after the peer has
+	// assigned a Session ID carry that peer Session ID in the L2TP
+	// header. ICRP delivered s.PeerID above.
+	if err := t.Channel.SendSession(iccnBody, s.PeerID, time.Now()); err != nil {
 		return err
 	}
 
@@ -429,4 +453,37 @@ var (
 	ErrUnexpectedSCCRP    = errors.New("l2tp: SCCRP on non-initiator tunnel")
 	ErrUnexpectedICRP     = errors.New("l2tp: ICRP on non-LAC session")
 	ErrLACRequestMissing  = errors.New("l2tp: LAC bring-up request lost")
+	ErrNoLocalIP          = errors.New("l2tp: no local IP for tunnel; set tunnel-pool lns.source-ipv4 or AAA Tunnel-Client-Endpoint")
 )
+
+// lookupConfiguredSourceIP scans the running L2TPConfig for an LNS
+// entry whose `ipv4` matches `peerIP` and returns its `source-ipv4`.
+// Returns nil if no match. The scan is bounded by the number of LNS
+// entries configured (typically <100), so a linear walk is fine.
+func (c *Component) lookupConfiguredSourceIP(peerIP net.IP) net.IP {
+	if c.cfgMgr == nil {
+		return nil
+	}
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil || cfg.L2TP == nil {
+		return nil
+	}
+	for _, pool := range cfg.L2TP.TunnelPools {
+		if pool == nil {
+			continue
+		}
+		for i := range pool.LNS {
+			lnsIP := net.ParseIP(pool.LNS[i].IPv4)
+			if lnsIP == nil || !lnsIP.Equal(peerIP) {
+				continue
+			}
+			if pool.LNS[i].SourceIPv4 == "" {
+				continue
+			}
+			if src := net.ParseIP(pool.LNS[i].SourceIPv4); src != nil {
+				return src
+			}
+		}
+	}
+	return nil
+}

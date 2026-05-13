@@ -56,6 +56,11 @@ type Tunnel struct {
 	// ref_count of sessions currently bound. Used by teardown to defer
 	// tunnel deletion until the last session is gone.
 	refCount int
+
+	// installedInVPP is true once the L2TPv2 plugin holds an entry for
+	// this tunnel in its bihash. Gates AddL2TPSession calls; cleared by
+	// uninstallTunnelVPP on teardown.
+	installedInVPP bool
 }
 
 func (t *Tunnel) addSession(s *Session) {

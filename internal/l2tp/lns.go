@@ -150,7 +150,20 @@ func (c *Component) HandleSCCCN(t *Tunnel, avps []l2tppkt.AVP, outstandingChalle
 		t.outstandingChallenge = nil
 		t.mu.Unlock()
 	}
-	return t.FSM.RecvSCCCN()
+	if err := t.FSM.RecvSCCCN(); err != nil {
+		return err
+	}
+	// Tunnel is now Established. Install it in the VPP L2TPv2 plugin
+	// so subsequent AddL2TPSessionIP calls (on ICRQ) can resolve it.
+	if err := c.installTunnelVPP(t); err != nil {
+		c.log.Error("AddL2TPTunnel failed on LNS",
+			"peer_ip", t.PeerIP.String(),
+			"local_tunnel_id", t.LocalID,
+			"peer_tunnel_id", t.PeerID,
+			"error", err)
+		return err
+	}
+	return nil
 }
 
 // HandleICRQ processes an inbound ICRQ on the LNS side. It allocates a
@@ -239,6 +252,7 @@ func (c *Component) HandleStopCCN(t *Tunnel) {
 	c.stopTunnelRunner(t.PeerIP, t.LocalID)
 	c.unregisterTunnel(t.PeerIP, t.LocalID)
 	c.releaseTunnelID(t.PeerIP, t.LocalID)
+	c.uninstallTunnelVPP(t)
 }
 
 var (

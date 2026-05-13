@@ -65,7 +65,8 @@ func (r *tunnelRunner) Start() {
 		return
 	}
 	r.hello.Start(func(body []byte) error {
-		return r.sendBody(body, r.tunnel.Channel.Ns(), r.tunnel.Channel.Nr())
+		// HELLO is tunnel-scoped: RFC 2661 §5.5 requires Session ID 0.
+		return r.sendBody(body, 0, r.tunnel.Channel.Ns(), r.tunnel.Channel.Nr())
 	})
 
 	go r.loop()
@@ -109,8 +110,8 @@ func (r *tunnelRunner) loop() {
 	}
 }
 
-func (r *tunnelRunner) sendBody(body []byte, ns, nr uint16) error {
-	h := l2tppkt.NewControl(r.tunnel.PeerID, 0, ns, nr)
+func (r *tunnelRunner) sendBody(body []byte, sessionID, ns, nr uint16) error {
+	h := l2tppkt.NewControl(r.tunnel.PeerID, sessionID, ns, nr)
 	return r.send(r.tunnel.LocalIP, r.tunnel.PeerIP,
 		r.tunnel.LocalPort, r.tunnel.PeerPort, *h, body)
 }
@@ -126,12 +127,13 @@ func (c *Component) startTunnelRunner(t *Tunnel, helloInterval time.Duration) {
 	r := newTunnelRunner(t, c.send, helloInterval)
 
 	cfg := l2tppkt.Config{PeerRWS: 16}
-	t.Channel = l2tppkt.NewControlChannel(cfg, func(body []byte, ns, nr uint16) error {
-		return r.sendBody(body, ns, nr)
+	t.Channel = l2tppkt.NewControlChannel(cfg, func(body []byte, sessionID, ns, nr uint16) error {
+		return r.sendBody(body, sessionID, ns, nr)
 	}, func() {
 		// Channel declared dead — drive the tunnel to Cleanup.
 		t.FSM.Stop()
 		c.unregisterTunnel(t.PeerIP, t.LocalID)
+		c.uninstallTunnelVPP(t)
 	})
 
 	c.mu.Lock()

@@ -11,14 +11,20 @@ import (
 )
 
 type sentMsg struct {
-	body []byte
-	ns   uint16
-	nr   uint16
+	body      []byte
+	sessionID uint16
+	ns        uint16
+	nr        uint16
 }
 
 func recordingSend(out *[]sentMsg) SendFunc {
-	return func(body []byte, ns, nr uint16) error {
-		*out = append(*out, sentMsg{body: append([]byte(nil), body...), ns: ns, nr: nr})
+	return func(body []byte, sessionID, ns, nr uint16) error {
+		*out = append(*out, sentMsg{
+			body:      append([]byte(nil), body...),
+			sessionID: sessionID,
+			ns:        ns,
+			nr:        nr,
+		})
 		return nil
 	}
 }
@@ -199,7 +205,7 @@ func TestSeqLessWraparound(t *testing.T) {
 }
 
 func TestSetPeerWindowClamps(t *testing.T) {
-	ch := NewControlChannel(Config{PeerRWS: 8}, func(_ []byte, _, _ uint16) error { return nil }, nil)
+	ch := NewControlChannel(Config{PeerRWS: 8}, func(_ []byte, _, _, _ uint16) error { return nil }, nil)
 	ch.cwnd = 16
 	ch.ssthresh = 16
 
@@ -223,7 +229,7 @@ func TestSetPeerWindowClamps(t *testing.T) {
 
 func TestSendErrorPropagates(t *testing.T) {
 	want := errors.New("net broken")
-	ch := NewControlChannel(Config{PeerRWS: 4}, func(_ []byte, _, _ uint16) error {
+	ch := NewControlChannel(Config{PeerRWS: 4}, func(_ []byte, _, _, _ uint16) error {
 		return want
 	}, nil)
 	if err := ch.Send([]byte("x"), time.Unix(0, 0)); err != want {

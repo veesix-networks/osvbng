@@ -38,13 +38,17 @@ const (
 )
 
 // SendFunc serializes and transmits a control message body with the
-// given Ns and Nr in the L2TP header. The tunnel ID is owned by the
-// caller; the channel only knows about sequence numbers.
+// given Ns, Nr, and Session-ID in the L2TP header. The tunnel ID is
+// owned by the caller; the channel only knows about sequence numbers
+// and the per-message session id supplied via Send.
 //
 // `body` is the AVP-sequence payload; the channel does not interpret
 // it. The implementation typically prepends a Header and writes to a
-// UDP socket.
-type SendFunc func(body []byte, ns, nr uint16) error
+// UDP socket. `sessionID` is 0 for tunnel-level control messages
+// (SCCRQ/SCCRP/SCCCN/StopCCN/HELLO and ZLBs) and the peer Session-ID
+// for session-scoped messages (ICRQ/ICRP/ICCN/CDN/WEN/SLI) per RFC
+// 2661 §3.1.
+type SendFunc func(body []byte, sessionID, ns, nr uint16) error
 
 // DeadFunc is invoked when the channel exhausts MaxRetries on the
 // outstanding message. The tunnel should treat the peer as gone and
@@ -52,10 +56,11 @@ type SendFunc func(body []byte, ns, nr uint16) error
 type DeadFunc func()
 
 type pendingMsg struct {
-	body     []byte
-	ns       uint16
-	attempts int
-	deadline time.Time
+	body      []byte
+	sessionID uint16
+	ns        uint16
+	attempts  int
+	deadline  time.Time
 }
 
 // ControlChannel state. All methods are intended to be called from a
@@ -150,18 +155,28 @@ func (c *ControlChannel) SetPeerWindow(rws int) {
 
 var ErrChannelDead = errors.New("l2tp: control channel dead, message dropped")
 
-// Send enqueues a control message for transmission. If the message
-// fits in the current send window it is transmitted immediately and
-// the retransmit timer is armed. Otherwise it queues behind in-flight
-// messages.
+// Send enqueues a tunnel-level control message (Session-ID 0) for
+// transmission. Use SendSession for session-scoped messages. If the
+// message fits in the current send window it is transmitted
+// immediately and the retransmit timer is armed; otherwise it queues
+// behind in-flight messages.
 //
 // `body` is retained by the channel until ACKed; callers should pass
 // a freshly-allocated slice or accept that mutating their copy will
 // affect retransmissions.
 func (c *ControlChannel) Send(body []byte, now time.Time) error {
+	return c.SendSession(body, 0, now)
+}
+
+// SendSession is the session-scoped variant of Send. The Session-ID
+// is carried in the L2TP header of the outbound message (and on every
+// retransmission). RFC 2661 §3.1: ICRQ/ICRP/ICCN/CDN/WEN/SLI carry
+// the peer Session-ID; tunnel-level messages carry 0.
+func (c *ControlChannel) SendSession(body []byte, sessionID uint16, now time.Time) error {
 	m := pendingMsg{
-		body: body,
-		ns:   c.ns,
+		body:      body,
+		sessionID: sessionID,
+		ns:        c.ns,
 	}
 	c.ns++
 	c.queue = append(c.queue, m)
@@ -189,7 +204,7 @@ func (c *ControlChannel) driveSend(now time.Time) error {
 		}
 		c.queue[i].attempts = 1
 		c.queue[i].deadline = now.Add(c.rtoInitial)
-		if err := c.send(c.queue[i].body, c.queue[i].ns, c.nr); err != nil {
+		if err := c.send(c.queue[i].body, c.queue[i].sessionID, c.queue[i].ns, c.nr); err != nil {
 			return err
 		}
 		inflight++
@@ -327,14 +342,15 @@ func (c *ControlChannel) Tick(now time.Time) time.Time {
 			rto = c.rtoMax
 		}
 		c.queue[i].deadline = now.Add(rto)
-		_ = c.send(c.queue[i].body, c.queue[i].ns, c.nr)
+		_ = c.send(c.queue[i].body, c.queue[i].sessionID, c.queue[i].ns, c.nr)
 	}
 	c.recomputeNextRTO()
 
-	// ZLB emission.
+	// ZLB emission. Per RFC 2661 §5.4 a ZLB is a tunnel-level ack and
+	// carries Session-ID 0; the Ns is the current next-send value (not
+	// incremented because the ZLB has no payload).
 	if !c.zlbDeadline.IsZero() && !now.Before(c.zlbDeadline) {
-		// Empty body; the L2TP header carries Ns/Nr.
-		_ = c.send(nil, c.ns, c.nr)
+		_ = c.send(nil, 0, c.ns, c.nr)
 		c.zlbDeadline = time.Time{}
 	}
 
