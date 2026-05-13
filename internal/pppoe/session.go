@@ -326,9 +326,12 @@ func (s *SessionState) onAuthResult(allowed bool, attributes map[string]interfac
 			s.component.logger.Info("Handing subscriber off to LAC",
 				"session_id", s.SessionID, "username", s.Username)
 			s.Phase = ppp.PhaseLACTunnelPending
-			s.startLACVPPSessionAdd()
-			s.pendingAuthType = ""
+			// Keep pendingAuthType / pendingPAPID / pendingCHAPID
+			// populated — handleLACDecision needs them to send PAP-Ack
+			// / CHAP-Success once the L2TP tunnel comes up. Clear only
+			// the AAA request correlation ID.
 			s.pendingAuthRequestID = ""
+			s.startLACVPPSessionAdd()
 			return
 		}
 

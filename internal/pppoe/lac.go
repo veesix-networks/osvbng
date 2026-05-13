@@ -6,8 +6,10 @@ package pppoe
 
 import (
 	"net"
+	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/events"
+	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/ppp"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
@@ -118,8 +120,30 @@ func (c *Component) handleLACDecision(event events.Event) {
 			sess.sendCHAPSuccess(sess.pendingCHAPID)
 		}
 		sess.Phase = ppp.PhaseLACTunneled
+		sess.BoundAt = time.Now()
 		sess.pendingAuthType = ""
 		sess.pendingAuthRequestID = ""
+
+		var tunneledTo net.IP
+		if data.PeerIP != "" {
+			tunneledTo = net.ParseIP(data.PeerIP)
+		}
+		c.checkpointSession(sess)
+		_ = c.publishSessionLifecycle(&models.PPPSession{
+			SessionID:     sess.SessionID,
+			State:         models.SessionStateTunneled,
+			AccessType:    string(models.AccessTypePPPoE),
+			Protocol:      string(models.ProtocolPPPoESession),
+			PPPSessionID:  sess.PPPoESessionID,
+			MAC:           sess.MAC,
+			OuterVLAN:     sess.OuterVLAN,
+			InnerVLAN:     sess.InnerVLAN,
+			IfIndex:       sess.SwIfIndex,
+			Username:      sess.Username,
+			AAASessionID:  sess.AcctSessionID,
+			ActivatedAt:   sess.BoundAt,
+			TunneledToLNS: tunneledTo,
+		})
 		return
 	}
 
