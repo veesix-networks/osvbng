@@ -69,7 +69,7 @@ Lookup Local Auth User ID
     ${rc}    ${output} =    Run And Return Rc And Output
     ...    curl -sf http://${ip}:${OSVBNG_API_PORT}/api/show/subscriber/auth/local/users
     Should Be Equal As Integers    ${rc}    0
-    ${id} =    Run    echo '${output}' | jq -r '.users[] | select(.username == "${username}") | .id'
+    ${id} =    Run    echo '${output}' | jq -r '.data.users[] | select(.username == "${username}") | .id'
     RETURN    ${id}
 
 Create IPoE Users

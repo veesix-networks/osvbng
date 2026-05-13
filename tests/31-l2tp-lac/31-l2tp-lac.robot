@@ -21,7 +21,7 @@ Resource            ../sessions.robot
 Resource            ../localauth.robot
 
 Suite Setup         Deploy Topology    ${lab-file}
-Suite Teardown      Teardown PPPoE Test
+Suite Teardown      Destroy Topology    ${lab-file}
 
 *** Variables ***
 ${lab-name}         osvbng-l2tp-lac
@@ -73,6 +73,41 @@ Verify Tunnel In osvbng API
     Should Contain    ${output}    tunneled
     Should Contain    ${output}    ${lns-ipv4}
 
+Verify L2TP Tunnel Established On LNS
+    [Documentation]    bngblaster's LNS side reports the L2TPv2 tunnel as
+    ...                Established (SCCRQ → SCCRP → SCCCN handshake completed
+    ...                with Challenge-AVP auth).
+    Wait Until Keyword Succeeds    30s    2s
+    ...    Bngblaster L2TP Tunnel State Is    ${subscribers}    Established
+
+Verify L2TP Session Established On LNS
+    [Documentation]    bngblaster's LNS side reports the L2TPv2 session as
+    ...                Established (ICRQ → ICRP → ICCN with proxy-auth AVPs
+    ...                carrying the LAC's CHAP material).
+    Wait Until Keyword Succeeds    30s    2s
+    ...    Bngblaster L2TP Session State Is    ${subscribers}    Established
+
+Verify Subscriber Got IP From LNS
+    [Documentation]    The subscriber-side PPPoE session terminates PPP at
+    ...                the LNS, so the LNS hands out the IP. Verify both
+    ...                IPCP and IP6CP converge through the tunnel.
+    Wait Until Keyword Succeeds    60s    2s
+    ...    Bngblaster Subscriber Has IPv4    ${subscribers}
+
+Verify L2TP Data Flowed
+    [Documentation]    bngblaster's tunnel counters reflect data packets in
+    ...                both directions — confirming the VPP LAC bridge
+    ...                (PPPoE → l2tpv2-encap-raw and l2tpv2-input →
+    ...                osvbng-pppoe-lac-tx) is forwarding PPP frames.
+    ${rc}    ${output} =    BNG Blaster CLI Command    ${subscribers}    l2tp-tunnels
+    Should Be Equal As Integers    ${rc}    0
+    ${rc}    ${counts} =    Run And Return Rc And Output
+    ...    echo '${output}' | python3 -c "import sys,json; d=json.load(sys.stdin); t=d['l2tp-tunnels'][0]; print(t['data-packets-rx'], t['data-packets-tx'])"
+    Should Be Equal As Integers    ${rc}    0
+    @{parts} =    Split String    ${counts}
+    Should Be True    ${parts}[0] > 0    Expected non-zero L2TP data-packets-rx on LNS
+    Should Be True    ${parts}[1] > 0    Expected non-zero L2TP data-packets-tx on LNS
+
 *** Keywords ***
 LAC Session Is Tunneled
     [Arguments]    ${container}    ${expected_count}
@@ -82,3 +117,30 @@ LAC Session Is Tunneled
     Should Be Equal As Integers    ${rc}    0
     Should Be Equal As Strings    ${result}    ${expected_count}
     ...    Expected ${expected_count} tunneled sessions but got ${result}
+
+Bngblaster L2TP Tunnel State Is
+    [Arguments]    ${container}    ${expected_state}
+    ${rc}    ${output} =    BNG Blaster CLI Command    ${container}    l2tp-tunnels
+    Should Be Equal As Integers    ${rc}    0
+    ${rc}    ${state} =    Run And Return Rc And Output
+    ...    echo '${output}' | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['l2tp-tunnels'][0]['state'])"
+    Should Be Equal As Integers    ${rc}    0
+    Should Be Equal As Strings    ${state}    ${expected_state}
+
+Bngblaster L2TP Session State Is
+    [Arguments]    ${container}    ${expected_state}
+    ${rc}    ${output} =    BNG Blaster CLI Command    ${container}    l2tp-sessions
+    Should Be Equal As Integers    ${rc}    0
+    ${rc}    ${state} =    Run And Return Rc And Output
+    ...    echo '${output}' | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['l2tp-sessions'][0]['state'])"
+    Should Be Equal As Integers    ${rc}    0
+    Should Be Equal As Strings    ${state}    ${expected_state}
+
+Bngblaster Subscriber Has IPv4
+    [Arguments]    ${container}    ${session_id}=1
+    ${rc}    ${output} =    BNG Blaster CLI Command    ${container}    session-info session-id ${session_id}
+    Should Be Equal As Integers    ${rc}    0
+    ${rc}    ${ipv4} =    Run And Return Rc And Output
+    ...    echo '${output}' | python3 -c "import sys,json; d=json.load(sys.stdin); s=d.get('session-info',{}); print(s.get('ipv4-address',''))"
+    Should Be Equal As Integers    ${rc}    0
+    Should Not Be Empty    ${ipv4}    Subscriber did not receive an IPv4 from the LNS
