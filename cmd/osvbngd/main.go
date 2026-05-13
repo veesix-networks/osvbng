@@ -410,6 +410,8 @@ func main() {
 				PPPoESessionID:       attrs.PPPoESessionID,
 				Username:             attrs.Username,
 				TunnelSpecs:          specs,
+				PPPoESwIfIndex:       attrs.PPPoESwIfIndex,
+				EncapIfIndex:         attrs.EncapIfIndex,
 				ProxyAuthenType:      attrs.ProxyAuthenType,
 				ProxyAuthenName:      attrs.ProxyAuthenName,
 				ProxyAuthenChallenge: attrs.ProxyAuthenChallenge,

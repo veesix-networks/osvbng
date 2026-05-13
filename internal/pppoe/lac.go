@@ -20,6 +20,15 @@ type LACBringUpAttrs struct {
 	PPPoESessionID uint16
 	Username       string
 
+	// PPPoESwIfIndex is the subscriber's PPPoE session sw_if_index in
+	// VPP — used by the L2TP plugin as the opaque it stashes in
+	// vnet_buffer for the LNS→subscriber bridge.
+	PPPoESwIfIndex uint32
+
+	// EncapIfIndex is the TX interface for outbound L2TP packets;
+	// ~0 lets VPP resolve via FIB on the LNS peer IP.
+	EncapIfIndex uint32
+
 	// AAAAttrs is the subset of the AAA reply attribute bag the LAC
 	// needs to parse out tunnel candidates (tunnel.type,
 	// tunnel.server-endpoint, tunnel.password, tunnel.preference,
@@ -175,6 +184,8 @@ func buildLACBringUpAttrs(s *SessionState) LACBringUpAttrs {
 	attrs := LACBringUpAttrs{
 		PPPoESessionID: s.PPPoESessionID,
 		Username:       s.Username,
+		PPPoESwIfIndex: s.SwIfIndex,
+		EncapIfIndex:   s.EncapIfIndex,
 		AAAAttrs:       make(map[string]string, len(s.Attributes)),
 	}
 	for k, v := range s.Attributes {

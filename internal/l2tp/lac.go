@@ -30,6 +30,18 @@ type LACBringUpRequest struct {
 	LocalName              string
 	LocalIP                net.IP
 
+	// PPPoESwIfIndex is the partner PPPoE session's sw_if_index in
+	// VPP. Stashed in `vnet_buffer_l2tpv2_opaque` by the L2TP plugin
+	// when decapsulating LNS→subscriber frames so the
+	// osvbng-pppoe-lac-tx node can look up the session and prepend
+	// Eth+VLAN+PPPoE before TX. Required for AddL2TPSessionRaw.
+	PPPoESwIfIndex uint32
+
+	// EncapIfIndex is the TX interface VPP should use when emitting
+	// outbound L2TP packets. Typically the BNG's uplink. ~0 lets the
+	// plugin pick via FIB lookup on the peer IP.
+	EncapIfIndex uint32
+
 	// Proxy LCP / proxy auth replay material, copied into ICCN per
 	// RFC 3437.
 	LastSentLCPConfReq     []byte
@@ -335,13 +347,34 @@ func (c *Component) handleICRP(s *Session, avps []l2tppkt.AVP) error {
 		return err
 	}
 
+	if c.vpp != nil {
+		if err := c.vpp.AddL2TPSessionRaw(
+			t.LocalIP, t.PeerIP,
+			t.LocalID, s.LocalID, s.PeerID,
+			lacRawNextNode, req.PPPoESwIfIndex, req.EncapIfIndex,
+		); err != nil {
+			c.log.Error("AddL2TPSessionRaw failed; aborting LAC bring-up",
+				"session_id", s.SessionID, "error", err)
+			c.clearLACPending(t.PeerIP, t.LocalID)
+			c.publishLACDecision(req.PPPoESessionID, nil, nil, err)
+			return err
+		}
+	}
+
 	s.mu.Lock()
 	s.ActivatedAt = time.Now()
+	s.PPPoESwIfIndex = req.PPPoESwIfIndex
 	s.mu.Unlock()
 	c.clearLACPending(t.PeerIP, t.LocalID)
 	c.publishLACDecision(req.PPPoESessionID, t, s, nil)
 	return nil
 }
+
+// lacRawNextNode is the VPP graph node the L2TPv2 plugin forwards
+// decapsulated PPP frames to in the LNS→subscriber direction. The
+// PPPoE plugin registers this node at init time per
+// AMENDMENT-PLUGIN-TRANSPARENCY.md.
+const lacRawNextNode = "osvbng-pppoe-lac-tx"
 
 // publishLACDecision emits the TopicL2TPLACDecision event the PPPoE
 // component subscribes to. On success `t`/`s` describe the bound
