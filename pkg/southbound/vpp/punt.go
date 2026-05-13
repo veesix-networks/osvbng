@@ -241,7 +241,7 @@ func (v *VPP) DumpPuntRegistrations() ([]southbound.PuntRegistration, error) {
 	}
 	defer ch.Close()
 
-	req := &osvbng_punt.OsvbngPuntRegistrationDump{}
+	req := &osvbng_punt.OsvbngPuntRegistrationDump{SwIfIndex: ^interface_types.InterfaceIndex(0)}
 
 	stream := ch.SendMultiRequest(req)
 	var result []southbound.PuntRegistration

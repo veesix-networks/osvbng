@@ -396,13 +396,17 @@ func main() {
 			return cfg, true
 		})
 
-		l2tpTransport, err := l2tp.NewKernelUDPTransport(nil)
+		// Kernel UDP socket bound in the dataplane netns is used for
+		// TX only — the source-port-1701 bind anchors outbound control
+		// frames so the L2TP peer's reply lookup succeeds. RX flows
+		// from VPP's l2tpv2-input → osvbng-punt SHM → dataplaneComp.
+		// L2TPChan, wired into l2tpComp via SetPuntChannel above.
+		l2tpTransport, err := l2tp.NewKernelUDPTransport(nil, config.LCPNetNs)
 		if err != nil {
 			log.Fatalf("Failed to open L2TP kernel UDP socket: %v", err)
 		}
 		l2tpComp.SetSendControlFn(l2tpTransport.Send)
-		go l2tpTransport.Feed(context.Background(), nil, dataplaneComp.L2TPChan)
-		mainLog.Info("L2TP component created (kernel UDP control transport)")
+		mainLog.Info("L2TP component created (VPP punt RX, kernel-UDP TX)")
 
 		pppoeComp.SetLACTrigger(func(attrs pppoe.LACBringUpAttrs) error {
 			specs := l2tp.ParseTunnelSpecs(attrs.AAAAttrs)

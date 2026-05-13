@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"runtime"
 	"sync"
 
 	"github.com/google/gopacket"
@@ -16,6 +17,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
 	l2tppkt "github.com/veesix-networks/osvbng/pkg/l2tp"
 	"github.com/veesix-networks/osvbng/pkg/models"
+	"github.com/vishvananda/netns"
 )
 
 // KernelUDPTransport is a kernel-UDP-socket implementation of both the
@@ -37,12 +39,69 @@ type KernelUDPTransport struct {
 	done    chan struct{}
 }
 
-func NewKernelUDPTransport(listenIP net.IP) (*KernelUDPTransport, error) {
+// NewKernelUDPTransport opens a UDP/1701 socket bound inside `nsName`
+// (typically the dataplane netns where VPP's LCP taps and L3 IPs live).
+// Pass "" to bind in the calling thread's current netns — useful for
+// unit tests or topologies where the L2TP backbone IP is in the main
+// netns. The returned socket retains its netns; reads and writes from
+// any goroutine route through the correct netns regardless of the
+// current OS thread.
+func NewKernelUDPTransport(listenIP net.IP, nsName string) (*KernelUDPTransport, error) {
 	addr := &net.UDPAddr{IP: listenIP, Port: 1701}
-	conn, err := net.ListenUDP("udp4", addr)
-	if err != nil {
-		return nil, fmt.Errorf("listen udp/1701: %w", err)
+
+	open := func() (*net.UDPConn, error) {
+		return net.ListenUDP("udp4", addr)
 	}
+
+	if nsName == "" {
+		conn, err := open()
+		if err != nil {
+			return nil, fmt.Errorf("listen udp/1701: %w", err)
+		}
+		return &KernelUDPTransport{
+			conn: conn,
+			stop: make(chan struct{}),
+			done: make(chan struct{}),
+		}, nil
+	}
+
+	// Switch this OS thread into the target netns, open the socket, then
+	// restore. The socket itself stays attached to the netns it was
+	// opened in — goroutines using it later don't need to be in the
+	// dataplane netns.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	origNs, err := netns.Get()
+	if err != nil {
+		return nil, fmt.Errorf("get current netns: %w", err)
+	}
+	defer origNs.Close()
+
+	targetNs, err := netns.GetFromName(nsName)
+	if err != nil {
+		return nil, fmt.Errorf("get netns %q: %w", nsName, err)
+	}
+	defer targetNs.Close()
+
+	if err := netns.Set(targetNs); err != nil {
+		return nil, fmt.Errorf("setns %q: %w", nsName, err)
+	}
+
+	conn, openErr := open()
+
+	// Restore even if open() failed.
+	if setErr := netns.Set(origNs); setErr != nil {
+		if conn != nil {
+			_ = conn.Close()
+		}
+		return nil, fmt.Errorf("restore netns: %w", setErr)
+	}
+
+	if openErr != nil {
+		return nil, fmt.Errorf("listen udp/1701 in netns %q: %w", nsName, openErr)
+	}
+
 	return &KernelUDPTransport{
 		conn: conn,
 		stop: make(chan struct{}),

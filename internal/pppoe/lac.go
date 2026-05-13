@@ -245,13 +245,24 @@ func (s *SessionState) startLACVPPSessionAdd() {
 		return
 	}
 
-	// LAC subscribers have no local IP assignment — pass net.IPv4zero.
-	// The plugin's reverse-route to 0.0.0.0/32 is dead-end and never
-	// hit because the punt plugin's LAC dispatch diverts subscriber→LNS
-	// traffic before it can reach the IP-decap path.
+	s.component.logger.Info("LAC: calling AddPPPoESessionAsync",
+		"session_id", s.SessionID,
+		"pppoe_session_id", s.PPPoESessionID,
+		"client_mac", s.MAC.String(),
+		"local_mac", localMAC.String(),
+		"encap_if_index", s.EncapIfIndex,
+		"svlan", s.OuterVLAN, "cvlan", s.InnerVLAN)
+
+	// LAC subscribers have no local IP assignment. VPP's reverse-route
+	// installation may reject 0.0.0.0; pass a TEST-NET-1 placeholder
+	// derived from the session ID. The reverse-route is dead-end and
+	// never hit because the punt plugin's LAC dispatch diverts the
+	// subscriber→LNS path before IP-decap.
+	placeholderIP := net.IPv4(192, 0, 2,
+		byte((s.PPPoESessionID%254)+1))
 	s.component.vpp.AddPPPoESessionAsync(
 		s.PPPoESessionID,
-		net.IPv4zero,
+		placeholderIP,
 		s.MAC,
 		localMAC,
 		s.EncapIfIndex,
