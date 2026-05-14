@@ -65,6 +65,25 @@ type ConfigLine struct {
 	Value string
 }
 
+// NeedsAccessInterface reports whether this config has any subscriber
+// group that requires a directly-attached access interface (PPPoE,
+// IPoE, LAC). LNS-only deployments have subscribers arriving via L2TP
+// and never bind an access interface.
+func (c *Config) NeedsAccessInterface() bool {
+	if c.SubscriberGroups == nil {
+		return false
+	}
+	for _, g := range c.SubscriberGroups.Groups {
+		if g == nil {
+			continue
+		}
+		if g.AccessType != "" && g.AccessType != "lns" {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *Config) GetAccessInterface() (string, error) {
 	var accessInterfaces []string
 
