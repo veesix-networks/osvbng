@@ -27,8 +27,8 @@
   },
   "ppp": {
     "authentication": {
-      "username": "user{session-global}",
-      "password": "test",
+      "username": "wholesale-ppp-username",
+      "password": "wholesale-password",
       "timeout": 10,
       "retry": 10,
       "protocol": "CHAP"

@@ -43,11 +43,18 @@ Verify VPP Is Running
     Should Contain    ${output}    vpp
 
 Provision Local User With Tunnel Attributes
-    [Documentation]    The AAA policy uses agent-remote-id as the lookup key
-    ...                with authenticate=false (LAC mode: real auth happens
-    ...                at the LNS via proxy-auth AVPs in ICCN). The local
-    ...                entry exists only to return the Tunnel-* attributes
-    ...                that pick the bngblaster LNS.
+    [Documentation]    Wholesale LAC authorization: AAA policy is
+    ...                format=$agent-remote-id$ + authenticate=false, so
+    ...                osvbng-LAC looks up the AAA user by the PPPoE
+    ...                agent-remote-id (NOT the PPP CHAP username) and
+    ...                returns Tunnel-* attributes. Real PPP auth happens
+    ...                at the LNS via proxy-auth AVPs carried in ICCN.
+    ...
+    ...                The bngblaster config sets agent-remote-id="user1"
+    ...                but PPP CHAP username="wholesale-ppp-username" —
+    ...                "wholesale-ppp-username" is NOT in the local DB,
+    ...                so this test only passes if osvbng truly uses
+    ...                remote-id for the lookup, never the PPP username.
     Create Local Auth User    ${bng1}    user1
     ${user_id} =    Lookup Local Auth User ID    ${bng1}    user1
     Should Not Be Empty    ${user_id}
