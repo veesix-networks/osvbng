@@ -28,6 +28,7 @@ selecting a tunnel for a subscriber.
 | `secret` | string | Shared secret for Challenge/Challenge-Response AVPs. Empty disables tunnel auth. | `s3cret` |
 | `preference` | uint16 | Lower wins. Tied to RFC 2868 Tunnel-Preference. | `100` |
 | `vrf` | string | VRF to source the L2TP backbone in. Defaults to the global table. | `wholesale` |
+| `ppp-framing` | string | Override the profile's `ppp-framing` for sessions opened toward this specific LNS. Useful when one upstream wholesale operator expects ACFC compressed framing and another expects HDLC on the same profile. | `hdlc` |
 
 AAA-returned `Tunnel-Client-Endpoint` (RFC 2868) takes precedence over
 `source-ipv4` per LNS.
@@ -49,6 +50,7 @@ group references one profile via `l2tp.profile`.
 | `challenge-required` | bool | LNS-only: reject SCCRQ without a Challenge AVP. | `false` |
 | `proxy-lcp-mode` | string | LNS-only: `forward` (re-play proxy-LCP) or `renegotiate`. | `forward` |
 | `max-attempts-per-subscriber` | int | LAC-only: number of LNS candidates to try before giving up. | `4` |
+| `ppp-framing` | string | PPP framing for data packets on this session: `hdlc` (Address+Control prefix present — default, matches every major LNS / pppd-based LAC) or `compressed` (ACFC, no prefix). Resolved once at session-create, the dataplane reads a single per-session byte offset on each packet with no branch on payload content. | `hdlc` |
 
 ### Retransmit
 
@@ -67,6 +69,20 @@ group references one profile via `l2tp.profile`.
 | `tunnel-ttl` | duration | How long a denylisted tunnel-spec is excluded. |
 | `triggers` | [string] | CDN result codes that denylist a tunnel (`02`, `04`, `05`, `06`, `10`). |
 
+## `l2tp.peer-policies`
+
+LNS-only: authorize an inbound LAC by Host Name AVP and bind it to a
+profile + shared secret for Challenge-AVP auth. Keyed by an arbitrary
+policy name; the `hostname` field carries the actual Host Name AVP
+value to match.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `hostname` | string | LAC Host Name AVP value to match. |
+| `secret` | string | Shared secret for Challenge AVP (when the profile or this peer requires it). |
+| `profile` | string | Name of the `l2tp.profiles` entry to apply to this peer. |
+| `ppp-framing` | string | Override the profile's `ppp-framing` for sessions originating from this LAC. Resolution order is per-peer-policy → profile → `hdlc`. |
+
 ## `subscriber-groups.groups.<name>.l2tp`
 
 Binds a subscriber group to an L2TP profile.
@@ -75,10 +91,12 @@ Binds a subscriber group to an L2TP profile.
 |-------|------|-------------|
 | `profile` | string | Name of the `l2tp.profiles` entry. |
 
-The group's `access-type` must be `lac`. The AAA policy attached to the
-group is consulted to map the subscriber to Tunnel-* attributes (either
-through local-DB attributes by `agent-remote-id` / username, or via a
-RADIUS Access-Accept).
+For `access-type: lac` the AAA policy attached to the group maps the
+subscriber to Tunnel-* attributes (local DB by `agent-remote-id` /
+username, or RADIUS Access-Accept). For `access-type: lns` the
+subscriber-group's `default-service-group` selects the loopback used as
+unnumbered for per-session vnet interfaces (must point at a configured
+service group with an `unnumbered` field).
 
 ## AAA contract (RFC 2868)
 

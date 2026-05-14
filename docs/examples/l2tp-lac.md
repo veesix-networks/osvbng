@@ -7,9 +7,9 @@ PPP frames over an L2TPv2 tunnel to the remote LNS. The LNS terminates PPP,
 hands out the IP, and owns the subscriber's data plane from that point on.
 
 ```
-            PPPoE / Q-in-Q                         L2TPv2 / UDP 1701
+            PPPoE / Q-in-Q                              PPPoL2TP
 subscriber  ───────────────►   osvbng-LAC   ────────────────────────►   LNS (ISP)
-                              (eth1 access)      (eth2 backbone)
+                              (eth1 access)      (eth2 backbone, UDP 1701)
 ```
 
 The LAC's AAA policy looks up the subscriber by `agent-remote-id` and returns

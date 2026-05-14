@@ -74,6 +74,7 @@ nav:
     - PPPoE BNG: examples/pppoe-bng.md
     - IPoE + PPPoE BNG: examples/ipoe-pppoe-bng.md
     - L2TP LAC (Wholesale): examples/l2tp-lac.md
+    - L2TP LNS: examples/l2tp-lns.md
     - Routing Policies: examples/routing-policies.md
     - VRF-Lite: examples/vrf-lite.md
     - MPLS L3VPN: examples/l3vpn.md
