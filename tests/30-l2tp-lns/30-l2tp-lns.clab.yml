@@ -17,7 +17,7 @@ topology:
         - SYS_NICE
       env:
         OSVBNG_WAIT_FOR_INTERFACES: "true"
-        OSVBNG_NUM_INTERFACES: "3"
+        OSVBNG_NUM_INTERFACES: "1"
       binds:
         - config/bng1/osvbng.yaml:/etc/osvbng/osvbng.yaml:ro
 
@@ -34,14 +34,20 @@ topology:
       exec:
         - bash /entrypoint.sh
 
-    subscribers:
+    lac:
       kind: linux
-      image: veesixnetworks/bngblaster:0.9.30
+      image: veesixnetworks/xl2tpd:local
+      image-pull-policy: Never
+      cap-add:
+        - NET_ADMIN
+        - NET_RAW
+        - SYS_ADMIN
       binds:
-        - config/subscribers/config-l2tp-lac.json:/config/config.json:ro
+        - config/lac/xl2tpd.conf:/etc/xl2tpd/xl2tpd.conf:ro
+        - config/lac/l2tp-secrets:/etc/xl2tpd/l2tp-secrets:ro
+        - config/lac/options.xl2tpd:/etc/ppp/options.xl2tpd:ro
+        - config/lac/chap-secrets:/etc/ppp/chap-secrets:ro
 
   links:
-    # bng1 eth1 carries L2TP transport (from blaster LAC) to osvbng LNS
-    - endpoints: [bng1:eth1, subscribers:eth1]
-    # Core / upstream uplink
-    - endpoints: [bng1:eth2, corerouter1:eth1]
+    - endpoints: [lac:eth1, corerouter1:eth1]
+    - endpoints: [corerouter1:eth2, bng1:eth1]
