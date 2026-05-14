@@ -7,7 +7,7 @@
 // Package l2tpv2 contains generated bindings for API file l2tpv2.api.
 //
 // Contents:
-// -  8 messages
+// - 14 messages
 package l2tpv2
 
 import (
@@ -26,7 +26,7 @@ const _ = api.GoVppAPIPackageIsVersion2
 const (
 	APIFile    = "l2tpv2"
 	APIVersion = "1.0.0"
-	VersionCrc = 0x969965eb
+	VersionCrc = 0x828eba4b
 )
 
 // Add or delete an L2TPv2 session.
@@ -60,11 +60,12 @@ type L2tpv2AddDelSession struct {
 	RawOpaque       uint32                         `binapi:"u32,name=raw_opaque" json:"raw_opaque,omitempty"`
 	DecapVrfID      uint32                         `binapi:"u32,name=decap_vrf_id" json:"decap_vrf_id,omitempty"`
 	EncapIfIndex    interface_types.InterfaceIndex `binapi:"interface_index,name=encap_if_index" json:"encap_if_index,omitempty"`
+	PppHdrSkip      uint8                          `binapi:"u8,name=ppp_hdr_skip" json:"ppp_hdr_skip,omitempty"`
 }
 
 func (m *L2tpv2AddDelSession) Reset()               { *m = L2tpv2AddDelSession{} }
 func (*L2tpv2AddDelSession) GetMessageName() string { return "l2tpv2_add_del_session" }
-func (*L2tpv2AddDelSession) GetCrcString() string   { return "21553613" }
+func (*L2tpv2AddDelSession) GetCrcString() string   { return "940ed15e" }
 func (*L2tpv2AddDelSession) GetMessageType() api.MessageType {
 	return api.RequestMessage
 }
@@ -86,6 +87,7 @@ func (m *L2tpv2AddDelSession) Size() (size int) {
 	size += 4      // m.RawOpaque
 	size += 4      // m.DecapVrfID
 	size += 4      // m.EncapIfIndex
+	size += 1      // m.PppHdrSkip
 	return size
 }
 func (m *L2tpv2AddDelSession) Marshal(b []byte) ([]byte, error) {
@@ -106,6 +108,7 @@ func (m *L2tpv2AddDelSession) Marshal(b []byte) ([]byte, error) {
 	buf.EncodeUint32(m.RawOpaque)
 	buf.EncodeUint32(m.DecapVrfID)
 	buf.EncodeUint32(uint32(m.EncapIfIndex))
+	buf.EncodeUint8(m.PppHdrSkip)
 	return buf.Bytes(), nil
 }
 func (m *L2tpv2AddDelSession) Unmarshal(b []byte) error {
@@ -123,6 +126,7 @@ func (m *L2tpv2AddDelSession) Unmarshal(b []byte) error {
 	m.RawOpaque = buf.DecodeUint32()
 	m.DecapVrfID = buf.DecodeUint32()
 	m.EncapIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
+	m.PppHdrSkip = buf.DecodeUint8()
 	return nil
 }
 
@@ -290,11 +294,12 @@ type L2tpv2SessionDetails struct {
 	RawOpaque       uint32                         `binapi:"u32,name=raw_opaque" json:"raw_opaque,omitempty"`
 	DecapVrfID      uint32                         `binapi:"u32,name=decap_vrf_id" json:"decap_vrf_id,omitempty"`
 	EncapIfIndex    interface_types.InterfaceIndex `binapi:"interface_index,name=encap_if_index" json:"encap_if_index,omitempty"`
+	PppHdrSkip      uint8                          `binapi:"u8,name=ppp_hdr_skip" json:"ppp_hdr_skip,omitempty"`
 }
 
 func (m *L2tpv2SessionDetails) Reset()               { *m = L2tpv2SessionDetails{} }
 func (*L2tpv2SessionDetails) GetMessageName() string { return "l2tpv2_session_details" }
-func (*L2tpv2SessionDetails) GetCrcString() string   { return "fc31ab2e" }
+func (*L2tpv2SessionDetails) GetCrcString() string   { return "4d67a69a" }
 func (*L2tpv2SessionDetails) GetMessageType() api.MessageType {
 	return api.ReplyMessage
 }
@@ -317,6 +322,7 @@ func (m *L2tpv2SessionDetails) Size() (size int) {
 	size += 4      // m.RawOpaque
 	size += 4      // m.DecapVrfID
 	size += 4      // m.EncapIfIndex
+	size += 1      // m.PppHdrSkip
 	return size
 }
 func (m *L2tpv2SessionDetails) Marshal(b []byte) ([]byte, error) {
@@ -338,6 +344,7 @@ func (m *L2tpv2SessionDetails) Marshal(b []byte) ([]byte, error) {
 	buf.EncodeUint32(m.RawOpaque)
 	buf.EncodeUint32(m.DecapVrfID)
 	buf.EncodeUint32(uint32(m.EncapIfIndex))
+	buf.EncodeUint8(m.PppHdrSkip)
 	return buf.Bytes(), nil
 }
 func (m *L2tpv2SessionDetails) Unmarshal(b []byte) error {
@@ -356,6 +363,7 @@ func (m *L2tpv2SessionDetails) Unmarshal(b []byte) error {
 	m.RawOpaque = buf.DecodeUint32()
 	m.DecapVrfID = buf.DecodeUint32()
 	m.EncapIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
+	m.PppHdrSkip = buf.DecodeUint8()
 	return nil
 }
 
@@ -390,6 +398,243 @@ func (m *L2tpv2SessionDump) Marshal(b []byte) ([]byte, error) {
 func (m *L2tpv2SessionDump) Unmarshal(b []byte) error {
 	buf := codec.NewBuffer(b)
 	m.SwIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
+	return nil
+}
+
+// Set or clear a delegated prefix on a DECAP_IP session.
+// L2tpv2SetDelegatedPrefix defines message 'l2tpv2_set_delegated_prefix'.
+type L2tpv2SetDelegatedPrefix struct {
+	SwIfIndex interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
+	Prefix    ip_types.Prefix                `binapi:"prefix,name=prefix" json:"prefix,omitempty"`
+	NextHop   ip_types.IP6Address            `binapi:"ip6_address,name=next_hop" json:"next_hop,omitempty"`
+	IsAdd     bool                           `binapi:"bool,name=is_add" json:"is_add,omitempty"`
+}
+
+func (m *L2tpv2SetDelegatedPrefix) Reset()               { *m = L2tpv2SetDelegatedPrefix{} }
+func (*L2tpv2SetDelegatedPrefix) GetMessageName() string { return "l2tpv2_set_delegated_prefix" }
+func (*L2tpv2SetDelegatedPrefix) GetCrcString() string   { return "80a8a97d" }
+func (*L2tpv2SetDelegatedPrefix) GetMessageType() api.MessageType {
+	return api.RequestMessage
+}
+
+func (m *L2tpv2SetDelegatedPrefix) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4      // m.SwIfIndex
+	size += 1      // m.Prefix.Address.Af
+	size += 1 * 16 // m.Prefix.Address.Un
+	size += 1      // m.Prefix.Len
+	size += 1 * 16 // m.NextHop
+	size += 1      // m.IsAdd
+	return size
+}
+func (m *L2tpv2SetDelegatedPrefix) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeUint32(uint32(m.SwIfIndex))
+	buf.EncodeUint8(uint8(m.Prefix.Address.Af))
+	buf.EncodeBytes(m.Prefix.Address.Un.XXX_UnionData[:], 16)
+	buf.EncodeUint8(m.Prefix.Len)
+	buf.EncodeBytes(m.NextHop[:], 16)
+	buf.EncodeBool(m.IsAdd)
+	return buf.Bytes(), nil
+}
+func (m *L2tpv2SetDelegatedPrefix) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.SwIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
+	m.Prefix.Address.Af = ip_types.AddressFamily(buf.DecodeUint8())
+	copy(m.Prefix.Address.Un.XXX_UnionData[:], buf.DecodeBytes(16))
+	m.Prefix.Len = buf.DecodeUint8()
+	copy(m.NextHop[:], buf.DecodeBytes(16))
+	m.IsAdd = buf.DecodeBool()
+	return nil
+}
+
+// L2tpv2SetDelegatedPrefixReply defines message 'l2tpv2_set_delegated_prefix_reply'.
+type L2tpv2SetDelegatedPrefixReply struct {
+	Retval int32 `binapi:"i32,name=retval" json:"retval,omitempty"`
+}
+
+func (m *L2tpv2SetDelegatedPrefixReply) Reset() { *m = L2tpv2SetDelegatedPrefixReply{} }
+func (*L2tpv2SetDelegatedPrefixReply) GetMessageName() string {
+	return "l2tpv2_set_delegated_prefix_reply"
+}
+func (*L2tpv2SetDelegatedPrefixReply) GetCrcString() string { return "e8d4e804" }
+func (*L2tpv2SetDelegatedPrefixReply) GetMessageType() api.MessageType {
+	return api.ReplyMessage
+}
+
+func (m *L2tpv2SetDelegatedPrefixReply) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.Retval
+	return size
+}
+func (m *L2tpv2SetDelegatedPrefixReply) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeInt32(m.Retval)
+	return buf.Bytes(), nil
+}
+func (m *L2tpv2SetDelegatedPrefixReply) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.Retval = buf.DecodeInt32()
+	return nil
+}
+
+// Set or clear the subscriber IPv4 binding on a DECAP_IP session.
+// L2tpv2SetSessionIPv4 defines message 'l2tpv2_set_session_ipv4'.
+type L2tpv2SetSessionIPv4 struct {
+	SwIfIndex interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
+	ClientIP  ip_types.IP4Address            `binapi:"ip4_address,name=client_ip" json:"client_ip,omitempty"`
+	IsAdd     bool                           `binapi:"bool,name=is_add" json:"is_add,omitempty"`
+}
+
+func (m *L2tpv2SetSessionIPv4) Reset()               { *m = L2tpv2SetSessionIPv4{} }
+func (*L2tpv2SetSessionIPv4) GetMessageName() string { return "l2tpv2_set_session_ipv4" }
+func (*L2tpv2SetSessionIPv4) GetCrcString() string   { return "e56ebcfd" }
+func (*L2tpv2SetSessionIPv4) GetMessageType() api.MessageType {
+	return api.RequestMessage
+}
+
+func (m *L2tpv2SetSessionIPv4) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4     // m.SwIfIndex
+	size += 1 * 4 // m.ClientIP
+	size += 1     // m.IsAdd
+	return size
+}
+func (m *L2tpv2SetSessionIPv4) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeUint32(uint32(m.SwIfIndex))
+	buf.EncodeBytes(m.ClientIP[:], 4)
+	buf.EncodeBool(m.IsAdd)
+	return buf.Bytes(), nil
+}
+func (m *L2tpv2SetSessionIPv4) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.SwIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
+	copy(m.ClientIP[:], buf.DecodeBytes(4))
+	m.IsAdd = buf.DecodeBool()
+	return nil
+}
+
+// L2tpv2SetSessionIPv4Reply defines message 'l2tpv2_set_session_ipv4_reply'.
+type L2tpv2SetSessionIPv4Reply struct {
+	Retval int32 `binapi:"i32,name=retval" json:"retval,omitempty"`
+}
+
+func (m *L2tpv2SetSessionIPv4Reply) Reset()               { *m = L2tpv2SetSessionIPv4Reply{} }
+func (*L2tpv2SetSessionIPv4Reply) GetMessageName() string { return "l2tpv2_set_session_ipv4_reply" }
+func (*L2tpv2SetSessionIPv4Reply) GetCrcString() string   { return "e8d4e804" }
+func (*L2tpv2SetSessionIPv4Reply) GetMessageType() api.MessageType {
+	return api.ReplyMessage
+}
+
+func (m *L2tpv2SetSessionIPv4Reply) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.Retval
+	return size
+}
+func (m *L2tpv2SetSessionIPv4Reply) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeInt32(m.Retval)
+	return buf.Bytes(), nil
+}
+func (m *L2tpv2SetSessionIPv4Reply) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.Retval = buf.DecodeInt32()
+	return nil
+}
+
+// Set or clear the subscriber IPv6 (IA_NA) binding on a DECAP_IP session.
+// L2tpv2SetSessionIPv6 defines message 'l2tpv2_set_session_ipv6'.
+type L2tpv2SetSessionIPv6 struct {
+	SwIfIndex interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
+	ClientIP  ip_types.IP6Address            `binapi:"ip6_address,name=client_ip" json:"client_ip,omitempty"`
+	IsAdd     bool                           `binapi:"bool,name=is_add" json:"is_add,omitempty"`
+}
+
+func (m *L2tpv2SetSessionIPv6) Reset()               { *m = L2tpv2SetSessionIPv6{} }
+func (*L2tpv2SetSessionIPv6) GetMessageName() string { return "l2tpv2_set_session_ipv6" }
+func (*L2tpv2SetSessionIPv6) GetCrcString() string   { return "aa625d9a" }
+func (*L2tpv2SetSessionIPv6) GetMessageType() api.MessageType {
+	return api.RequestMessage
+}
+
+func (m *L2tpv2SetSessionIPv6) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4      // m.SwIfIndex
+	size += 1 * 16 // m.ClientIP
+	size += 1      // m.IsAdd
+	return size
+}
+func (m *L2tpv2SetSessionIPv6) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeUint32(uint32(m.SwIfIndex))
+	buf.EncodeBytes(m.ClientIP[:], 16)
+	buf.EncodeBool(m.IsAdd)
+	return buf.Bytes(), nil
+}
+func (m *L2tpv2SetSessionIPv6) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.SwIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
+	copy(m.ClientIP[:], buf.DecodeBytes(16))
+	m.IsAdd = buf.DecodeBool()
+	return nil
+}
+
+// L2tpv2SetSessionIPv6Reply defines message 'l2tpv2_set_session_ipv6_reply'.
+type L2tpv2SetSessionIPv6Reply struct {
+	Retval int32 `binapi:"i32,name=retval" json:"retval,omitempty"`
+}
+
+func (m *L2tpv2SetSessionIPv6Reply) Reset()               { *m = L2tpv2SetSessionIPv6Reply{} }
+func (*L2tpv2SetSessionIPv6Reply) GetMessageName() string { return "l2tpv2_set_session_ipv6_reply" }
+func (*L2tpv2SetSessionIPv6Reply) GetCrcString() string   { return "e8d4e804" }
+func (*L2tpv2SetSessionIPv6Reply) GetMessageType() api.MessageType {
+	return api.ReplyMessage
+}
+
+func (m *L2tpv2SetSessionIPv6Reply) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.Retval
+	return size
+}
+func (m *L2tpv2SetSessionIPv6Reply) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeInt32(m.Retval)
+	return buf.Bytes(), nil
+}
+func (m *L2tpv2SetSessionIPv6Reply) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.Retval = buf.DecodeInt32()
 	return nil
 }
 
@@ -500,12 +745,18 @@ func (m *L2tpv2TunnelDump) Unmarshal(b []byte) error {
 
 func init() { file_l2tpv2_binapi_init() }
 func file_l2tpv2_binapi_init() {
-	api.RegisterMessage((*L2tpv2AddDelSession)(nil), "l2tpv2_add_del_session_21553613")
+	api.RegisterMessage((*L2tpv2AddDelSession)(nil), "l2tpv2_add_del_session_940ed15e")
 	api.RegisterMessage((*L2tpv2AddDelSessionReply)(nil), "l2tpv2_add_del_session_reply_5383d31f")
 	api.RegisterMessage((*L2tpv2AddDelTunnel)(nil), "l2tpv2_add_del_tunnel_9391f3fc")
 	api.RegisterMessage((*L2tpv2AddDelTunnelReply)(nil), "l2tpv2_add_del_tunnel_reply_eea9bee6")
-	api.RegisterMessage((*L2tpv2SessionDetails)(nil), "l2tpv2_session_details_fc31ab2e")
+	api.RegisterMessage((*L2tpv2SessionDetails)(nil), "l2tpv2_session_details_4d67a69a")
 	api.RegisterMessage((*L2tpv2SessionDump)(nil), "l2tpv2_session_dump_f9e6675e")
+	api.RegisterMessage((*L2tpv2SetDelegatedPrefix)(nil), "l2tpv2_set_delegated_prefix_80a8a97d")
+	api.RegisterMessage((*L2tpv2SetDelegatedPrefixReply)(nil), "l2tpv2_set_delegated_prefix_reply_e8d4e804")
+	api.RegisterMessage((*L2tpv2SetSessionIPv4)(nil), "l2tpv2_set_session_ipv4_e56ebcfd")
+	api.RegisterMessage((*L2tpv2SetSessionIPv4Reply)(nil), "l2tpv2_set_session_ipv4_reply_e8d4e804")
+	api.RegisterMessage((*L2tpv2SetSessionIPv6)(nil), "l2tpv2_set_session_ipv6_aa625d9a")
+	api.RegisterMessage((*L2tpv2SetSessionIPv6Reply)(nil), "l2tpv2_set_session_ipv6_reply_e8d4e804")
 	api.RegisterMessage((*L2tpv2TunnelDetails)(nil), "l2tpv2_tunnel_details_eb048f3b")
 	api.RegisterMessage((*L2tpv2TunnelDump)(nil), "l2tpv2_tunnel_dump_d568a70b")
 }
@@ -519,6 +770,12 @@ func AllMessages() []api.Message {
 		(*L2tpv2AddDelTunnelReply)(nil),
 		(*L2tpv2SessionDetails)(nil),
 		(*L2tpv2SessionDump)(nil),
+		(*L2tpv2SetDelegatedPrefix)(nil),
+		(*L2tpv2SetDelegatedPrefixReply)(nil),
+		(*L2tpv2SetSessionIPv4)(nil),
+		(*L2tpv2SetSessionIPv4Reply)(nil),
+		(*L2tpv2SetSessionIPv6)(nil),
+		(*L2tpv2SetSessionIPv6Reply)(nil),
 		(*L2tpv2TunnelDetails)(nil),
 		(*L2tpv2TunnelDump)(nil),
 	}

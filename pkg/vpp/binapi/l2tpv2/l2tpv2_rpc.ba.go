@@ -16,6 +16,9 @@ type RPCService interface {
 	L2tpv2AddDelSession(ctx context.Context, in *L2tpv2AddDelSession) (*L2tpv2AddDelSessionReply, error)
 	L2tpv2AddDelTunnel(ctx context.Context, in *L2tpv2AddDelTunnel) (*L2tpv2AddDelTunnelReply, error)
 	L2tpv2SessionDump(ctx context.Context, in *L2tpv2SessionDump) (RPCService_L2tpv2SessionDumpClient, error)
+	L2tpv2SetDelegatedPrefix(ctx context.Context, in *L2tpv2SetDelegatedPrefix) (*L2tpv2SetDelegatedPrefixReply, error)
+	L2tpv2SetSessionIPv4(ctx context.Context, in *L2tpv2SetSessionIPv4) (*L2tpv2SetSessionIPv4Reply, error)
+	L2tpv2SetSessionIPv6(ctx context.Context, in *L2tpv2SetSessionIPv6) (*L2tpv2SetSessionIPv6Reply, error)
 	L2tpv2TunnelDump(ctx context.Context, in *L2tpv2TunnelDump) (RPCService_L2tpv2TunnelDumpClient, error)
 }
 
@@ -86,6 +89,33 @@ func (c *serviceClient_L2tpv2SessionDumpClient) Recv() (*L2tpv2SessionDetails, e
 	default:
 		return nil, fmt.Errorf("unexpected message: %T %v", m, m)
 	}
+}
+
+func (c *serviceClient) L2tpv2SetDelegatedPrefix(ctx context.Context, in *L2tpv2SetDelegatedPrefix) (*L2tpv2SetDelegatedPrefixReply, error) {
+	out := new(L2tpv2SetDelegatedPrefixReply)
+	err := c.conn.Invoke(ctx, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, api.RetvalToVPPApiError(out.Retval)
+}
+
+func (c *serviceClient) L2tpv2SetSessionIPv4(ctx context.Context, in *L2tpv2SetSessionIPv4) (*L2tpv2SetSessionIPv4Reply, error) {
+	out := new(L2tpv2SetSessionIPv4Reply)
+	err := c.conn.Invoke(ctx, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, api.RetvalToVPPApiError(out.Retval)
+}
+
+func (c *serviceClient) L2tpv2SetSessionIPv6(ctx context.Context, in *L2tpv2SetSessionIPv6) (*L2tpv2SetSessionIPv6Reply, error) {
+	out := new(L2tpv2SetSessionIPv6Reply)
+	err := c.conn.Invoke(ctx, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, api.RetvalToVPPApiError(out.Retval)
 }
 
 func (c *serviceClient) L2tpv2TunnelDump(ctx context.Context, in *L2tpv2TunnelDump) (RPCService_L2tpv2TunnelDumpClient, error) {
