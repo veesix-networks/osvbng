@@ -33,6 +33,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/cache/memory"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/config"
+	l2tpcfg "github.com/veesix-networks/osvbng/pkg/config/l2tp"
 	syscfg "github.com/veesix-networks/osvbng/pkg/config/system"
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
 	"github.com/veesix-networks/osvbng/pkg/cppm"
@@ -158,9 +159,13 @@ func main() {
 		log.Fatalf("Failed to connect to VPP: %v", err)
 	}
 
-	accessInterface, err := cfg.GetAccessInterface()
-	if err != nil {
-		log.Fatalf("Invalid access interface configuration: %v", err)
+	var accessInterface string
+	if cfg.NeedsAccessInterface() {
+		name, err := cfg.GetAccessInterface()
+		if err != nil {
+			log.Fatalf("Invalid access interface configuration: %v", err)
+		}
+		accessInterface = name
 	}
 
 	ifMgr := ifmgr.New()
@@ -393,6 +398,7 @@ func main() {
 					cfg.ReceiveWindowSize = uint16(profile.ReceiveWindowSize)
 				}
 			}
+			cfg.PPPHdrSkip = l2tpcfg.ResolvePPPFramingLNS(profile, policy).PPPHdrSkip()
 			return cfg, true
 		})
 

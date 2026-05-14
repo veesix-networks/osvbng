@@ -26,6 +26,12 @@ type TunnelSpec struct {
 	Preference    uint16
 	ClientAuthID  string
 	ServerAuthID  string
+
+	// PPP header skip on data frames (0 or 2). Resolved from the
+	// LAC's tunnel-pool entry + profile config. Defaults to 2 (HDLC
+	// Address+Control prefix present) to match every major LNS out
+	// of the box.
+	PPPHdrSkip uint8
 }
 
 // ParseTunnelSpecs reads an AAA attribute map and returns the tunnel
@@ -45,7 +51,7 @@ func ParseTunnelSpecs(attrs map[string]string) []TunnelSpec {
 		_ = base
 		s, ok := byTag[tag]
 		if !ok {
-			s = &TunnelSpec{Tag: tag}
+			s = &TunnelSpec{Tag: tag, PPPHdrSkip: 2}
 			byTag[tag] = s
 		}
 		return s

@@ -71,6 +71,21 @@ func (c *Component) initSessionPPP(s *Session) {
 		PhaseFn:    func() ppp.Phase { return s.Phase },
 		HandlePAP:  func(code, id uint8, data []byte) error { return c.handlePAPPacket(s, code, id, data) },
 		HandleCHAP: func(code, id uint8, data []byte) error { return c.handleCHAPPacket(s, code, id, data) },
+		OnEchoReq: func(id uint8, data []byte) {
+			if s.Phase != ppp.PhaseOpen && s.Phase != ppp.PhaseNetwork {
+				return
+			}
+			// RFC 1661 §5.8: the Magic-Number in the reply is the
+			// responder's, not the peer's echo.
+			magic := s.LCP.LocalConfig().Magic
+			resp := make([]byte, 4)
+			binary.BigEndian.PutUint32(resp, magic)
+			if len(data) > 4 {
+				resp = append(resp, data[4:]...)
+			}
+			pkt := buildPPPPacket(ppp.EchoRep, id, resp)
+			_ = c.sendPPPFrame(s, pppProtoLCP, pkt)
+		},
 		OnProtocolReject: func(rejected uint16) {
 			switch rejected {
 			case pppProtoIPCP:
@@ -103,14 +118,16 @@ func (c *Component) initSessionPPP(s *Session) {
 // path; we drop them because there is no dataplane to forward them
 // to. Either way, this function is for PPP *control* protocols only.
 func (c *Component) dispatchPPPFrame(s *Session, frame []byte) error {
+	if len(frame) >= 2 && frame[0] == 0xff && frame[1] == 0x03 {
+		// HDLC Address+Control. Per RFC 1662 §3.1 some senders include
+		// the bytes even when ACFC was rejected; xl2tpd's pppd does.
+		frame = frame[2:]
+	}
 	if len(frame) < 2 {
 		return ErrPPPFrameShort
 	}
 	proto := binary.BigEndian.Uint16(frame[:2])
 	if proto == pppProtoIPv4 || proto == pppProtoIPv6 {
-		// Dataplane traffic. Never reachable in a VPP-integrated
-		// build because VPP handles IP forwarding before any punt;
-		// dropped here only to keep a kernel-UDP smoke test honest.
 		return nil
 	}
 	if s.PPPDispatcher == nil {

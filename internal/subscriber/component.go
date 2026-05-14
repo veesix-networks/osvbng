@@ -134,6 +134,13 @@ func (c *Component) GetSessions(ctx context.Context, accessType, protocol string
 
 			var sess models.SubscriberSession
 			switch meta.AccessType {
+			case string(models.AccessTypeL2TP):
+				var l2tpSess models.PPPoL2TPSession
+				if err := json.Unmarshal(data, &l2tpSess); err != nil {
+					c.logger.Debug("Failed to unmarshal L2TP session", "key", key, "error", err)
+					continue
+				}
+				sess = &l2tpSess
 			case string(models.AccessTypePPPoE):
 				var pppSess models.PPPSession
 				if err := json.Unmarshal(data, &pppSess); err != nil {
@@ -315,6 +322,13 @@ func (c *Component) handleSessionLifecycle(event events.Event) {
 			c.logger.Error("Invalid session type for PPPoE lifecycle event")
 			return
 		}
+	case models.AccessTypeL2TP:
+		if l2tpSess, ok := data.Session.(*models.PPPoL2TPSession); ok {
+			sess = l2tpSess
+		} else {
+			c.logger.Error("Invalid session type for L2TP lifecycle event")
+			return
+		}
 	default:
 		c.logger.Error("Unsupported access type", "access_type", data.AccessType)
 		return
@@ -326,7 +340,7 @@ func (c *Component) handleSessionLifecycle(event events.Event) {
 
 	c.emitLifecycleCounter(sess)
 
-	if outerVLAN == 0 {
+	if outerVLAN == 0 && data.AccessType != models.AccessTypeL2TP {
 		c.logger.Error("Session rejected: S-VLAN required", "session_id", sessionID)
 		return
 	}

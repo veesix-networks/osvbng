@@ -49,6 +49,12 @@ type Tunnel struct {
 	// Hello / liveness state.
 	HelloInterval time.Duration
 
+	// Resolved at SCCRQ from profile + peer-policy config; passed into
+	// AddPPPoL2TPSession at ICRQ so the data path can read the offset
+	// once per packet without per-packet detection. 0 = ACFC
+	// compressed, 2 = HDLC prefix present (default).
+	PPPHdrSkip uint8
+
 	// CreatedAt marks when the tunnel object was instantiated (not when
 	// it reached Established).
 	CreatedAt time.Time

@@ -65,8 +65,10 @@ func (r *tunnelRunner) Start() {
 		return
 	}
 	r.hello.Start(func(body []byte) error {
-		// HELLO is tunnel-scoped: RFC 2661 §5.5 requires Session ID 0.
-		return r.sendBody(body, 0, r.tunnel.Channel.Ns(), r.tunnel.Channel.Nr())
+		// HELLO is a reliable control message and must increment Ns.
+		// Routing through the channel queues it for retransmit and
+		// keeps the send sequence monotonic.
+		return r.tunnel.Channel.Send(body, time.Now())
 	})
 
 	go r.loop()

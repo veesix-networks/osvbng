@@ -123,7 +123,7 @@ func (c *Component) SetAllocator(r *allocator.Registry) { c.registry = r }
 func (c *Component) SetSouthbound(s southbound.Southbound) { c.vpp = s }
 
 // SetVRFManager installs the VRF table-ID resolver. Required to map a
-// subscriber-group VRF name to the FIB index passed to AddL2TPSessionIP.
+// subscriber-group VRF name to the FIB index passed to AddPPPoL2TPSession.
 func (c *Component) SetVRFManager(m *vrfmgr.Manager) { c.vrfMgr = m }
 
 // SetServiceGroupResolver installs the service-group resolver used to

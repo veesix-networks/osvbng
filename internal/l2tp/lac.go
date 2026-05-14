@@ -157,6 +157,7 @@ func (c *Component) tryLACTunnel(req LACBringUpRequest, spec TunnelSpec) error {
 		Sessions:             make(map[uint16]*Session),
 		CreatedAt:            time.Now(),
 		outstandingChallenge: ourChallenge,
+		PPPHdrSkip:           spec.PPPHdrSkip,
 	}
 	if err := t.FSM.SendSCCRQ(); err != nil {
 		c.releaseTunnelID(peerIP, localTunnelID)
@@ -376,6 +377,7 @@ func (c *Component) handleICRP(s *Session, avps []l2tppkt.AVP) error {
 			t.LocalIP, t.PeerIP,
 			t.LocalID, s.LocalID, s.PeerID,
 			lacRawNextNode, req.PPPoESwIfIndex, req.EncapIfIndex,
+			t.PPPHdrSkip,
 		)
 		if err != nil {
 			c.log.Error("AddL2TPSessionRaw failed; aborting LAC bring-up",

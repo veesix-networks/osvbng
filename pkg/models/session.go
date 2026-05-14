@@ -255,6 +255,8 @@ func MakePPPSessionID(sessionID uint16) string {
 type PPPoL2TPSession struct {
 	SessionID    string
 	State        SessionState
+	AccessType   string
+	Protocol     string
 	AAASessionID string
 
 	LocalIP            net.IP

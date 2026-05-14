@@ -21,6 +21,11 @@ type LNSConfig struct {
 	Secret            []byte // for Challenge-AVP verification
 	ChallengeRequired bool
 	HelloInterval     time.Duration
+
+	// PPP framing byte count on data packets (2 = HDLC prefix
+	// present, 0 = ACFC compressed). Resolved from profile +
+	// peer-policy at lookup time.
+	PPPHdrSkip uint8
 }
 
 // HandleSCCRQ processes an inbound SCCRQ on the LNS side. It validates
@@ -100,6 +105,7 @@ func (c *Component) HandleSCCRQ(localIP, peerIP net.IP, avps []l2tppkt.AVP, cfg 
 		Secret:               cfg.Secret,
 		Sessions:             make(map[uint16]*Session),
 		HelloInterval:        cfg.HelloInterval,
+		PPPHdrSkip:           cfg.PPPHdrSkip,
 		CreatedAt:            time.Now(),
 		outstandingChallenge: ourChallenge,
 	}
@@ -154,7 +160,7 @@ func (c *Component) HandleSCCCN(t *Tunnel, avps []l2tppkt.AVP, outstandingChalle
 		return err
 	}
 	// Tunnel is now Established. Install it in the VPP L2TPv2 plugin
-	// so subsequent AddL2TPSessionIP calls (on ICRQ) can resolve it.
+	// so subsequent AddPPPoL2TPSession calls (on ICRQ) can resolve it.
 	if err := c.installTunnelVPP(t); err != nil {
 		c.log.Error("AddL2TPTunnel failed on LNS",
 			"peer_ip", t.PeerIP.String(),
@@ -214,6 +220,11 @@ func (c *Component) HandleICRQ(t *Tunnel, avps []l2tppkt.AVP) (icrpBody []byte, 
 		return nil, nil, err
 	}
 	t.addSession(s)
+
+	if err := c.installLNSSessionVPP(s); err != nil {
+		t.removeSession(s.LocalID)
+		return nil, nil, err
+	}
 
 	icrpBody = l2tppkt.BuildICRP(l2tppkt.ICRPParams{
 		LocalSessionID: localID,

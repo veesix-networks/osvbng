@@ -58,12 +58,10 @@ func (c *Component) Dispatch(pkt *dataplane.ParsedPacket) error {
 		return fmt.Errorf("l2tp parse avps: %w", err)
 	}
 	msgType := l2tppkt.DecodeMessageType(avps)
+	c.log.Debug("l2tp dispatch", "msg_type", msgType, "tunnel_id", h.TunnelID, "src", pkt.IPv4.SrcIP.String(), "avp_count", len(avps))
 
-	// SCCRQ is the only message type that arrives before a tunnel
-	// exists locally. Everything else must resolve to an existing
-	// tunnel by (peer_ip, local_tunnel_id).
 	if msgType == l2tppkt.MsgTypeSCCRQ {
-		return c.dispatchSCCRQ(pkt, avps)
+		return c.dispatchSCCRQ(pkt, h, avps)
 	}
 
 	t := c.LookupTunnel(pkt.IPv4.SrcIP, h.TunnelID)
@@ -84,6 +82,11 @@ func (c *Component) Dispatch(pkt *dataplane.ParsedPacket) error {
 			// Duplicate or out-of-window — channel has already ACKed.
 			return nil
 		}
+	}
+
+	// ZLB (no AVPs): pure ack already consumed by Recv above.
+	if len(avps) == 0 {
+		return nil
 	}
 
 	switch msgType {
@@ -108,8 +111,14 @@ func (c *Component) Dispatch(pkt *dataplane.ParsedPacket) error {
 		c.HandleStopCCN(t)
 		return nil
 	case l2tppkt.MsgTypeICRQ:
-		_, _, err := c.HandleICRQ(t, avps)
-		return err
+		icrpBody, s, err := c.HandleICRQ(t, avps)
+		if err != nil {
+			return err
+		}
+		if icrpBody != nil && t.Channel != nil && s != nil {
+			return t.Channel.SendSession(icrpBody, s.PeerID, time.Now())
+		}
+		return nil
 	case l2tppkt.MsgTypeICCN:
 		s := c.LookupSession(pkt.IPv4.SrcIP, h.TunnelID, h.SessionID)
 		if s == nil {
@@ -127,18 +136,13 @@ func (c *Component) Dispatch(pkt *dataplane.ParsedPacket) error {
 	return ErrUnsupportedMessageType
 }
 
-func (c *Component) dispatchSCCRQ(pkt *dataplane.ParsedPacket, avps []l2tppkt.AVP) error {
-	// Look up the peer policy by Host Name AVP. Without a matching
-	// policy we reject with StopCCN ResultCode=4 (unauthorized).
+func (c *Component) dispatchSCCRQ(pkt *dataplane.ParsedPacket, h *l2tppkt.Header, avps []l2tppkt.AVP) error {
 	hostAVP := l2tppkt.FindFirst(avps, 0, l2tppkt.AVPHostName)
 	if hostAVP == nil {
 		return ErrMissingHostName
 	}
 	_ = l2tppkt.DecodeString(hostAVP)
 
-	// In a fully-wired component the LNSConfig comes from
-	// pkg/config/l2tp via the peer-policies map. The cmd-level wiring
-	// supplies this resolution callback; absent it we cannot proceed.
 	if c.resolveLNSConfig == nil {
 		return ErrLNSConfigUnresolved
 	}
@@ -147,8 +151,21 @@ func (c *Component) dispatchSCCRQ(pkt *dataplane.ParsedPacket, avps []l2tppkt.AV
 		return ErrLACNotAuthorized
 	}
 
-	_, _, err := c.HandleSCCRQ(pkt.IPv4.DstIP, pkt.IPv4.SrcIP, avps, cfg)
-	return err
+	sccrpBody, t, err := c.HandleSCCRQ(pkt.IPv4.DstIP, pkt.IPv4.SrcIP, avps, cfg)
+	if err != nil {
+		return err
+	}
+	if sccrpBody != nil && t != nil && t.Channel != nil {
+		// Register the just-consumed SCCRQ on the freshly-built channel
+		// so SCCRP carries Nr=h.Ns+1 and the next inbound (SCCCN at Ns=1)
+		// matches c.nr.
+		now := time.Now()
+		if _, err := t.Channel.Recv(h.Ns, h.Nr, now); err != nil {
+			return err
+		}
+		return t.Channel.Send(sccrpBody, now)
+	}
+	return nil
 }
 
 // respondV3Unsupported is a stub for the rare case of a v3 control

@@ -371,9 +371,11 @@ func (c *Component) resolveLNSSubscriberGroup() *subscriber.SubscriberGroup {
 // the values into the IPCP / IPv6CP FSMs, and drives both layers Open.
 // Called with s.mu held.
 func (c *Component) startNCP(s *Session) {
+	c.log.Debug("L2TP NCP starting", "session_id", s.SessionID)
 	if s.IPv4Address == nil {
 		c.allocateIPv4(s)
 	}
+	c.log.Debug("L2TP NCP allocated", "session_id", s.SessionID, "ipv4", s.IPv4Address)
 	if s.IPv6Address == nil {
 		c.allocateIANA(s)
 	}
@@ -384,6 +386,9 @@ func (c *Component) startNCP(s *Session) {
 	if s.IPv4Address != nil {
 		s.IPCP.SetPeerAddress(s.IPv4Address)
 	}
+
+	c.applyIPv4ProfileToIPCP(s)
+
 	if dns1, ok := s.Attributes[aaa.AttrDNSPrimary]; ok {
 		var dns1IP, dns2IP net.IP
 		dns1IP = net.ParseIP(dns1)
@@ -397,6 +402,43 @@ func (c *Component) startNCP(s *Session) {
 	s.IPCP.FSM().Open()
 	s.IPv6CP.FSM().Up()
 	s.IPv6CP.FSM().Open()
+}
+
+// applyIPv4ProfileToIPCP seeds the LNS-side IPCP options (local
+// gateway address, DNS) from the configured IPv4 profile so the
+// outbound ConfReq carries real values; AAA-returned attributes still
+// override later in startNCP.
+func (c *Component) applyIPv4ProfileToIPCP(s *Session) {
+	if s.AllocCtx == nil || s.AllocCtx.ProfileName == "" || c.cfgMgr == nil {
+		return
+	}
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil {
+		return
+	}
+	profile := cfg.IPv4Profiles[s.AllocCtx.ProfileName]
+	if profile == nil {
+		return
+	}
+	if gw := net.ParseIP(profile.Gateway); gw != nil {
+		s.IPCP.SetAddress(gw)
+	}
+	var dns1, dns2 net.IP
+	for i, d := range profile.DNS {
+		ip := net.ParseIP(d)
+		if ip == nil {
+			continue
+		}
+		switch i {
+		case 0:
+			dns1 = ip
+		case 1:
+			dns2 = ip
+		}
+	}
+	if dns1 != nil || dns2 != nil {
+		s.IPCP.SetDNS(dns1, dns2)
+	}
 }
 
 func (c *Component) allocateIPv4(s *Session) {
@@ -452,6 +494,7 @@ func (c *Component) allocatePD(s *Session) {
 // interface on first NCP up, and publishes SessionStateActive. Called
 // with s.mu held.
 func (c *Component) onIPCPUp(s *Session) {
+	c.log.Debug("L2TP IPCP up", "session_id", s.SessionID, "peer_addr", s.IPCP.PeerConfig().Address)
 	s.IPv4Address = s.IPCP.PeerConfig().Address
 	s.ipcpOpen = true
 	c.checkSessionOpen(s)
@@ -476,8 +519,10 @@ func (c *Component) onIPv6CPDown(s *Session) {
 }
 
 // checkSessionOpen runs after every NCP up callback. The session
-// transitions to PhaseOpen as soon as either NCP converges; VPP
-// programming happens once per session. Called with s.mu held.
+// transitions to PhaseOpen as soon as either NCP converges and the
+// Active lifecycle event is emitted exactly once. Note: VPP install
+// happens earlier (HandleICRQ → installLNSSessionVPP), so the gate is
+// `lifecyclePublished`, not `programmedInVPP`. Called with s.mu held.
 func (c *Component) checkSessionOpen(s *Session) {
 	if s.Phase != ppp.PhaseNetwork {
 		return
@@ -485,51 +530,106 @@ func (c *Component) checkSessionOpen(s *Session) {
 	if !s.ipcpOpen && !s.ipv6cpOpen {
 		return
 	}
-	if s.programmedInVPP {
+	if s.lifecyclePublished {
 		return
 	}
 	s.Phase = ppp.PhaseOpen
 	s.BoundAt = time.Now()
 	s.ActivatedAt = time.Now()
+	s.lifecyclePublished = true
 
 	c.programSessionVPP(s)
 	c.publishSessionLifecycle(s, models.SessionStateActive)
 }
 
-// programSessionVPP installs the L2TP session in the dataplane via the
-// southbound DECAP_IP path. Called with s.mu held. Best-effort: if the
-// southbound is not wired (kernel-UDP smoke test) the session stays
-// active in the control plane but no per-session vnet interface is
-// allocated.
-func (c *Component) programSessionVPP(s *Session) {
-	s.programmedInVPP = true
+// installLNSSessionVPP creates the per-session DECAP_IP entry in the
+// VPP L2TPv2 plugin at ICRQ time, before LCP / CHAP / NCP negotiate.
+// Without this entry the plugin drops every T=0 data packet (NO_SUCH_SESSION)
+// so LCP Configure-Request from the LAC's pppd never reaches userspace.
+// VRF defaults to 0 because AAA has not yet returned the subscriber's
+// service-group; the FIB binding for the IP address is performed in
+// programSessionVPP once NCP converges. encap_if_index ~0 means "FIB
+// lookup on the peer IP" which is what we want for any LNS reached via
+// a routed dataplane.
+func (c *Component) installLNSSessionVPP(s *Session) error {
 	if c.vpp == nil {
-		return
+		return nil
 	}
-
-	var decapVRF uint32
-	if s.VRF != "" && c.vrfMgr != nil {
-		if tableID, _, _, err := c.vrfMgr.ResolveVRF(s.VRF); err == nil {
-			decapVRF = tableID
-		} else {
-			c.log.Error("L2TP VRF resolution failed",
-				"session_id", s.SessionID, "vrf", s.VRF, "error", err)
-			return
-		}
+	s.mu.Lock()
+	if s.programmedInVPP {
+		s.mu.Unlock()
+		return nil
 	}
-
+	s.EncapIfIndex = ^uint32(0)
 	t := s.Tunnel
-	swIfIndex, err := c.vpp.AddL2TPSessionIP(
+	s.mu.Unlock()
+
+	swIfIndex, err := c.vpp.AddPPPoL2TPSession(
 		t.LocalIP, t.PeerIP,
 		t.LocalID, s.LocalID, s.PeerID,
-		decapVRF, s.EncapIfIndex,
+		0, ^uint32(0),
+		t.PPPHdrSkip,
 	)
 	if err != nil {
-		c.log.Error("L2TP southbound program failed",
+		c.log.Error("L2TP southbound install failed",
 			"session_id", s.SessionID, "error", err)
+		return err
+	}
+
+	s.mu.Lock()
+	s.SwIfIndex = swIfIndex
+	s.programmedInVPP = true
+	s.mu.Unlock()
+	return nil
+}
+
+// programSessionVPP runs once per session after NCP converges. Same
+// shape as the IPoE / PPPoE bring-up:
+//   1. set the per-session vnet iface unnumbered to the service-group's
+//      loopback — this enables IPv4 / IPv6 on the iface as a side
+//      effect of vnet_sw_interface_update_unnumbered, and gives the
+//      iface a source IP (the loopback's) for L3 forwarding;
+//   2. install the subscriber's /32 v4, /128 v6 IANA, and PD routes
+//      via the per-session iface so FIB lookups forward both directions.
+func (c *Component) programSessionVPP(s *Session) {
+	if c.vpp == nil || s.SwIfIndex == 0 {
 		return
 	}
-	s.SwIfIndex = swIfIndex
+
+	if loopback := s.ServiceGroup.Unnumbered; loopback != "" {
+		c.vpp.SetUnnumberedAsync(s.SwIfIndex, loopback, func(err error) {
+			if err != nil {
+				c.log.Error("L2TP set-unnumbered failed",
+					"session_id", s.SessionID, "loopback", loopback, "error", err)
+			}
+		})
+	} else {
+		c.log.Warn("L2TP session has no service-group unnumbered loopback; FIB ingress on per-session iface will drop until one is configured",
+			"session_id", s.SessionID, "service_group", s.ServiceGroup.Name)
+	}
+
+	if s.IPv4Address != nil {
+		if err := c.vpp.PPPoL2TPSetSubscriberIPv4(s.SwIfIndex, s.IPv4Address, true); err != nil {
+			c.log.Error("L2TP subscriber IPv4 bind failed",
+				"session_id", s.SessionID, "ipv4", s.IPv4Address, "error", err)
+		}
+	}
+	if s.IPv6Address != nil {
+		if err := c.vpp.PPPoL2TPSetSubscriberIPv6(s.SwIfIndex, s.IPv6Address, true); err != nil {
+			c.log.Error("L2TP subscriber IPv6 bind failed",
+				"session_id", s.SessionID, "ipv6", s.IPv6Address, "error", err)
+		}
+	}
+	if s.IPv6Prefix != nil {
+		nh := s.IPv6Address
+		if nh == nil {
+			nh = net.IPv6unspecified
+		}
+		if err := c.vpp.PPPoL2TPSetDelegatedPrefix(s.SwIfIndex, *s.IPv6Prefix, nh, true); err != nil {
+			c.log.Error("L2TP delegated prefix bind failed",
+				"session_id", s.SessionID, "prefix", s.IPv6Prefix.String(), "error", err)
+		}
+	}
 }
 
 // publishSessionLifecycle emits a SessionLifecycleEvent carrying a
@@ -547,6 +647,8 @@ func (c *Component) publishSessionLifecycle(s *Session, state models.SessionStat
 	payload := &models.PPPoL2TPSession{
 		SessionID:      s.SessionID,
 		State:          state,
+		AccessType:     string(models.AccessTypeL2TP),
+		Protocol:       string(models.ProtocolL2TP),
 		AAASessionID:   s.AcctSessionID,
 		LocalIP:        t.LocalIP,
 		PeerIP:         t.PeerIP,

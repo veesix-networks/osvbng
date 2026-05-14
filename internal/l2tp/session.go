@@ -78,10 +78,11 @@ type Session struct {
 	allocatedPDPool   string
 
 	// NCP convergence flags (LNS).
-	ipcpOpen        bool
-	ipv6cpOpen      bool
-	programmedInVPP bool
-	LCPMagic        uint32
+	ipcpOpen           bool
+	ipv6cpOpen         bool
+	programmedInVPP    bool
+	lifecyclePublished bool
+	LCPMagic           uint32
 
 	// VPP-side state (LNS).
 	SwIfIndex    uint32
