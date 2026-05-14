@@ -4,7 +4,48 @@
 
 package l2tp
 
-import "time"
+import (
+	"strings"
+	"time"
+)
+
+// PPPFramingHDLC and PPPFramingCompressed select how a session is
+// expected to frame PPP packets on the wire. HDLC = Address+Control
+// (0xff 0x03) prefix present on every PPP frame (default; matches
+// pppd-based LACs out of the box). Compressed = ACFC in effect, no
+// prefix.
+const (
+	PPPFramingHDLC       = "hdlc"
+	PPPFramingCompressed = "compressed"
+)
+
+// PPPFraming is an embeddable per-entity override for the PPP framing
+// mode on a session. Resolution is most-specific-wins via Merge.
+type PPPFraming struct {
+	Framing string `json:"ppp-framing,omitempty" yaml:"ppp-framing,omitempty"`
+}
+
+// Merge returns a copy of `p` with non-empty fields from `override`
+// taking precedence. Used to fold a profile-level default with a
+// per-server / per-peer-policy override.
+func (p PPPFraming) Merge(override PPPFraming) PPPFraming {
+	if override.Framing != "" {
+		p.Framing = override.Framing
+	}
+	return p
+}
+
+// PPPHdrSkip returns the byte count the dataplane should advance past
+// before reading the PPP protocol field. 2 for HDLC framing (default),
+// 0 for compressed (ACFC). Unknown / unset values fall back to HDLC.
+func (p PPPFraming) PPPHdrSkip() uint8 {
+	switch strings.ToLower(p.Framing) {
+	case PPPFramingCompressed:
+		return 0
+	default:
+		return 2
+	}
+}
 
 // L2TPConfig is the top-level L2TPv2 configuration block. Control-plane
 // policing for UDP/1701 punt is owned by the punt plugin config, not
@@ -24,8 +65,9 @@ type TunnelPool struct {
 	LNS       []LNSRef `json:"lns,omitempty"        yaml:"lns,omitempty"`
 }
 
-// LNSRef is one LNS endpoint inside a tunnel-pool. Per-server VRF and
-// source-ipv4 let one pool span multiple VRFs without forking groups.
+// LNSRef is one LNS endpoint inside a tunnel-pool. Per-server VRF,
+// source-ipv4, and PPP framing override let one pool span multiple
+// upstream LNSes with mixed behavior.
 type LNSRef struct {
 	Name       string `json:"name"                  yaml:"name"`
 	IPv4       string `json:"ipv4"                  yaml:"ipv4"`
@@ -33,6 +75,7 @@ type LNSRef struct {
 	Preference uint16 `json:"preference,omitempty"  yaml:"preference,omitempty"`
 	VRF        string `json:"vrf,omitempty"         yaml:"vrf,omitempty"`
 	SourceIPv4 string `json:"source-ipv4,omitempty" yaml:"source-ipv4,omitempty"`
+	PPPFraming `yaml:",inline"`
 }
 
 // Profile bundles timers, limits and policy. Referenced from a
@@ -46,6 +89,7 @@ type Profile struct {
 	TunnelPool        string            `json:"tunnel-pool,omitempty"         yaml:"tunnel-pool,omitempty"`
 	Retransmit        *RetransmitConfig `json:"retransmit,omitempty"          yaml:"retransmit,omitempty"`
 	Denylist          *DenylistConfig   `json:"denylist,omitempty"            yaml:"denylist,omitempty"`
+	PPPFraming        `yaml:",inline"`
 
 	// LNS-only.
 	ChallengeRequired bool   `json:"challenge-required,omitempty" yaml:"challenge-required,omitempty"`
@@ -71,9 +115,10 @@ type DenylistConfig struct {
 // PeerPolicy authorizes an inbound LAC by hostname and binds it to a
 // profile and a shared secret for Challenge-AVP auth. LNS-only.
 type PeerPolicy struct {
-	Hostname string `json:"hostname"          yaml:"hostname"`
-	Secret   string `json:"secret,omitempty"  yaml:"secret,omitempty"`
-	Profile  string `json:"profile,omitempty" yaml:"profile,omitempty"`
+	Hostname   string `json:"hostname"          yaml:"hostname"`
+	Secret     string `json:"secret,omitempty"  yaml:"secret,omitempty"`
+	Profile    string `json:"profile,omitempty" yaml:"profile,omitempty"`
+	PPPFraming `yaml:",inline"`
 }
 
 func (c *L2TPConfig) GetProfile(name string) *Profile {
@@ -102,4 +147,38 @@ func (c *L2TPConfig) GetPeerPolicyByHostname(hostname string) *PeerPolicy {
 		}
 	}
 	return nil
+}
+
+// ResolvePPPFramingLNS picks the framing for an LNS session: a peer-
+// policy override wins, otherwise the profile default, otherwise
+// HDLC. Used at session-create on the LNS side.
+func ResolvePPPFramingLNS(profile *Profile, policy *PeerPolicy) PPPFraming {
+	var f PPPFraming
+	if profile != nil {
+		f = f.Merge(profile.PPPFraming)
+	}
+	if policy != nil {
+		f = f.Merge(policy.PPPFraming)
+	}
+	if f.Framing == "" {
+		f.Framing = PPPFramingHDLC
+	}
+	return f
+}
+
+// ResolvePPPFramingLAC picks the framing for a LAC session: the
+// upstream LNS server entry wins, otherwise the profile default,
+// otherwise HDLC. Used at LAC session bring-up.
+func ResolvePPPFramingLAC(profile *Profile, lns *LNSRef) PPPFraming {
+	var f PPPFraming
+	if profile != nil {
+		f = f.Merge(profile.PPPFraming)
+	}
+	if lns != nil {
+		f = f.Merge(lns.PPPFraming)
+	}
+	if f.Framing == "" {
+		f.Framing = PPPFramingHDLC
+	}
+	return f
 }
