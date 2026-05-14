@@ -56,17 +56,29 @@ func (i *IPCP) SetDNS(primary, secondary net.IP) {
 func (i *IPCP) BuildConfReq() []Option {
 	var opts []Option
 
-	if !i.rejected[IPCPOptAddress] {
+	// RFC 1332 §3.3: 0.0.0.0 in a Configure-Request means "I don't have
+	// an address, please give me one" — a client convention. A server
+	// (LNS/BNG) without a configured local address omits the option
+	// entirely rather than asking the subscriber for one.
+	if !i.rejected[IPCPOptAddress] && isUsableIPv4(i.local.Address) {
 		opts = append(opts, IPAddressOption(i.local.Address))
 	}
-	if !i.rejected[IPCPOptPrimaryDNS] {
+	if !i.rejected[IPCPOptPrimaryDNS] && isUsableIPv4(i.local.PrimaryDNS) {
 		opts = append(opts, DNSOption(IPCPOptPrimaryDNS, i.local.PrimaryDNS))
 	}
-	if !i.rejected[IPCPOptSecondaryDNS] {
+	if !i.rejected[IPCPOptSecondaryDNS] && isUsableIPv4(i.local.SecondaryDNS) {
 		opts = append(opts, DNSOption(IPCPOptSecondaryDNS, i.local.SecondaryDNS))
 	}
 
 	return opts
+}
+
+func isUsableIPv4(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	v4 := ip.To4()
+	return v4 != nil && !v4.IsUnspecified()
 }
 
 func (i *IPCP) ProcessConfReq(opts []Option) (ack, nak, rej []Option) {
@@ -75,12 +87,15 @@ func (i *IPCP) ProcessConfReq(opts []Option) (ack, nak, rej []Option) {
 		case IPCPOptAddress:
 			if len(o.Data) == 4 {
 				addr := net.IP(o.Data)
-				if addr.Equal(net.IPv4zero) {
-					if i.peer.PeerAddress != nil && !i.peer.PeerAddress.Equal(net.IPv4zero) {
-						nak = append(nak, IPAddressOption(i.peer.PeerAddress))
-					} else {
-						rej = append(rej, o)
-					}
+				// RFC 1332 §3.3: if the peer proposes an address but
+				// we have an authoritative one for them (from AAA or
+				// pool allocation), Configure-Nak with our value so
+				// the peer adopts it. Only accept the peer's proposal
+				// when we have nothing to assign.
+				if isUsableIPv4(i.peer.PeerAddress) && !addr.Equal(i.peer.PeerAddress.To4()) {
+					nak = append(nak, IPAddressOption(i.peer.PeerAddress))
+				} else if addr.Equal(net.IPv4zero) {
+					rej = append(rej, o)
 				} else {
 					i.peer.Address = addr
 					ack = append(ack, o)
