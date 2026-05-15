@@ -52,6 +52,7 @@ type Component struct {
 	srgMgr           ha.SRGProvider
 	ifMgr            *ifmgr.Manager
 	cfgMgr           component.ConfigManager
+	accessResolver   subscriber.AccessResolver
 	vpp              southbound.Southbound
 	vrfMgr           *vrfmgr.Manager
 	svcGroupResolver *svcgroup.Resolver
@@ -185,6 +186,7 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 		srgMgr:           srgMgr,
 		ifMgr:            ifMgr,
 		cfgMgr:           deps.ConfigManager,
+		accessResolver:   deps.AccessResolver,
 		vpp:              deps.Southbound,
 		vrfMgr:           deps.VRFManager,
 		svcGroupResolver: deps.SvcGroupResolver,
@@ -276,10 +278,10 @@ func (c *Component) removeFromIndexes(sess *SessionState) {
 }
 
 func (c *Component) isMixedAccessSVLAN(svlan uint16) bool {
-	if c.cfgMgr == nil {
+	if c.accessResolver == nil {
 		return false
 	}
-	return c.cfgMgr.IsMixedAccessSVLAN(svlan)
+	return c.accessResolver.IsMixedAccessSVLAN(svlan)
 }
 
 func (c *Component) isOwner(sess *SessionState) bool {

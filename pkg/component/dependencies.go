@@ -3,6 +3,7 @@ package component
 import (
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/config"
+	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/cppm"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
 	"github.com/veesix-networks/osvbng/pkg/events"
@@ -16,7 +17,6 @@ import (
 type ConfigManager interface {
 	GetRunning() (*config.Config, error)
 	GetStartup() (*config.Config, error)
-	IsMixedAccessSVLAN(svlan uint16) bool
 }
 
 type Dependencies struct {
@@ -29,6 +29,7 @@ type Dependencies struct {
 	OpDB             opdb.Store
 	CPPM             *cppm.Manager
 	Exclusivity      session.ExclusivityRegistry
+	AccessResolver   subscriber.AccessResolver
 
 	DHCPChan   <-chan *dataplane.ParsedPacket
 	DHCPv6Chan <-chan *dataplane.ParsedPacket
