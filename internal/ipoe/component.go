@@ -1475,12 +1475,6 @@ func (c *Component) handleAAAResponse(event events.Event) {
 
 	resolved := c.resolveServiceGroup(svlan, data.Response.Attributes)
 
-	logArgs := []any{"session_id", sessID}
-	for _, attr := range resolved.LogAttrs() {
-		logArgs = append(logArgs, attr.Key, attr.Value.Any())
-	}
-	c.logger.Debug("Resolved service group", logArgs...)
-
 	var srgName string
 	if c.srgMgr != nil && subscriberGroup != "" {
 		srgName = c.srgMgr.GetSRGForGroup(subscriberGroup)
