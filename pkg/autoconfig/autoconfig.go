@@ -7,6 +7,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
 	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/operations"
+	pkgpaths "github.com/veesix-networks/osvbng/pkg/paths"
 )
 
 type Change struct {
@@ -131,32 +132,33 @@ func (a *Autoconfig) deriveSVLANConfig(group *subscriber.SubscriberGroup, vlanRa
 		Value: loopback,
 	})
 
-	subIf := fmt.Sprintf("%s.%d", a.parentInterface, svlan)
+	subIfEncoded := pkgpaths.EncodeInterfaceName(fmt.Sprintf("%s.%d", a.parentInterface, svlan))
+	parentEncoded := pkgpaths.EncodeInterfaceName(a.parentInterface)
 	if vlanRange.HasAccessType(subscriber.AccessTypeIPoE) {
 		for _, proto := range []string{"dhcpv4", "dhcpv6", "arp", "ipv6nd"} {
 			changes = append(changes, Change{
-				Path:  fmt.Sprintf("_internal.punt.%s.%s", subIf, proto),
+				Path:  fmt.Sprintf("_internal.punt.%s.%s", subIfEncoded, proto),
 				Value: &operations.PuntConfig{Enabled: true},
 			})
 		}
 		changes = append(changes, Change{
-			Path:  fmt.Sprintf("_internal.access.%s.ipoe-input", subIf),
+			Path:  fmt.Sprintf("_internal.access.%s.ipoe-input", subIfEncoded),
 			Value: &operations.AccessConfig{Enabled: true},
 		})
 	}
 	if vlanRange.HasAccessType(subscriber.AccessTypePPPoE) || vlanRange.HasAccessType(subscriber.AccessTypeLAC) {
 		changes = append(changes, Change{
-			Path:  fmt.Sprintf("_internal.punt.%s.pppoe", subIf),
+			Path:  fmt.Sprintf("_internal.punt.%s.pppoe", subIfEncoded),
 			Value: &operations.PuntConfig{Enabled: true},
 		})
 		changes = append(changes, Change{
-			Path:  fmt.Sprintf("_internal.access.%s.promiscuous", a.parentInterface),
+			Path:  fmt.Sprintf("_internal.access.%s.promiscuous", parentEncoded),
 			Value: &operations.AccessConfig{Enabled: true},
 		})
 	}
 	if vlanRange.HasAccessType(subscriber.AccessTypeLNS) {
 		changes = append(changes, Change{
-			Path:  fmt.Sprintf("_internal.punt.%s.l2tp", subIf),
+			Path:  fmt.Sprintf("_internal.punt.%s.l2tp", subIfEncoded),
 			Value: &operations.PuntConfig{Enabled: true},
 		})
 	}

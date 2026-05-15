@@ -56,17 +56,17 @@ func TestDerive_IPoEEmitsPuntAndAccess(t *testing.T) {
 		},
 	}))
 	for _, p := range []string{
-		"_internal.punt.eth1.100.dhcpv4",
-		"_internal.punt.eth1.100.dhcpv6",
-		"_internal.punt.eth1.100.arp",
-		"_internal.punt.eth1.100.ipv6nd",
-		"_internal.access.eth1.100.ipoe-input",
+		"_internal.punt.eth1_dot_100.dhcpv4",
+		"_internal.punt.eth1_dot_100.dhcpv6",
+		"_internal.punt.eth1_dot_100.arp",
+		"_internal.punt.eth1_dot_100.ipv6nd",
+		"_internal.access.eth1_dot_100.ipoe-input",
 	} {
 		if !pathPresent(changes, p) {
 			t.Errorf("expected path %s", p)
 		}
 	}
-	if pathPresent(changes, "_internal.punt.eth1.100.pppoe") {
+	if pathPresent(changes, "_internal.punt.eth1_dot_100.pppoe") {
 		t.Error("[ipoe] must not emit pppoe punt")
 	}
 }
@@ -79,7 +79,7 @@ func TestDerive_PPPoEEmitsPuntAndParentPromisc(t *testing.T) {
 			},
 		},
 	}))
-	if !pathPresent(changes, "_internal.punt.eth1.100.pppoe") {
+	if !pathPresent(changes, "_internal.punt.eth1_dot_100.pppoe") {
 		t.Error("[pppoe] must emit pppoe punt")
 	}
 	if !pathPresent(changes, "_internal.access.eth1.promiscuous") {
@@ -96,9 +96,9 @@ func TestDerive_MixedEmitsUnion(t *testing.T) {
 		},
 	}))
 	for _, p := range []string{
-		"_internal.punt.eth1.100.dhcpv4",
-		"_internal.punt.eth1.100.pppoe",
-		"_internal.access.eth1.100.ipoe-input",
+		"_internal.punt.eth1_dot_100.dhcpv4",
+		"_internal.punt.eth1_dot_100.pppoe",
+		"_internal.access.eth1_dot_100.ipoe-input",
 		"_internal.access.eth1.promiscuous",
 	} {
 		if !pathPresent(changes, p) {
@@ -116,9 +116,9 @@ func TestDerive_MixedReverseOrderEmitsSameUnion(t *testing.T) {
 		},
 	}))
 	for _, p := range []string{
-		"_internal.punt.eth1.100.dhcpv4",
-		"_internal.punt.eth1.100.pppoe",
-		"_internal.access.eth1.100.ipoe-input",
+		"_internal.punt.eth1_dot_100.dhcpv4",
+		"_internal.punt.eth1_dot_100.pppoe",
+		"_internal.access.eth1_dot_100.ipoe-input",
 		"_internal.access.eth1.promiscuous",
 	} {
 		if !pathPresent(changes, p) {
@@ -135,7 +135,7 @@ func TestDerive_LNSEmitsL2TPPunt(t *testing.T) {
 			},
 		},
 	}))
-	if !pathPresent(changes, "_internal.punt.eth1.1.l2tp") {
+	if !pathPresent(changes, "_internal.punt.eth1_dot_1.l2tp") {
 		t.Error("[lns] must emit l2tp punt")
 	}
 	if pathPresent(changes, "_internal.access.eth1.promiscuous") {
