@@ -174,6 +174,12 @@ func (i *Ingress) parsePacket(pkt *PuntPacket) (*dataplane.ParsedPacket, error) 
 		}
 	case ProtoL2TP:
 		parsed.Protocol = models.ProtocolL2TP
+		if ipv4Layer := packet.Layer(layers.LayerTypeIPv4); ipv4Layer != nil {
+			parsed.IPv4 = ipv4Layer.(*layers.IPv4)
+		}
+		if udpLayer := packet.Layer(layers.LayerTypeUDP); udpLayer != nil {
+			parsed.UDP = udpLayer.(*layers.UDP)
+		}
 	default:
 		return nil, fmt.Errorf("unsupported protocol: %d", pkt.Protocol)
 	}

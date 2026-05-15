@@ -11,6 +11,7 @@ type Sessions interface {
 	DeletePPPoESession(sessionID uint16, clientIP net.IP, clientMAC net.HardwareAddr) error
 	AddPPPoESessionAsync(sessionID uint16, clientIP net.IP, clientMAC net.HardwareAddr, localMAC net.HardwareAddr, encapIfIndex uint32, outerVLAN uint16, innerVLAN uint16, decapVrfID uint32, pppMTU uint16, policy MSSClampPolicy, callback func(uint32, error))
 	DeletePPPoESessionAsync(sessionID uint16, clientIP net.IP, clientMAC net.HardwareAddr, callback func(error))
+	SetPPPoESessionLACTunneled(swIfIndex uint32, lacL2TPSessionIndex uint32, isLAC bool) error
 
 	AddIPoESession(clientMAC net.HardwareAddr, localMAC net.HardwareAddr, encapIfIndex uint32, outerVLAN uint16, innerVLAN uint16, decapVrfID uint32) (uint32, error)
 	DeleteIPoESession(clientMAC net.HardwareAddr, encapIfIndex uint32, innerVLAN uint16) error
@@ -32,6 +33,28 @@ type Sessions interface {
 	ApplyScheduler(swIfIndex uint32, rateKbps uint32, cfg *qos.SchedulerConfig) error
 	RemoveScheduler(swIfIndex uint32) error
 	DumpSchedulers() ([]SchedulerState, error)
+
+	// L2TPv2 tunnels (the transport protocol). IDs are passed in HOST
+	// byte order.
+	AddL2TPTunnel(local, peer net.IP, localID, peerID, localPort, peerPort uint16, dfBit bool) (uint32, error)
+	DeleteL2TPTunnel(local, peer net.IP, localID uint16) error
+
+	// Subscriber sessions carried over L2TP.
+	//   - PPPoL2TP: PPP terminating at the LNS (DECAP_IP). Creates a
+	//     per-session vnet interface and binds the subscriber's IPs.
+	//   - LAC raw: PPPoE-on-the-wire bridged out via L2TP (DECAP_RAW).
+	//     No subscriber IP binding — the LNS owns the IP.
+	// pppHdrSkip selects the data-frame PPP framing: 2 = HDLC
+	// Address+Control prefix present (default; matches every major
+	// LNS / pppd-based LAC), 0 = ACFC compressed. Resolved once from
+	// operator config; the plugin stores it and reads it once per
+	// packet, branch-free.
+	AddPPPoL2TPSession(local, peer net.IP, localTunnelID, localSessionID, peerSessionID uint16, decapVrfID uint32, encapIfIndex uint32, pppHdrSkip uint8) (uint32, error)
+	AddL2TPSessionRaw(local, peer net.IP, localTunnelID, localSessionID, peerSessionID uint16, rawNextNode string, rawOpaque uint32, encapIfIndex uint32, pppHdrSkip uint8) (uint32, error)
+	DeleteL2TPSession(local, peer net.IP, localTunnelID, localSessionID uint16) error
+	PPPoL2TPSetSubscriberIPv4(swIfIndex uint32, clientIP net.IP, isAdd bool) error
+	PPPoL2TPSetSubscriberIPv6(swIfIndex uint32, clientIP net.IP, isAdd bool) error
+	PPPoL2TPSetDelegatedPrefix(swIfIndex uint32, prefix net.IPNet, nextHop net.IP, isAdd bool) error
 }
 
 type SchedulerTinState struct {

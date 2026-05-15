@@ -71,8 +71,10 @@ func validateVLANTpid(value string) error {
 }
 
 func (c *Config) Validate() error {
-	if _, err := c.GetAccessInterface(); err != nil {
-		return fmt.Errorf("access interface validation: %w", err)
+	if c.NeedsAccessInterface() {
+		if _, err := c.GetAccessInterface(); err != nil {
+			return fmt.Errorf("access interface validation: %w", err)
+		}
 	}
 
 	for ifName, iface := range c.Interfaces {

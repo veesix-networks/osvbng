@@ -7,7 +7,7 @@
 // Package osvbng_pppoe contains generated bindings for API file osvbng_pppoe.api.
 //
 // Contents:
-// -  4 messages
+// -  6 messages
 package osvbng_pppoe
 
 import (
@@ -27,7 +27,7 @@ const _ = api.GoVppAPIPackageIsVersion2
 const (
 	APIFile    = "osvbng_pppoe"
 	APIVersion = "1.0.0"
-	VersionCrc = 0x8fbe5315
+	VersionCrc = 0x6fc03417
 )
 
 // Set or delete a PPPoE session
@@ -267,12 +267,100 @@ func (m *OsvbngPppoeSessionDump) Unmarshal(b []byte) error {
 	return nil
 }
 
+// Set or clear the LAC-tunneled flag on a PPPoE session
+//   - sw_if_index - software index of the PPPoE session interface
+//   - is_lac_tunneled - 1 to bridge subscriber↔LNS via L2TPv2, 0 to clear
+//   - lac_l2tp_session_index - L2TPv2 session sw_if_index stashed in
+//     vnet_buffer for the subscriber→LNS direction; ignored when
+//     is_lac_tunneled=0
+//
+// OsvbngPppoeSetLacTunnel defines message 'osvbng_pppoe_set_lac_tunnel'.
+type OsvbngPppoeSetLacTunnel struct {
+	SwIfIndex           interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
+	IsLacTunneled       bool                           `binapi:"bool,name=is_lac_tunneled" json:"is_lac_tunneled,omitempty"`
+	LacL2tpSessionIndex uint32                         `binapi:"u32,name=lac_l2tp_session_index" json:"lac_l2tp_session_index,omitempty"`
+}
+
+func (m *OsvbngPppoeSetLacTunnel) Reset()               { *m = OsvbngPppoeSetLacTunnel{} }
+func (*OsvbngPppoeSetLacTunnel) GetMessageName() string { return "osvbng_pppoe_set_lac_tunnel" }
+func (*OsvbngPppoeSetLacTunnel) GetCrcString() string   { return "19c5a170" }
+func (*OsvbngPppoeSetLacTunnel) GetMessageType() api.MessageType {
+	return api.RequestMessage
+}
+
+func (m *OsvbngPppoeSetLacTunnel) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.SwIfIndex
+	size += 1 // m.IsLacTunneled
+	size += 4 // m.LacL2tpSessionIndex
+	return size
+}
+func (m *OsvbngPppoeSetLacTunnel) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeUint32(uint32(m.SwIfIndex))
+	buf.EncodeBool(m.IsLacTunneled)
+	buf.EncodeUint32(m.LacL2tpSessionIndex)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngPppoeSetLacTunnel) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.SwIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
+	m.IsLacTunneled = buf.DecodeBool()
+	m.LacL2tpSessionIndex = buf.DecodeUint32()
+	return nil
+}
+
+// reply for osvbng_pppoe_set_lac_tunnel
+//   - retval - return code
+//
+// OsvbngPppoeSetLacTunnelReply defines message 'osvbng_pppoe_set_lac_tunnel_reply'.
+type OsvbngPppoeSetLacTunnelReply struct {
+	Retval int32 `binapi:"i32,name=retval" json:"retval,omitempty"`
+}
+
+func (m *OsvbngPppoeSetLacTunnelReply) Reset() { *m = OsvbngPppoeSetLacTunnelReply{} }
+func (*OsvbngPppoeSetLacTunnelReply) GetMessageName() string {
+	return "osvbng_pppoe_set_lac_tunnel_reply"
+}
+func (*OsvbngPppoeSetLacTunnelReply) GetCrcString() string { return "e8d4e804" }
+func (*OsvbngPppoeSetLacTunnelReply) GetMessageType() api.MessageType {
+	return api.ReplyMessage
+}
+
+func (m *OsvbngPppoeSetLacTunnelReply) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.Retval
+	return size
+}
+func (m *OsvbngPppoeSetLacTunnelReply) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeInt32(m.Retval)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngPppoeSetLacTunnelReply) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.Retval = buf.DecodeInt32()
+	return nil
+}
+
 func init() { file_osvbng_pppoe_binapi_init() }
 func file_osvbng_pppoe_binapi_init() {
 	api.RegisterMessage((*OsvbngPppoeAddDelSession)(nil), "osvbng_pppoe_add_del_session_0ae5915d")
 	api.RegisterMessage((*OsvbngPppoeAddDelSessionReply)(nil), "osvbng_pppoe_add_del_session_reply_5383d31f")
 	api.RegisterMessage((*OsvbngPppoeSessionDetails)(nil), "osvbng_pppoe_session_details_97890e59")
 	api.RegisterMessage((*OsvbngPppoeSessionDump)(nil), "osvbng_pppoe_session_dump_f9e6675e")
+	api.RegisterMessage((*OsvbngPppoeSetLacTunnel)(nil), "osvbng_pppoe_set_lac_tunnel_19c5a170")
+	api.RegisterMessage((*OsvbngPppoeSetLacTunnelReply)(nil), "osvbng_pppoe_set_lac_tunnel_reply_e8d4e804")
 }
 
 // Messages returns list of all messages in this module.
@@ -282,5 +370,7 @@ func AllMessages() []api.Message {
 		(*OsvbngPppoeAddDelSessionReply)(nil),
 		(*OsvbngPppoeSessionDetails)(nil),
 		(*OsvbngPppoeSessionDump)(nil),
+		(*OsvbngPppoeSetLacTunnel)(nil),
+		(*OsvbngPppoeSetLacTunnelReply)(nil),
 	}
 }

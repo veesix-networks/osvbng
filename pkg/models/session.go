@@ -181,6 +181,42 @@ type PPPSession struct {
 	NegotiatedPPPMTU uint16
 	IPv4MSS          uint16
 	IPv6MSS          uint16
+
+	// TunneledToLNS is the LNS IP this subscriber is currently bridged
+	// to in LAC mode. Populated only when State == SessionStateTunneled;
+	// nil for terminating PPPoE sessions.
+	TunneledToLNS net.IP
+
+	// L2TP is the LAC binding for this subscriber. Non-nil only when
+	// the session is in `tunneled` state. Marshaled with `omitempty`
+	// so non-LAC sessions render the same JSON as before.
+	L2TP *L2TPBinding `json:"L2TP,omitempty"`
+}
+
+// L2TPBinding is the L2TPv2 session metadata for a LAC-bridged
+// PPPoE subscriber. The PeerTunnelID/PeerSessionID are what the LNS
+// sees as its local IDs.
+type L2TPBinding struct {
+	LocalTunnelID  uint16 `json:"LocalTunnelID"`
+	PeerTunnelID   uint16 `json:"PeerTunnelID"`
+	LocalSessionID uint16 `json:"LocalSessionID"`
+	PeerSessionID  uint16 `json:"PeerSessionID"`
+}
+
+// L2TPTunnelSummary is the tunnel-level snapshot returned by
+// `show l2tp tunnels`. One row per active tunnel; sessions are
+// surfaced through the per-subscriber view.
+type L2TPTunnelSummary struct {
+	LocalIP       string    `json:"LocalIP"`
+	PeerIP        string    `json:"PeerIP"`
+	LocalID       uint16    `json:"LocalID"`
+	PeerID        uint16    `json:"PeerID"`
+	LocalHostname string    `json:"LocalHostname,omitempty"`
+	PeerHostname  string    `json:"PeerHostname,omitempty"`
+	Role          string    `json:"Role"`
+	State         string    `json:"State"`
+	SessionCount  int       `json:"SessionCount"`
+	CreatedAt     time.Time `json:"CreatedAt"`
 }
 
 func (s *PPPSession) GetSessionID() string      { return s.SessionID }
@@ -212,6 +248,69 @@ func MakeIPoESessionID(mac net.HardwareAddr, vlan uint16) string {
 func MakePPPSessionID(sessionID uint16) string {
 	return fmt.Sprintf("ppp:%d", sessionID)
 }
+
+// PPPoL2TPSession represents an LNS-terminated subscriber: PPP runs
+// locally over L2TP transport. Subscriber identity comes from the LAC
+// end of the tunnel; there is no MAC or VLAN at this layer.
+type PPPoL2TPSession struct {
+	SessionID    string
+	State        SessionState
+	AccessType   string
+	Protocol     string
+	AAASessionID string
+
+	LocalIP            net.IP
+	PeerIP             net.IP
+	LocalTunnelID      uint16
+	PeerTunnelID       uint16
+	LocalSessionID     uint16
+	PeerSessionID      uint16
+	TunnelAssignmentID string
+	LACHostname        string
+
+	IfIndex      uint32
+	VRF          string
+	ServiceGroup string
+	SRGName      string
+
+	IPv4Address net.IP
+	IPv6Address net.IP
+	IPv6Prefix  string
+	IPv4Pool    string
+	IANAPool    string
+
+	LCPState    string
+	IPCPState   string
+	IPv6CPState string
+	LCPMagic    uint32
+
+	Username string
+
+	ActivatedAt time.Time
+	Attributes  map[string]string
+
+	NegotiatedPPPMTU uint16
+	IPv4MSS          uint16
+	IPv6MSS          uint16
+}
+
+func (s *PPPoL2TPSession) GetSessionID() string      { return s.SessionID }
+func (s *PPPoL2TPSession) GetAccessType() AccessType { return AccessTypeL2TP }
+func (s *PPPoL2TPSession) GetProtocol() Protocol     { return ProtocolL2TP }
+func (s *PPPoL2TPSession) GetState() SessionState    { return s.State }
+func (s *PPPoL2TPSession) GetMAC() net.HardwareAddr  { return nil }
+func (s *PPPoL2TPSession) GetOuterVLAN() uint16      { return 0 }
+func (s *PPPoL2TPSession) GetInnerVLAN() uint16      { return 0 }
+func (s *PPPoL2TPSession) GetAAASessionID() string   { return s.AAASessionID }
+func (s *PPPoL2TPSession) GetIPv4Address() net.IP    { return s.IPv4Address }
+func (s *PPPoL2TPSession) GetIPv6Address() net.IP    { return s.IPv6Address }
+func (s *PPPoL2TPSession) GetIPv6Prefix() string     { return s.IPv6Prefix }
+func (s *PPPoL2TPSession) GetIfIndex() uint32        { return s.IfIndex }
+func (s *PPPoL2TPSession) GetVLANCount() int         { return 0 }
+func (s *PPPoL2TPSession) GetUsername() string       { return s.Username }
+func (s *PPPoL2TPSession) GetServiceGroup() string   { return s.ServiceGroup }
+func (s *PPPoL2TPSession) GetSRGName() string        { return s.SRGName }
+func (s *PPPoL2TPSession) GetActivatedAt() time.Time { return s.ActivatedAt }
 
 type SessionStats struct {
 	RxPackets uint64 `json:"rx_packets"`

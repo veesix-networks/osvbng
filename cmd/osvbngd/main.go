@@ -21,6 +21,7 @@ import (
 	"github.com/veesix-networks/osvbng/internal/dataplane"
 	"github.com/veesix-networks/osvbng/internal/gateway"
 	"github.com/veesix-networks/osvbng/internal/ipoe"
+	"github.com/veesix-networks/osvbng/internal/l2tp"
 	"github.com/veesix-networks/osvbng/internal/monitor"
 	"github.com/veesix-networks/osvbng/internal/pppoe"
 	"github.com/veesix-networks/osvbng/internal/routing"
@@ -32,6 +33,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/cache/memory"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/config"
+	l2tpcfg "github.com/veesix-networks/osvbng/pkg/config/l2tp"
 	syscfg "github.com/veesix-networks/osvbng/pkg/config/system"
 	"github.com/veesix-networks/osvbng/pkg/configmgr"
 	"github.com/veesix-networks/osvbng/pkg/cppm"
@@ -157,9 +159,13 @@ func main() {
 		log.Fatalf("Failed to connect to VPP: %v", err)
 	}
 
-	accessInterface, err := cfg.GetAccessInterface()
-	if err != nil {
-		log.Fatalf("Invalid access interface configuration: %v", err)
+	var accessInterface string
+	if cfg.NeedsAccessInterface() {
+		name, err := cfg.GetAccessInterface()
+		if err != nil {
+			log.Fatalf("Invalid access interface configuration: %v", err)
+		}
+		accessInterface = name
 	}
 
 	ifMgr := ifmgr.New()
@@ -359,6 +365,71 @@ func main() {
 		log.Fatalf("Failed to create pppoe component: %v", err)
 	}
 
+	var l2tpComp *l2tp.Component
+	if cfg.L2TP != nil {
+		l2tpComp = l2tp.New(logger.Get(logger.L2TP))
+		l2tpComp.SetPuntChannel(dataplaneComp.L2TPChan)
+		l2tpComp.SetEventBus(coreDeps.EventBus)
+		l2tpComp.SetConfigManager(coreDeps.ConfigManager)
+		l2tpComp.SetSouthbound(coreDeps.Southbound)
+		l2tpComp.SetVRFManager(vrfMgr)
+		l2tpComp.SetServiceGroupResolver(svcGroupResolver)
+		l2tpComp.SetLocalHostname("osvbng")
+		if reg := allocator.GetGlobalRegistry(); reg != nil {
+			l2tpComp.SetAllocator(reg)
+		}
+
+		l2tpCfg := cfg.L2TP
+		l2tpComp.SetLNSConfigResolver(func(hostname string) (l2tp.LNSConfig, bool) {
+			policy := l2tpCfg.GetPeerPolicyByHostname(hostname)
+			if policy == nil {
+				return l2tp.LNSConfig{}, false
+			}
+			profile := l2tpCfg.GetProfile(policy.Profile)
+			cfg := l2tp.LNSConfig{
+				LocalHostname:     "osvbng",
+				ReceiveWindowSize: 16,
+				Secret:            []byte(policy.Secret),
+			}
+			if profile != nil {
+				cfg.ChallengeRequired = profile.ChallengeRequired
+				cfg.HelloInterval = profile.HelloInterval
+				if profile.ReceiveWindowSize > 0 {
+					cfg.ReceiveWindowSize = uint16(profile.ReceiveWindowSize)
+				}
+			}
+			cfg.PPPHdrSkip = l2tpcfg.ResolvePPPFramingLNS(profile, policy).PPPHdrSkip()
+			return cfg, true
+		})
+
+		// Kernel UDP socket bound in the dataplane netns is used for
+		// TX only — the source-port-1701 bind anchors outbound control
+		// frames so the L2TP peer's reply lookup succeeds. RX flows
+		// from VPP's l2tpv2-input → osvbng-punt SHM → dataplaneComp.
+		// L2TPChan, wired into l2tpComp via SetPuntChannel above.
+		l2tpTransport, err := l2tp.NewKernelUDPTransport(nil, config.LCPNetNs)
+		if err != nil {
+			log.Fatalf("Failed to open L2TP kernel UDP socket: %v", err)
+		}
+		l2tpComp.SetSendControlFn(l2tpTransport.Send)
+		mainLog.Info("L2TP component created (VPP punt RX, kernel-UDP TX)")
+
+		pppoeComp.SetLACTrigger(func(attrs pppoe.LACBringUpAttrs) error {
+			specs := l2tp.ParseTunnelSpecs(attrs.AAAAttrs)
+			return l2tpComp.StartLACSession(l2tp.LACBringUpRequest{
+				PPPoESessionID:       attrs.PPPoESessionID,
+				Username:             attrs.Username,
+				TunnelSpecs:          specs,
+				PPPoESwIfIndex:       attrs.PPPoESwIfIndex,
+				EncapIfIndex:         attrs.EncapIfIndex,
+				ProxyAuthenType:      attrs.ProxyAuthenType,
+				ProxyAuthenName:      attrs.ProxyAuthenName,
+				ProxyAuthenChallenge: attrs.ProxyAuthenChallenge,
+				ProxyAuthenResponse:  attrs.ProxyAuthenResponse,
+			})
+		})
+	}
+
 	var cgnat *cgnatcomp.Component
 	if cfg.CGNAT != nil && len(cfg.CGNAT.Pools) > 0 {
 		cgnat, err = cgnatcomp.NewComponent(coreDeps, ifMgr, vrfMgr)
@@ -461,6 +532,9 @@ func main() {
 	orch.Register(subscriberComp)
 	orch.Register(arpComp)
 	orch.Register(pppoeComp)
+	if l2tpComp != nil {
+		orch.Register(l2tpComp)
+	}
 	if cgnat != nil {
 		orch.Register(cgnat)
 	}
@@ -511,6 +585,7 @@ func main() {
 		DHCPv4Providers:  dhcp4Providers,
 		DHCPv6Providers:  dhcp6Providers,
 		CGNAT:            cgnat,
+		L2TP:             l2tpComp,
 		RunningConfig:    configd,
 	})
 

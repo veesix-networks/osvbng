@@ -10,6 +10,7 @@ import (
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/ha"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/interfaces"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/ip"
+	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/l2tp"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/plugins"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/protocols/bgp"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/protocols/bgp/vpn/ipv4"

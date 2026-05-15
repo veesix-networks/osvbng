@@ -11,6 +11,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/uuid"
+	pppdisp "github.com/veesix-networks/osvbng/internal/ppp"
 	"github.com/veesix-networks/osvbng/pkg/aaa"
 	"github.com/veesix-networks/osvbng/pkg/allocator"
 	aaacfg "github.com/veesix-networks/osvbng/pkg/config/aaa"
@@ -48,6 +49,27 @@ func (s *SessionState) initPPP() {
 	s.chap = &ppp.CHAPHandler{
 		Send: s.sendCHAP,
 	}
+
+	s.dispatcher = &pppdisp.Dispatcher{
+		LCP:        s.lcp,
+		IPCP:       s.ipcp,
+		IPv6CP:     s.ipv6cp,
+		PhaseFn:    func() ppp.Phase { return s.Phase },
+		HandlePAP:  s.handlePAPPacket,
+		HandleCHAP: s.handleCHAPPacket,
+		OnEchoReq: func(id uint8, data []byte) {
+			if s.Phase == ppp.PhaseOpen || s.Phase == ppp.PhaseNetwork {
+				s.sendLCPEchoReply(id, data)
+			}
+		},
+		OnEchoRep: func(id uint8, _ []byte) {
+			if s.component.echoGen != nil {
+				s.component.echoGen.HandleEchoReply(s.PPPoESessionID, id)
+			}
+		},
+		OnProtocolReject:   s.handleProtocolReject,
+		SendProtocolReject: s.sendProtocolReject,
+	}
 }
 
 func (s *SessionState) up() {
@@ -64,71 +86,12 @@ func (s *SessionState) handlePPP(pppLayer *layers.PPP) error {
 	defer s.mu.Unlock()
 
 	proto := uint16(pppLayer.PPPType)
-	payload := pppLayer.Payload
-
-	if len(payload) < 4 {
-		return fmt.Errorf("PPP packet too short")
-	}
-
-	code := payload[0]
-	id := payload[1]
-	length := binary.BigEndian.Uint16(payload[2:4])
-	if int(length) > len(payload) {
-		return fmt.Errorf("PPP packet length mismatch")
-	}
-	data := payload[4:length]
-
 	s.component.logger.Debug("Received PPP packet",
 		"pppoe_session_id", s.PPPoESessionID,
 		"proto", fmt.Sprintf("0x%04x", proto),
-		"code", code,
 		"phase", s.Phase.String())
 
-	switch proto {
-	case ppp.ProtoLCP:
-		return s.handleLCP(code, id, data)
-	case ppp.ProtoPAP:
-		return s.handlePAPPacket(code, id, data)
-	case ppp.ProtoCHAP:
-		return s.handleCHAPPacket(code, id, data)
-	case ppp.ProtoIPCP:
-		if s.Phase != ppp.PhaseNetwork && s.Phase != ppp.PhaseOpen {
-			return nil
-		}
-		s.ipcp.FSM().Input(code, id, data)
-	case ppp.ProtoIPv6CP:
-		if s.Phase != ppp.PhaseNetwork && s.Phase != ppp.PhaseOpen {
-			return nil
-		}
-		s.ipv6cp.FSM().Input(code, id, data)
-	default:
-		s.component.logger.Debug("Unknown PPP protocol", "proto", fmt.Sprintf("0x%04x", proto))
-		s.sendProtocolReject(proto, payload)
-	}
-
-	return nil
-}
-
-func (s *SessionState) handleLCP(code, id uint8, data []byte) error {
-	switch code {
-	case ppp.EchoReq:
-		if s.Phase == ppp.PhaseOpen || s.Phase == ppp.PhaseNetwork {
-			s.sendLCPEchoReply(id, data)
-		}
-	case ppp.EchoRep:
-		if s.component.echoGen != nil {
-			s.component.echoGen.HandleEchoReply(s.PPPoESessionID, id)
-		}
-	case ppp.ProtoRej:
-		// RFC 1661 Section 5.7 - stop sending the rejected protocol
-		if len(data) >= 2 {
-			rejectedProto := binary.BigEndian.Uint16(data[0:2])
-			s.handleProtocolReject(rejectedProto)
-		}
-	default:
-		s.lcp.FSM().Input(code, id, data)
-	}
-	return nil
+	return s.dispatcher.HandleFrame(proto, pppLayer.Payload)
 }
 
 func (s *SessionState) handlePAPPacket(code, id uint8, data []byte) error {
@@ -182,6 +145,7 @@ func (s *SessionState) handleCHAPPacket(code, id uint8, data []byte) error {
 		s.Username = username
 		s.pendingAuthType = "chap"
 		s.pendingCHAPID = id
+		s.chapResponse = append(s.chapResponse[:0], response...)
 
 		s.publishAAARequest(map[string]string{
 			aaa.AttrCHAPID:        hex.EncodeToString([]byte{id}),
@@ -358,9 +322,23 @@ func (s *SessionState) onAuthResult(allowed bool, attributes map[string]interfac
 		}
 		s.component.logger.Info("Resolved service group", logArgs...)
 
-		if s.pendingAuthType == "pap" {
+		if s.shouldTunnelToLAC() {
+			s.component.logger.Info("Handing subscriber off to LAC",
+				"session_id", s.SessionID, "username", s.Username)
+			s.Phase = ppp.PhaseLACTunnelPending
+			// Keep pendingAuthType / pendingPAPID / pendingCHAPID
+			// populated — handleLACDecision needs them to send PAP-Ack
+			// / CHAP-Success once the L2TP tunnel comes up. Clear only
+			// the AAA request correlation ID.
+			s.pendingAuthRequestID = ""
+			s.startLACVPPSessionAdd()
+			return
+		}
+
+		switch s.pendingAuthType {
+		case "pap":
 			s.sendPAPAck(s.pendingPAPID)
-		} else if s.pendingAuthType == "chap" {
+		case "chap":
 			s.sendCHAPSuccess(s.pendingCHAPID)
 		}
 
@@ -370,9 +348,10 @@ func (s *SessionState) onAuthResult(allowed bool, attributes map[string]interfac
 			"session_id", s.SessionID,
 			"auth_type", s.pendingAuthType)
 
-		if s.pendingAuthType == "pap" {
+		switch s.pendingAuthType {
+		case "pap":
 			s.sendPAPNak(s.pendingPAPID)
-		} else if s.pendingAuthType == "chap" {
+		case "chap":
 			s.sendCHAPFailure(s.pendingCHAPID)
 		}
 

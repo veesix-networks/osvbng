@@ -1,0 +1,117 @@
+# Copyright 2026 The osvbng Authors
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+subscriber-groups:
+    groups:
+        pppoe-lac:
+            access-type: lac
+            vlan-tpid: dot1q
+            vlans:
+                - svlan: "200-210"
+                  cvlan: any
+                  interface: loop100
+            aaa-policy: pppoe-policy
+            l2tp:
+                profile: L2TP_LAC_DEFAULT
+
+l2tp:
+    tunnel-pools:
+        LNS_POOL:
+            local-name: bng1
+            lns:
+                - name: bngblaster-lns
+                  ipv4: 10.0.0.2
+                  source-ipv4: 10.0.0.1
+                  secret: shared
+                  preference: 100
+    profiles:
+        L2TP_LAC_DEFAULT:
+            session-limit: 1000
+            hello-interval: 60s
+            receive-window-size: 16
+            tunnel-pool: LNS_POOL
+            max-attempts-per-subscriber: 4
+
+ipv4-profiles:
+    default:
+        gateway: 10.255.0.1
+        pools:
+            - name: subscriber-pool
+              network: 10.255.0.0/16
+              priority: 1
+
+interfaces:
+    loop0:
+        description: Control Plane Loopback
+        enabled: true
+        address:
+            ipv4:
+                - 10.254.0.1/32
+    eth1:
+        description: Subscriber-facing (PPPoE)
+        enabled: true
+        bng_mode: access
+    eth2:
+        description: L2TP backbone (LNS reachability)
+        enabled: true
+        address:
+            ipv4:
+                - 10.0.0.1/30
+    eth3:
+        description: Core link (corerouter1)
+        enabled: true
+        address:
+            ipv4:
+                - 10.1.0.1/30
+    loop100:
+        description: Subscriber Gateway Loopback
+        enabled: true
+        address:
+            ipv4:
+                - 10.255.0.1/32
+
+aaa:
+    auth_provider: local
+    nas_identifier: osvbng
+    policy:
+        # LAC mode: osvbng does not authenticate the subscriber. The LNS
+        # validates CHAP via the proxy-auth AVPs we forward in ICCN.
+        # Local auth is used purely as a lookup table: agent-remote-id
+        # -> Tunnel-* attributes that pick the LNS.
+        - name: pppoe-policy
+          type: ppp
+          format: $agent-remote-id$
+          authenticate: false
+          max_concurrent_sessions: 1
+
+plugins:
+    exporter.prometheus:
+        enabled: true
+        listen_address: :9090
+    northbound.api:
+        enabled: true
+        listen_address: :8080
+    subscriber.auth.local:
+        allow_all: false
+        database_path: /tmp/osvbng.db
+
+monitoring:
+    collect_interval: 30s
+
+logging:
+    format: text
+    level: info
+    components:
+        aaa: debug
+        pppoe: debug
+        l2tp: debug
+        dataplane: debug
+        southbound: debug
+
+dataplane:
+    lcp-netns: dataplane
+    statseg:
+        size: "512m"
+        page-size: "4k"
+        per-node-counters: false

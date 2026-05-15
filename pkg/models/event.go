@@ -61,4 +61,9 @@ const (
 	SessionStateRequesting  SessionState = "requesting"
 	SessionStateActive      SessionState = "active"
 	SessionStateReleased    SessionState = "released"
+
+	// SessionStateTunneled marks a PPPoE subscriber whose PPP frames
+	// are bridged to an LNS over L2TP. The PPPoE session owns the
+	// subscriber record; no local NCP or IP allocation runs.
+	SessionStateTunneled SessionState = "tunneled"
 )

@@ -15,6 +15,7 @@ import (
 type RPCService interface {
 	OsvbngPppoeAddDelSession(ctx context.Context, in *OsvbngPppoeAddDelSession) (*OsvbngPppoeAddDelSessionReply, error)
 	OsvbngPppoeSessionDump(ctx context.Context, in *OsvbngPppoeSessionDump) (RPCService_OsvbngPppoeSessionDumpClient, error)
+	OsvbngPppoeSetLacTunnel(ctx context.Context, in *OsvbngPppoeSetLacTunnel) (*OsvbngPppoeSetLacTunnelReply, error)
 }
 
 type serviceClient struct {
@@ -75,4 +76,13 @@ func (c *serviceClient_OsvbngPppoeSessionDumpClient) Recv() (*OsvbngPppoeSession
 	default:
 		return nil, fmt.Errorf("unexpected message: %T %v", m, m)
 	}
+}
+
+func (c *serviceClient) OsvbngPppoeSetLacTunnel(ctx context.Context, in *OsvbngPppoeSetLacTunnel) (*OsvbngPppoeSetLacTunnelReply, error) {
+	out := new(OsvbngPppoeSetLacTunnelReply)
+	err := c.conn.Invoke(ctx, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, api.RetvalToVPPApiError(out.Retval)
 }

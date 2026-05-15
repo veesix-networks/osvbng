@@ -1,0 +1,129 @@
+# Copyright 2026 The osvbng Authors
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+service-groups:
+    lns-default:
+        unnumbered: loop100
+
+subscriber-groups:
+    groups:
+        lns:
+            access-type: lns
+            ipv4-profile: default
+            ipv6-profile: default-v6
+            aaa-policy: lns-policy
+            default-service-group: lns-default
+            l2tp:
+                profile: LNS_DEFAULT
+
+l2tp:
+    profiles:
+        LNS_DEFAULT:
+            receive-window-size: 16
+            hello-interval: 60s
+            challenge-required: false
+            proxy-lcp-mode: forward
+    peer-policies:
+        xl2tpd:
+            hostname: "lac"
+            secret: "shared"
+            profile: LNS_DEFAULT
+
+ipv4-profiles:
+    default:
+        gateway: 100.64.0.1
+        dns:
+            - 8.8.8.8
+        pools:
+            - name: lns-subscribers
+              network: 100.64.0.0/16
+              priority: 1
+
+ipv6-profiles:
+    default-v6:
+        iana-pools:
+            - name: lns-wan-link
+              network: 2001:db8:1::/64
+              range_start: 2001:db8:1::1000
+              range_end: 2001:db8:1::ffff
+        pd-pools:
+            - name: lns-pd
+              network: 2001:db8:2::/40
+              prefix_length: 56
+
+interfaces:
+    loop0:
+        description: Control Plane Loopback
+        enabled: true
+        address:
+            ipv4:
+                - 10.254.0.1/32
+    loop100:
+        description: LNS Subscriber Gateway Loopback
+        enabled: true
+        address:
+            ipv4:
+                - 100.64.0.1/32
+            ipv6:
+                - 2001:db8:1::1/128
+    eth1:
+        description: Core Link (corerouter1)
+        enabled: true
+        address:
+            ipv4:
+                - 10.20.0.2/30
+
+protocols:
+    ospf:
+        enabled: true
+        router-id: 10.254.0.1
+        log-adjacency-changes: true
+        areas:
+            "0.0.0.0":
+                interfaces:
+                    eth1:
+                        network: point-to-point
+                    loop0:
+                        passive: true
+
+aaa:
+    auth_provider: local
+    nas_identifier: osvbng
+    policy:
+        - name: lns-policy
+          type: ppp
+          authenticate: true
+          max_concurrent_sessions: 1
+
+plugins:
+    exporter.prometheus:
+        enabled: true
+        listen_address: :9090
+    northbound.api:
+        enabled: true
+        listen_address: :8080
+    subscriber.auth.local:
+        allow_all: true
+        database_path: /tmp/osvbng.db
+
+monitoring:
+    collect_interval: 30s
+
+logging:
+    format: text
+    level: info
+    components:
+        aaa: debug
+        pppoe: debug
+        l2tp: debug
+        dataplane: debug
+        southbound: debug
+        subscriber.auth.local: debug
+
+dataplane:
+    lcp-netns: dataplane
+    statseg:
+        size: "512m"
+        page-size: "4k"
+        per-node-counters: false

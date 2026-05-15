@@ -9,6 +9,7 @@ const (
 	AAA        = "aaa"
 	IPoE       = "ipoe"
 	PPPoE      = "pppoe"
+	L2TP       = "l2tp"
 	ARP        = "arp"
 	Dataplane  = "dataplane"
 	Subscriber = "subscriber"

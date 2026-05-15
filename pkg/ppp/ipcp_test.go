@@ -35,6 +35,8 @@ func TestIPCPSetDNS(t *testing.T) {
 
 func TestIPCPBuildConfReq(t *testing.T) {
 	ipcp := NewIPCP(Callbacks{})
+	ipcp.SetAddress(net.ParseIP("100.64.0.1"))
+	ipcp.SetDNS(net.ParseIP("8.8.8.8"), net.ParseIP("8.8.4.4"))
 	opts := ipcp.BuildConfReq()
 
 	var hasAddr, hasPrimaryDNS, hasSecondaryDNS bool
@@ -57,6 +59,17 @@ func TestIPCPBuildConfReq(t *testing.T) {
 	}
 	if !hasSecondaryDNS {
 		t.Error("expected Secondary DNS option")
+	}
+}
+
+func TestIPCPBuildConfReqEmptyWhenUnset(t *testing.T) {
+	// Per RFC 1332 §3.3 a server without a configured local address
+	// must not emit an IP-Address option with 0.0.0.0 (which would
+	// signal "I'm a client asking for one").
+	ipcp := NewIPCP(Callbacks{})
+	opts := ipcp.BuildConfReq()
+	if len(opts) != 0 {
+		t.Errorf("expected no options when local fields are unset, got %d", len(opts))
 	}
 }
 

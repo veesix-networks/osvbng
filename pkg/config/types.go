@@ -11,6 +11,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/config/cgnat"
 	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
 	"github.com/veesix-networks/osvbng/pkg/config/ip"
+	"github.com/veesix-networks/osvbng/pkg/config/l2tp"
 	"github.com/veesix-networks/osvbng/pkg/config/protocols"
 	"github.com/veesix-networks/osvbng/pkg/config/qos"
 	routing_policy "github.com/veesix-networks/osvbng/pkg/config/routing_policy"
@@ -33,6 +34,7 @@ type Config struct {
 	Watchdog         system.WatchdogConfig              `json:"watchdog,omitempty" yaml:"watchdog,omitempty"`
 	CGNAT            *cgnat.Config                      `json:"cgnat,omitempty" yaml:"cgnat,omitempty"`
 	HA               HAConfig                           `json:"ha,omitempty" yaml:"ha,omitempty"`
+	L2TP             *l2tp.L2TPConfig                   `json:"l2tp,omitempty" yaml:"l2tp,omitempty"`
 
 	// Walked in struct order — dependency order matters
 	System          *SystemConfig                          `json:"system,omitempty" yaml:"system,omitempty"`
@@ -61,6 +63,25 @@ type DiffResult struct {
 type ConfigLine struct {
 	Path  string
 	Value string
+}
+
+// NeedsAccessInterface reports whether this config has any subscriber
+// group that requires a directly-attached access interface (PPPoE,
+// IPoE, LAC). LNS-only deployments have subscribers arriving via L2TP
+// and never bind an access interface.
+func (c *Config) NeedsAccessInterface() bool {
+	if c.SubscriberGroups == nil {
+		return false
+	}
+	for _, g := range c.SubscriberGroups.Groups {
+		if g == nil {
+			continue
+		}
+		if g.AccessType != "" && g.AccessType != "lns" {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Config) GetAccessInterface() (string, error) {

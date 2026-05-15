@@ -7,6 +7,7 @@ package deps
 import (
 	aaacomp "github.com/veesix-networks/osvbng/internal/aaa"
 	cgnatcomp "github.com/veesix-networks/osvbng/internal/cgnat"
+	l2tpcomp "github.com/veesix-networks/osvbng/internal/l2tp"
 	routingcomp "github.com/veesix-networks/osvbng/internal/routing"
 	"github.com/veesix-networks/osvbng/internal/subscriber"
 	"github.com/veesix-networks/osvbng/internal/watchdog"
@@ -45,6 +46,7 @@ type ShowDeps struct {
 	DHCPv4Providers  map[string]dhcp4.DHCPProvider
 	DHCPv6Providers  map[string]dhcp6.DHCPProvider
 	CGNAT            *cgnatcomp.Component
+	L2TP             *l2tpcomp.Component
 	RunningConfig    RunningConfigReader
 }
 
