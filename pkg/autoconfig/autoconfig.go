@@ -6,6 +6,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
 	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
+	"github.com/veesix-networks/osvbng/pkg/operations"
 )
 
 type Change struct {
@@ -26,21 +27,29 @@ func New(cfg *config.Config, parentInterface string) *Autoconfig {
 }
 
 func (a *Autoconfig) DeriveConfig() ([]Change, error) {
-	var changes []Change
-
 	if a.cfg.SubscriberGroups == nil {
-		return changes, nil
+		return nil, nil
 	}
+
+	var ordered []Change
+	seen := map[string]int{}
 
 	for _, group := range a.cfg.SubscriberGroups.Groups {
 		groupChanges, err := a.deriveGroupConfig(group)
 		if err != nil {
 			return nil, fmt.Errorf("derive config for group: %w", err)
 		}
-		changes = append(changes, groupChanges...)
+		for _, ch := range groupChanges {
+			if idx, ok := seen[ch.Path]; ok {
+				ordered[idx] = ch
+				continue
+			}
+			seen[ch.Path] = len(ordered)
+			ordered = append(ordered, ch)
+		}
 	}
 
-	return changes, nil
+	return ordered, nil
 }
 
 func (a *Autoconfig) deriveGroupConfig(group *subscriber.SubscriberGroup) ([]Change, error) {
@@ -121,6 +130,36 @@ func (a *Autoconfig) deriveSVLANConfig(group *subscriber.SubscriberGroup, vlanRa
 		Path:  fmt.Sprintf("interfaces.%s.subinterfaces.%d.unnumbered", a.parentInterface, svlan),
 		Value: loopback,
 	})
+
+	subIf := fmt.Sprintf("%s.%d", a.parentInterface, svlan)
+	if group.HasAccessType(subscriber.AccessTypeIPoE) {
+		for _, proto := range []string{"dhcpv4", "dhcpv6", "arp", "ipv6nd"} {
+			changes = append(changes, Change{
+				Path:  fmt.Sprintf("_internal.punt.%s.%s", subIf, proto),
+				Value: &operations.PuntConfig{Enabled: true},
+			})
+		}
+		changes = append(changes, Change{
+			Path:  fmt.Sprintf("_internal.access.%s.ipoe-input", subIf),
+			Value: &operations.AccessConfig{Enabled: true},
+		})
+	}
+	if group.HasAccessType(subscriber.AccessTypePPPoE) || group.HasAccessType(subscriber.AccessTypeLAC) {
+		changes = append(changes, Change{
+			Path:  fmt.Sprintf("_internal.punt.%s.pppoe", subIf),
+			Value: &operations.PuntConfig{Enabled: true},
+		})
+		changes = append(changes, Change{
+			Path:  fmt.Sprintf("_internal.access.%s.promiscuous", a.parentInterface),
+			Value: &operations.AccessConfig{Enabled: true},
+		})
+	}
+	if group.HasAccessType(subscriber.AccessTypeLNS) {
+		changes = append(changes, Change{
+			Path:  fmt.Sprintf("_internal.punt.%s.l2tp", subIf),
+			Value: &operations.PuntConfig{Enabled: true},
+		})
+	}
 
 	return changes
 }

@@ -69,6 +69,10 @@ type PuntConfig struct {
 	SocketPath string
 }
 
+type AccessConfig struct {
+	Enabled bool
+}
+
 type SVLANConfig struct {
 	Enabled bool
 	IPv4    []string
