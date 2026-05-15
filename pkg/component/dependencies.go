@@ -16,6 +16,7 @@ import (
 type ConfigManager interface {
 	GetRunning() (*config.Config, error)
 	GetStartup() (*config.Config, error)
+	IsMixedAccessSVLAN(svlan uint16) bool
 }
 
 type Dependencies struct {

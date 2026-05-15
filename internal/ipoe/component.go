@@ -131,15 +131,7 @@ func (c *Component) isMixedAccessSVLAN(svlan uint16) bool {
 	if c.cfgMgr == nil {
 		return false
 	}
-	cfg, err := c.cfgMgr.GetRunning()
-	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
-		return false
-	}
-	_, vr := cfg.SubscriberGroups.FindGroupBySVLAN(svlan)
-	if vr == nil {
-		return false
-	}
-	return vr.HasAccessType(subscriber.AccessTypeIPoE) && vr.HasAccessType(subscriber.AccessTypePPPoE)
+	return c.cfgMgr.IsMixedAccessSVLAN(svlan)
 }
 
 func (c *Component) claimTuple(sess *SessionState) {
