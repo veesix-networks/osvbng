@@ -86,6 +86,7 @@ plugins {
   plugin osvbng_srg_plugin.so { enable }
   plugin osvbng_cgnat_plugin.so { enable }
   plugin osvbng_qos_sched_plugin.so { enable }
+  plugin l2tpv2_plugin.so { enable }
 }
 
 logging {
@@ -187,6 +188,7 @@ plugins {
   plugin osvbng_srg_plugin.so { enable }
   plugin osvbng_cgnat_plugin.so { enable }
   plugin osvbng_qos_sched_plugin.so { enable }
+  plugin l2tpv2_plugin.so { enable }
 }
 
 logging {
@@ -278,6 +280,7 @@ plugins {
   plugin osvbng_srg_plugin.so { enable }
   plugin osvbng_cgnat_plugin.so { enable }
   plugin osvbng_qos_sched_plugin.so { enable }
+  plugin l2tpv2_plugin.so { enable }
 }
 
 logging {
