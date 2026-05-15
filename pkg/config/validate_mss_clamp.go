@@ -29,7 +29,7 @@ func ValidateMSSClampParentMTU(cfg *Config) error {
 
 		if group.PPPoE != nil && group.PPPoE.IsBabyGiants() {
 			if !group.HasAccessType(subscriber.AccessTypePPPoE) {
-				return fmt.Errorf("subscriber group %q: pppoe.mru only applies when access-types includes pppoe (current: %v)", name, group.AccessTypes)
+				return fmt.Errorf("subscriber group %q: pppoe.mru only applies when some vlan range has pppoe in access-types", name)
 			}
 		}
 

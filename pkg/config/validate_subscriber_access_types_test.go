@@ -44,9 +44,8 @@ func TestValidateSubscriberAccessTypes_ValidSingleElement(t *testing.T) {
 	for _, at := range cases {
 		t.Run(string(at), func(t *testing.T) {
 			cfg := cfgWithGroup("eth1", &subscriber.SubscriberGroup{
-				AccessTypes: []subscriber.AccessType{at},
 				VLANs: []subscriber.VLANRange{
-					{SVLAN: "100", CVLAN: "any", ParentInterface: "eth1"},
+					{SVLAN: "100", CVLAN: "any", ParentInterface: "eth1", AccessTypes: []subscriber.AccessType{at}},
 				},
 			})
 			if err := ValidateSubscriberAccessTypes(cfg); err != nil {
@@ -58,9 +57,8 @@ func TestValidateSubscriberAccessTypes_ValidSingleElement(t *testing.T) {
 
 func TestValidateSubscriberAccessTypes_ValidMixed(t *testing.T) {
 	cfg := cfgWithGroup("eth1", &subscriber.SubscriberGroup{
-		AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE, subscriber.AccessTypePPPoE},
 		VLANs: []subscriber.VLANRange{
-			{SVLAN: "100-299", CVLAN: "any", ParentInterface: "eth1"},
+			{SVLAN: "100-299", CVLAN: "any", ParentInterface: "eth1", AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE, subscriber.AccessTypePPPoE}},
 		},
 	})
 	if err := ValidateSubscriberAccessTypes(cfg); err != nil {
@@ -70,9 +68,8 @@ func TestValidateSubscriberAccessTypes_ValidMixed(t *testing.T) {
 
 func TestValidateSubscriberAccessTypes_Empty(t *testing.T) {
 	cfg := cfgWithGroup("eth1", &subscriber.SubscriberGroup{
-		AccessTypes: []subscriber.AccessType{},
 		VLANs: []subscriber.VLANRange{
-			{SVLAN: "100", CVLAN: "any", ParentInterface: "eth1"},
+			{SVLAN: "100", CVLAN: "any", ParentInterface: "eth1", AccessTypes: []subscriber.AccessType{}},
 		},
 	})
 	if err := ValidateSubscriberAccessTypes(cfg); err == nil || !strings.Contains(err.Error(), "access-types is empty") {
@@ -82,9 +79,8 @@ func TestValidateSubscriberAccessTypes_Empty(t *testing.T) {
 
 func TestValidateSubscriberAccessTypes_Unknown(t *testing.T) {
 	cfg := cfgWithGroup("eth1", &subscriber.SubscriberGroup{
-		AccessTypes: []subscriber.AccessType{"bogus"},
 		VLANs: []subscriber.VLANRange{
-			{SVLAN: "100", CVLAN: "any", ParentInterface: "eth1"},
+			{SVLAN: "100", CVLAN: "any", ParentInterface: "eth1", AccessTypes: []subscriber.AccessType{"bogus"}},
 		},
 	})
 	if err := ValidateSubscriberAccessTypes(cfg); err == nil || !strings.Contains(err.Error(), "not one of") {
@@ -94,9 +90,8 @@ func TestValidateSubscriberAccessTypes_Unknown(t *testing.T) {
 
 func TestValidateSubscriberAccessTypes_Duplicate(t *testing.T) {
 	cfg := cfgWithGroup("eth1", &subscriber.SubscriberGroup{
-		AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE, subscriber.AccessTypeIPoE},
 		VLANs: []subscriber.VLANRange{
-			{SVLAN: "100", CVLAN: "any", ParentInterface: "eth1"},
+			{SVLAN: "100", CVLAN: "any", ParentInterface: "eth1", AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE, subscriber.AccessTypeIPoE}},
 		},
 	})
 	if err := ValidateSubscriberAccessTypes(cfg); err == nil || !strings.Contains(err.Error(), "duplicate") {
@@ -120,9 +115,8 @@ func TestValidateSubscriberAccessTypes_InvalidCombinations(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			cfg := cfgWithGroup("eth1", &subscriber.SubscriberGroup{
-				AccessTypes: c.ats,
 				VLANs: []subscriber.VLANRange{
-					{SVLAN: "100", CVLAN: "any", ParentInterface: "eth1"},
+					{SVLAN: "100", CVLAN: "any", ParentInterface: "eth1", AccessTypes: c.ats},
 				},
 			})
 			if err := ValidateSubscriberAccessTypes(cfg); err == nil {
@@ -134,9 +128,8 @@ func TestValidateSubscriberAccessTypes_InvalidCombinations(t *testing.T) {
 
 func TestValidateSubscriberAccessTypes_ParentInterfaceRequired(t *testing.T) {
 	cfg := cfgWithGroup("eth1", &subscriber.SubscriberGroup{
-		AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE},
 		VLANs: []subscriber.VLANRange{
-			{SVLAN: "100", CVLAN: "any"},
+			{SVLAN: "100", CVLAN: "any", AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE}},
 		},
 	})
 	if err := ValidateSubscriberAccessTypes(cfg); err == nil || !strings.Contains(err.Error(), "parent-interface is required") {
@@ -146,9 +139,8 @@ func TestValidateSubscriberAccessTypes_ParentInterfaceRequired(t *testing.T) {
 
 func TestValidateSubscriberAccessTypes_ParentInterfaceMissing(t *testing.T) {
 	cfg := cfgWithGroup("eth1", &subscriber.SubscriberGroup{
-		AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE},
 		VLANs: []subscriber.VLANRange{
-			{SVLAN: "100", CVLAN: "any", ParentInterface: "ghost0"},
+			{SVLAN: "100", CVLAN: "any", ParentInterface: "ghost0", AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE}},
 		},
 	})
 	if err := ValidateSubscriberAccessTypes(cfg); err == nil || !strings.Contains(err.Error(), "not defined in interfaces") {
@@ -158,9 +150,8 @@ func TestValidateSubscriberAccessTypes_ParentInterfaceMissing(t *testing.T) {
 
 func TestValidateSubscriberAccessTypes_ParentInterfaceOptionalForLNS(t *testing.T) {
 	cfg := cfgWithGroup("eth1", &subscriber.SubscriberGroup{
-		AccessTypes: []subscriber.AccessType{subscriber.AccessTypeLNS},
 		VLANs: []subscriber.VLANRange{
-			{SVLAN: "100", CVLAN: "any"},
+			{SVLAN: "100", CVLAN: "any", AccessTypes: []subscriber.AccessType{subscriber.AccessTypeLNS}},
 		},
 	})
 	if err := ValidateSubscriberAccessTypes(cfg); err != nil {
@@ -173,15 +164,13 @@ func TestValidateSubscriberAccessTypes_MultipleParentInterfaces(t *testing.T) {
 		SubscriberGroups: &subscriber.SubscriberGroupsConfig{
 			Groups: map[string]*subscriber.SubscriberGroup{
 				"g1": {
-					AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE},
 					VLANs: []subscriber.VLANRange{
-						{SVLAN: "100", CVLAN: "any", ParentInterface: "eth1"},
+						{SVLAN: "100", CVLAN: "any", ParentInterface: "eth1", AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE}},
 					},
 				},
 				"g2": {
-					AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE},
 					VLANs: []subscriber.VLANRange{
-						{SVLAN: "200", CVLAN: "any", ParentInterface: "eth2"},
+						{SVLAN: "200", CVLAN: "any", ParentInterface: "eth2", AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE}},
 					},
 				},
 			},

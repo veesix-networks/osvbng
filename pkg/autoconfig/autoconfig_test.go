@@ -50,9 +50,8 @@ func pathCount(changes []Change, prefix string) int {
 func TestDerive_IPoEEmitsPuntAndAccess(t *testing.T) {
 	changes := deriveOrFail(t, cfgWithGroups(map[string]*subscriber.SubscriberGroup{
 		"g": {
-			AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE},
 			VLANs: []subscriber.VLANRange{
-				{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1"},
+				{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1", AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE}},
 			},
 		},
 	}))
@@ -75,9 +74,8 @@ func TestDerive_IPoEEmitsPuntAndAccess(t *testing.T) {
 func TestDerive_PPPoEEmitsPuntAndParentPromisc(t *testing.T) {
 	changes := deriveOrFail(t, cfgWithGroups(map[string]*subscriber.SubscriberGroup{
 		"g": {
-			AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE},
 			VLANs: []subscriber.VLANRange{
-				{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1"},
+				{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1", AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE}},
 			},
 		},
 	}))
@@ -92,9 +90,8 @@ func TestDerive_PPPoEEmitsPuntAndParentPromisc(t *testing.T) {
 func TestDerive_MixedEmitsUnion(t *testing.T) {
 	changes := deriveOrFail(t, cfgWithGroups(map[string]*subscriber.SubscriberGroup{
 		"g": {
-			AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE, subscriber.AccessTypePPPoE},
 			VLANs: []subscriber.VLANRange{
-				{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1"},
+				{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1", AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE, subscriber.AccessTypePPPoE}},
 			},
 		},
 	}))
@@ -113,9 +110,8 @@ func TestDerive_MixedEmitsUnion(t *testing.T) {
 func TestDerive_MixedReverseOrderEmitsSameUnion(t *testing.T) {
 	changes := deriveOrFail(t, cfgWithGroups(map[string]*subscriber.SubscriberGroup{
 		"g": {
-			AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE, subscriber.AccessTypeIPoE},
 			VLANs: []subscriber.VLANRange{
-				{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1"},
+				{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1", AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE, subscriber.AccessTypeIPoE}},
 			},
 		},
 	}))
@@ -134,9 +130,8 @@ func TestDerive_MixedReverseOrderEmitsSameUnion(t *testing.T) {
 func TestDerive_LNSEmitsL2TPPunt(t *testing.T) {
 	changes := deriveOrFail(t, cfgWithGroups(map[string]*subscriber.SubscriberGroup{
 		"lns": {
-			AccessTypes: []subscriber.AccessType{subscriber.AccessTypeLNS},
 			VLANs: []subscriber.VLANRange{
-				{SVLAN: "1-4094", CVLAN: "any", Interface: "loop600", ParentInterface: "eth1"},
+				{SVLAN: "1-4094", CVLAN: "any", Interface: "loop600", ParentInterface: "eth1", AccessTypes: []subscriber.AccessType{subscriber.AccessTypeLNS}},
 			},
 		},
 	}))
@@ -151,9 +146,8 @@ func TestDerive_LNSEmitsL2TPPunt(t *testing.T) {
 func TestDerive_DedupesPromiscuousAcrossSVLANs(t *testing.T) {
 	changes := deriveOrFail(t, cfgWithGroups(map[string]*subscriber.SubscriberGroup{
 		"g": {
-			AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE},
 			VLANs: []subscriber.VLANRange{
-				{SVLAN: "100-199", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1"},
+				{SVLAN: "100-199", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1", AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE}},
 			},
 		},
 	}))
@@ -165,9 +159,8 @@ func TestDerive_DedupesPromiscuousAcrossSVLANs(t *testing.T) {
 func TestDerive_AccessConfigValuesSensible(t *testing.T) {
 	changes := deriveOrFail(t, cfgWithGroups(map[string]*subscriber.SubscriberGroup{
 		"g": {
-			AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE},
 			VLANs: []subscriber.VLANRange{
-				{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1"},
+				{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1", AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE}},
 			},
 		},
 	}))

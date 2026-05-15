@@ -12,7 +12,6 @@ vrfs:
 subscriber-groups:
     groups:
         default:
-            access-type: ipoe
             vlan-tpid: dot1q
             ipv4-profile: default
             ipv6-profile: default-v6
@@ -20,6 +19,8 @@ subscriber-groups:
                 - svlan: "100-110"
                   cvlan: any
                   interface: loop100
+                  parent-interface: eth1
+                  access-types: [ipoe]
             aaa-policy: default-policy
 
 ipv4-profiles:
@@ -78,7 +79,6 @@ interfaces:
     eth1:
         description: Access Interface
         enabled: true
-        bng_mode: access
     eth2:
         description: Core Link (corerouter1)
         enabled: true

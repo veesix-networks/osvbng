@@ -112,7 +112,6 @@ service-groups:
 subscriber-groups:
     groups:
         default:
-            access-types: [ipoe]
             vlan-tpid: dot1q
             ipv4-profile: default
             ipv6-profile: default-v6
@@ -121,13 +120,13 @@ subscriber-groups:
                   cvlan: any
                   interface: loop100
                   parent-interface: eth1
+                  access-types: [ipoe]
             bgp:
                 enabled: true
                 advertise-pools: true
                 redistribute-connected: true
             aaa-policy: default-policy
         relay:
-            access-types: [ipoe]
             vlan-tpid: dot1q
             ipv4-profile: relay-v4
             ipv6-profile: relay-v6
@@ -136,9 +135,9 @@ subscriber-groups:
                   cvlan: any
                   interface: loop100
                   parent-interface: eth1
+                  access-types: [ipoe]
             aaa-policy: default-policy
         proxy:
-            access-types: [ipoe]
             vlan-tpid: dot1q
             ipv4-profile: proxy-v4
             ipv6-profile: proxy-v6
@@ -147,9 +146,9 @@ subscriber-groups:
                   cvlan: any
                   interface: loop100
                   parent-interface: eth1
+                  access-types: [ipoe]
             aaa-policy: default-policy
         pppoe:
-            access-types: [pppoe]
             vlan-tpid: dot1q
             ipv4-profile: default
             vlans:
@@ -157,9 +156,9 @@ subscriber-groups:
                   cvlan: any
                   interface: loop100
                   parent-interface: eth1
+                  access-types: [pppoe]
             aaa-policy: default-policy
         mixed:
-            access-types: [ipoe, pppoe]
             vlan-tpid: dot1q
             ipv4-profile: default
             ipv6-profile: default-v6
@@ -168,6 +167,7 @@ subscriber-groups:
                   cvlan: any
                   interface: loop100
                   parent-interface: eth1
+                  access-types: [ipoe, pppoe]
             aaa-policy: default-policy
 
 ipv4-profiles:

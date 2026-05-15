@@ -86,7 +86,7 @@ func (a *Autoconfig) deriveSVLANConfig(group *subscriber.SubscriberGroup, vlanRa
 			Enabled:          true,
 			Unnumbered:       loopback,
 			SubscriberAccess: true,
-			MSSClamp:         a.deriveMSSClamp(group),
+			MSSClamp:         a.deriveMSSClamp(group, vlanRange),
 		},
 	})
 
@@ -132,7 +132,7 @@ func (a *Autoconfig) deriveSVLANConfig(group *subscriber.SubscriberGroup, vlanRa
 	})
 
 	subIf := fmt.Sprintf("%s.%d", a.parentInterface, svlan)
-	if group.HasAccessType(subscriber.AccessTypeIPoE) {
+	if vlanRange.HasAccessType(subscriber.AccessTypeIPoE) {
 		for _, proto := range []string{"dhcpv4", "dhcpv6", "arp", "ipv6nd"} {
 			changes = append(changes, Change{
 				Path:  fmt.Sprintf("_internal.punt.%s.%s", subIf, proto),
@@ -144,7 +144,7 @@ func (a *Autoconfig) deriveSVLANConfig(group *subscriber.SubscriberGroup, vlanRa
 			Value: &operations.AccessConfig{Enabled: true},
 		})
 	}
-	if group.HasAccessType(subscriber.AccessTypePPPoE) || group.HasAccessType(subscriber.AccessTypeLAC) {
+	if vlanRange.HasAccessType(subscriber.AccessTypePPPoE) || vlanRange.HasAccessType(subscriber.AccessTypeLAC) {
 		changes = append(changes, Change{
 			Path:  fmt.Sprintf("_internal.punt.%s.pppoe", subIf),
 			Value: &operations.PuntConfig{Enabled: true},
@@ -154,7 +154,7 @@ func (a *Autoconfig) deriveSVLANConfig(group *subscriber.SubscriberGroup, vlanRa
 			Value: &operations.AccessConfig{Enabled: true},
 		})
 	}
-	if group.HasAccessType(subscriber.AccessTypeLNS) {
+	if vlanRange.HasAccessType(subscriber.AccessTypeLNS) {
 		changes = append(changes, Change{
 			Path:  fmt.Sprintf("_internal.punt.%s.l2tp", subIf),
 			Value: &operations.PuntConfig{Enabled: true},
@@ -228,8 +228,8 @@ func (a *Autoconfig) getRAConfig(group *subscriber.SubscriberGroup) raConfig {
 // termination while the actual subscriber CPE on the far side is still 1500-
 // or-less. Operators on non-standard subscriber paths must declare
 // subscriber-path-mtu explicitly per group.
-func (a *Autoconfig) deriveMSSClamp(group *subscriber.SubscriberGroup) *interfaces.MSSClampSpec {
-	if len(group.AccessTypes) == 1 && group.HasAccessType(subscriber.AccessTypePPPoE) {
+func (a *Autoconfig) deriveMSSClamp(group *subscriber.SubscriberGroup, vlanRange subscriber.VLANRange) *interfaces.MSSClampSpec {
+	if len(vlanRange.AccessTypes) == 1 && vlanRange.HasAccessType(subscriber.AccessTypePPPoE) {
 		return nil
 	}
 	if !group.MSSClamp.IsEnabled() {

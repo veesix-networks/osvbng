@@ -1,12 +1,12 @@
 # Subscriber Groups
 
-Defines how subscribers are grouped and configured based on VLAN. Each group binds a set of VLANs to an access type (IPoE or PPPoE), address profiles, service group, and AAA policy. Both IPoE and PPPoE sessions use the same profile and service group resolution.
+Defines how subscribers are grouped and configured based on VLAN. Each group binds a set of VLANs to one or more access types (IPoE, PPPoE, LAC, LNS), address profiles, service group, and AAA policy. Both IPoE and PPPoE sessions use the same profile and service group resolution.
 
 ## Group Settings
 
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
-| `access-type` | string | Access type: `ipoe`, `pppoe`, `lac`, `lns` | `ipoe` |
+| `access-types` | []string | One or more of `ipoe`, `pppoe`, `lac`, `lns`. The only valid multi-element combination is `[ipoe, pppoe]` (mixed-access on a shared SVLAN range); `lac` and `lns` are single-element only. | `[ipoe, pppoe]` |
 | `vlans` | [VLANRule](#vlan-rules) | VLAN matching rules | |
 | `ipv4-profile` | string | [IPv4 profile](ipv4-profiles.md) name | `residential` |
 | `ipv6-profile` | string | [IPv6 profile](ipv6-profiles.md) name | `default-v6` |
@@ -25,6 +25,7 @@ Defines how subscribers are grouped and configured based on VLAN. Each group bin
 | `svlan` | string | S-VLAN match: single ID or range | `100-199` |
 | `cvlan` | string | C-VLAN match: single, range, or `any` | `any` |
 | `interface` | string | Gateway interface for matched subscribers | `loop100` |
+| `parent-interface` | string | Physical access interface where these subscribers arrive. Required for `ipoe`/`pppoe`/`lac`; optional for `lns`. All VLAN ranges across all groups must reference the same parent-interface (single-access-interface invariant). | `eth1` |
 | `aaa.policy` | string | AAA policy override for this VLAN range | `custom-policy` |
 
 ## Group IPv6
@@ -56,7 +57,7 @@ Defines how subscribers are grouped and configured based on VLAN. Each group bin
 
 ## Group PPPoE
 
-PPPoE-specific settings. Only consulted when `access-type: pppoe`.
+PPPoE-specific settings. Only consulted when `access-types: [pppoe]`.
 
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
@@ -135,7 +136,7 @@ service-groups:
 subscriber-groups:
   groups:
     residential:
-      access-type: ipoe
+      access-types: [ipoe]
       session-mode: unified
       ipv4-profile: residential
       ipv6-profile: default-v6
@@ -145,12 +146,13 @@ subscriber-groups:
         - svlan: "100-199"
           cvlan: any
           interface: loop100
+          parent-interface: eth1
       bgp:
         enabled: true
         advertise-pools: true
         network-route-policy: POOL-EXPORT
     residential-pppoe:
-      access-type: pppoe
+      access-types: [pppoe]
       ipv4-profile: residential
       ipv6-profile: default-v6
       aaa-policy: default-policy
@@ -158,12 +160,12 @@ subscriber-groups:
         - svlan: "200-299"
           cvlan: any
           interface: loop100
+          parent-interface: eth1
       pppoe:
         mru: 1500
 
 interfaces:
   eth1:
-    bng_mode: access
     enabled: true
     mtu: 1512
 ```
