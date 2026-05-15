@@ -34,7 +34,7 @@ subscriber-groups:
                   cvlan: any
                   interface: loop100
                   parent-interface: eth1
-                  access-types: [ipoe]
+                  access-types: [ipoe, pppoe]
             aaa-policy: default-policy
         pppoe:
             ipv4-profile: default
@@ -44,16 +44,6 @@ subscriber-groups:
                   interface: loop100
                   parent-interface: eth1
                   access-types: [pppoe]
-            aaa-policy: default-policy
-        mixed:
-            ipv4-profile: default
-            ipv6-profile: default-v6
-            vlans:
-                - svlan: "500-520"
-                  cvlan: any
-                  interface: loop100
-                  parent-interface: eth1
-                  access-types: [ipoe, pppoe]
             aaa-policy: default-policy
 
 ipv4-profiles:
