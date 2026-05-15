@@ -273,6 +273,24 @@ func (c *Component) removeFromIndexes(sess *SessionState) {
 	}
 }
 
+func (c *Component) isOwner(sess *SessionState) bool {
+	if c.exclusivity == nil {
+		return true
+	}
+	tk := session.MakeTupleKey(sess.OuterVLAN, sess.InnerVLAN, sess.MAC)
+	return c.exclusivity.IsOwner(tk, session.Owner{Protocol: session.ProtoPPPoE, SessionID: sess.SessionID, Key: tk})
+}
+
+func (c *Component) fenceOwnership(sess *SessionState) bool {
+	return c.isOwner(sess)
+}
+
+func (c *Component) sessionByID(sessID string) *SessionState {
+	c.sessionMu.RLock()
+	defer c.sessionMu.RUnlock()
+	return c.sessionIDIndex[sessID]
+}
+
 func (c *Component) evictPreviousOwner(prev *session.Owner, tk session.TupleKey) {
 	c.eventBus.Publish(events.TopicSubscriberTerminate, events.Event{
 		Source:    "pppoe",
@@ -975,6 +993,10 @@ func (c *Component) handleDeadPeer(sessionID uint16) {
 }
 
 func (c *Component) publishSessionLifecycle(payload models.SubscriberSession) error {
+	if sess := c.sessionByID(payload.GetSessionID()); sess != nil && !c.isOwner(sess) {
+		c.logger.Debug("Lifecycle publish suppressed: tuple owned by another protocol", "session_id", payload.GetSessionID())
+		return nil
+	}
 	c.eventBus.Publish(events.TopicSessionLifecycle, events.Event{
 		Source: c.Name(),
 		Data: &events.SessionLifecycleEvent{

@@ -162,6 +162,16 @@ func (c *Component) isOwner(sess *SessionState) bool {
 	return c.exclusivity.IsOwner(tk, session.Owner{Protocol: session.ProtoIPoE, SessionID: sess.SessionID, Key: tk})
 }
 
+func (c *Component) fenceOwnership(sess *SessionState) bool {
+	if c.isOwner(sess) {
+		return true
+	}
+	sess.mu.Lock()
+	sess.Closing = true
+	sess.mu.Unlock()
+	return false
+}
+
 func (c *Component) addSessionToIndexes(sess *SessionState) {
 	if sess.AcctSessionID != "" {
 		c.acctSessionIndex.Store(sess.AcctSessionID, sess)
@@ -1306,6 +1316,11 @@ func (c *Component) handleServerResponse(pkt *dataplane.ParsedPacket) error {
 }
 
 func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) error {
+	if !c.fenceOwnership(sess) {
+		c.logger.WithGroup(logger.IPoEDHCP4).Debug("DHCP ACK dropped: tuple owned by another protocol", "session_id", sess.SessionID)
+		return nil
+	}
+
 	leaseTime := uint32(0)
 	if leaseOpt := getDHCPOption(pkt.DHCPv4.Options, 51); len(leaseOpt) == 4 {
 		leaseTime = binary.BigEndian.Uint32(leaseOpt)
@@ -1419,6 +1434,11 @@ func (c *Component) handleAAAResponse(event events.Event) {
 		return
 	}
 	sess := val.(*SessionState)
+
+	if !c.fenceOwnership(sess) {
+		c.logger.Debug("AAA response dropped: tuple owned by another protocol", "session_id", sessID)
+		return
+	}
 
 	sess.mu.Lock()
 	sess.AAAApproved = allowed
@@ -1537,6 +1557,10 @@ func (c *Component) handleAAAResponse(event events.Event) {
 			}
 
 			c.vpp.AddIPoESessionAsync(mac, localMAC, encapIfIndex, svlan, cvlan, decapVrfID, func(swIfIndex uint32, err error) {
+				if !c.fenceOwnership(sess) {
+					c.logger.Debug("AddIPoESession callback dropped: tuple owned by another protocol", "session_id", sessID)
+					return
+				}
 				sess.mu.Lock()
 				if sess.IPoESessionCreated {
 					sess.mu.Unlock()
@@ -2700,6 +2724,11 @@ func (c *Component) forwardDHCPv6ToProvider(sess *SessionState, pkt *dataplane.P
 }
 
 func (c *Component) handleDHCPv6Reply(sess *SessionState, msg *dhcp6.Message) error {
+	if !c.fenceOwnership(sess) {
+		c.logger.Debug("DHCPv6 reply dropped: tuple owned by another protocol", "session_id", sess.SessionID)
+		return nil
+	}
+
 	var ianaAddr net.IP
 	var pdPrefix *net.IPNet
 	var validTime uint32
@@ -3249,6 +3278,14 @@ func (c *Component) publishSessionProgrammed(sess *SessionState, swIfIndex uint3
 }
 
 func (c *Component) publishSessionLifecycle(payload models.SubscriberSession) error {
+	if ipoeSess, ok := payload.(*models.IPoESession); ok {
+		if val, found := c.sessionIndex.Load(ipoeSess.SessionID); found {
+			if sess, ok := val.(*SessionState); ok && !c.isOwner(sess) {
+				c.logger.Debug("Lifecycle publish suppressed: tuple owned by another protocol", "session_id", ipoeSess.SessionID)
+				return nil
+			}
+		}
+	}
 	c.eventBus.Publish(events.TopicSessionLifecycle, events.Event{
 		Source: c.Name(),
 		Data: &events.SessionLifecycleEvent{
