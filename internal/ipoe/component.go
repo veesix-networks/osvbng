@@ -124,10 +124,26 @@ type SessionState struct {
 	AllocCtx     *allocator.Context
 	Closing      bool
 	AAAInFlight  bool
+	MixedAccess  bool
+}
+
+func (c *Component) isMixedAccessSVLAN(svlan uint16) bool {
+	if c.cfgMgr == nil {
+		return false
+	}
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+		return false
+	}
+	_, vr := cfg.SubscriberGroups.FindGroupBySVLAN(svlan)
+	if vr == nil {
+		return false
+	}
+	return vr.HasAccessType(subscriber.AccessTypeIPoE) && vr.HasAccessType(subscriber.AccessTypePPPoE)
 }
 
 func (c *Component) claimTuple(sess *SessionState) {
-	if c.exclusivity == nil {
+	if c.exclusivity == nil || !sess.MixedAccess {
 		return
 	}
 	tk := session.MakeTupleKey(sess.OuterVLAN, sess.InnerVLAN, sess.MAC)
@@ -146,7 +162,7 @@ func (c *Component) claimTuple(sess *SessionState) {
 }
 
 func (c *Component) releaseTuple(sess *SessionState) {
-	if c.exclusivity == nil {
+	if c.exclusivity == nil || !sess.MixedAccess {
 		return
 	}
 	tk := session.MakeTupleKey(sess.OuterVLAN, sess.InnerVLAN, sess.MAC)
@@ -155,7 +171,7 @@ func (c *Component) releaseTuple(sess *SessionState) {
 }
 
 func (c *Component) isOwner(sess *SessionState) bool {
-	if c.exclusivity == nil {
+	if c.exclusivity == nil || !sess.MixedAccess {
 		return true
 	}
 	tk := session.MakeTupleKey(sess.OuterVLAN, sess.InnerVLAN, sess.MAC)
@@ -700,6 +716,7 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 			InnerVLAN:     pkt.InnerVLAN,
 			EncapIfIndex:  pkt.SwIfIndex,
 			State:         "discovering",
+			MixedAccess:   c.isMixedAccessSVLAN(pkt.OuterVLAN),
 		}
 
 		c.sessionIndex.Store(sessID, newSess)

@@ -158,6 +158,8 @@ type SessionState struct {
 	allocatedPool     string
 	allocatedIANAPool string
 
+	MixedAccess bool
+
 	// l2tpBinding is set when this PPPoE session has been handed off to
 	// LAC mode and the L2TPv2 tunnel/session IDs are known. Non-nil
 	// only while Phase == PhaseLACTunneled. Surfaced through the
@@ -240,7 +242,7 @@ func (c *Component) addToIndexes(sess *SessionState) {
 	if sess.IPv6Address != nil {
 		c.ipv6Index[sess.IPv6Address.String()] = sess
 	}
-	if c.exclusivity != nil {
+	if c.exclusivity != nil && sess.MixedAccess {
 		tk := session.MakeTupleKey(sess.OuterVLAN, sess.InnerVLAN, sess.MAC)
 		owner := session.Owner{Protocol: session.ProtoPPPoE, SessionID: sess.SessionID, Key: tk}
 		if prev := c.exclusivity.Claim(tk, owner); prev != nil && prev.Protocol != session.ProtoPPPoE {
@@ -266,15 +268,30 @@ func (c *Component) removeFromIndexes(sess *SessionState) {
 	if sess.IPv6Address != nil {
 		delete(c.ipv6Index, sess.IPv6Address.String())
 	}
-	if c.exclusivity != nil {
+	if c.exclusivity != nil && sess.MixedAccess {
 		tk := session.MakeTupleKey(sess.OuterVLAN, sess.InnerVLAN, sess.MAC)
 		owner := session.Owner{Protocol: session.ProtoPPPoE, SessionID: sess.SessionID, Key: tk}
 		c.exclusivity.Release(tk, owner)
 	}
 }
 
+func (c *Component) isMixedAccessSVLAN(svlan uint16) bool {
+	if c.cfgMgr == nil {
+		return false
+	}
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+		return false
+	}
+	_, vr := cfg.SubscriberGroups.FindGroupBySVLAN(svlan)
+	if vr == nil {
+		return false
+	}
+	return vr.HasAccessType(subscriber.AccessTypeIPoE) && vr.HasAccessType(subscriber.AccessTypePPPoE)
+}
+
 func (c *Component) isOwner(sess *SessionState) bool {
-	if c.exclusivity == nil {
+	if c.exclusivity == nil || !sess.MixedAccess {
 		return true
 	}
 	tk := session.MakeTupleKey(sess.OuterVLAN, sess.InnerVLAN, sess.MAC)
@@ -526,6 +543,7 @@ func (c *Component) handlePADR(pkt *dataplane.ParsedPacket) error {
 		SwIfIndex:      pkt.SwIfIndex,
 		EncapIfIndex:   pkt.SwIfIndex,
 		Phase:          ppp.PhaseDead,
+		MixedAccess:    c.isMixedAccessSVLAN(pkt.OuterVLAN),
 		ServiceName:    tags.ServiceName,
 		HostUniq:       tags.HostUniq,
 		AgentCircuitID: tags.AgentCircuitID,
@@ -1376,6 +1394,7 @@ func (c *Component) restoreFromHASync(srgName string) {
 			EncapIfIndex:   encapIfIndex,
 			SwIfIndex:      swIfIndex,
 			Phase:          ppp.PhaseOpen,
+			MixedAccess:    c.isMixedAccessSVLAN(outerVLAN),
 			IPv4Address:    ipv4,
 			IPv6Address:    ipv6,
 			Username:       cp.Username,
