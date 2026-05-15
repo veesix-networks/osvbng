@@ -55,6 +55,7 @@ type Component struct {
 	svcGroupResolver *svcgroup.Resolver
 	cache            cache.Cache
 	opdb             opdb.Store
+	exclusivity      session.ExclusivityRegistry
 	dhcp4Providers   map[string]dhcp4.DHCPProvider
 	dhcp6Providers   map[string]dhcp6.DHCPProvider
 	sessions         sync.Map
@@ -125,6 +126,42 @@ type SessionState struct {
 	AAAInFlight  bool
 }
 
+func (c *Component) claimTuple(sess *SessionState) {
+	if c.exclusivity == nil {
+		return
+	}
+	tk := session.MakeTupleKey(sess.OuterVLAN, sess.InnerVLAN, sess.MAC)
+	owner := session.Owner{Protocol: session.ProtoIPoE, SessionID: sess.SessionID, Key: tk}
+	if prev := c.exclusivity.Claim(tk, owner); prev != nil && prev.Protocol != session.ProtoIPoE {
+		c.eventBus.Publish(events.TopicSubscriberTerminate, events.Event{
+			Source:    "ipoe",
+			Timestamp: time.Now(),
+			Data: &events.SubscriberTerminateEvent{
+				SessionID: prev.SessionID,
+				Reason:    "evicted by cross-protocol claim",
+				Key:       &tk,
+			},
+		})
+	}
+}
+
+func (c *Component) releaseTuple(sess *SessionState) {
+	if c.exclusivity == nil {
+		return
+	}
+	tk := session.MakeTupleKey(sess.OuterVLAN, sess.InnerVLAN, sess.MAC)
+	owner := session.Owner{Protocol: session.ProtoIPoE, SessionID: sess.SessionID, Key: tk}
+	c.exclusivity.Release(tk, owner)
+}
+
+func (c *Component) isOwner(sess *SessionState) bool {
+	if c.exclusivity == nil {
+		return true
+	}
+	tk := session.MakeTupleKey(sess.OuterVLAN, sess.InnerVLAN, sess.MAC)
+	return c.exclusivity.IsOwner(tk, session.Owner{Protocol: session.ProtoIPoE, SessionID: sess.SessionID, Key: tk})
+}
+
 func (c *Component) addSessionToIndexes(sess *SessionState) {
 	if sess.AcctSessionID != "" {
 		c.acctSessionIndex.Store(sess.AcctSessionID, sess)
@@ -185,8 +222,17 @@ func (c *Component) resolveTargetFromEvent(ev *events.SubscriberMutationEvent) *
 }
 
 func (c *Component) resolveTerminateTarget(ev *events.SubscriberTerminateEvent) *SessionState {
+	if ev.Key != nil {
+		var mac net.HardwareAddr = ev.Key.MAC[:]
+		if val, ok := c.sessions.Load(c.makeSessionKeyV4(mac, ev.Key.SVLAN, ev.Key.CVLAN)); ok {
+			return val.(*SessionState)
+		}
+		if val, ok := c.sessions.Load(c.makeSessionKeyV6(mac, ev.Key.SVLAN, ev.Key.CVLAN)); ok {
+			return val.(*SessionState)
+		}
+	}
 	if ev.SessionID != "" {
-		if val, ok := c.sessions.Load(ev.SessionID); ok {
+		if val, ok := c.sessionIndex.Load(ev.SessionID); ok {
 			return val.(*SessionState)
 		}
 	}
@@ -426,6 +472,7 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 		vpp:              deps.Southbound,
 		cache:            deps.Cache,
 		opdb:             deps.OpDB,
+		exclusivity:      deps.Exclusivity,
 		dhcp4Providers:   dhcp4Providers,
 		dhcp6Providers:   dhcp6Providers,
 		dhcpChan:         deps.DHCPChan,
@@ -651,6 +698,7 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 			sess = actual.(*SessionState)
 		} else {
 			sess = newSess
+			c.claimTuple(sess)
 		}
 	}
 
@@ -829,6 +877,7 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 			sess = actual.(*SessionState)
 		} else {
 			sess = newSess
+			c.claimTuple(sess)
 		}
 	} else {
 		sess.mu.Lock()
@@ -2010,6 +2059,7 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 			sess = actual.(*SessionState)
 		} else {
 			sess = newSess
+			c.claimTuple(sess)
 		}
 	}
 
@@ -3896,6 +3946,7 @@ func (c *Component) handleSubscriberTerminate(ev events.Event) {
 	c.sessions.Delete(lookupKeyV6)
 	c.sessionIndex.Delete(sess.SessionID)
 	c.removeSessionFromIndexes(sess)
+	c.releaseTuple(sess)
 	c.deleteSessionCheckpoint(sess.SessionID)
 
 	c.publishSessionLifecycle(&models.IPoESession{

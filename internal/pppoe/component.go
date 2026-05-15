@@ -57,6 +57,7 @@ type Component struct {
 	svcGroupResolver *svcgroup.Resolver
 	cache            cache.Cache
 	opdb             opdb.Store
+	exclusivity      session.ExclusivityRegistry
 
 	acName    string
 	cookieMgr *pppoe.CookieManager
@@ -187,6 +188,7 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 		svcGroupResolver: deps.SvcGroupResolver,
 		cache:            deps.Cache,
 		opdb:             deps.OpDB,
+		exclusivity:      deps.Exclusivity,
 		acName:           defaultACName,
 		cookieMgr:        cookieMgr,
 		sessions:          make(map[string]*SessionState),
@@ -238,6 +240,13 @@ func (c *Component) addToIndexes(sess *SessionState) {
 	if sess.IPv6Address != nil {
 		c.ipv6Index[sess.IPv6Address.String()] = sess
 	}
+	if c.exclusivity != nil {
+		tk := session.MakeTupleKey(sess.OuterVLAN, sess.InnerVLAN, sess.MAC)
+		owner := session.Owner{Protocol: session.ProtoPPPoE, SessionID: sess.SessionID, Key: tk}
+		if prev := c.exclusivity.Claim(tk, owner); prev != nil && prev.Protocol != session.ProtoPPPoE {
+			c.evictPreviousOwner(prev, tk)
+		}
+	}
 }
 
 func (c *Component) removeFromIndexes(sess *SessionState) {
@@ -257,6 +266,23 @@ func (c *Component) removeFromIndexes(sess *SessionState) {
 	if sess.IPv6Address != nil {
 		delete(c.ipv6Index, sess.IPv6Address.String())
 	}
+	if c.exclusivity != nil {
+		tk := session.MakeTupleKey(sess.OuterVLAN, sess.InnerVLAN, sess.MAC)
+		owner := session.Owner{Protocol: session.ProtoPPPoE, SessionID: sess.SessionID, Key: tk}
+		c.exclusivity.Release(tk, owner)
+	}
+}
+
+func (c *Component) evictPreviousOwner(prev *session.Owner, tk session.TupleKey) {
+	c.eventBus.Publish(events.TopicSubscriberTerminate, events.Event{
+		Source:    "pppoe",
+		Timestamp: time.Now(),
+		Data: &events.SubscriberTerminateEvent{
+			SessionID: prev.SessionID,
+			Reason:    "evicted by cross-protocol claim",
+			Key:       &tk,
+		},
+	})
 }
 
 func (c *Component) resolveTargetLocked(ev *events.SubscriberMutationEvent) *SessionState {
@@ -279,6 +305,12 @@ func (c *Component) resolveTargetLocked(ev *events.SubscriberMutationEvent) *Ses
 }
 
 func (c *Component) resolveTerminateTargetLocked(ev *events.SubscriberTerminateEvent) *SessionState {
+	if ev.Key != nil {
+		var mac net.HardwareAddr = ev.Key.MAC[:]
+		if sess := c.sessions[c.sessionKey(mac, ev.Key.SVLAN, ev.Key.CVLAN)]; sess != nil {
+			return sess
+		}
+	}
 	if ev.SessionID != "" {
 		return c.sessionIDIndex[ev.SessionID]
 	}
