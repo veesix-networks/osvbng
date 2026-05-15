@@ -54,6 +54,24 @@ Get Local Auth Users
     Should Be Equal As Integers    ${rc}    0
     RETURN    ${output}
 
+Set Local Auth User Attribute
+    [Arguments]    ${container}    ${user_id}    ${attribute}    ${value}    ${op}=set
+    ${ip} =    Get Container IPv4    ${container}
+    ${rc}    ${output} =    Run And Return Rc And Output
+    ...    curl -sf -X POST http://${ip}:${OSVBNG_API_PORT}/api/exec/subscriber/auth/local/user/${user_id}/attribute -H "Content-Type: application/json" -d '{"attribute":"${attribute}","value":"${value}","op":"${op}"}'
+    Log    ${output}
+    Should Be Equal As Integers    ${rc}    0
+    RETURN    ${output}
+
+Lookup Local Auth User ID
+    [Arguments]    ${container}    ${username}
+    ${ip} =    Get Container IPv4    ${container}
+    ${rc}    ${output} =    Run And Return Rc And Output
+    ...    curl -sf http://${ip}:${OSVBNG_API_PORT}/api/show/subscriber/auth/local/users
+    Should Be Equal As Integers    ${rc}    0
+    ${id} =    Run    echo '${output}' | jq -r '.data.users[] | select(.username == "${username}") | .id'
+    RETURN    ${id}
+
 Create IPoE Users
     [Arguments]    ${container}    ${count}    ${prefix}=DEV-
     FOR    ${i}    IN RANGE    1    ${count} + 1

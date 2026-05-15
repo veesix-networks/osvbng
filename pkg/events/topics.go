@@ -18,4 +18,9 @@ const (
 	TopicSubscriberMutation       = "osvbng:events:subscriber:mutation"
 	TopicSubscriberMutationResult = "osvbng:events:subscriber:mutation:result"
 	TopicSubscriberTerminate      = "osvbng:events:subscriber:terminate"
+
+	// L2TPv2 topics — see components/l2tp/60-l2tpv2/IMPLEMENTATION_SPEC.md
+	// §"Shared-core performance considerations" (spec-finalize C4).
+	TopicAAAResponseL2TP = "osvbng:events:aaa:response:l2tp"
+	TopicL2TPLACDecision = "osvbng:events:l2tp:lac:decision"
 )

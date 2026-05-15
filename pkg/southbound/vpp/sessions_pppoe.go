@@ -339,4 +339,24 @@ func (v *VPP) DeletePPPoESessionAsync(sessionID uint16, clientIP net.IP, clientM
 	})
 }
 
+func (v *VPP) SetPPPoESessionLACTunneled(swIfIndex uint32, lacL2TPSessionIndex uint32, isLAC bool) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
 
+	req := &osvbng_pppoe.OsvbngPppoeSetLacTunnel{
+		SwIfIndex:           interface_types.InterfaceIndex(swIfIndex),
+		IsLacTunneled:       isLAC,
+		LacL2tpSessionIndex: lacL2TPSessionIndex,
+	}
+	reply := &osvbng_pppoe.OsvbngPppoeSetLacTunnelReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("set lac tunnel: %w", err)
+	}
+	if reply.Retval != 0 {
+		return fmt.Errorf("set lac tunnel rv=%d", reply.Retval)
+	}
+	return nil
+}

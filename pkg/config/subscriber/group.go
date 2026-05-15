@@ -59,6 +59,13 @@ type SubscriberGroup struct {
 	PPPoE               *PPPoEConfig           `json:"pppoe,omitempty" yaml:"pppoe,omitempty"`
 	MSSClamp            *MSSClampConfig        `json:"mss-clamp,omitempty" yaml:"mss-clamp,omitempty"`
 	DHCPv6              *SubscriberDHCPv6      `json:"dhcpv6,omitempty" yaml:"dhcpv6,omitempty"`
+	L2TP                *SubscriberL2TPConfig  `json:"l2tp,omitempty" yaml:"l2tp,omitempty"`
+}
+
+// SubscriberL2TPConfig is the per-subscriber-group L2TP binding. It
+// references a named profile in the top-level l2tp.profiles block.
+type SubscriberL2TPConfig struct {
+	Profile string `json:"profile,omitempty" yaml:"profile,omitempty"`
 }
 
 type SubscriberDHCPv6 struct {

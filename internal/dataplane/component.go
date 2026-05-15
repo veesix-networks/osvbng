@@ -33,6 +33,7 @@ type Component struct {
 	ARPChan    chan *dataplane.ParsedPacket
 	PPPoEChan  chan *dataplane.ParsedPacket
 	IPv6NDChan chan *dataplane.ParsedPacket
+	L2TPChan   chan *dataplane.ParsedPacket
 
 	CPPM *cppm.Manager
 
@@ -62,6 +63,7 @@ func New(deps component.Dependencies) (*Component, error) {
 		ARPChan:    make(chan *dataplane.ParsedPacket, 1000),
 		PPPoEChan:  make(chan *dataplane.ParsedPacket, 1000),
 		IPv6NDChan: make(chan *dataplane.ParsedPacket, 1000),
+		L2TPChan:   make(chan *dataplane.ParsedPacket, 1000),
 		CPPM:       deps.CPPM,
 	}
 
@@ -198,6 +200,11 @@ func (c *Component) readLoop() {
 					continue
 				}
 				c.logger.Debug("Received L2TP packet", "sw_if_index", pkt.SwIfIndex, "mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
+				select {
+				case c.L2TPChan <- pkt:
+				default:
+					c.logger.Warn("L2TP channel full, dropping")
+				}
 			default:
 				c.logger.Warn("Unknown protocol", "protocol", pkt.Protocol)
 			}

@@ -25,7 +25,7 @@ const _ = api.GoVppAPIPackageIsVersion2
 const (
 	APIFile    = "osvbng_punt"
 	APIVersion = "1.0.0"
-	VersionCrc = 0x21e3d419
+	VersionCrc = 0x2ece67eb
 )
 
 // Enable/disable OSVBNG punt for a protocol on an interface
@@ -234,12 +234,16 @@ func (m *OsvbngPuntRegistrationDetails) Unmarshal(b []byte) error {
 }
 
 // Dump OSVBNG punt registrations
+//   - sw_if_index - filter to one interface, or ~0 for all
+//
 // OsvbngPuntRegistrationDump defines message 'osvbng_punt_registration_dump'.
-type OsvbngPuntRegistrationDump struct{}
+type OsvbngPuntRegistrationDump struct {
+	SwIfIndex interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
+}
 
 func (m *OsvbngPuntRegistrationDump) Reset()               { *m = OsvbngPuntRegistrationDump{} }
 func (*OsvbngPuntRegistrationDump) GetMessageName() string { return "osvbng_punt_registration_dump" }
-func (*OsvbngPuntRegistrationDump) GetCrcString() string   { return "51077d14" }
+func (*OsvbngPuntRegistrationDump) GetCrcString() string   { return "f9e6675e" }
 func (*OsvbngPuntRegistrationDump) GetMessageType() api.MessageType {
 	return api.RequestMessage
 }
@@ -248,6 +252,7 @@ func (m *OsvbngPuntRegistrationDump) Size() (size int) {
 	if m == nil {
 		return 0
 	}
+	size += 4 // m.SwIfIndex
 	return size
 }
 func (m *OsvbngPuntRegistrationDump) Marshal(b []byte) ([]byte, error) {
@@ -255,9 +260,12 @@ func (m *OsvbngPuntRegistrationDump) Marshal(b []byte) ([]byte, error) {
 		b = make([]byte, m.Size())
 	}
 	buf := codec.NewBuffer(b)
+	buf.EncodeUint32(uint32(m.SwIfIndex))
 	return buf.Bytes(), nil
 }
 func (m *OsvbngPuntRegistrationDump) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.SwIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
 	return nil
 }
 
@@ -357,7 +365,7 @@ func file_osvbng_punt_binapi_init() {
 	api.RegisterMessage((*OsvbngPuntPolicerConfigure)(nil), "osvbng_punt_policer_configure_c5ef7127")
 	api.RegisterMessage((*OsvbngPuntPolicerConfigureReply)(nil), "osvbng_punt_policer_configure_reply_e8d4e804")
 	api.RegisterMessage((*OsvbngPuntRegistrationDetails)(nil), "osvbng_punt_registration_details_b436106a")
-	api.RegisterMessage((*OsvbngPuntRegistrationDump)(nil), "osvbng_punt_registration_dump_51077d14")
+	api.RegisterMessage((*OsvbngPuntRegistrationDump)(nil), "osvbng_punt_registration_dump_f9e6675e")
 	api.RegisterMessage((*OsvbngPuntStatsDetails)(nil), "osvbng_punt_stats_details_393afd80")
 	api.RegisterMessage((*OsvbngPuntStatsDump)(nil), "osvbng_punt_stats_dump_51077d14")
 }
