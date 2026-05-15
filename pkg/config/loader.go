@@ -75,6 +75,10 @@ func (c *Config) Validate() error {
 		return err
 	}
 
+	if err := c.CGNAT.Validate(); err != nil {
+		return err
+	}
+
 	if c.NeedsAccessInterface() {
 		if _, err := c.GetAccessInterface(); err != nil {
 			return fmt.Errorf("access interface validation: %w", err)

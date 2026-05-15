@@ -120,12 +120,3 @@ func (c *Config) GetAccessInterface() (string, error) {
 	return "", fmt.Errorf("multiple parent-interfaces configured across subscriber groups (only 1 allowed): %v", names)
 }
 
-func (c *Config) GetCoreInterface() string {
-	for name, iface := range c.Interfaces {
-		if iface.BNGMode == "core" {
-			return name
-		}
-	}
-	return ""
-}
-
