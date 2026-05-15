@@ -68,20 +68,16 @@ func (a *Autoconfig) deriveSVLANConfig(group *subscriber.SubscriberGroup, vlanRa
 	raConfig := a.getRAConfig(group)
 	resolvedVRF := resolveRangeVRF(group, vlanRange)
 
-	bngMode := a.getBNGMode(group)
-
 	changes = append(changes, Change{
 		Path: fmt.Sprintf("interfaces.%s.subinterfaces.%d", a.parentInterface, svlan),
 		Value: &interfaces.SubinterfaceConfig{
-			ID:         int(svlan),
-			VLAN:       int(svlan),
-			VLANTpid:   group.VLANTpid,
-			Enabled:    true,
-			Unnumbered: loopback,
-			BNG: &interfaces.BNGConfig{
-				Mode: bngMode,
-			},
-			MSSClamp: a.deriveMSSClamp(group),
+			ID:               int(svlan),
+			VLAN:             int(svlan),
+			VLANTpid:         group.VLANTpid,
+			Enabled:          true,
+			Unnumbered:       loopback,
+			SubscriberAccess: true,
+			MSSClamp:         a.deriveMSSClamp(group),
 		},
 	})
 
@@ -126,13 +122,6 @@ func (a *Autoconfig) deriveSVLANConfig(group *subscriber.SubscriberGroup, vlanRa
 		Value: loopback,
 	})
 
-	changes = append(changes, Change{
-		Path: fmt.Sprintf("interfaces.%s.subinterfaces.%d.bng", a.parentInterface, svlan),
-		Value: &interfaces.BNGConfig{
-			Mode: bngMode,
-		},
-	})
-
 	return changes
 }
 
@@ -147,19 +136,6 @@ func resolveRangeVRF(group *subscriber.SubscriberGroup, r subscriber.VLANRange) 
 		return ""
 	}
 	return group.VRF
-}
-
-func (a *Autoconfig) getBNGMode(group *subscriber.SubscriberGroup) interfaces.BNGMode {
-	if group.HasAccessType("lns") {
-		return interfaces.BNGModeLNS
-	}
-	if group.HasAccessType("lac") {
-		return interfaces.BNGModeLAC
-	}
-	if group.HasAccessType("pppoe") && !group.HasAccessType("ipoe") {
-		return interfaces.BNGModePPPoE
-	}
-	return interfaces.BNGModeIPoE
 }
 
 type raConfig struct {

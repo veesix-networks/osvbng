@@ -18,7 +18,7 @@ func boolPtr(b bool) *bool    { return &b }
 func cfgWithAccessIface(name string, mtu int) *Config {
 	return &Config{
 		Interfaces: map[string]*interfaces.InterfaceConfig{
-			name: {Name: name, BNGMode: "access", MTU: mtu, Enabled: true},
+			name: {Name: name, MTU: mtu, Enabled: true},
 		},
 		SubscriberGroups: &subscriber.SubscriberGroupsConfig{
 			Groups: map[string]*subscriber.SubscriberGroup{},
