@@ -35,11 +35,16 @@ func TestValidateSubscriberAccessTypes_NilConfig(t *testing.T) {
 }
 
 func TestValidateSubscriberAccessTypes_ValidSingleElement(t *testing.T) {
-	cases := []string{"ipoe", "pppoe", "lac", "lns"}
+	cases := []subscriber.AccessType{
+		subscriber.AccessTypeIPoE,
+		subscriber.AccessTypePPPoE,
+		subscriber.AccessTypeLAC,
+		subscriber.AccessTypeLNS,
+	}
 	for _, at := range cases {
-		t.Run(at, func(t *testing.T) {
+		t.Run(string(at), func(t *testing.T) {
 			cfg := cfgWithGroup("eth1", &subscriber.SubscriberGroup{
-				AccessTypes: []string{at},
+				AccessTypes: []subscriber.AccessType{at},
 				VLANs: []subscriber.VLANRange{
 					{SVLAN: "100", CVLAN: "any", ParentInterface: "eth1"},
 				},
@@ -53,7 +58,7 @@ func TestValidateSubscriberAccessTypes_ValidSingleElement(t *testing.T) {
 
 func TestValidateSubscriberAccessTypes_ValidMixed(t *testing.T) {
 	cfg := cfgWithGroup("eth1", &subscriber.SubscriberGroup{
-		AccessTypes: []string{"ipoe", "pppoe"},
+		AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE, subscriber.AccessTypePPPoE},
 		VLANs: []subscriber.VLANRange{
 			{SVLAN: "100-299", CVLAN: "any", ParentInterface: "eth1"},
 		},
@@ -65,7 +70,7 @@ func TestValidateSubscriberAccessTypes_ValidMixed(t *testing.T) {
 
 func TestValidateSubscriberAccessTypes_Empty(t *testing.T) {
 	cfg := cfgWithGroup("eth1", &subscriber.SubscriberGroup{
-		AccessTypes: []string{},
+		AccessTypes: []subscriber.AccessType{},
 		VLANs: []subscriber.VLANRange{
 			{SVLAN: "100", CVLAN: "any", ParentInterface: "eth1"},
 		},
@@ -77,7 +82,7 @@ func TestValidateSubscriberAccessTypes_Empty(t *testing.T) {
 
 func TestValidateSubscriberAccessTypes_Unknown(t *testing.T) {
 	cfg := cfgWithGroup("eth1", &subscriber.SubscriberGroup{
-		AccessTypes: []string{"bogus"},
+		AccessTypes: []subscriber.AccessType{"bogus"},
 		VLANs: []subscriber.VLANRange{
 			{SVLAN: "100", CVLAN: "any", ParentInterface: "eth1"},
 		},
@@ -89,7 +94,7 @@ func TestValidateSubscriberAccessTypes_Unknown(t *testing.T) {
 
 func TestValidateSubscriberAccessTypes_Duplicate(t *testing.T) {
 	cfg := cfgWithGroup("eth1", &subscriber.SubscriberGroup{
-		AccessTypes: []string{"ipoe", "ipoe"},
+		AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE, subscriber.AccessTypeIPoE},
 		VLANs: []subscriber.VLANRange{
 			{SVLAN: "100", CVLAN: "any", ParentInterface: "eth1"},
 		},
@@ -102,15 +107,15 @@ func TestValidateSubscriberAccessTypes_Duplicate(t *testing.T) {
 func TestValidateSubscriberAccessTypes_InvalidCombinations(t *testing.T) {
 	cases := []struct {
 		name string
-		ats  []string
+		ats  []subscriber.AccessType
 	}{
-		{"lac_plus_ipoe", []string{"lac", "ipoe"}},
-		{"lac_plus_pppoe", []string{"lac", "pppoe"}},
-		{"lac_plus_lns", []string{"lac", "lns"}},
-		{"lns_plus_ipoe", []string{"lns", "ipoe"}},
-		{"lns_plus_pppoe", []string{"lns", "pppoe"}},
-		{"three_way", []string{"ipoe", "pppoe", "lac"}},
-		{"three_way_lns", []string{"ipoe", "pppoe", "lns"}},
+		{"lac_plus_ipoe", []subscriber.AccessType{subscriber.AccessTypeLAC, subscriber.AccessTypeIPoE}},
+		{"lac_plus_pppoe", []subscriber.AccessType{subscriber.AccessTypeLAC, subscriber.AccessTypePPPoE}},
+		{"lac_plus_lns", []subscriber.AccessType{subscriber.AccessTypeLAC, subscriber.AccessTypeLNS}},
+		{"lns_plus_ipoe", []subscriber.AccessType{subscriber.AccessTypeLNS, subscriber.AccessTypeIPoE}},
+		{"lns_plus_pppoe", []subscriber.AccessType{subscriber.AccessTypeLNS, subscriber.AccessTypePPPoE}},
+		{"three_way", []subscriber.AccessType{subscriber.AccessTypeIPoE, subscriber.AccessTypePPPoE, subscriber.AccessTypeLAC}},
+		{"three_way_lns", []subscriber.AccessType{subscriber.AccessTypeIPoE, subscriber.AccessTypePPPoE, subscriber.AccessTypeLNS}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -129,7 +134,7 @@ func TestValidateSubscriberAccessTypes_InvalidCombinations(t *testing.T) {
 
 func TestValidateSubscriberAccessTypes_ParentInterfaceRequired(t *testing.T) {
 	cfg := cfgWithGroup("eth1", &subscriber.SubscriberGroup{
-		AccessTypes: []string{"ipoe"},
+		AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE},
 		VLANs: []subscriber.VLANRange{
 			{SVLAN: "100", CVLAN: "any"},
 		},
@@ -141,7 +146,7 @@ func TestValidateSubscriberAccessTypes_ParentInterfaceRequired(t *testing.T) {
 
 func TestValidateSubscriberAccessTypes_ParentInterfaceMissing(t *testing.T) {
 	cfg := cfgWithGroup("eth1", &subscriber.SubscriberGroup{
-		AccessTypes: []string{"ipoe"},
+		AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE},
 		VLANs: []subscriber.VLANRange{
 			{SVLAN: "100", CVLAN: "any", ParentInterface: "ghost0"},
 		},
@@ -153,7 +158,7 @@ func TestValidateSubscriberAccessTypes_ParentInterfaceMissing(t *testing.T) {
 
 func TestValidateSubscriberAccessTypes_ParentInterfaceOptionalForLNS(t *testing.T) {
 	cfg := cfgWithGroup("eth1", &subscriber.SubscriberGroup{
-		AccessTypes: []string{"lns"},
+		AccessTypes: []subscriber.AccessType{subscriber.AccessTypeLNS},
 		VLANs: []subscriber.VLANRange{
 			{SVLAN: "100", CVLAN: "any"},
 		},
@@ -168,13 +173,13 @@ func TestValidateSubscriberAccessTypes_MultipleParentInterfaces(t *testing.T) {
 		SubscriberGroups: &subscriber.SubscriberGroupsConfig{
 			Groups: map[string]*subscriber.SubscriberGroup{
 				"g1": {
-					AccessTypes: []string{"ipoe"},
+					AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE},
 					VLANs: []subscriber.VLANRange{
 						{SVLAN: "100", CVLAN: "any", ParentInterface: "eth1"},
 					},
 				},
 				"g2": {
-					AccessTypes: []string{"pppoe"},
+					AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE},
 					VLANs: []subscriber.VLANRange{
 						{SVLAN: "200", CVLAN: "any", ParentInterface: "eth2"},
 					},

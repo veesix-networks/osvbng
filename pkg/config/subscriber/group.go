@@ -43,8 +43,17 @@ const (
 	SessionModeIndependent SessionMode = "independent"
 )
 
+type AccessType string
+
+const (
+	AccessTypeIPoE  AccessType = "ipoe"
+	AccessTypePPPoE AccessType = "pppoe"
+	AccessTypeLAC   AccessType = "lac"
+	AccessTypeLNS   AccessType = "lns"
+)
+
 type SubscriberGroup struct {
-	AccessTypes         []string               `json:"access-types,omitempty" yaml:"access-types,omitempty"`
+	AccessTypes         []AccessType           `json:"access-types,omitempty" yaml:"access-types,omitempty"`
 	VLANs               []VLANRange            `json:"vlans,omitempty" yaml:"vlans,omitempty"`
 	SessionMode         SessionMode            `json:"session-mode,omitempty" yaml:"session-mode,omitempty"`
 	VLANTpid            string                 `json:"vlan-tpid,omitempty" yaml:"vlan-tpid,omitempty"`
@@ -83,7 +92,7 @@ type SubscriberCGNATConfig struct {
 	Policy string `json:"policy,omitempty" yaml:"policy,omitempty"`
 }
 
-func (sg *SubscriberGroup) HasAccessType(t string) bool {
+func (sg *SubscriberGroup) HasAccessType(t AccessType) bool {
 	if sg == nil {
 		return false
 	}

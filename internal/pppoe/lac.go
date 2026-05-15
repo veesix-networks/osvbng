@@ -8,6 +8,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/ppp"
@@ -181,7 +182,7 @@ func (s *SessionState) shouldTunnelToLAC() bool {
 		return false
 	}
 	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(s.OuterVLAN)
-	if group == nil || !group.HasAccessType("lac") {
+	if group == nil || !group.HasAccessType(subscriber.AccessTypeLAC) {
 		return false
 	}
 	// AAA must say "tunnel.type = L2TP" on at least one tagged entry.

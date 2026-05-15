@@ -190,7 +190,7 @@ func (a *Autoconfig) getRAConfig(group *subscriber.SubscriberGroup) raConfig {
 // or-less. Operators on non-standard subscriber paths must declare
 // subscriber-path-mtu explicitly per group.
 func (a *Autoconfig) deriveMSSClamp(group *subscriber.SubscriberGroup) *interfaces.MSSClampSpec {
-	if len(group.AccessTypes) == 1 && group.AccessTypes[0] == "pppoe" {
+	if len(group.AccessTypes) == 1 && group.HasAccessType(subscriber.AccessTypePPPoE) {
 		return nil
 	}
 	if !group.MSSClamp.IsEnabled() {

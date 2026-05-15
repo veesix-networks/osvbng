@@ -77,7 +77,7 @@ func (c *Config) NeedsAccessInterface() bool {
 		if g == nil {
 			continue
 		}
-		if g.HasAccessType("ipoe") || g.HasAccessType("pppoe") || g.HasAccessType("lac") {
+		if g.HasAccessType(subscriber.AccessTypeIPoE) || g.HasAccessType(subscriber.AccessTypePPPoE) || g.HasAccessType(subscriber.AccessTypeLAC) {
 			return true
 		}
 	}
@@ -94,7 +94,7 @@ func (c *Config) GetAccessInterface() (string, error) {
 		if g == nil {
 			continue
 		}
-		if !g.HasAccessType("ipoe") && !g.HasAccessType("pppoe") && !g.HasAccessType("lac") {
+		if !g.HasAccessType(subscriber.AccessTypeIPoE) && !g.HasAccessType(subscriber.AccessTypePPPoE) && !g.HasAccessType(subscriber.AccessTypeLAC) {
 			continue
 		}
 		for _, vr := range g.VLANs {

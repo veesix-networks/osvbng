@@ -11,11 +11,11 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
 )
 
-var validAccessTypes = map[string]struct{}{
-	"ipoe":  {},
-	"pppoe": {},
-	"lac":   {},
-	"lns":   {},
+var validAccessTypes = map[subscriber.AccessType]struct{}{
+	subscriber.AccessTypeIPoE:  {},
+	subscriber.AccessTypePPPoE: {},
+	subscriber.AccessTypeLAC:   {},
+	subscriber.AccessTypeLNS:   {},
 }
 
 func ValidateSubscriberAccessTypes(cfg *Config) error {
@@ -34,7 +34,7 @@ func ValidateSubscriberAccessTypes(cfg *Config) error {
 			return fmt.Errorf("subscriber group %q: access-types is empty", name)
 		}
 
-		seen := map[string]struct{}{}
+		seen := map[subscriber.AccessType]struct{}{}
 		for _, a := range group.AccessTypes {
 			if _, ok := validAccessTypes[a]; !ok {
 				return fmt.Errorf("subscriber group %q: access-types entry %q is not one of ipoe, pppoe, lac, lns", name, a)
@@ -49,7 +49,7 @@ func ValidateSubscriberAccessTypes(cfg *Config) error {
 			return err
 		}
 
-		if !group.HasAccessType("lns") {
+		if !group.HasAccessType(subscriber.AccessTypeLNS) {
 			for i, vr := range group.VLANs {
 				if vr.ParentInterface == "" {
 					return fmt.Errorf("subscriber group %q vlans[%d]: parent-interface is required when access-types is %v", name, i, group.AccessTypes)
@@ -83,10 +83,10 @@ func ValidateSubscriberAccessTypes(cfg *Config) error {
 }
 
 func validateAccessTypeCombination(name string, group *subscriber.SubscriberGroup) error {
-	hasIPoE := group.HasAccessType("ipoe")
-	hasPPPoE := group.HasAccessType("pppoe")
-	hasLAC := group.HasAccessType("lac")
-	hasLNS := group.HasAccessType("lns")
+	hasIPoE := group.HasAccessType(subscriber.AccessTypeIPoE)
+	hasPPPoE := group.HasAccessType(subscriber.AccessTypePPPoE)
+	hasLAC := group.HasAccessType(subscriber.AccessTypeLAC)
+	hasLNS := group.HasAccessType(subscriber.AccessTypeLNS)
 
 	if hasLAC && (hasLNS || hasIPoE || hasPPPoE) {
 		return fmt.Errorf("subscriber group %q: lac is mutually exclusive with other access-types (got %v)", name, group.AccessTypes)

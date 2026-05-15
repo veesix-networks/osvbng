@@ -17,7 +17,7 @@ func TestGetAccessInterface_FromParentInterface(t *testing.T) {
 		SubscriberGroups: &subscriber.SubscriberGroupsConfig{
 			Groups: map[string]*subscriber.SubscriberGroup{
 				"residential": {
-					AccessTypes: []string{"ipoe", "pppoe"},
+					AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE, subscriber.AccessTypePPPoE},
 					VLANs: []subscriber.VLANRange{
 						{SVLAN: "100-299", CVLAN: "any", ParentInterface: "eth1"},
 					},
@@ -49,7 +49,7 @@ func TestGetAccessInterface_LNSOnlyReturnsNoInterface(t *testing.T) {
 		SubscriberGroups: &subscriber.SubscriberGroupsConfig{
 			Groups: map[string]*subscriber.SubscriberGroup{
 				"lns": {
-					AccessTypes: []string{"lns"},
+					AccessTypes: []subscriber.AccessType{subscriber.AccessTypeLNS},
 					VLANs: []subscriber.VLANRange{
 						{SVLAN: "100", CVLAN: "any", ParentInterface: "eth1"},
 					},
@@ -68,13 +68,13 @@ func TestGetAccessInterface_MultipleParents(t *testing.T) {
 		SubscriberGroups: &subscriber.SubscriberGroupsConfig{
 			Groups: map[string]*subscriber.SubscriberGroup{
 				"g1": {
-					AccessTypes: []string{"ipoe"},
+					AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE},
 					VLANs: []subscriber.VLANRange{
 						{SVLAN: "100", CVLAN: "any", ParentInterface: "eth1"},
 					},
 				},
 				"g2": {
-					AccessTypes: []string{"pppoe"},
+					AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE},
 					VLANs: []subscriber.VLANRange{
 						{SVLAN: "200", CVLAN: "any", ParentInterface: "eth2"},
 					},
@@ -91,15 +91,15 @@ func TestGetAccessInterface_MultipleParents(t *testing.T) {
 func TestNeedsAccessInterface(t *testing.T) {
 	cases := []struct {
 		name string
-		ats  []string
+		ats  []subscriber.AccessType
 		want bool
 	}{
-		{"ipoe", []string{"ipoe"}, true},
-		{"pppoe", []string{"pppoe"}, true},
-		{"mixed", []string{"ipoe", "pppoe"}, true},
-		{"lac", []string{"lac"}, true},
-		{"lns", []string{"lns"}, false},
-		{"empty", []string{}, false},
+		{"ipoe", []subscriber.AccessType{subscriber.AccessTypeIPoE}, true},
+		{"pppoe", []subscriber.AccessType{subscriber.AccessTypePPPoE}, true},
+		{"mixed", []subscriber.AccessType{subscriber.AccessTypeIPoE, subscriber.AccessTypePPPoE}, true},
+		{"lac", []subscriber.AccessType{subscriber.AccessTypeLAC}, true},
+		{"lns", []subscriber.AccessType{subscriber.AccessTypeLNS}, false},
+		{"empty", []subscriber.AccessType{}, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
