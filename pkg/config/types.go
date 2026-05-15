@@ -77,7 +77,7 @@ func (c *Config) NeedsAccessInterface() bool {
 		if g == nil {
 			continue
 		}
-		if g.AccessType != "" && g.AccessType != "lns" {
+		if g.HasAccessType("ipoe") || g.HasAccessType("pppoe") || g.HasAccessType("lac") {
 			return true
 		}
 	}

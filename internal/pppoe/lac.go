@@ -181,7 +181,7 @@ func (s *SessionState) shouldTunnelToLAC() bool {
 		return false
 	}
 	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(s.OuterVLAN)
-	if group == nil || group.AccessType != "lac" {
+	if group == nil || !group.HasAccessType("lac") {
 		return false
 	}
 	// AAA must say "tunnel.type = L2TP" on at least one tagged entry.

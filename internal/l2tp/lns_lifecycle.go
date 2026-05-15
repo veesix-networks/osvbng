@@ -360,7 +360,7 @@ func (c *Component) resolveLNSSubscriberGroup() *subscriber.SubscriberGroup {
 		return nil
 	}
 	for _, g := range cfg.SubscriberGroups.Groups {
-		if g != nil && g.AccessType == "lns" {
+		if g != nil && g.HasAccessType("lns") {
 			return g
 		}
 	}

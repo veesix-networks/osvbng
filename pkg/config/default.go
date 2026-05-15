@@ -50,12 +50,13 @@ func Generate(opts GenerateOptions) (string, error) {
 		SubscriberGroups: &subscriber.SubscriberGroupsConfig{
 			Groups: map[string]*subscriber.SubscriberGroup{
 				"default": {
-					AccessType: "ipoe",
+					AccessTypes: []string{"ipoe"},
 					VLANs: []subscriber.VLANRange{
 						{
-							SVLAN:     "100",
-							CVLAN:     "any",
-							Interface: "loop100",
+							SVLAN:           "100",
+							CVLAN:           "any",
+							Interface:       "loop100",
+							ParentInterface: accessInterface,
 						},
 					},
 					IPv4Profile:   "default",
@@ -143,7 +144,6 @@ func Generate(opts GenerateOptions) (string, error) {
 				Name:        accessInterface,
 				Description: "Access Interface",
 				Enabled:     true,
-				BNGMode:     "access",
 			},
 		},
 	}
@@ -153,7 +153,6 @@ func Generate(opts GenerateOptions) (string, error) {
 			Name:        coreInterface,
 			Description: "Core Interface",
 			Enabled:     true,
-			BNGMode:     "core",
 			LCP:         true,
 		}
 	}

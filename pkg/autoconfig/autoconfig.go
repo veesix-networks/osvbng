@@ -150,14 +150,14 @@ func resolveRangeVRF(group *subscriber.SubscriberGroup, r subscriber.VLANRange) 
 }
 
 func (a *Autoconfig) getBNGMode(group *subscriber.SubscriberGroup) interfaces.BNGMode {
-	if group.AccessType == "pppoe" {
-		return interfaces.BNGModePPPoE
+	if group.HasAccessType("lns") {
+		return interfaces.BNGModeLNS
 	}
-	if group.AccessType == "lac" {
+	if group.HasAccessType("lac") {
 		return interfaces.BNGModeLAC
 	}
-	if group.AccessType == "lns" {
-		return interfaces.BNGModeLNS
+	if group.HasAccessType("pppoe") && !group.HasAccessType("ipoe") {
+		return interfaces.BNGModePPPoE
 	}
 	return interfaces.BNGModeIPoE
 }
@@ -214,7 +214,7 @@ func (a *Autoconfig) getRAConfig(group *subscriber.SubscriberGroup) raConfig {
 // or-less. Operators on non-standard subscriber paths must declare
 // subscriber-path-mtu explicitly per group.
 func (a *Autoconfig) deriveMSSClamp(group *subscriber.SubscriberGroup) *interfaces.MSSClampSpec {
-	if group.AccessType == "pppoe" {
+	if len(group.AccessTypes) == 1 && group.AccessTypes[0] == "pppoe" {
 		return nil
 	}
 	if !group.MSSClamp.IsEnabled() {

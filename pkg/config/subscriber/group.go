@@ -44,7 +44,7 @@ const (
 )
 
 type SubscriberGroup struct {
-	AccessType          string                 `json:"access-type,omitempty" yaml:"access-type,omitempty"` // ipoe, pppoe, lac, lns
+	AccessTypes         []string               `json:"access-types,omitempty" yaml:"access-types,omitempty"`
 	VLANs               []VLANRange            `json:"vlans,omitempty" yaml:"vlans,omitempty"`
 	SessionMode         SessionMode            `json:"session-mode,omitempty" yaml:"session-mode,omitempty"`
 	VLANTpid            string                 `json:"vlan-tpid,omitempty" yaml:"vlan-tpid,omitempty"`
@@ -81,6 +81,18 @@ func (sg *SubscriberGroup) GetAllowRelayForward() bool {
 
 type SubscriberCGNATConfig struct {
 	Policy string `json:"policy,omitempty" yaml:"policy,omitempty"`
+}
+
+func (sg *SubscriberGroup) HasAccessType(t string) bool {
+	if sg == nil {
+		return false
+	}
+	for _, a := range sg.AccessTypes {
+		if a == t {
+			return true
+		}
+	}
+	return false
 }
 
 // GetOuterTPID returns the outer TPID for subscriber traffic. Subscriber groups
@@ -153,15 +165,16 @@ func (sg *SubscriberGroup) GetPolicyName(svlan uint16) string {
 }
 
 type VLANRange struct {
-	SVLAN     string    `json:"svlan,omitempty" yaml:"svlan,omitempty"`
-	CVLAN     string    `json:"cvlan,omitempty" yaml:"cvlan,omitempty"`
-	Interface string    `json:"interface,omitempty" yaml:"interface,omitempty"`
-	VRF       string    `json:"vrf,omitempty" yaml:"vrf,omitempty"`
-	IPv4      []string  `json:"ipv4,omitempty" yaml:"ipv4,omitempty"`
-	IPv6      []string  `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`
-	DHCP      string    `json:"dhcp,omitempty" yaml:"dhcp,omitempty"`
-	AAA       *VLANAAAs `json:"aaa,omitempty" yaml:"aaa,omitempty"`
-	Template  string    `json:"template,omitempty" yaml:"template,omitempty"`
+	SVLAN           string    `json:"svlan,omitempty" yaml:"svlan,omitempty"`
+	CVLAN           string    `json:"cvlan,omitempty" yaml:"cvlan,omitempty"`
+	Interface       string    `json:"interface,omitempty" yaml:"interface,omitempty"`
+	ParentInterface string    `json:"parent-interface,omitempty" yaml:"parent-interface,omitempty"`
+	VRF             string    `json:"vrf,omitempty" yaml:"vrf,omitempty"`
+	IPv4            []string  `json:"ipv4,omitempty" yaml:"ipv4,omitempty"`
+	IPv6            []string  `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`
+	DHCP            string    `json:"dhcp,omitempty" yaml:"dhcp,omitempty"`
+	AAA             *VLANAAAs `json:"aaa,omitempty" yaml:"aaa,omitempty"`
+	Template        string    `json:"template,omitempty" yaml:"template,omitempty"`
 }
 
 func (v *VLANRange) GetSVLANs() ([]uint16, error) {

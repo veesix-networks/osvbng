@@ -71,6 +71,10 @@ func validateVLANTpid(value string) error {
 }
 
 func (c *Config) Validate() error {
+	if err := ValidateSubscriberAccessTypes(c); err != nil {
+		return err
+	}
+
 	if c.NeedsAccessInterface() {
 		if _, err := c.GetAccessInterface(); err != nil {
 			return fmt.Errorf("access interface validation: %w", err)
