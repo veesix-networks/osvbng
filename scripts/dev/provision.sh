@@ -51,8 +51,8 @@ EOF
 
 export PATH="/usr/local/go/bin:$HOME/go/bin:$PATH"
 
-GOBIN=/usr/local/bin go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-GOBIN=/usr/local/bin go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+GOBIN=/usr/local/bin go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10
+GOBIN=/usr/local/bin go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
 
 # --- VPP ---
 

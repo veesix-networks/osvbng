@@ -13,7 +13,7 @@ WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 
-RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest && \
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10 && \
     go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
 
 COPY . .
