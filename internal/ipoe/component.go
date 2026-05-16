@@ -50,6 +50,7 @@ type Component struct {
 	srgMgr           ha.SRGProvider
 	ifMgr            *ifmgr.Manager
 	cfgMgr           component.ConfigManager
+	accessResolver   subscriber.AccessResolver
 	vpp              southbound.Southbound
 	vrfMgr           *vrfmgr.Manager
 	svcGroupResolver *svcgroup.Resolver
@@ -124,6 +125,42 @@ type SessionState struct {
 	AllocCtx     *allocator.Context
 	Closing      bool
 	AAAInFlight  bool
+	MixedAccess  bool
+}
+
+func (c *Component) isMixedAccessSVLAN(svlan uint16) bool {
+	if c.accessResolver == nil {
+		return false
+	}
+	return c.accessResolver.IsMixedAccessSVLAN(svlan)
+}
+
+func (c *Component) claimTuple(sess *SessionState) {
+	if c.exclusivity == nil || !sess.MixedAccess {
+		return
+	}
+	tk := session.MakeTupleKey(sess.OuterVLAN, sess.InnerVLAN, sess.MAC)
+	owner := session.Owner{Protocol: session.ProtoIPoE, SessionID: sess.SessionID, Key: tk}
+	if prev := c.exclusivity.Claim(tk, owner); prev != nil && prev.Protocol != session.ProtoIPoE {
+		c.eventBus.Publish(events.TopicSubscriberTerminate, events.Event{
+			Source:    "ipoe",
+			Timestamp: time.Now(),
+			Data: &events.SubscriberTerminateEvent{
+				SessionID: prev.SessionID,
+				Reason:    "evicted by cross-protocol claim",
+				Key:       &tk,
+			},
+		})
+	}
+}
+
+func (c *Component) releaseTuple(sess *SessionState) {
+	if c.exclusivity == nil || !sess.MixedAccess {
+		return
+	}
+	tk := session.MakeTupleKey(sess.OuterVLAN, sess.InnerVLAN, sess.MAC)
+	owner := session.Owner{Protocol: session.ProtoIPoE, SessionID: sess.SessionID, Key: tk}
+	c.exclusivity.Release(tk, owner)
 }
 
 func (c *Component) claimTuple(sess *SessionState) {
@@ -479,6 +516,7 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 		vrfMgr:           deps.VRFManager,
 		svcGroupResolver: deps.SvcGroupResolver,
 		cfgMgr:           deps.ConfigManager,
+		accessResolver:   deps.AccessResolver,
 		vpp:              deps.Southbound,
 		cache:            deps.Cache,
 		opdb:             deps.OpDB,
@@ -700,6 +738,7 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 			InnerVLAN:     pkt.InnerVLAN,
 			EncapIfIndex:  pkt.SwIfIndex,
 			State:         "discovering",
+			MixedAccess:   c.isMixedAccessSVLAN(pkt.OuterVLAN),
 		}
 
 		c.sessionIndex.Store(sessID, newSess)
@@ -1491,12 +1530,6 @@ func (c *Component) handleAAAResponse(event events.Event) {
 	)
 
 	resolved := c.resolveServiceGroup(svlan, data.Response.Attributes)
-
-	logArgs := []any{"session_id", sessID}
-	for _, attr := range resolved.LogAttrs() {
-		logArgs = append(logArgs, attr.Key, attr.Value.Any())
-	}
-	c.logger.Debug("Resolved service group", logArgs...)
 
 	var srgName string
 	if c.srgMgr != nil && subscriberGroup != "" {

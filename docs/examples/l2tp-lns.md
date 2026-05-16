@@ -36,7 +36,7 @@ service-groups:
 subscriber-groups:
   groups:
     lns:
-      access-type: lns
+      access-types: [lns]
       ipv4-profile: default
       ipv6-profile: default-v6
       default-service-group: lns-default

@@ -320,12 +320,6 @@ func (s *SessionState) onAuthResult(allowed bool, attributes map[string]interfac
 		s.SRGName = s.component.resolveSRGName(s.OuterVLAN)
 		s.AllocCtx = s.buildAllocContext(attributes)
 
-		logArgs := []any{"session_id", s.SessionID}
-		for _, attr := range resolved.LogAttrs() {
-			logArgs = append(logArgs, attr.Key, attr.Value.Any())
-		}
-		s.component.logger.Info("Resolved service group", logArgs...)
-
 		if s.shouldTunnelToLAC() {
 			s.component.logger.Info("Handing subscriber off to LAC",
 				"session_id", s.SessionID, "username", s.Username)

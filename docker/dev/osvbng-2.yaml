@@ -27,21 +27,23 @@ service-groups:
 subscriber-groups:
     groups:
         default:
-            access-type: ipoe
             ipv4-profile: default
             ipv6-profile: default-v6
             vlans:
                 - svlan: "100-120"
                   cvlan: any
                   interface: loop100
+                  parent-interface: eth1
+                  access-types: [ipoe, pppoe]
             aaa-policy: default-policy
         pppoe:
-            access-type: pppoe
             ipv4-profile: default
             vlans:
                 - svlan: "200-220"
                   cvlan: any
                   interface: loop100
+                  parent-interface: eth1
+                  access-types: [pppoe]
             aaa-policy: default-policy
 
 ipv4-profiles:
@@ -97,7 +99,6 @@ interfaces:
     eth1:
         description: Access Interface
         enabled: true
-        bng_mode: access
     eth2:
         description: Core Link (frr-peer)
         enabled: true

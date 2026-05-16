@@ -50,24 +50,23 @@ func pathCount(changes []Change, prefix string) int {
 func TestDerive_IPoEEmitsPuntAndAccess(t *testing.T) {
 	changes := deriveOrFail(t, cfgWithGroups(map[string]*subscriber.SubscriberGroup{
 		"g": {
-			AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE},
 			VLANs: []subscriber.VLANRange{
-				{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1"},
+				{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1", AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE}},
 			},
 		},
 	}))
 	for _, p := range []string{
-		"_internal.punt.eth1.100.dhcpv4",
-		"_internal.punt.eth1.100.dhcpv6",
-		"_internal.punt.eth1.100.arp",
-		"_internal.punt.eth1.100.ipv6nd",
-		"_internal.access.eth1.100.ipoe-input",
+		"_internal.punt.eth1_dot_100.dhcpv4",
+		"_internal.punt.eth1_dot_100.dhcpv6",
+		"_internal.punt.eth1_dot_100.arp",
+		"_internal.punt.eth1_dot_100.ipv6nd",
+		"_internal.access.eth1_dot_100.ipoe-input",
 	} {
 		if !pathPresent(changes, p) {
 			t.Errorf("expected path %s", p)
 		}
 	}
-	if pathPresent(changes, "_internal.punt.eth1.100.pppoe") {
+	if pathPresent(changes, "_internal.punt.eth1_dot_100.pppoe") {
 		t.Error("[ipoe] must not emit pppoe punt")
 	}
 }
@@ -75,13 +74,12 @@ func TestDerive_IPoEEmitsPuntAndAccess(t *testing.T) {
 func TestDerive_PPPoEEmitsPuntAndParentPromisc(t *testing.T) {
 	changes := deriveOrFail(t, cfgWithGroups(map[string]*subscriber.SubscriberGroup{
 		"g": {
-			AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE},
 			VLANs: []subscriber.VLANRange{
-				{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1"},
+				{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1", AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE}},
 			},
 		},
 	}))
-	if !pathPresent(changes, "_internal.punt.eth1.100.pppoe") {
+	if !pathPresent(changes, "_internal.punt.eth1_dot_100.pppoe") {
 		t.Error("[pppoe] must emit pppoe punt")
 	}
 	if !pathPresent(changes, "_internal.access.eth1.promiscuous") {
@@ -92,16 +90,15 @@ func TestDerive_PPPoEEmitsPuntAndParentPromisc(t *testing.T) {
 func TestDerive_MixedEmitsUnion(t *testing.T) {
 	changes := deriveOrFail(t, cfgWithGroups(map[string]*subscriber.SubscriberGroup{
 		"g": {
-			AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE, subscriber.AccessTypePPPoE},
 			VLANs: []subscriber.VLANRange{
-				{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1"},
+				{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1", AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE, subscriber.AccessTypePPPoE}},
 			},
 		},
 	}))
 	for _, p := range []string{
-		"_internal.punt.eth1.100.dhcpv4",
-		"_internal.punt.eth1.100.pppoe",
-		"_internal.access.eth1.100.ipoe-input",
+		"_internal.punt.eth1_dot_100.dhcpv4",
+		"_internal.punt.eth1_dot_100.pppoe",
+		"_internal.access.eth1_dot_100.ipoe-input",
 		"_internal.access.eth1.promiscuous",
 	} {
 		if !pathPresent(changes, p) {
@@ -113,16 +110,15 @@ func TestDerive_MixedEmitsUnion(t *testing.T) {
 func TestDerive_MixedReverseOrderEmitsSameUnion(t *testing.T) {
 	changes := deriveOrFail(t, cfgWithGroups(map[string]*subscriber.SubscriberGroup{
 		"g": {
-			AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE, subscriber.AccessTypeIPoE},
 			VLANs: []subscriber.VLANRange{
-				{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1"},
+				{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1", AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE, subscriber.AccessTypeIPoE}},
 			},
 		},
 	}))
 	for _, p := range []string{
-		"_internal.punt.eth1.100.dhcpv4",
-		"_internal.punt.eth1.100.pppoe",
-		"_internal.access.eth1.100.ipoe-input",
+		"_internal.punt.eth1_dot_100.dhcpv4",
+		"_internal.punt.eth1_dot_100.pppoe",
+		"_internal.access.eth1_dot_100.ipoe-input",
 		"_internal.access.eth1.promiscuous",
 	} {
 		if !pathPresent(changes, p) {
@@ -134,13 +130,12 @@ func TestDerive_MixedReverseOrderEmitsSameUnion(t *testing.T) {
 func TestDerive_LNSEmitsL2TPPunt(t *testing.T) {
 	changes := deriveOrFail(t, cfgWithGroups(map[string]*subscriber.SubscriberGroup{
 		"lns": {
-			AccessTypes: []subscriber.AccessType{subscriber.AccessTypeLNS},
 			VLANs: []subscriber.VLANRange{
-				{SVLAN: "1-4094", CVLAN: "any", Interface: "loop600", ParentInterface: "eth1"},
+				{SVLAN: "1-4094", CVLAN: "any", Interface: "loop600", ParentInterface: "eth1", AccessTypes: []subscriber.AccessType{subscriber.AccessTypeLNS}},
 			},
 		},
 	}))
-	if !pathPresent(changes, "_internal.punt.eth1.1.l2tp") {
+	if !pathPresent(changes, "_internal.punt.eth1_dot_1.l2tp") {
 		t.Error("[lns] must emit l2tp punt")
 	}
 	if pathPresent(changes, "_internal.access.eth1.promiscuous") {
@@ -151,9 +146,8 @@ func TestDerive_LNSEmitsL2TPPunt(t *testing.T) {
 func TestDerive_DedupesPromiscuousAcrossSVLANs(t *testing.T) {
 	changes := deriveOrFail(t, cfgWithGroups(map[string]*subscriber.SubscriberGroup{
 		"g": {
-			AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE},
 			VLANs: []subscriber.VLANRange{
-				{SVLAN: "100-199", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1"},
+				{SVLAN: "100-199", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1", AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE}},
 			},
 		},
 	}))
@@ -165,9 +159,8 @@ func TestDerive_DedupesPromiscuousAcrossSVLANs(t *testing.T) {
 func TestDerive_AccessConfigValuesSensible(t *testing.T) {
 	changes := deriveOrFail(t, cfgWithGroups(map[string]*subscriber.SubscriberGroup{
 		"g": {
-			AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE},
 			VLANs: []subscriber.VLANRange{
-				{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1"},
+				{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1", AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE}},
 			},
 		},
 	}))

@@ -27,7 +27,6 @@ service-groups:
 subscriber-groups:
     groups:
         default:
-            access-type: ipoe
             vlan-tpid: dot1q
             ipv4-profile: default
             ipv6-profile: default-v6
@@ -35,19 +34,22 @@ subscriber-groups:
                 - svlan: "100-110"
                   cvlan: any
                   interface: loop100
+                  parent-interface: eth1
+                  access-types: [ipoe]
             bgp:
                 enabled: true
                 advertise-pools: true
                 redistribute-connected: true
             aaa-policy: default-policy
         pppoe:
-            access-type: pppoe
             vlan-tpid: dot1q
             ipv4-profile: default
             vlans:
                 - svlan: "200-210"
                   cvlan: any
                   interface: loop100
+                  parent-interface: eth1
+                  access-types: [pppoe]
             aaa-policy: default-policy
 
 ipv4-profiles:
@@ -113,7 +115,6 @@ interfaces:
     eth1:
         description: Access Interface
         enabled: true
-        bng_mode: access
     eth2:
         description: Core Link (corerouter1)
         enabled: true

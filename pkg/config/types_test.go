@@ -17,9 +17,8 @@ func TestGetAccessInterface_FromParentInterface(t *testing.T) {
 		SubscriberGroups: &subscriber.SubscriberGroupsConfig{
 			Groups: map[string]*subscriber.SubscriberGroup{
 				"residential": {
-					AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE, subscriber.AccessTypePPPoE},
 					VLANs: []subscriber.VLANRange{
-						{SVLAN: "100-299", CVLAN: "any", ParentInterface: "eth1"},
+						{SVLAN: "100-299", CVLAN: "any", ParentInterface: "eth1", AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE, subscriber.AccessTypePPPoE}},
 					},
 				},
 			},
@@ -49,9 +48,8 @@ func TestGetAccessInterface_LNSOnlyReturnsNoInterface(t *testing.T) {
 		SubscriberGroups: &subscriber.SubscriberGroupsConfig{
 			Groups: map[string]*subscriber.SubscriberGroup{
 				"lns": {
-					AccessTypes: []subscriber.AccessType{subscriber.AccessTypeLNS},
 					VLANs: []subscriber.VLANRange{
-						{SVLAN: "100", CVLAN: "any", ParentInterface: "eth1"},
+						{SVLAN: "100", CVLAN: "any", ParentInterface: "eth1", AccessTypes: []subscriber.AccessType{subscriber.AccessTypeLNS}},
 					},
 				},
 			},
@@ -68,15 +66,13 @@ func TestGetAccessInterface_MultipleParents(t *testing.T) {
 		SubscriberGroups: &subscriber.SubscriberGroupsConfig{
 			Groups: map[string]*subscriber.SubscriberGroup{
 				"g1": {
-					AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE},
 					VLANs: []subscriber.VLANRange{
-						{SVLAN: "100", CVLAN: "any", ParentInterface: "eth1"},
+						{SVLAN: "100", CVLAN: "any", ParentInterface: "eth1", AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE}},
 					},
 				},
 				"g2": {
-					AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE},
 					VLANs: []subscriber.VLANRange{
-						{SVLAN: "200", CVLAN: "any", ParentInterface: "eth2"},
+						{SVLAN: "200", CVLAN: "any", ParentInterface: "eth2", AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE}},
 					},
 				},
 			},
@@ -106,7 +102,7 @@ func TestNeedsAccessInterface(t *testing.T) {
 			cfg := &Config{
 				SubscriberGroups: &subscriber.SubscriberGroupsConfig{
 					Groups: map[string]*subscriber.SubscriberGroup{
-						"g": {AccessTypes: c.ats},
+						"g": {VLANs: []subscriber.VLANRange{{AccessTypes: c.ats}}},
 					},
 				},
 			}

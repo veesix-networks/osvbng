@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 cgnat:
+  outside_interface: eth2
   pools:
     residential:
       mode: pba
@@ -24,7 +25,6 @@ cgnat:
 subscriber-groups:
     groups:
         default:
-            access-type: ipoe
             vlan-tpid: dot1q
             ipv4-profile: default
             ipv6-profile: default-v6
@@ -32,6 +32,8 @@ subscriber-groups:
                 - svlan: "100-110"
                   cvlan: any
                   interface: loop100
+                  parent-interface: eth1
+                  access-types: [ipoe]
             aaa-policy: default-policy
             cgnat:
               policy: residential
@@ -92,11 +94,9 @@ interfaces:
     eth1:
         description: Access Interface
         enabled: true
-        bng_mode: access
     eth2:
         description: Core Link
         enabled: true
-        bng_mode: core
         address:
             ipv4:
                 - 10.0.0.1/30

@@ -33,7 +33,7 @@ service-groups:
 subscriber-groups:
   groups:
     customer-a-ipoe:
-      access-type: ipoe
+      access-types: [ipoe]
       vlan-tpid: dot1q
       ipv4-profile: default
       default-service-group: customer-a
@@ -41,6 +41,7 @@ subscriber-groups:
         - svlan: "200-299"
           cvlan: any
           interface: loop101
+          parent-interface: interfaces
       aaa-policy: default-policy
 
 interfaces:
@@ -49,7 +50,7 @@ interfaces:
   loop101:
     address: {ipv4: [192.168.123.1/32]}
     vrf: CUSTOMER-A
-  eth1: {bng_mode: access}
+  eth1: {}
   eth2:
     description: Core Link (p1)
     address: {ipv4: [10.0.0.1/30]}

@@ -1,8 +1,8 @@
 # IPoE + PPPoE BNG
 
-A combined QinQ deployment serving both IPoE and PPPoE subscribers on the same BNG. Each access type uses a different S-VLAN range and AAA policy, but shares the same address pools and routing infrastructure.
+A combined QinQ deployment serving IPoE and PPPoE subscribers concurrently on the **same** S-VLAN range. The control plane demultiplexes by ethertype (0x0800/0x86dd for IPoE/DHCP, 0x8863/0x8864 for PPPoE) and routes each session to the IPoE or PPPoE state machine. Migration between protocols on the same QinQ tuple `(S-VLAN, C-VLAN, MAC)` is mediated by a cross-protocol exclusivity registry: the second protocol to bind a tuple evicts the first (last-wins).
 
-This is the most common deployment model for ISPs migrating from PPPoE to IPoE — existing PPPoE subscribers continue to work while new deployments use IPoE. Both access types arrive on the same physical interface, differentiated by S-VLAN range.
+This is the most common deployment model for ISPs migrating from PPPoE to IPoE — existing PPPoE subscribers continue to work while new deployments use IPoE, with no renumbering required. Both access types arrive on the same physical interface and the same S-VLAN range.
 
 ## Configuration
 
@@ -18,28 +18,20 @@ routing-policies:
 
 subscriber-groups:
   groups:
-    ipoe-residential:
-      access-type: ipoe
+    residential:
+      access-types: [ipoe, pppoe]
       ipv4-profile: residential-v4
       ipv6-profile: residential-v6
       vlans:
-        - svlan: "100-199"
+        - svlan: "100-299"
           cvlan: any
           interface: loop100
+          parent-interface: eth1
       bgp:
         enabled: true
         advertise-pools: true
         network-route-policy: POOL-EXPORT
-      aaa-policy: ipoe-policy
-    pppoe-residential:
-      access-type: pppoe
-      ipv4-profile: residential-v4
-      ipv6-profile: residential-v6
-      vlans:
-        - svlan: "200-299"
-          cvlan: any
-          interface: loop100
-      aaa-policy: pppoe-policy
+      aaa-policy: residential-policy
 
 ipv4-profiles:
   residential-v4:
@@ -98,7 +90,6 @@ interfaces:
   eth1:
     description: Access Interface
     enabled: true
-    bng_mode: access
   eth2:
     description: Core Uplink
     enabled: true
@@ -152,10 +143,7 @@ aaa:
   auth_provider: local
   nas_identifier: osvbng
   policy:
-    - name: ipoe-policy
-      format: $remote-id$
-      max_concurrent_sessions: 1
-    - name: pppoe-policy
+    - name: residential-policy
       type: ppp
       format: $agent-remote-id$
       authenticate: true
@@ -177,8 +165,8 @@ logging:
 
 ## Key Points
 
-- **Shared address pools** — both IPoE and PPPoE subscribers draw from the same `residential-v4` and `residential-v6` profiles
-- **Separate QinQ VLAN ranges** — IPoE on S-VLAN 100-199, PPPoE on S-VLAN 200-299
-- **Separate AAA policies** — IPoE uses `$remote-id$` for identification, PPPoE uses `$agent-remote-id$` with `authenticate: true` to validate CHAP/PAP credentials
-- **Single access interface** — both access types share `eth1` with `bng_mode: access`. osvbng demultiplexes by protocol (DHCP discovery vs PPPoE discovery) and VLAN
-- **BGP pool advertisement** is only on the IPoE group in this example — enable it on both if PPPoE subscribers also need their pools advertised to the core
+- **Shared SVLAN range** — `100-299` covers both IPoE and PPPoE subscribers; no renumbering required for migration
+- **Shared address pools** — both protocols draw from the same `residential-v4` and `residential-v6` profiles
+- **Single AAA policy** — `residential-policy` applies to both protocols; per-event `Access-Type` (IPoE vs PPPoE) is set automatically and visible to the policy
+- **Single access interface** — both access types share `eth1`, named via `vlans[].parent-interface: eth1`. osvbng demultiplexes by ethertype (0x0800/0x86dd for IPoE/DHCP, 0x8863/0x8864 for PPPoE) and VLAN
+- **Cross-protocol exclusivity** — same `(S-VLAN, C-VLAN, MAC)` tuple cannot have both an IPoE and PPPoE session at once. Last-wins: the protocol that binds the tuple second evicts the first. CPEs migrating between protocols on the same QinQ identity get clean tear-down of the old session.
