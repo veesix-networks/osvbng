@@ -53,6 +53,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/northbound"
 	"github.com/veesix-networks/osvbng/pkg/opdb/sqlite"
 	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
+	"github.com/veesix-networks/osvbng/pkg/session"
 	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/telemetry"
 	"github.com/veesix-networks/osvbng/pkg/version"
@@ -234,6 +235,8 @@ func main() {
 	defer opdbStore.Close()
 	mainLog.Info("OpDB initialized", "path", "/var/lib/osvbng/opdb.db")
 
+	exclusivityRegistry := session.NewRegistry()
+
 	coreDeps := component.Dependencies{
 		EventBus:         eventBus,
 		Cache:            cache,
@@ -243,6 +246,7 @@ func main() {
 		ConfigManager:    configd,
 		OpDB:             opdbStore,
 		CPPM:             cppmManager,
+		Exclusivity:      exclusivityRegistry,
 	}
 
 	dataplaneComp, err := dataplane.New(coreDeps)

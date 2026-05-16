@@ -7,6 +7,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/opdb"
+	"github.com/veesix-networks/osvbng/pkg/session"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
@@ -18,18 +19,19 @@ type ConfigManager interface {
 }
 
 type Dependencies struct {
-	EventBus      events.Bus
-	Cache         cache.Cache
-	Southbound    southbound.Southbound
+	EventBus         events.Bus
+	Cache            cache.Cache
+	Southbound       southbound.Southbound
 	VRFManager       *vrfmgr.Manager
 	SvcGroupResolver *svcgroup.Resolver
-	ConfigManager ConfigManager
-	OpDB          opdb.Store
-	CPPM          *cppm.Manager
+	ConfigManager    ConfigManager
+	OpDB             opdb.Store
+	CPPM             *cppm.Manager
+	Exclusivity      session.ExclusivityRegistry
 
-	DHCPChan    <-chan *dataplane.ParsedPacket
-	DHCPv6Chan  <-chan *dataplane.ParsedPacket
-	ARPChan     <-chan *dataplane.ParsedPacket
-	PPPChan     <-chan *dataplane.ParsedPacket
-	IPv6NDChan  <-chan *dataplane.ParsedPacket
+	DHCPChan   <-chan *dataplane.ParsedPacket
+	DHCPv6Chan <-chan *dataplane.ParsedPacket
+	ARPChan    <-chan *dataplane.ParsedPacket
+	PPPChan    <-chan *dataplane.ParsedPacket
+	IPv6NDChan <-chan *dataplane.ParsedPacket
 }

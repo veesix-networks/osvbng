@@ -18,7 +18,7 @@ func boolPtr(b bool) *bool    { return &b }
 func cfgWithAccessIface(name string, mtu int) *Config {
 	return &Config{
 		Interfaces: map[string]*interfaces.InterfaceConfig{
-			name: {Name: name, BNGMode: "access", MTU: mtu, Enabled: true},
+			name: {Name: name, MTU: mtu, Enabled: true},
 		},
 		SubscriberGroups: &subscriber.SubscriberGroupsConfig{
 			Groups: map[string]*subscriber.SubscriberGroup{},
@@ -35,9 +35,9 @@ func TestValidateMSSClampParentMTU_NoSubscriberGroups(t *testing.T) {
 func TestValidateMSSClampParentMTU_PPPoEDot1QBabyGiantsPasses(t *testing.T) {
 	cfg := cfgWithAccessIface("eth1", 1512)
 	cfg.SubscriberGroups.Groups["g1"] = &subscriber.SubscriberGroup{
-		AccessType: "pppoe",
+		AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE},
 		VLANs: []subscriber.VLANRange{
-			{SVLAN: "100", CVLAN: "any", Interface: "loop100"},
+			{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1"},
 		},
 		PPPoE: &subscriber.PPPoEConfig{MRU: u16Ptr(1500)},
 	}
@@ -50,9 +50,9 @@ func TestValidateMSSClampParentMTU_PPPoEDot1QBabyGiantsPasses(t *testing.T) {
 func TestValidateMSSClampParentMTU_PPPoEDot1QBabyGiantsFailsParentTooSmall(t *testing.T) {
 	cfg := cfgWithAccessIface("eth1", 1500)
 	cfg.SubscriberGroups.Groups["g1"] = &subscriber.SubscriberGroup{
-		AccessType: "pppoe",
+		AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE},
 		VLANs: []subscriber.VLANRange{
-			{SVLAN: "100", CVLAN: "any", Interface: "loop100"},
+			{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1"},
 		},
 		PPPoE: &subscriber.PPPoEConfig{MRU: u16Ptr(1500)},
 	}
@@ -71,9 +71,9 @@ func TestValidateMSSClampParentMTU_PPPoEDot1QBabyGiantsFailsParentTooSmall(t *te
 func TestValidateMSSClampParentMTU_PPPoEQinQBabyGiantsRequiresLargerParent(t *testing.T) {
 	cfg := cfgWithAccessIface("eth1", 1512)
 	cfg.SubscriberGroups.Groups["g1"] = &subscriber.SubscriberGroup{
-		AccessType: "pppoe",
+		AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE},
 		VLANs: []subscriber.VLANRange{
-			{SVLAN: "100", CVLAN: "200", Interface: "loop100"},
+			{SVLAN: "100", CVLAN: "200", Interface: "loop100", ParentInterface: "eth1"},
 		},
 		PPPoE: &subscriber.PPPoEConfig{MRU: u16Ptr(1500)},
 	}
@@ -95,25 +95,25 @@ func TestValidateMSSClampParentMTU_PPPoEQinQBabyGiantsRequiresLargerParent(t *te
 func TestValidateMSSClampParentMTU_BabyGiantsOnNonPPPoERejected(t *testing.T) {
 	cfg := cfgWithAccessIface("eth1", 1512)
 	cfg.SubscriberGroups.Groups["g1"] = &subscriber.SubscriberGroup{
-		AccessType: "ipoe",
+		AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE},
 		VLANs: []subscriber.VLANRange{
-			{SVLAN: "100", CVLAN: "any", Interface: "loop100"},
+			{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1"},
 		},
 		PPPoE: &subscriber.PPPoEConfig{MRU: u16Ptr(1500)},
 	}
 
 	err := ValidateMSSClampParentMTU(cfg)
-	if err == nil || !strings.Contains(err.Error(), "PPPoE") {
-		t.Fatalf("expected PPPoE-only error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "pppoe") {
+		t.Fatalf("expected pppoe-only error, got %v", err)
 	}
 }
 
 func TestValidateMSSClampParentMTU_AbsentBlockNoValidation(t *testing.T) {
 	cfg := cfgWithAccessIface("eth1", 1500)
 	cfg.SubscriberGroups.Groups["g1"] = &subscriber.SubscriberGroup{
-		AccessType: "pppoe",
+		AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE},
 		VLANs: []subscriber.VLANRange{
-			{SVLAN: "100", CVLAN: "any", Interface: "loop100"},
+			{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1"},
 		},
 	}
 
@@ -125,9 +125,9 @@ func TestValidateMSSClampParentMTU_AbsentBlockNoValidation(t *testing.T) {
 func TestValidateMSSClampParentMTU_MRU1492NoValidation(t *testing.T) {
 	cfg := cfgWithAccessIface("eth1", 1500)
 	cfg.SubscriberGroups.Groups["g1"] = &subscriber.SubscriberGroup{
-		AccessType: "pppoe",
+		AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE},
 		VLANs: []subscriber.VLANRange{
-			{SVLAN: "100", CVLAN: "any", Interface: "loop100"},
+			{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1"},
 		},
 		PPPoE: &subscriber.PPPoEConfig{MRU: u16Ptr(1492)},
 	}
@@ -140,9 +140,9 @@ func TestValidateMSSClampParentMTU_MRU1492NoValidation(t *testing.T) {
 func TestValidateMSSClampParentMTU_DefaultParentMTUAssumed1500(t *testing.T) {
 	cfg := cfgWithAccessIface("eth1", 0)
 	cfg.SubscriberGroups.Groups["g1"] = &subscriber.SubscriberGroup{
-		AccessType: "pppoe",
+		AccessTypes: []subscriber.AccessType{subscriber.AccessTypePPPoE},
 		VLANs: []subscriber.VLANRange{
-			{SVLAN: "100", CVLAN: "any", Interface: "loop100"},
+			{SVLAN: "100", CVLAN: "any", Interface: "loop100", ParentInterface: "eth1"},
 		},
 		PPPoE: &subscriber.PPPoEConfig{MRU: u16Ptr(1500)},
 	}

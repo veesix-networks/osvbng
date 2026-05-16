@@ -77,7 +77,7 @@ func (c *Config) NeedsAccessInterface() bool {
 		if g == nil {
 			continue
 		}
-		if g.AccessType != "" && g.AccessType != "lns" {
+		if g.HasAccessType(subscriber.AccessTypeIPoE) || g.HasAccessType(subscriber.AccessTypePPPoE) || g.HasAccessType(subscriber.AccessTypeLAC) {
 			return true
 		}
 	}
@@ -85,30 +85,38 @@ func (c *Config) NeedsAccessInterface() bool {
 }
 
 func (c *Config) GetAccessInterface() (string, error) {
-	var accessInterfaces []string
+	if c.SubscriberGroups == nil {
+		return "", fmt.Errorf("no subscriber-group with parent-interface configured")
+	}
 
-	for name, iface := range c.Interfaces {
-		if iface.BNGMode == "access" {
-			accessInterfaces = append(accessInterfaces, name)
+	seen := map[string]struct{}{}
+	for _, g := range c.SubscriberGroups.Groups {
+		if g == nil {
+			continue
+		}
+		if !g.HasAccessType(subscriber.AccessTypeIPoE) && !g.HasAccessType(subscriber.AccessTypePPPoE) && !g.HasAccessType(subscriber.AccessTypeLAC) {
+			continue
+		}
+		for _, vr := range g.VLANs {
+			if vr.ParentInterface != "" {
+				seen[vr.ParentInterface] = struct{}{}
+			}
 		}
 	}
 
-	if len(accessInterfaces) == 0 {
-		return "", fmt.Errorf("no interface configured with bng_mode: access")
-	}
-
-	if len(accessInterfaces) > 1 {
-		return "", fmt.Errorf("multiple interfaces configured with bng_mode: access (only 1 allowed): %v", accessInterfaces)
-	}
-
-	return accessInterfaces[0], nil
-}
-
-func (c *Config) GetCoreInterface() string {
-	for name, iface := range c.Interfaces {
-		if iface.BNGMode == "core" {
-			return name
+	switch len(seen) {
+	case 0:
+		return "", fmt.Errorf("no subscriber-group vlan-range with parent-interface configured")
+	case 1:
+		for name := range seen {
+			return name, nil
 		}
 	}
-	return ""
+
+	names := make([]string, 0, len(seen))
+	for n := range seen {
+		names = append(names, n)
+	}
+	return "", fmt.Errorf("multiple parent-interfaces configured across subscriber groups (only 1 allowed): %v", names)
 }
+
