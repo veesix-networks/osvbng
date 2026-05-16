@@ -1852,27 +1852,6 @@ func (c *Component) cleanupSessions() {
 				}
 
 				if c.vpp != nil && sess.IPoESwIfIndex != 0 {
-					if sess.IPv6Address != nil {
-						c.vpp.IPoESetSessionIPv6Async(sess.IPoESwIfIndex, sess.IPv6Address, false, func(err error) {
-							if err != nil {
-								c.logger.Debug("Failed to unbind IPv6 from stale IPoE session", "session_id", sessID, "error", err)
-							}
-						})
-					}
-					if sess.IPv6Prefix != nil {
-						c.vpp.IPoESetDelegatedPrefixAsync(sess.IPoESwIfIndex, *sess.IPv6Prefix, net.ParseIP("::"), false, func(err error) {
-							if err != nil {
-								c.logger.Debug("Failed to unbind PD from stale IPoE session", "session_id", sessID, "error", err)
-							}
-						})
-					}
-					if sess.IPv4 != nil {
-						c.vpp.IPoESetSessionIPv4Async(sess.IPoESwIfIndex, sess.IPv4, false, func(err error) {
-							if err != nil {
-								c.logger.Warn("Failed to unbind IPv4 from stale IPoE session", "session_id", sessID, "error", err)
-							}
-						})
-					}
 					c.vpp.DeleteIPoESessionAsync(sess.MAC, sess.EncapIfIndex, sess.InnerVLAN, func(err error) {
 						if err != nil {
 							c.logger.Warn("Failed to delete stale IPoE session", "session_id", sessID, "error", err)
