@@ -28,6 +28,7 @@ type Interfaces interface {
 
 	SetUnnumbered(ifaceName, loopbackName string) error
 	SetUnnumberedAsync(swIfIndex uint32, loopbackName string, callback func(error))
+	UnsetUnnumberedAsync(swIfIndex uint32, loopbackName string, callback func(error))
 
 	DumpInterfaces() ([]InterfaceInfo, error)
 	DumpUnnumbered() ([]UnnumberedInfo, error)
