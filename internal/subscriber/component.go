@@ -473,7 +473,45 @@ func (c *Component) releaseSession(sess models.SubscriberSession) error {
 		c.logger.Warn("Failed to remove QoS", "error", err, "sw_if_index", swIfIndex)
 	}
 
+	if loopback := c.resolveSessionLoopback(sess); loopback != "" {
+		c.vpp.UnsetUnnumberedAsync(swIfIndex, loopback, func(err error) {
+			if err != nil {
+				c.logger.Debug("Failed to unset unnumbered on session interface",
+					"error", err, "sw_if_index", swIfIndex, "loopback", loopback)
+			}
+		})
+	}
+
 	return nil
+}
+
+// resolveSessionLoopback returns the loopback an unnumbered binding was
+// set against, or "" if the session never had one. PPPoE sessions get
+// their own /32 from the assigned client IP and are never unnumbered;
+// IPoE and L2TP-LNS sessions borrow from the service-group loopback (or
+// the VLAN range's gateway loopback as fallback for IPoE).
+func (c *Component) resolveSessionLoopback(sess models.SubscriberSession) string {
+	if sess.GetAccessType() == models.AccessTypePPPoE {
+		return ""
+	}
+
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil {
+		return ""
+	}
+
+	if sgName := sess.GetServiceGroup(); sgName != "" && cfg.ServiceGroups != nil {
+		if sg := cfg.ServiceGroups[sgName]; sg != nil && sg.Unnumbered != "" {
+			return sg.Unnumbered
+		}
+	}
+
+	if cfg.SubscriberGroups != nil {
+		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(sess.GetOuterVLAN()); group != nil {
+			return group.FindGatewayForSVLAN(sess.GetOuterVLAN())
+		}
+	}
+	return ""
 }
 
 func (c *Component) interfaceExists(name string) bool {
