@@ -302,10 +302,6 @@ func (s *SessionState) stopCHAPRetryTimer() {
 }
 
 func (s *SessionState) onAuthResult(allowed bool, attributes map[string]interface{}) {
-	if !s.component.fenceOwnership(s) {
-		s.component.logger.Debug("Auth result dropped: tuple owned by another protocol", "session_id", s.SessionID)
-		return
-	}
 	if allowed {
 		for k, v := range attributes {
 			if str, ok := v.(string); ok {
@@ -660,11 +656,6 @@ func (s *SessionState) checkOpen() {
 		"ipcp_open", s.ipcpOpen,
 		"ipv6cp_open", s.ipv6cpOpen)
 
-	if !s.component.fenceOwnership(s) {
-		s.component.logger.Debug("checkOpen dropped: tuple owned by another protocol", "session_id", s.SessionID)
-		return
-	}
-
 	if s.Phase == ppp.PhaseNetwork {
 		if s.ipcpOpen || s.ipv6cpOpen {
 			s.Phase = ppp.PhaseOpen
@@ -791,11 +782,6 @@ func (s *SessionState) snapshotForTeardown() sessionTeardownSnapshot {
 }
 
 func (s *SessionState) onVPPSessionCreated(swIfIndex uint32, err error) {
-	if !s.component.fenceOwnership(s) {
-		s.component.logger.Debug("AddPPPoESession callback dropped: tuple owned by another protocol", "session_id", s.SessionID)
-		return
-	}
-
 	s.mu.Lock()
 
 	if err != nil {
