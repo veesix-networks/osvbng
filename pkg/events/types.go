@@ -4,7 +4,10 @@
 
 package events
 
-import "github.com/veesix-networks/osvbng/pkg/models"
+import (
+	"github.com/veesix-networks/osvbng/pkg/models"
+	"github.com/veesix-networks/osvbng/pkg/session"
+)
 
 type SessionLifecycleEvent struct {
 	AccessType models.AccessType
@@ -79,6 +82,7 @@ type SubscriberTerminateEvent struct {
 	FramedIPv4    string
 	FramedIPv6    string
 	Reason        string
+	Key           *session.TupleKey
 }
 
 // L2TPLACDecisionEvent communicates the LAC bring-up outcome back to

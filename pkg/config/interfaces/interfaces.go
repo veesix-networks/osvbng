@@ -19,7 +19,6 @@ type InterfaceConfig struct {
 	Bond    *BondConfig `json:"bond,omitempty" yaml:"bond,omitempty"`
 	LCP     bool        `json:"-" yaml:"-"`
 	VRF     string      `json:"vrf,omitempty" yaml:"vrf,omitempty"`
-	BNGMode string      `json:"bng_mode,omitempty" yaml:"bng_mode,omitempty"`
 	CGNAT   string      `json:"cgnat,omitempty" yaml:"cgnat,omitempty"`
 
 	Subinterfaces SubinterfaceMap `json:"subinterfaces,omitempty" yaml:"subinterfaces,omitempty"`
@@ -42,11 +41,11 @@ type SubinterfaceConfig struct {
 	Description string         `json:"description,omitempty" yaml:"description,omitempty"`
 	Address     *AddressConfig `json:"address,omitempty" yaml:"address,omitempty"`
 	IPv6        *IPv6Config    `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`
-	ARP         *ARPConfig     `json:"arp,omitempty" yaml:"arp,omitempty"`
-	Unnumbered  string         `json:"unnumbered,omitempty" yaml:"unnumbered,omitempty"`
-	BNG         *BNGConfig     `json:"bng,omitempty" yaml:"bng,omitempty"`
-	MSSClamp    *MSSClampSpec  `json:"-" yaml:"-"`
-	Enabled     bool           `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	ARP              *ARPConfig    `json:"arp,omitempty" yaml:"arp,omitempty"`
+	Unnumbered       string        `json:"unnumbered,omitempty" yaml:"unnumbered,omitempty"`
+	SubscriberAccess bool          `json:"-" yaml:"-"`
+	MSSClamp         *MSSClampSpec `json:"-" yaml:"-"`
+	Enabled          bool          `json:"enabled,omitempty" yaml:"enabled,omitempty"`
 }
 
 type MSSClampSpec struct {
@@ -64,7 +63,7 @@ func (c *InterfaceConfig) NeedsLCP() bool {
 }
 
 func (c *SubinterfaceConfig) NeedsLCP() bool {
-	return c.BNG == nil
+	return !c.SubscriberAccess
 }
 
 type SubinterfaceMap map[string]*SubinterfaceConfig
@@ -86,20 +85,6 @@ func (m *SubinterfaceMap) UnmarshalYAML(unmarshal func(interface{}) error) error
 	}
 	*m = SubinterfaceMap(raw)
 	return nil
-}
-
-type BNGMode string
-
-const (
-	BNGModeIPoE   BNGMode = "ipoe"    // IPoE: DHCPv4, DHCPv6, ARP
-	BNGModeIPoEL3 BNGMode = "ipoe-l3" // IPoE L3: DHCP relay
-	BNGModePPPoE  BNGMode = "pppoe"   // PPPoE local termination
-	BNGModeLAC    BNGMode = "lac"     // PPPoE -> L2TP tunnel to LNS
-	BNGModeLNS    BNGMode = "lns"     // L2TP tunnel termination
-)
-
-type BNGConfig struct {
-	Mode BNGMode `json:"mode" yaml:"mode"`
 }
 
 type IPv6Config struct {

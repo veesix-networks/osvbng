@@ -28,8 +28,8 @@ func ValidateMSSClampParentMTU(cfg *Config) error {
 		}
 
 		if group.PPPoE != nil && group.PPPoE.IsBabyGiants() {
-			if group.AccessType != "pppoe" {
-				return fmt.Errorf("subscriber group %q: pppoe.mru only applies to PPPoE access (current access-type: %q)", name, group.AccessType)
+			if !group.HasAccessType(subscriber.AccessTypePPPoE) {
+				return fmt.Errorf("subscriber group %q: pppoe.mru only applies when access-types includes pppoe (current: %v)", name, group.AccessTypes)
 			}
 		}
 
@@ -65,17 +65,17 @@ func ValidateMSSClampParentMTU(cfg *Config) error {
 }
 
 func pppMRUValidationNeeded(group *subscriber.SubscriberGroup) bool {
-	return group.AccessType == "pppoe" && group.PPPoE != nil && group.PPPoE.IsBabyGiants()
+	return group.HasAccessType(subscriber.AccessTypePPPoE) && group.PPPoE != nil && group.PPPoE.IsBabyGiants()
 }
 
 func requiredParentMTU(group *subscriber.SubscriberGroup) uint16 {
 	mru := subscriber.DefaultPPPMRU
-	if group.AccessType == "pppoe" && group.PPPoE != nil {
+	if group.HasAccessType(subscriber.AccessTypePPPoE) && group.PPPoE != nil {
 		mru = group.PPPoE.GetMRU()
 	}
 
 	overhead := uint16(0)
-	if group.AccessType == "pppoe" {
+	if group.HasAccessType(subscriber.AccessTypePPPoE) {
 		overhead += pppoePPPHeader
 	}
 	overhead += vlanOverheadFor(group)

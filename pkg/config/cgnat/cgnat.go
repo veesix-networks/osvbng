@@ -7,9 +7,20 @@ package cgnat
 import "fmt"
 
 type Config struct {
-	Standalone bool             `json:"standalone,omitempty" yaml:"standalone,omitempty"`
-	Pools      map[string]*Pool `json:"pools,omitempty" yaml:"pools,omitempty"`
-	Logging    *LoggingConfig   `json:"logging,omitempty" yaml:"logging,omitempty"`
+	Standalone       bool             `json:"standalone,omitempty" yaml:"standalone,omitempty"`
+	OutsideInterface string           `json:"outside_interface,omitempty" yaml:"outside_interface,omitempty"`
+	Pools            map[string]*Pool `json:"pools,omitempty" yaml:"pools,omitempty"`
+	Logging          *LoggingConfig   `json:"logging,omitempty" yaml:"logging,omitempty"`
+}
+
+func (c *Config) Validate() error {
+	if c == nil {
+		return nil
+	}
+	if len(c.Pools) > 0 && c.OutsideInterface == "" {
+		return fmt.Errorf("cgnat: outside_interface is required when pools are configured")
+	}
+	return nil
 }
 
 type Pool struct {

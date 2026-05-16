@@ -31,7 +31,6 @@ const (
 	InterfaceSubinterfaceIPv6         Path = "interfaces.<*>.subinterfaces.<*>.ipv6"
 	InterfaceSubinterfaceARP          Path = "interfaces.<*>.subinterfaces.<*>.arp"
 	InterfaceSubinterfaceUnnumbered   Path = "interfaces.<*>.subinterfaces.<*>.unnumbered"
-	InterfaceSubinterfaceBNG          Path = "interfaces.<*>.subinterfaces.<*>.bng"
 	InterfaceSubinterfaceVRF          Path = "interfaces.<*>.subinterfaces.<*>.vrf"
 
 	InterfaceIPv6          Path = "interfaces.<*>.ipv6"
@@ -139,6 +138,9 @@ const (
 	InternalPuntDHCPv6      Path = "_internal.punt.<*>.dhcpv6"
 	InternalPuntPPPoE       Path = "_internal.punt.<*>.pppoe"
 	InternalPuntIPv6ND      Path = "_internal.punt.<*>.ipv6nd"
+	InternalPuntL2TP        Path = "_internal.punt.<*>.l2tp"
+	InternalAccessIPoEInput Path = "_internal.access.<*>.ipoe-input"
+	InternalAccessPromisc   Path = "_internal.access.<*>.promiscuous"
 	InternalIPv6Enabled     Path = "_internal.ipv6.<*>.enabled"
 	InternalIPv6RA          Path = "_internal.ipv6.<*>.ra"
 	InternalIPv6Multicast   Path = "_internal.ipv6.<*>.multicast"

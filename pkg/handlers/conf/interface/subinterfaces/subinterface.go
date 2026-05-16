@@ -49,7 +49,7 @@ func (h *SubinterfaceHandler) Validate(ctx context.Context, hctx *conf.HandlerCo
 		values, err := paths.InterfaceSubinterface.ExtractWildcards(hctx.Path, 2)
 		if err == nil && len(values) >= 1 {
 			parentName := values[0]
-			if parentCfg, exists := hctx.Config.Interfaces[parentName]; exists && parentCfg.BNGMode == "access" {
+			if accessIf, _ := hctx.Config.GetAccessInterface(); accessIf != "" && accessIf == parentName {
 				groupName := hctx.Config.SubscriberGroups.FindGroupNameBySVLAN(uint16(cfg.VLAN))
 				if groupName != "" {
 					return fmt.Errorf("sub-interface vlan %d conflicts with subscriber group %s", cfg.VLAN, groupName)
@@ -84,7 +84,7 @@ func (h *SubinterfaceHandler) Apply(ctx context.Context, hctx *conf.HandlerConte
 		ParentIface:  parentIf,
 		SubID:        uint16(subIfID),
 		OuterVLAN:    uint16(cfg.VLAN),
-		InnerVLANAny: cfg.BNG != nil,
+		InnerVLANAny: cfg.SubscriberAccess,
 		VLANTpid:     cfg.VLANTpid,
 	}
 
