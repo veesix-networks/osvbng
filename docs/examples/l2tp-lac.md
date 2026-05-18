@@ -30,12 +30,13 @@ osvbng never validates the subscriber's password.
 subscriber-groups:
   groups:
     pppoe-lac:
-      access-type: lac
+      access-types: [lac]
       vlan-tpid: dot1q
       vlans:
         - svlan: "200-210"
           cvlan: any
           interface: loop100
+          parent-interface: eth1
       aaa-policy: pppoe-policy
       l2tp:
         profile: L2TP_LAC_DEFAULT
@@ -78,7 +79,6 @@ interfaces:
   eth1:
     description: Subscriber-facing (PPPoE)
     enabled: true
-    bng_mode: access
   eth2:
     description: L2TP backbone (LNS reachability)
     enabled: true

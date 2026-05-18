@@ -6,9 +6,11 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/config"
+	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/frr"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
@@ -23,9 +25,10 @@ type ConfigManager struct {
 	frrConfig *frr.Config
 	logger    *logger.Logger
 
-	runningConfig  *config.Config
-	startupConfig  *config.Config
-	dataplaneState *DataplaneState
+	runningConfig    *config.Config
+	startupConfig    *config.Config
+	dataplaneState   *DataplaneState
+	mixedAccessSet   atomic.Value
 	sessions       map[conf.SessionID]*session
 	versions       []ConfigVersion
 	nextSessionID  uint64
@@ -334,6 +337,7 @@ func (cd *ConfigManager) Commit(id conf.SessionID) error {
 
 	cd.versions = append(cd.versions, version)
 	cd.runningConfig = sess.config
+	cd.refreshMixedAccessSet()
 
 	if !cd.disableVersions {
 		if err := cd.saveVersion(version); err != nil {
@@ -537,6 +541,7 @@ func (cd *ConfigManager) Rollback(toVersion int) error {
 	}
 
 	cd.runningConfig = cd.sessions[sessionID].config
+	cd.refreshMixedAccessSet()
 
 	diff := FormatChanges(sess.changes)
 	changes := make([]Change, 0)
@@ -632,6 +637,48 @@ func (cd *ConfigManager) GetRunning() (*config.Config, error) {
 	return cd.runningConfig, nil
 }
 
+// IsMixedAccessSVLAN returns true when the operator-supplied access-types
+// on the VLAN range matching svlan contains both ipoe and pppoe. Reads
+// are lock-free; the underlying map is recomputed and atomically swapped
+// on every Commit so runtime config changes propagate immediately.
+func (cd *ConfigManager) IsMixedAccessSVLAN(svlan uint16) bool {
+	v := cd.mixedAccessSet.Load()
+	if v == nil {
+		return false
+	}
+	m := v.(map[uint16]struct{})
+	_, ok := m[svlan]
+	return ok
+}
+
+// refreshMixedAccessSet recomputes the per-SVLAN mixed-access set from
+// the current runningConfig and atomically swaps it. Caller must hold
+// cd.mu (the writer lock).
+func (cd *ConfigManager) refreshMixedAccessSet() {
+	m := map[uint16]struct{}{}
+	cfg := cd.runningConfig
+	if cfg != nil && cfg.SubscriberGroups != nil {
+		for _, g := range cfg.SubscriberGroups.Groups {
+			if g == nil {
+				continue
+			}
+			for _, vr := range g.VLANs {
+				if !vr.HasAccessType(subscriber.AccessTypeIPoE) || !vr.HasAccessType(subscriber.AccessTypePPPoE) {
+					continue
+				}
+				svlans, err := vr.GetSVLANs()
+				if err != nil {
+					continue
+				}
+				for _, s := range svlans {
+					m[s] = struct{}{}
+				}
+			}
+		}
+	}
+	cd.mixedAccessSet.Store(m)
+}
+
 func (cd *ConfigManager) GetStartup() (*config.Config, error) {
 	cd.mu.RLock()
 	defer cd.mu.RUnlock()
@@ -644,6 +691,7 @@ func (cd *ConfigManager) ResetForRecovery() {
 	defer cd.mu.Unlock()
 
 	cd.runningConfig = &config.Config{}
+	cd.refreshMixedAccessSet()
 	if cd.dataplaneState != nil {
 		cd.dataplaneState.Reset()
 	} else {

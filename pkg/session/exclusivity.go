@@ -43,20 +43,38 @@ type ExclusivityRegistry interface {
 	Lookup(key TupleKey) *Owner
 }
 
-type Registry struct {
+const numShards = 16
+
+type shard struct {
 	mu    sync.RWMutex
 	owned map[TupleKey]Owner
 }
 
+type Registry struct {
+	shards [numShards]*shard
+}
+
 func NewRegistry() *Registry {
-	return &Registry{owned: make(map[TupleKey]Owner)}
+	r := &Registry{}
+	for i := range r.shards {
+		r.shards[i] = &shard{owned: make(map[TupleKey]Owner)}
+	}
+	return r
+}
+
+func (r *Registry) shardFor(k TupleKey) *shard {
+	h := uint32(k.SVLAN)<<16 | uint32(k.CVLAN)
+	h ^= uint32(k.MAC[0])<<24 | uint32(k.MAC[1])<<16 | uint32(k.MAC[2])<<8 | uint32(k.MAC[3])
+	h ^= uint32(k.MAC[4])<<8 | uint32(k.MAC[5])
+	return r.shards[h&(numShards-1)]
 }
 
 func (r *Registry) Claim(key TupleKey, owner Owner) *Owner {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	prev, exists := r.owned[key]
-	r.owned[key] = owner
+	s := r.shardFor(key)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	prev, exists := s.owned[key]
+	s.owned[key] = owner
 	if !exists {
 		return nil
 	}
@@ -67,22 +85,24 @@ func (r *Registry) Claim(key TupleKey, owner Owner) *Owner {
 }
 
 func (r *Registry) Release(key TupleKey, owner Owner) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	cur, exists := r.owned[key]
+	s := r.shardFor(key)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cur, exists := s.owned[key]
 	if !exists {
 		return
 	}
 	if cur.Protocol != owner.Protocol || cur.SessionID != owner.SessionID {
 		return
 	}
-	delete(r.owned, key)
+	delete(s.owned, key)
 }
 
 func (r *Registry) IsOwner(key TupleKey, owner Owner) bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	cur, exists := r.owned[key]
+	s := r.shardFor(key)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	cur, exists := s.owned[key]
 	if !exists {
 		return false
 	}
@@ -90,9 +110,10 @@ func (r *Registry) IsOwner(key TupleKey, owner Owner) bool {
 }
 
 func (r *Registry) Lookup(key TupleKey) *Owner {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	cur, exists := r.owned[key]
+	s := r.shardFor(key)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	cur, exists := s.owned[key]
 	if !exists {
 		return nil
 	}

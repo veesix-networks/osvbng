@@ -247,6 +247,7 @@ func main() {
 		OpDB:             opdbStore,
 		CPPM:             cppmManager,
 		Exclusivity:      exclusivityRegistry,
+		AccessResolver:   configd,
 	}
 
 	dataplaneComp, err := dataplane.New(coreDeps)

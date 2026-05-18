@@ -101,6 +101,23 @@ func (sg *SubscriberGroup) HasAccessType(t AccessType) bool {
 			return true
 		}
 	}
+	for _, vr := range sg.VLANs {
+		if vr.HasAccessType(t) {
+			return true
+		}
+	}
+	return false
+}
+
+func (v *VLANRange) HasAccessType(t AccessType) bool {
+	if v == nil {
+		return false
+	}
+	for _, a := range v.AccessTypes {
+		if a == t {
+			return true
+		}
+	}
 	return false
 }
 
@@ -174,10 +191,11 @@ func (sg *SubscriberGroup) GetPolicyName(svlan uint16) string {
 }
 
 type VLANRange struct {
-	SVLAN           string    `json:"svlan,omitempty" yaml:"svlan,omitempty"`
-	CVLAN           string    `json:"cvlan,omitempty" yaml:"cvlan,omitempty"`
-	Interface       string    `json:"interface,omitempty" yaml:"interface,omitempty"`
-	ParentInterface string    `json:"parent-interface,omitempty" yaml:"parent-interface,omitempty"`
+	SVLAN           string       `json:"svlan,omitempty" yaml:"svlan,omitempty"`
+	CVLAN           string       `json:"cvlan,omitempty" yaml:"cvlan,omitempty"`
+	Interface       string       `json:"interface,omitempty" yaml:"interface,omitempty"`
+	ParentInterface string       `json:"parent-interface,omitempty" yaml:"parent-interface,omitempty"`
+	AccessTypes     []AccessType `json:"access-types,omitempty" yaml:"access-types,omitempty"`
 	VRF             string    `json:"vrf,omitempty" yaml:"vrf,omitempty"`
 	IPv4            []string  `json:"ipv4,omitempty" yaml:"ipv4,omitempty"`
 	IPv6            []string  `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`

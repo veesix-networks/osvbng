@@ -45,7 +45,7 @@ func (h *SubinterfaceHandler) Validate(ctx context.Context, hctx *conf.HandlerCo
 		}
 	}
 
-	if hctx.Config != nil && hctx.Config.SubscriberGroups != nil {
+	if !cfg.SubscriberAccess && hctx.Config != nil && hctx.Config.SubscriberGroups != nil {
 		values, err := paths.InterfaceSubinterface.ExtractWildcards(hctx.Path, 2)
 		if err == nil && len(values) >= 1 {
 			parentName := values[0]

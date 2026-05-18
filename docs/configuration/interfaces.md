@@ -9,7 +9,6 @@ Network interface configuration. Each key in the `interfaces` map is an interfac
 | `enabled` | bool | Enable the interface | `true` |
 | `mtu` | int | MTU size | `9000` |
 | `lcp` | bool | Create Linux Control Plane interface | `true` |
-| `bng_mode` | string | BNG role: `access` or `core` | `access` |
 | `unnumbered` | string | Borrow address from named interface | `loop100` |
 | `bond` | [Bond](#bond) | Bond interface configuration (DPDK only) | |
 | `address` | [Address](#address) | IP address configuration | |
@@ -141,8 +140,6 @@ interfaces:
     name: eth1
     description: Access Interface
     enabled: true
-    bng_mode: access
-
   eth2:
     name: eth2
     description: Core Interface

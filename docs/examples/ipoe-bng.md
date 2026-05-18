@@ -19,13 +19,14 @@ routing-policies:
 subscriber-groups:
   groups:
     residential:
-      access-type: ipoe
+      access-types: [ipoe]
       ipv4-profile: residential-v4
       ipv6-profile: residential-v6
       vlans:
         - svlan: "100-199"
           cvlan: any
           interface: loop100
+          parent-interface: eth1
       bgp:
         enabled: true
         advertise-pools: true
@@ -89,7 +90,6 @@ interfaces:
   eth1:
     description: Access Interface
     enabled: true
-    bng_mode: access
   eth2:
     description: Core Uplink
     enabled: true
@@ -163,7 +163,7 @@ logging:
 
 ## Key Points
 
-- **Access interface** (`eth1`) is set to `bng_mode: access` — this is where subscriber-facing VLANs arrive
+- **Access interface** (`eth1`) is named by each subscriber group's `vlans[].parent-interface` — this is where subscriber-facing VLANs arrive
 - **Subscriber gateway** (`loop100`) is the unnumbered interface for subscriber sessions — its address is the default gateway
 - **QinQ VLAN matching** — `svlan: "100-199"` matches the outer S-VLAN range; `cvlan: any` accepts any inner C-VLAN
 - **BGP pool advertisement** (`advertise-pools: true`) automatically creates BGP `network` statements for the subscriber pools so the core network can route to subscribers. The optional `network-route-policy` controls how these prefixes are advertised (e.g. community tagging). If `advertise-pools` is disabled, you must manually configure the `network` statements under `protocols.bgp.ipv4-unicast.networks`

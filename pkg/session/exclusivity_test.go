@@ -114,6 +114,24 @@ func TestTupleIdentity_DistinctCVLANsDoNotCollide(t *testing.T) {
 	}
 }
 
+func BenchmarkRegistry_MixedConcurrent(b *testing.B) {
+	r := NewRegistry()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		var i uint16
+		for pb.Next() {
+			i++
+			k := MakeTupleKey(100+i%16, 1, mac("aa:bb:cc:00:00:01"))
+			owner := Owner{Protocol: ProtoIPoE, SessionID: "s", Key: k}
+			r.Claim(k, owner)
+			r.IsOwner(k, owner)
+			r.IsOwner(k, owner)
+			r.IsOwner(k, owner)
+			r.Release(k, owner)
+		}
+	})
+}
+
 func TestConcurrentClaimRelease_NoRaces(t *testing.T) {
 	r := NewRegistry()
 	const N = 64

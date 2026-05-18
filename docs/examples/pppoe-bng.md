@@ -10,13 +10,14 @@ Subscribers connect via PPPoE discovery on QinQ double-tagged access ports. Each
 subscriber-groups:
   groups:
     residential:
-      access-type: pppoe
+      access-types: [pppoe]
       ipv4-profile: residential-v4
       ipv6-profile: residential-v6
       vlans:
         - svlan: "200-299"
           cvlan: any
           interface: loop100
+          parent-interface: eth1
       aaa-policy: pppoe-policy
 
 ipv4-profiles:
@@ -76,7 +77,6 @@ interfaces:
   eth1:
     description: Access Interface
     enabled: true
-    bng_mode: access
   eth2:
     description: Core Uplink
     enabled: true
@@ -152,7 +152,7 @@ logging:
 
 ## Key Differences from IPoE
 
-- **`access-type: pppoe`** — subscribers establish PPPoE sessions instead of raw DHCP
+- **`access-types: [pppoe]`** — subscribers establish PPPoE sessions instead of raw DHCP
 - **AAA policy `type: ppp`** — identifies this as a PPP-based session
 - **`authenticate: true`** — every PPPoE session must pass authentication before IP assignment
 - **`format: $agent-remote-id$`** — subscriber identity is derived from the agent remote ID, a value inserted by the access network provider

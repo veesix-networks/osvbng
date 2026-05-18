@@ -7,6 +7,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
 	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/operations"
+	pkgpaths "github.com/veesix-networks/osvbng/pkg/paths"
 )
 
 type Change struct {
@@ -86,7 +87,7 @@ func (a *Autoconfig) deriveSVLANConfig(group *subscriber.SubscriberGroup, vlanRa
 			Enabled:          true,
 			Unnumbered:       loopback,
 			SubscriberAccess: true,
-			MSSClamp:         a.deriveMSSClamp(group),
+			MSSClamp:         a.deriveMSSClamp(group, vlanRange),
 		},
 	})
 
@@ -131,32 +132,33 @@ func (a *Autoconfig) deriveSVLANConfig(group *subscriber.SubscriberGroup, vlanRa
 		Value: loopback,
 	})
 
-	subIf := fmt.Sprintf("%s.%d", a.parentInterface, svlan)
-	if group.HasAccessType(subscriber.AccessTypeIPoE) {
+	subIfEncoded := pkgpaths.EncodeInterfaceName(fmt.Sprintf("%s.%d", a.parentInterface, svlan))
+	parentEncoded := pkgpaths.EncodeInterfaceName(a.parentInterface)
+	if vlanRange.HasAccessType(subscriber.AccessTypeIPoE) {
 		for _, proto := range []string{"dhcpv4", "dhcpv6", "arp", "ipv6nd"} {
 			changes = append(changes, Change{
-				Path:  fmt.Sprintf("_internal.punt.%s.%s", subIf, proto),
+				Path:  fmt.Sprintf("_internal.punt.%s.%s", subIfEncoded, proto),
 				Value: &operations.PuntConfig{Enabled: true},
 			})
 		}
 		changes = append(changes, Change{
-			Path:  fmt.Sprintf("_internal.access.%s.ipoe-input", subIf),
+			Path:  fmt.Sprintf("_internal.access.%s.ipoe-input", subIfEncoded),
 			Value: &operations.AccessConfig{Enabled: true},
 		})
 	}
-	if group.HasAccessType(subscriber.AccessTypePPPoE) || group.HasAccessType(subscriber.AccessTypeLAC) {
+	if vlanRange.HasAccessType(subscriber.AccessTypePPPoE) || vlanRange.HasAccessType(subscriber.AccessTypeLAC) {
 		changes = append(changes, Change{
-			Path:  fmt.Sprintf("_internal.punt.%s.pppoe", subIf),
+			Path:  fmt.Sprintf("_internal.punt.%s.pppoe", subIfEncoded),
 			Value: &operations.PuntConfig{Enabled: true},
 		})
 		changes = append(changes, Change{
-			Path:  fmt.Sprintf("_internal.access.%s.promiscuous", a.parentInterface),
+			Path:  fmt.Sprintf("_internal.access.%s.promiscuous", parentEncoded),
 			Value: &operations.AccessConfig{Enabled: true},
 		})
 	}
-	if group.HasAccessType(subscriber.AccessTypeLNS) {
+	if vlanRange.HasAccessType(subscriber.AccessTypeLNS) {
 		changes = append(changes, Change{
-			Path:  fmt.Sprintf("_internal.punt.%s.l2tp", subIf),
+			Path:  fmt.Sprintf("_internal.punt.%s.l2tp", subIfEncoded),
 			Value: &operations.PuntConfig{Enabled: true},
 		})
 	}
@@ -228,8 +230,8 @@ func (a *Autoconfig) getRAConfig(group *subscriber.SubscriberGroup) raConfig {
 // termination while the actual subscriber CPE on the far side is still 1500-
 // or-less. Operators on non-standard subscriber paths must declare
 // subscriber-path-mtu explicitly per group.
-func (a *Autoconfig) deriveMSSClamp(group *subscriber.SubscriberGroup) *interfaces.MSSClampSpec {
-	if len(group.AccessTypes) == 1 && group.HasAccessType(subscriber.AccessTypePPPoE) {
+func (a *Autoconfig) deriveMSSClamp(group *subscriber.SubscriberGroup, vlanRange subscriber.VLANRange) *interfaces.MSSClampSpec {
+	if len(vlanRange.AccessTypes) == 1 && vlanRange.HasAccessType(subscriber.AccessTypePPPoE) {
 		return nil
 	}
 	if !group.MSSClamp.IsEnabled() {

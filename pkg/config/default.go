@@ -50,13 +50,13 @@ func Generate(opts GenerateOptions) (string, error) {
 		SubscriberGroups: &subscriber.SubscriberGroupsConfig{
 			Groups: map[string]*subscriber.SubscriberGroup{
 				"default": {
-					AccessTypes: []subscriber.AccessType{subscriber.AccessTypeIPoE},
 					VLANs: []subscriber.VLANRange{
 						{
 							SVLAN:           "100",
 							CVLAN:           "any",
 							Interface:       "loop100",
 							ParentInterface: accessInterface,
+							AccessTypes:     []subscriber.AccessType{subscriber.AccessTypeIPoE},
 						},
 					},
 					IPv4Profile:   "default",
