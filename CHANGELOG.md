@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.11.0](https://github.com/veesix-networks/osvbng/compare/v0.10.0...v0.11.0) (2026-05-16)
+
+
+### Features
+
+* **api:** paginate list-returning northbound show endpoints ([#292](https://github.com/veesix-networks/osvbng/issues/292)) ([082fa32](https://github.com/veesix-networks/osvbng/commit/082fa32d3a21cc567d6912b2b9c0b00096f0d6e5))
+* **dev:** one-shot QEMU/KVM development environment ([#251](https://github.com/veesix-networks/osvbng/issues/251)) ([3a90cf8](https://github.com/veesix-networks/osvbng/commit/3a90cf831c5fab18f3e07c6e3a6d8399cfbc9de7))
+* **dhcp:** support RFC 6221 LDRA termination in local DHCPv6 provider ([#288](https://github.com/veesix-networks/osvbng/issues/288)) ([110e55e](https://github.com/veesix-networks/osvbng/commit/110e55e487066cd4197fc3c4ca9c9b7c8264f5e2))
+* **dhcp:** VRF support for DHCP relay/proxy ([#296](https://github.com/veesix-networks/osvbng/issues/296)) ([1d6cade](https://github.com/veesix-networks/osvbng/commit/1d6cade928061cb1c4b387c830b51a1749df4710))
+* **ha:** per-component VRF binding for HA peer-sync + gateway via pkg/netbind ([#295](https://github.com/veesix-networks/osvbng/issues/295)) ([def589c](https://github.com/veesix-networks/osvbng/commit/def589caec1d23aa5aca31d599d41bce31fff35d))
+* **l2tp:** L2TPv2 LAC and LNS (RFC 2661) ([#305](https://github.com/veesix-networks/osvbng/issues/305)) ([5346ccf](https://github.com/veesix-networks/osvbng/commit/5346ccf02942f19b0b4be0d8db4a6e663662ea40))
+* **monitoring:** introduce typed telemetry SDK and migrated VPP exporter ([#299](https://github.com/veesix-networks/osvbng/issues/299)) ([1a1d7c6](https://github.com/veesix-networks/osvbng/commit/1a1d7c636426bc2262c5d9c28f90db384d30791e))
+* **monitoring:** migrate state.RegisterMetric callers to telemetry.RegisterMetric[T] ([ba5a5d0](https://github.com/veesix-networks/osvbng/commit/ba5a5d0ec4b38388aeff60b3b84997571449ff03))
+* **monitoring:** retire legacy state.RegisterMetric + typed FRR surfaces ([#304](https://github.com/veesix-networks/osvbng/issues/304)) ([05b8f95](https://github.com/veesix-networks/osvbng/commit/05b8f95025daae673cb7c04737d16e111fb8b39e))
+* **monitoring:** show-driven metric registration ([#300](https://github.com/veesix-networks/osvbng/issues/300)) ([6410e82](https://github.com/veesix-networks/osvbng/commit/6410e82615921700c9d9e6db288f861ef7052bc9))
+* **monitoring:** typed FRR JSON surfaces for BGP and LDP ([eee7f97](https://github.com/veesix-networks/osvbng/commit/eee7f9794432901e44e6237f644d74591667b90d))
+* **monitoring:** unify RegisterMetric across show handler return shapes ([#302](https://github.com/veesix-networks/osvbng/issues/302)) ([a8548cf](https://github.com/veesix-networks/osvbng/commit/a8548cf0595192bd3a227bb40d48c9955f3dc7d4))
+* **netbind:** plugin listener + HTTP client VRF binding with TLS ([#293](https://github.com/veesix-networks/osvbng/issues/293)) ([44cc084](https://github.com/veesix-networks/osvbng/commit/44cc08448ffd7469f1d41c7707848679528ce4ab))
+* **plugin:** add community cgnat-http-exporter plugin ([#284](https://github.com/veesix-networks/osvbng/issues/284)) ([82a8a0d](https://github.com/veesix-networks/osvbng/commit/82a8a0d6df520ce5ce1b557bbf9dd7c49f6ffbcc))
+* **radius:** per-server VRF + source IP for auth/acct/CoA via netbind ([1f3424d](https://github.com/veesix-networks/osvbng/commit/1f3424d5860a8e310ee49024b59d881106c354e9))
+* **radius:** per-server VRF + source IP for auth/acct/CoA via pkg/netbind ([#294](https://github.com/veesix-networks/osvbng/issues/294)) ([24265a9](https://github.com/veesix-networks/osvbng/commit/24265a99304b32c775091caf8d1c9668d1a9f6d2))
+* **subscriber:** mixed IPoE+PPPoE on shared S-VLAN range ([#306](https://github.com/veesix-networks/osvbng/issues/306)) ([e4ed0ad](https://github.com/veesix-networks/osvbng/commit/e4ed0ad4fc683b6cfd0988737b7b93ad1ca85f99))
+* **subscriber:** unset unnumbered on session release ([#307](https://github.com/veesix-networks/osvbng/issues/307)) ([798a264](https://github.com/veesix-networks/osvbng/commit/798a264f4affe4bdc438468de718b7765fd4aeff))
+* **vrf:** subscriber VRF cascade + VRF-lite / L3VPN integration suites ([#289](https://github.com/veesix-networks/osvbng/issues/289)) ([05b5dda](https://github.com/veesix-networks/osvbng/commit/05b5ddaa105443dadcba89bd35f06d9c9d437289))
+
+
+### Bug Fixes
+
+* **monitoring:** drop hostname label from BGP neighbor/VPN peer ([918af4b](https://github.com/veesix-networks/osvbng/commit/918af4baaf4ec03c2cb9ae42141d7513b2f9c0b8))
+* **netbind:** pick LocalAddr family by dial network for UDP source pinning ([c8ad5e4](https://github.com/veesix-networks/osvbng/commit/c8ad5e44ef6975a09fb1159cac3706743f211c55))
+* **southbound:** BNG parent promisc when Linux link missing ([#301](https://github.com/veesix-networks/osvbng/issues/301)) ([fa947d6](https://github.com/veesix-networks/osvbng/commit/fa947d6dfedc2fe5c59d28d5ae33623d38e1d88e))
+
 ## [0.10.0](https://github.com/veesix-networks/osvbng/compare/v0.9.0...v0.10.0) (2026-04-13)
 
 
