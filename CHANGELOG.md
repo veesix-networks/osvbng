@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.11.0](https://github.com/veesix-networks/osvbng/compare/v0.10.0...v0.11.0) (2026-05-16)
+## [0.11.0](https://github.com/veesix-networks/osvbng/compare/v0.10.0...v0.11.0) (2026-05-18)
 
 
 ### Features
