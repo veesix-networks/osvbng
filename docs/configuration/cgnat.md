@@ -106,7 +106,7 @@ Assign a CGNAT pool to all subscribers in a group:
 subscriber-groups:
   groups:
     default:
-      access-type: ipoe
+      access-types: [ipoe]
       ipv4-profile: shared-pool
       vlans:
         - svlan: "100-110"
@@ -196,7 +196,7 @@ cgnat:
 subscriber-groups:
   groups:
     default:
-      access-type: ipoe
+      access-types: [ipoe]
       ipv4-profile: shared-pool
       vlans:
         - svlan: "100-110"

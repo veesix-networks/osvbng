@@ -52,6 +52,7 @@ type Component struct {
 	srgMgr           ha.SRGProvider
 	ifMgr            *ifmgr.Manager
 	cfgMgr           component.ConfigManager
+	accessResolver   subscriber.AccessResolver
 	vpp              southbound.Southbound
 	vrfMgr           *vrfmgr.Manager
 	svcGroupResolver *svcgroup.Resolver
@@ -158,6 +159,8 @@ type SessionState struct {
 	allocatedPool     string
 	allocatedIANAPool string
 
+	MixedAccess bool
+
 	// l2tpBinding is set when this PPPoE session has been handed off to
 	// LAC mode and the L2TPv2 tunnel/session IDs are known. Non-nil
 	// only while Phase == PhaseLACTunneled. Surfaced through the
@@ -183,6 +186,7 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 		srgMgr:           srgMgr,
 		ifMgr:            ifMgr,
 		cfgMgr:           deps.ConfigManager,
+		accessResolver:   deps.AccessResolver,
 		vpp:              deps.Southbound,
 		vrfMgr:           deps.VRFManager,
 		svcGroupResolver: deps.SvcGroupResolver,
@@ -240,7 +244,7 @@ func (c *Component) addToIndexes(sess *SessionState) {
 	if sess.IPv6Address != nil {
 		c.ipv6Index[sess.IPv6Address.String()] = sess
 	}
-	if c.exclusivity != nil {
+	if c.exclusivity != nil && sess.MixedAccess {
 		tk := session.MakeTupleKey(sess.OuterVLAN, sess.InnerVLAN, sess.MAC)
 		owner := session.Owner{Protocol: session.ProtoPPPoE, SessionID: sess.SessionID, Key: tk}
 		if prev := c.exclusivity.Claim(tk, owner); prev != nil && prev.Protocol != session.ProtoPPPoE {
@@ -266,29 +270,18 @@ func (c *Component) removeFromIndexes(sess *SessionState) {
 	if sess.IPv6Address != nil {
 		delete(c.ipv6Index, sess.IPv6Address.String())
 	}
-	if c.exclusivity != nil {
+	if c.exclusivity != nil && sess.MixedAccess {
 		tk := session.MakeTupleKey(sess.OuterVLAN, sess.InnerVLAN, sess.MAC)
 		owner := session.Owner{Protocol: session.ProtoPPPoE, SessionID: sess.SessionID, Key: tk}
 		c.exclusivity.Release(tk, owner)
 	}
 }
 
-func (c *Component) isOwner(sess *SessionState) bool {
-	if c.exclusivity == nil {
-		return true
+func (c *Component) isMixedAccessSVLAN(svlan uint16) bool {
+	if c.accessResolver == nil {
+		return false
 	}
-	tk := session.MakeTupleKey(sess.OuterVLAN, sess.InnerVLAN, sess.MAC)
-	return c.exclusivity.IsOwner(tk, session.Owner{Protocol: session.ProtoPPPoE, SessionID: sess.SessionID, Key: tk})
-}
-
-func (c *Component) fenceOwnership(sess *SessionState) bool {
-	return c.isOwner(sess)
-}
-
-func (c *Component) sessionByID(sessID string) *SessionState {
-	c.sessionMu.RLock()
-	defer c.sessionMu.RUnlock()
-	return c.sessionIDIndex[sessID]
+	return c.accessResolver.IsMixedAccessSVLAN(svlan)
 }
 
 func (c *Component) evictPreviousOwner(prev *session.Owner, tk session.TupleKey) {
@@ -526,6 +519,7 @@ func (c *Component) handlePADR(pkt *dataplane.ParsedPacket) error {
 		SwIfIndex:      pkt.SwIfIndex,
 		EncapIfIndex:   pkt.SwIfIndex,
 		Phase:          ppp.PhaseDead,
+		MixedAccess:    c.isMixedAccessSVLAN(pkt.OuterVLAN),
 		ServiceName:    tags.ServiceName,
 		HostUniq:       tags.HostUniq,
 		AgentCircuitID: tags.AgentCircuitID,
@@ -993,10 +987,6 @@ func (c *Component) handleDeadPeer(sessionID uint16) {
 }
 
 func (c *Component) publishSessionLifecycle(payload models.SubscriberSession) error {
-	if sess := c.sessionByID(payload.GetSessionID()); sess != nil && !c.isOwner(sess) {
-		c.logger.Debug("Lifecycle publish suppressed: tuple owned by another protocol", "session_id", payload.GetSessionID())
-		return nil
-	}
 	c.eventBus.Publish(events.TopicSessionLifecycle, events.Event{
 		Source: c.Name(),
 		Data: &events.SessionLifecycleEvent{
@@ -1376,6 +1366,7 @@ func (c *Component) restoreFromHASync(srgName string) {
 			EncapIfIndex:   encapIfIndex,
 			SwIfIndex:      swIfIndex,
 			Phase:          ppp.PhaseOpen,
+			MixedAccess:    c.isMixedAccessSVLAN(outerVLAN),
 			IPv4Address:    ipv4,
 			IPv6Address:    ipv6,
 			Username:       cp.Username,

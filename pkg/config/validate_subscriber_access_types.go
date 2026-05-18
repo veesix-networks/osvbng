@@ -30,41 +30,37 @@ func ValidateSubscriberAccessTypes(cfg *Config) error {
 			continue
 		}
 
-		if len(group.AccessTypes) == 0 {
-			return fmt.Errorf("subscriber group %q: access-types is empty", name)
-		}
-
-		seen := map[subscriber.AccessType]struct{}{}
-		for _, a := range group.AccessTypes {
-			if _, ok := validAccessTypes[a]; !ok {
-				return fmt.Errorf("subscriber group %q: access-types entry %q is not one of ipoe, pppoe, lac, lns", name, a)
+		if len(group.AccessTypes) > 0 {
+			if len(group.AccessTypes) != 1 || group.AccessTypes[0] != subscriber.AccessTypeLNS {
+				return fmt.Errorf("subscriber group %q: group-level access-types is only valid for LNS-only groups (got %v); other protocols must declare access-types per vlan range", name, group.AccessTypes)
 			}
-			if _, dup := seen[a]; dup {
-				return fmt.Errorf("subscriber group %q: access-types contains duplicate %q", name, a)
+			if len(group.VLANs) > 0 {
+				return fmt.Errorf("subscriber group %q: LNS-only groups must not declare vlans (L2TP-terminated subscribers do not arrive via SVLAN demux)", name)
 			}
-			seen[a] = struct{}{}
+			continue
 		}
 
-		if err := validateAccessTypeCombination(name, group); err != nil {
-			return err
+		if len(group.VLANs) == 0 {
+			return fmt.Errorf("subscriber group %q: vlans is empty", name)
 		}
 
-		if !group.HasAccessType(subscriber.AccessTypeLNS) {
-			for i, vr := range group.VLANs {
+		for i, vr := range group.VLANs {
+			if err := validateVLANRangeAccessTypes(name, i, &vr); err != nil {
+				return err
+			}
+
+			needsParent := !vr.HasAccessType(subscriber.AccessTypeLNS)
+			if needsParent {
 				if vr.ParentInterface == "" {
-					return fmt.Errorf("subscriber group %q vlans[%d]: parent-interface is required when access-types is %v", name, i, group.AccessTypes)
+					return fmt.Errorf("subscriber group %q vlans[%d]: parent-interface is required when access-types is %v", name, i, vr.AccessTypes)
 				}
 				if _, ok := cfg.Interfaces[vr.ParentInterface]; !ok {
 					return fmt.Errorf("subscriber group %q vlans[%d]: parent-interface %q is not defined in interfaces", name, i, vr.ParentInterface)
 				}
 				parentInterfaces[vr.ParentInterface] = struct{}{}
-			}
-		} else {
-			for _, vr := range group.VLANs {
-				if vr.ParentInterface != "" {
-					if _, ok := cfg.Interfaces[vr.ParentInterface]; !ok {
-						return fmt.Errorf("subscriber group %q: parent-interface %q is not defined in interfaces", name, vr.ParentInterface)
-					}
+			} else if vr.ParentInterface != "" {
+				if _, ok := cfg.Interfaces[vr.ParentInterface]; !ok {
+					return fmt.Errorf("subscriber group %q vlans[%d]: parent-interface %q is not defined in interfaces", name, i, vr.ParentInterface)
 				}
 			}
 		}
@@ -76,26 +72,41 @@ func ValidateSubscriberAccessTypes(cfg *Config) error {
 			names = append(names, n)
 		}
 		sort.Strings(names)
-		return fmt.Errorf("subscriber groups reference multiple parent-interfaces %v: only one access interface is supported", names)
+		return fmt.Errorf("subscriber-groups reference multiple parent-interfaces %v: only one access interface is supported", names)
 	}
 
 	return nil
 }
 
-func validateAccessTypeCombination(name string, group *subscriber.SubscriberGroup) error {
-	hasIPoE := group.HasAccessType(subscriber.AccessTypeIPoE)
-	hasPPPoE := group.HasAccessType(subscriber.AccessTypePPPoE)
-	hasLAC := group.HasAccessType(subscriber.AccessTypeLAC)
-	hasLNS := group.HasAccessType(subscriber.AccessTypeLNS)
+func validateVLANRangeAccessTypes(groupName string, idx int, vr *subscriber.VLANRange) error {
+	if len(vr.AccessTypes) == 0 {
+		return fmt.Errorf("subscriber group %q vlans[%d]: access-types is empty", groupName, idx)
+	}
+
+	seen := map[subscriber.AccessType]struct{}{}
+	for _, a := range vr.AccessTypes {
+		if _, ok := validAccessTypes[a]; !ok {
+			return fmt.Errorf("subscriber group %q vlans[%d]: access-types entry %q is not one of ipoe, pppoe, lac, lns", groupName, idx, a)
+		}
+		if _, dup := seen[a]; dup {
+			return fmt.Errorf("subscriber group %q vlans[%d]: access-types contains duplicate %q", groupName, idx, a)
+		}
+		seen[a] = struct{}{}
+	}
+
+	hasIPoE := vr.HasAccessType(subscriber.AccessTypeIPoE)
+	hasPPPoE := vr.HasAccessType(subscriber.AccessTypePPPoE)
+	hasLAC := vr.HasAccessType(subscriber.AccessTypeLAC)
+	hasLNS := vr.HasAccessType(subscriber.AccessTypeLNS)
 
 	if hasLAC && (hasLNS || hasIPoE || hasPPPoE) {
-		return fmt.Errorf("subscriber group %q: lac is mutually exclusive with other access-types (got %v)", name, group.AccessTypes)
+		return fmt.Errorf("subscriber group %q vlans[%d]: lac is mutually exclusive with other access-types (got %v)", groupName, idx, vr.AccessTypes)
 	}
 	if hasLNS && (hasLAC || hasIPoE || hasPPPoE) {
-		return fmt.Errorf("subscriber group %q: lns is mutually exclusive with other access-types (got %v)", name, group.AccessTypes)
+		return fmt.Errorf("subscriber group %q vlans[%d]: lns is mutually exclusive with other access-types (got %v)", groupName, idx, vr.AccessTypes)
 	}
-	if len(group.AccessTypes) > 1 && (!hasIPoE || !hasPPPoE || hasLAC || hasLNS) {
-		return fmt.Errorf("subscriber group %q: the only valid multi-element access-types combination is [ipoe, pppoe] (got %v)", name, group.AccessTypes)
+	if len(vr.AccessTypes) > 1 && (!hasIPoE || !hasPPPoE || hasLAC || hasLNS) {
+		return fmt.Errorf("subscriber group %q vlans[%d]: the only valid multi-element access-types combination is [ipoe, pppoe] (got %v)", groupName, idx, vr.AccessTypes)
 	}
 	return nil
 }

@@ -38,7 +38,7 @@ Remote-Id (option 37) is not echoed. `RelayInfo.RemoteID` stores the post-enterp
 subscriber-groups:
   groups:
     access-only-isp:
-      access-type: ipoe
+      access-types: [ipoe]
       vlans:
         - svlan: 100
           interface: loop100

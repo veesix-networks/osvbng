@@ -91,9 +91,9 @@ Binds a subscriber group to an L2TP profile.
 |-------|------|-------------|
 | `profile` | string | Name of the `l2tp.profiles` entry. |
 
-For `access-type: lac` the AAA policy attached to the group maps the
+For `access-types: [lac]` the AAA policy attached to the group maps the
 subscriber to Tunnel-* attributes (local DB by `agent-remote-id` /
-username, or RADIUS Access-Accept). For `access-type: lns` the
+username, or RADIUS Access-Accept). For `access-types: [lns]` the
 subscriber-group's `default-service-group` selects the loopback used as
 unnumbered for per-session vnet interfaces (must point at a configured
 service group with an `unnumbered` field).
@@ -123,7 +123,7 @@ denylists failures per the profile's `denylist` block.
 subscriber-groups:
   groups:
     pppoe-lac:
-      access-type: lac
+      access-types: [lac]
       vlan-tpid: dot1q
       vlans:
         - svlan: "200-210"

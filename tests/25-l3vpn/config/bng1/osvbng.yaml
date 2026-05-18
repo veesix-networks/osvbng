@@ -22,19 +22,19 @@ service-groups:
 subscriber-groups:
   groups:
     default-ipoe:
-      access-type: ipoe
       vlan-tpid: dot1q
       ipv4-profile: default
       vlans:
         - svlan: "100-104"
           cvlan: any
           interface: loop100
+          parent-interface: eth1
+          access-types: [ipoe]
       bgp:
         enabled: true
         advertise-pools: true
       aaa-policy: default-policy
     custa-ipoe:
-      access-type: ipoe
       vlan-tpid: dot1q
       ipv4-profile: default
       vrf: CUSTOMER-A
@@ -43,21 +43,23 @@ subscriber-groups:
         - svlan: "200-204"
           cvlan: any
           interface: loop101
+          parent-interface: eth1
+          access-types: [ipoe]
       bgp:
         enabled: true
         advertise-pools: true
       aaa-policy: default-policy
     default-pppoe:
-      access-type: pppoe
       vlan-tpid: dot1q
       ipv4-profile: default
       vlans:
         - svlan: "110-114"
           cvlan: any
           interface: loop100
+          parent-interface: eth1
+          access-types: [pppoe]
       aaa-policy: default-policy
     custa-pppoe:
-      access-type: pppoe
       vlan-tpid: dot1q
       ipv4-profile: default
       vrf: CUSTOMER-A
@@ -66,6 +68,8 @@ subscriber-groups:
         - svlan: "210-214"
           cvlan: any
           interface: loop101
+          parent-interface: eth1
+          access-types: [pppoe]
       aaa-policy: default-policy
 
 ipv4-profiles:
@@ -111,7 +115,6 @@ interfaces:
   eth1:
     description: Access Interface
     enabled: true
-    bng_mode: access
   eth2:
     description: Core Link (p1)
     enabled: true

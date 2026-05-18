@@ -50,6 +50,7 @@ type Component struct {
 	srgMgr           ha.SRGProvider
 	ifMgr            *ifmgr.Manager
 	cfgMgr           component.ConfigManager
+	accessResolver   subscriber.AccessResolver
 	vpp              southbound.Southbound
 	vrfMgr           *vrfmgr.Manager
 	svcGroupResolver *svcgroup.Resolver
@@ -124,10 +125,18 @@ type SessionState struct {
 	AllocCtx     *allocator.Context
 	Closing      bool
 	AAAInFlight  bool
+	MixedAccess  bool
+}
+
+func (c *Component) isMixedAccessSVLAN(svlan uint16) bool {
+	if c.accessResolver == nil {
+		return false
+	}
+	return c.accessResolver.IsMixedAccessSVLAN(svlan)
 }
 
 func (c *Component) claimTuple(sess *SessionState) {
-	if c.exclusivity == nil {
+	if c.exclusivity == nil || !sess.MixedAccess {
 		return
 	}
 	tk := session.MakeTupleKey(sess.OuterVLAN, sess.InnerVLAN, sess.MAC)
@@ -146,30 +155,12 @@ func (c *Component) claimTuple(sess *SessionState) {
 }
 
 func (c *Component) releaseTuple(sess *SessionState) {
-	if c.exclusivity == nil {
+	if c.exclusivity == nil || !sess.MixedAccess {
 		return
 	}
 	tk := session.MakeTupleKey(sess.OuterVLAN, sess.InnerVLAN, sess.MAC)
 	owner := session.Owner{Protocol: session.ProtoIPoE, SessionID: sess.SessionID, Key: tk}
 	c.exclusivity.Release(tk, owner)
-}
-
-func (c *Component) isOwner(sess *SessionState) bool {
-	if c.exclusivity == nil {
-		return true
-	}
-	tk := session.MakeTupleKey(sess.OuterVLAN, sess.InnerVLAN, sess.MAC)
-	return c.exclusivity.IsOwner(tk, session.Owner{Protocol: session.ProtoIPoE, SessionID: sess.SessionID, Key: tk})
-}
-
-func (c *Component) fenceOwnership(sess *SessionState) bool {
-	if c.isOwner(sess) {
-		return true
-	}
-	sess.mu.Lock()
-	sess.Closing = true
-	sess.mu.Unlock()
-	return false
 }
 
 func (c *Component) addSessionToIndexes(sess *SessionState) {
@@ -479,6 +470,7 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 		vrfMgr:           deps.VRFManager,
 		svcGroupResolver: deps.SvcGroupResolver,
 		cfgMgr:           deps.ConfigManager,
+		accessResolver:   deps.AccessResolver,
 		vpp:              deps.Southbound,
 		cache:            deps.Cache,
 		opdb:             deps.OpDB,
@@ -700,6 +692,7 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 			InnerVLAN:     pkt.InnerVLAN,
 			EncapIfIndex:  pkt.SwIfIndex,
 			State:         "discovering",
+			MixedAccess:   c.isMixedAccessSVLAN(pkt.OuterVLAN),
 		}
 
 		c.sessionIndex.Store(sessID, newSess)
@@ -1316,11 +1309,6 @@ func (c *Component) handleServerResponse(pkt *dataplane.ParsedPacket) error {
 }
 
 func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) error {
-	if !c.fenceOwnership(sess) {
-		c.logger.WithGroup(logger.IPoEDHCP4).Debug("DHCP ACK dropped: tuple owned by another protocol", "session_id", sess.SessionID)
-		return nil
-	}
-
 	leaseTime := uint32(0)
 	if leaseOpt := getDHCPOption(pkt.DHCPv4.Options, 51); len(leaseOpt) == 4 {
 		leaseTime = binary.BigEndian.Uint32(leaseOpt)
@@ -1435,11 +1423,6 @@ func (c *Component) handleAAAResponse(event events.Event) {
 	}
 	sess := val.(*SessionState)
 
-	if !c.fenceOwnership(sess) {
-		c.logger.Debug("AAA response dropped: tuple owned by another protocol", "session_id", sessID)
-		return
-	}
-
 	sess.mu.Lock()
 	sess.AAAApproved = allowed
 	sess.AAAInFlight = false
@@ -1491,12 +1474,6 @@ func (c *Component) handleAAAResponse(event events.Event) {
 	)
 
 	resolved := c.resolveServiceGroup(svlan, data.Response.Attributes)
-
-	logArgs := []any{"session_id", sessID}
-	for _, attr := range resolved.LogAttrs() {
-		logArgs = append(logArgs, attr.Key, attr.Value.Any())
-	}
-	c.logger.Debug("Resolved service group", logArgs...)
 
 	var srgName string
 	if c.srgMgr != nil && subscriberGroup != "" {
@@ -1557,10 +1534,6 @@ func (c *Component) handleAAAResponse(event events.Event) {
 			}
 
 			c.vpp.AddIPoESessionAsync(mac, localMAC, encapIfIndex, svlan, cvlan, decapVrfID, func(swIfIndex uint32, err error) {
-				if !c.fenceOwnership(sess) {
-					c.logger.Debug("AddIPoESession callback dropped: tuple owned by another protocol", "session_id", sessID)
-					return
-				}
 				sess.mu.Lock()
 				if sess.IPoESessionCreated {
 					sess.mu.Unlock()
@@ -1879,27 +1852,6 @@ func (c *Component) cleanupSessions() {
 				}
 
 				if c.vpp != nil && sess.IPoESwIfIndex != 0 {
-					if sess.IPv6Address != nil {
-						c.vpp.IPoESetSessionIPv6Async(sess.IPoESwIfIndex, sess.IPv6Address, false, func(err error) {
-							if err != nil {
-								c.logger.Debug("Failed to unbind IPv6 from stale IPoE session", "session_id", sessID, "error", err)
-							}
-						})
-					}
-					if sess.IPv6Prefix != nil {
-						c.vpp.IPoESetDelegatedPrefixAsync(sess.IPoESwIfIndex, *sess.IPv6Prefix, net.ParseIP("::"), false, func(err error) {
-							if err != nil {
-								c.logger.Debug("Failed to unbind PD from stale IPoE session", "session_id", sessID, "error", err)
-							}
-						})
-					}
-					if sess.IPv4 != nil {
-						c.vpp.IPoESetSessionIPv4Async(sess.IPoESwIfIndex, sess.IPv4, false, func(err error) {
-							if err != nil {
-								c.logger.Warn("Failed to unbind IPv4 from stale IPoE session", "session_id", sessID, "error", err)
-							}
-						})
-					}
 					c.vpp.DeleteIPoESessionAsync(sess.MAC, sess.EncapIfIndex, sess.InnerVLAN, func(err error) {
 						if err != nil {
 							c.logger.Warn("Failed to delete stale IPoE session", "session_id", sessID, "error", err)
@@ -2724,11 +2676,6 @@ func (c *Component) forwardDHCPv6ToProvider(sess *SessionState, pkt *dataplane.P
 }
 
 func (c *Component) handleDHCPv6Reply(sess *SessionState, msg *dhcp6.Message) error {
-	if !c.fenceOwnership(sess) {
-		c.logger.Debug("DHCPv6 reply dropped: tuple owned by another protocol", "session_id", sess.SessionID)
-		return nil
-	}
-
 	var ianaAddr net.IP
 	var pdPrefix *net.IPNet
 	var validTime uint32
@@ -3278,14 +3225,6 @@ func (c *Component) publishSessionProgrammed(sess *SessionState, swIfIndex uint3
 }
 
 func (c *Component) publishSessionLifecycle(payload models.SubscriberSession) error {
-	if ipoeSess, ok := payload.(*models.IPoESession); ok {
-		if val, found := c.sessionIndex.Load(ipoeSess.SessionID); found {
-			if sess, ok := val.(*SessionState); ok && !c.isOwner(sess) {
-				c.logger.Debug("Lifecycle publish suppressed: tuple owned by another protocol", "session_id", ipoeSess.SessionID)
-				return nil
-			}
-		}
-	}
 	c.eventBus.Publish(events.TopicSessionLifecycle, events.Event{
 		Source: c.Name(),
 		Data: &events.SessionLifecycleEvent{
