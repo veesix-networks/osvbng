@@ -37,9 +37,13 @@ const (
 	SystemOpDBStatistics       Path = "system.opdb.statistics"
 	SystemLogging              Path = "system.logging"
 
-	ProtocolsOSPFNeighbors  Path = "protocols.ospf.neighbors"
-	ProtocolsOSPF6Neighbors Path = "protocols.ospf6.neighbors"
-	ProtocolsISISNeighbors  Path = "protocols.isis.neighbors"
+	ProtocolsOSPF              Path = "protocols.ospf"
+	ProtocolsOSPFAll           Path = "protocols.ospf.all"
+	ProtocolsOSPFInterfaces    Path = "protocols.ospf.interfaces"
+	ProtocolsOSPFInterfacesAll Path = "protocols.ospf.interfaces.all"
+	ProtocolsOSPFNeighbors     Path = "protocols.ospf.neighbors"
+	ProtocolsOSPF6Neighbors    Path = "protocols.ospf6.neighbors"
+	ProtocolsISISNeighbors     Path = "protocols.isis.neighbors"
 
 	ProtocolsMPLSTable      Path = "protocols.mpls.table"
 	ProtocolsMPLSInterfaces Path = "protocols.mpls.interfaces"
