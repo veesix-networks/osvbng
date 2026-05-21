@@ -295,6 +295,91 @@ func (c *Component) GetOSPFDatabase(vrf, lsaType string, opts ospf.DatabaseOpts)
 	return json.RawMessage(output), nil
 }
 
+var validMPLSTEDatabaseScopes = map[string]struct{}{
+	"vertex": {},
+	"edge":   {},
+	"subnet": {},
+}
+
+func (c *Component) GetOSPFMPLSTEInterface(iface string) (string, error) {
+	cmd := "show ip ospf mpls-te interface"
+	if iface != "" {
+		cmd += " " + iface
+	}
+	output, err := c.execVtysh("-c", cmd)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+func (c *Component) GetOSPFMPLSTERouter() (string, error) {
+	output, err := c.execVtysh("-c", "show ip ospf mpls-te router")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+func (c *Component) GetOSPFMPLSTEDatabase(opts ospf.MPLSTEDatabaseOpts) (string, error) {
+	cmd := "show ip ospf mpls-te database"
+	if opts.Scope != "" {
+		if _, ok := validMPLSTEDatabaseScopes[opts.Scope]; !ok {
+			return "", fmt.Errorf("invalid MPLS-TE database scope %q", opts.Scope)
+		}
+		cmd += " " + opts.Scope
+	}
+	if opts.AdvRouter != "" {
+		if err := ospfValidateIPv4("MPLS-TE adv-router", opts.AdvRouter); err != nil {
+			return "", err
+		}
+		cmd += " adv-router " + opts.AdvRouter
+	}
+	if opts.LSID != "" {
+		cmd += " " + opts.LSID
+	}
+	if opts.Verbose {
+		cmd += " verbose"
+	}
+	cmd += " json"
+	output, err := c.execVtysh("-c", cmd)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+func (c *Component) GetOSPFRouterInfo(pce bool) (string, error) {
+	cmd := "show ip ospf router-info"
+	if pce {
+		cmd += " pce"
+	}
+	output, err := c.execVtysh("-c", cmd)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+func (c *Component) GetOSPFSegmentRouting(advRouter string, selfOriginate bool) (string, error) {
+	cmd := "show ip ospf database segment-routing"
+	switch {
+	case selfOriginate:
+		cmd += " self-originate"
+	case advRouter != "":
+		if err := ospfValidateIPv4("SR adv-router", advRouter); err != nil {
+			return "", err
+		}
+		cmd += " adv-router " + advRouter
+	}
+	cmd += " json"
+	output, err := c.execVtysh("-c", cmd)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
 func (c *Component) GetOSPFSummaryAddress(vrf string, detail bool) (*ospf.SummaryAddress, error) {
 	prefix, err := ospfVRFPrefix(vrf)
 	if err != nil {

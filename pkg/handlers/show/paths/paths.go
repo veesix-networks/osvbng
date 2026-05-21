@@ -53,6 +53,11 @@ const (
 	ProtocolsOSPFSummary            Path = "protocols.ospf.summary-address"
 	ProtocolsOSPFDatabase           Path = "protocols.ospf.database"
 	ProtocolsOSPFDatabaseLSA        Path = "protocols.ospf.database.<*>"
+	ProtocolsOSPFMPLSTEInterface    Path = "protocols.ospf.mpls-te.interface"
+	ProtocolsOSPFMPLSTERouter       Path = "protocols.ospf.mpls-te.router"
+	ProtocolsOSPFMPLSTEDatabase     Path = "protocols.ospf.mpls-te.database"
+	ProtocolsOSPFRouterInfo         Path = "protocols.ospf.router-info"
+	ProtocolsOSPFSegmentRouting     Path = "protocols.ospf.segment-routing"
 	ProtocolsOSPF6Neighbors         Path = "protocols.ospf6.neighbors"
 	ProtocolsISISNeighbors          Path = "protocols.isis.neighbors"
 
