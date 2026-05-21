@@ -192,6 +192,70 @@ func (c *Component) GetOSPFGRHelperAll() (map[string]ospf.GRHelper, error) {
 	return out, nil
 }
 
+func (c *Component) GetOSPFRoute(detail bool) (map[string]ospf.Route, error) {
+	cmd := "show ip ospf route"
+	if detail {
+		cmd += " detail"
+	}
+	output, err := c.execVtysh("-c", cmd+" json")
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]ospf.Route{}
+	if err := json.Unmarshal(output, &out); err != nil {
+		return nil, fmt.Errorf("parse OSPF route: %w", err)
+	}
+	return out, nil
+}
+
+func (c *Component) GetOSPFBorderRouters(vrf string) (*ospf.BorderRouterMap, error) {
+	prefix, err := ospfVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	output, err := c.execVtysh("-c", "show ip ospf "+prefix+"border-routers json")
+	if err != nil {
+		return nil, err
+	}
+	var brm ospf.BorderRouterMap
+	if err := json.Unmarshal(output, &brm); err != nil {
+		return nil, fmt.Errorf("parse OSPF border-routers: %w", err)
+	}
+	return &brm, nil
+}
+
+func (c *Component) GetOSPFReachableRouters(vrf string) (string, error) {
+	prefix, err := ospfVRFPrefix(vrf)
+	if err != nil {
+		return "", err
+	}
+	output, err := c.execVtysh("-c", "show ip ospf "+prefix+"reachable-routers")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+func (c *Component) GetOSPFSummaryAddress(vrf string, detail bool) (*ospf.SummaryAddress, error) {
+	prefix, err := ospfVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	cmd := "show ip ospf " + prefix + "summary-address"
+	if detail {
+		cmd += " detail"
+	}
+	output, err := c.execVtysh("-c", cmd+" json")
+	if err != nil {
+		return nil, err
+	}
+	var sa ospf.SummaryAddress
+	if err := json.Unmarshal(output, &sa); err != nil {
+		return nil, fmt.Errorf("parse OSPF summary-address: %w", err)
+	}
+	return &sa, nil
+}
+
 func (c *Component) GetOSPF6Neighbors() ([]ospf6.Neighbor, error) {
 	output, err := c.execVtysh("-c", "show ipv6 ospf6 neighbor json")
 	if err != nil {
