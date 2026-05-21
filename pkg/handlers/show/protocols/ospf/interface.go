@@ -46,5 +46,14 @@ func (h *OSPFInterfacesHandler) Summary() string {
 }
 
 func (h *OSPFInterfacesHandler) Description() string {
-	return "Display OSPFv2 per-interface state, timers, costs, and neighbor counts. Honors vrf=<name|all> and interface=<name> options."
+	return "Display OSPFv2 per-interface state, timers, costs, and neighbor counts."
+}
+
+type OSPFInterfacesOptions struct {
+	VRF       string `query:"vrf" description:"VRF name; empty means the default routing table, 'all' returns every VRF"`
+	Interface string `query:"interface" description:"Restrict output to one interface name"`
+}
+
+func (h *OSPFInterfacesHandler) OptionsType() interface{} {
+	return &OSPFInterfacesOptions{}
 }

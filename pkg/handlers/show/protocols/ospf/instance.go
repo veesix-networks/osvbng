@@ -46,5 +46,13 @@ func (h *OSPFInstanceHandler) Summary() string {
 }
 
 func (h *OSPFInstanceHandler) Description() string {
-	return "Display OSPFv2 router state, SPF timing, LSA counters, and per-area LSDB summary. Honors vrf=<name|all> option."
+	return "Display OSPFv2 router state, SPF timing, LSA counters, and per-area LSDB summary."
+}
+
+type OSPFInstanceOptions struct {
+	VRF string `query:"vrf" description:"VRF name; empty means the default routing table, 'all' returns every VRF"`
+}
+
+func (h *OSPFInstanceHandler) OptionsType() interface{} {
+	return &OSPFInstanceOptions{}
 }

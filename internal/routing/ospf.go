@@ -3,7 +3,9 @@ package routing
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"regexp"
+	"strings"
 
 	"github.com/veesix-networks/osvbng/pkg/models/protocols/ospf"
 	"github.com/veesix-networks/osvbng/pkg/models/protocols/ospf6"
@@ -93,6 +95,99 @@ func (c *Component) GetOSPFInterfacesAll() (map[string]ospf.InterfaceMap, error)
 	out := map[string]ospf.InterfaceMap{}
 	if err := json.Unmarshal(output, &out); err != nil {
 		return nil, fmt.Errorf("parse OSPF interfaces (vrf all): %w", err)
+	}
+	return out, nil
+}
+
+func (c *Component) GetOSPFNeighbor(vrf, routerID string, detail bool) ([]ospf.Neighbor, error) {
+	if ip := net.ParseIP(routerID); ip == nil || ip.To4() == nil {
+		return nil, fmt.Errorf("invalid OSPF router-id %q", routerID)
+	}
+	prefix, err := ospfVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	cmd := "show ip ospf " + prefix + "neighbor " + routerID
+	if detail {
+		cmd += " detail"
+	}
+	output, err := c.execVtysh("-c", cmd+" json")
+	if err != nil {
+		return nil, err
+	}
+	var byVRF map[string]map[string][]ospf.Neighbor
+	if err := json.Unmarshal(output, &byVRF); err != nil {
+		return nil, fmt.Errorf("parse OSPF neighbor: %w", err)
+	}
+	for _, byRouter := range byVRF {
+		if entries, ok := byRouter[routerID]; ok {
+			return entries, nil
+		}
+	}
+	return nil, nil
+}
+
+func (c *Component) GetOSPFNeighborsDetail(vrf, iface string) (*ospf.NeighborDetailMap, error) {
+	prefix, err := ospfVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	cmd := "show ip ospf " + prefix + "neighbor"
+	if iface != "" {
+		cmd += " " + iface
+	}
+	cmd += " detail json"
+	output, err := c.execVtysh("-c", cmd)
+	if err != nil {
+		return nil, err
+	}
+	var ndm ospf.NeighborDetailMap
+	if err := json.Unmarshal(output, &ndm); err != nil {
+		return nil, fmt.Errorf("parse OSPF neighbor detail: %w", err)
+	}
+	return &ndm, nil
+}
+
+func (c *Component) GetOSPFNeighborsDetailAll() (map[string]ospf.NeighborDetailMap, error) {
+	output, err := c.execVtysh("-c", "show ip ospf vrf all neighbor detail json")
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]ospf.NeighborDetailMap{}
+	if err := json.Unmarshal(output, &out); err != nil {
+		return nil, fmt.Errorf("parse OSPF neighbor detail (vrf all): %w", err)
+	}
+	return out, nil
+}
+
+func (c *Component) GetOSPFGRHelper(vrf string, detail bool) (*ospf.GRHelper, error) {
+	prefix, err := ospfVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	cmd := "show ip ospf " + prefix + "graceful-restart helper"
+	if detail {
+		cmd += " detail"
+	}
+	output, err := c.execVtysh("-c", cmd+" json")
+	if err != nil {
+		return nil, err
+	}
+	var gr ospf.GRHelper
+	if err := json.Unmarshal(output, &gr); err != nil {
+		return nil, fmt.Errorf("parse OSPF gr-helper: %w", err)
+	}
+	return &gr, nil
+}
+
+func (c *Component) GetOSPFGRHelperAll() (map[string]ospf.GRHelper, error) {
+	output, err := c.execVtysh("-c", "show ip ospf vrf all graceful-restart helper json")
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]ospf.GRHelper{}
+	if err := json.Unmarshal(output, &out); err != nil {
+		return nil, fmt.Errorf("parse OSPF gr-helper (vrf all): %w", err)
 	}
 	return out, nil
 }
