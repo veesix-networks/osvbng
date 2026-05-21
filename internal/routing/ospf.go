@@ -236,6 +236,65 @@ func (c *Component) GetOSPFReachableRouters(vrf string) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
+var validOSPFLSATypes = map[string]struct{}{
+	"router":        {},
+	"network":       {},
+	"summary":       {},
+	"asbr-summary":  {},
+	"external":      {},
+	"nssa-external": {},
+	"opaque-link":   {},
+	"opaque-area":   {},
+	"opaque-as":     {},
+}
+
+func ospfValidateIPv4(name, value string) error {
+	if ip := net.ParseIP(value); ip == nil || ip.To4() == nil {
+		return fmt.Errorf("invalid %s %q", name, value)
+	}
+	return nil
+}
+
+func (c *Component) GetOSPFDatabase(vrf, lsaType string, opts ospf.DatabaseOpts) (json.RawMessage, error) {
+	prefix, err := ospfVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	cmd := "show ip ospf " + prefix + "database"
+	if lsaType != "" {
+		if _, ok := validOSPFLSATypes[lsaType]; !ok {
+			return nil, fmt.Errorf("invalid OSPF LSA type %q", lsaType)
+		}
+		cmd += " " + lsaType
+	}
+	if opts.MaxAge && lsaType == "" {
+		cmd += " max-age"
+	}
+	if opts.Detail && lsaType == "" {
+		cmd += " detail"
+	}
+	if opts.LinkStateID != "" {
+		if err := ospfValidateIPv4("LSA link-state-id", opts.LinkStateID); err != nil {
+			return nil, err
+		}
+		cmd += " " + opts.LinkStateID
+	}
+	if opts.SelfOriginate {
+		cmd += " self-originate"
+	}
+	if opts.AdvRouter != "" {
+		if err := ospfValidateIPv4("LSA adv-router", opts.AdvRouter); err != nil {
+			return nil, err
+		}
+		cmd += " adv-router " + opts.AdvRouter
+	}
+	output, err := c.execVtysh("-c", cmd+" json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
 func (c *Component) GetOSPFSummaryAddress(vrf string, detail bool) (*ospf.SummaryAddress, error) {
 	prefix, err := ospfVRFPrefix(vrf)
 	if err != nil {

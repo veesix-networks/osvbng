@@ -51,6 +51,8 @@ const (
 	ProtocolsOSPFBorderRouters      Path = "protocols.ospf.border-routers"
 	ProtocolsOSPFReachable          Path = "protocols.ospf.reachable-routers"
 	ProtocolsOSPFSummary            Path = "protocols.ospf.summary-address"
+	ProtocolsOSPFDatabase           Path = "protocols.ospf.database"
+	ProtocolsOSPFDatabaseLSA        Path = "protocols.ospf.database.<*>"
 	ProtocolsOSPF6Neighbors         Path = "protocols.ospf6.neighbors"
 	ProtocolsISISNeighbors          Path = "protocols.isis.neighbors"
 
