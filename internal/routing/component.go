@@ -438,6 +438,49 @@ var validBGPRIBFilters = map[string]struct{}{
 	"detail":         {},
 }
 
+var validBGPNeighborViews = map[string]struct{}{
+	"advertised-routes": {},
+	"received-routes":   {},
+	"routes":            {},
+}
+
+func (c *Component) GetBGPNeighborRoutes(vrf, neighbor, view string) (json.RawMessage, error) {
+	if _, ok := validBGPNeighborViews[view]; !ok {
+		return nil, fmt.Errorf("invalid BGP neighbor view %q", view)
+	}
+	prefix, err := bgpVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	output, err := c.execVtysh("-c", "show bgp "+prefix+"neighbors "+neighbor+" "+view+" json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
+func (c *Component) GetBGPNexthop(vrf, afi string, detail bool) (json.RawMessage, error) {
+	if afi != "" && afi != "ipv4" && afi != "ipv6" {
+		return nil, fmt.Errorf("invalid BGP nexthop AFI %q", afi)
+	}
+	prefix, err := bgpVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	cmd := "show bgp " + prefix + "nexthop"
+	if afi != "" {
+		cmd += " " + afi
+	}
+	if detail {
+		cmd += " detail"
+	}
+	output, err := c.execVtysh("-c", cmd+" json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
 func (c *Component) GetBGPRIB(vrf, afi, filter string) (json.RawMessage, error) {
 	if afi != "ipv4" && afi != "ipv6" {
 		return nil, fmt.Errorf("invalid BGP AFI %q", afi)
