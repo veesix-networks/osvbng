@@ -7,10 +7,10 @@ package bgp
 import "encoding/json"
 
 type VPNRoutes struct {
-	AddressFamily string `json:"-" metric:"label"`
+	AddressFamily string `json:"-" metric:"label=afi_safi"`
 
 	VrfId         uint32          `json:"vrfId,omitempty"`
-	VrfName       string          `json:"vrfName,omitempty" metric:"label"`
+	VrfName       string          `json:"vrfName,omitempty" metric:"label=vrf"`
 	TableVersion  uint64          `json:"tableVersion" metric:"name=protocols.bgp.vpn.table_version,type=gauge,help=BGP VPN table version."`
 	RouterId      string          `json:"routerId,omitempty"`
 	DefaultLocPrf uint32          `json:"defaultLocPrf,omitempty"`
@@ -21,12 +21,12 @@ type VPNRoutes struct {
 }
 
 type VPNSummary struct {
-	AddressFamily string `json:"-" metric:"label"`
+	AddressFamily string `json:"-" metric:"label=afi_safi"`
 
 	RouterId     string             `json:"routerId,omitempty"`
 	As           uint32             `json:"as" metric:"name=protocols.bgp.vpn.summary.local_as,type=gauge,help=Local BGP AS for the VPN AF."`
 	VrfId        uint32             `json:"vrfId,omitempty"`
-	VrfName      string             `json:"vrfName,omitempty" metric:"label"`
+	VrfName      string             `json:"vrfName,omitempty" metric:"label=vrf"`
 	TableVersion uint64             `json:"tableVersion" metric:"name=protocols.bgp.vpn.summary.table_version,type=gauge,help=BGP VPN summary table version."`
 	RibCount     uint64             `json:"ribCount" metric:"name=protocols.bgp.vpn.summary.rib_entries,type=gauge,help=BGP VPN RIB entries."`
 	RibMemory    uint64             `json:"ribMemory" metric:"name=protocols.bgp.vpn.summary.rib_memory_bytes,type=gauge,help=BGP VPN RIB memory in bytes."`
@@ -36,7 +36,7 @@ type VPNSummary struct {
 }
 
 type VPNPeer struct {
-	NeighborAddr               string `json:"-" metric:"label,map_key"`
+	NeighborAddr               string `json:"-" metric:"label=neighbor_addr,map_key"`
 	Hostname                   string `json:"hostname,omitempty"`
 	SoftwareVersion            string `json:"softwareVersion,omitempty"`
 	RemoteAs                   uint32 `json:"remoteAs,omitempty"`

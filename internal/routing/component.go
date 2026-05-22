@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strings"
 
 	"github.com/veesix-networks/osvbng/pkg/component"
@@ -350,6 +351,84 @@ func (c *Component) fetchVPNRoutes(cmd, af string) (*bgp.VPNRoutes, error) {
 	}
 	routes.AddressFamily = af
 	return &routes, nil
+}
+
+var validBGPVRFRE = regexp.MustCompile(`^(all|[A-Za-z0-9_-]+)$`)
+
+func bgpVRFPrefix(vrf string) (string, error) {
+	if vrf == "" {
+		return "", nil
+	}
+	if !validBGPVRFRE.MatchString(vrf) {
+		return "", fmt.Errorf("invalid VRF name %q", vrf)
+	}
+	return "vrf " + vrf + " ", nil
+}
+
+func (c *Component) GetBGPSummary(vrf string) (json.RawMessage, error) {
+	prefix, err := bgpVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	output, err := c.execVtysh("-c", "show bgp "+prefix+"summary json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
+func (c *Component) GetBGPSummaryAll() (json.RawMessage, error) {
+	output, err := c.execVtysh("-c", "show bgp vrf all summary json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
+func (c *Component) GetBGPAFISummary(vrf, afi string) (*bgp.SummaryAFI, error) {
+	if afi != "ipv4" && afi != "ipv6" {
+		return nil, fmt.Errorf("invalid BGP AFI %q", afi)
+	}
+	prefix, err := bgpVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	output, err := c.execVtysh("-c", "show bgp "+prefix+afi+" unicast summary json")
+	if err != nil {
+		return nil, err
+	}
+	var s bgp.SummaryAFI
+	if err := json.Unmarshal(output, &s); err != nil {
+		return nil, fmt.Errorf("parse BGP %s unicast summary: %w", afi, err)
+	}
+	return &s, nil
+}
+
+func (c *Component) GetBGPAFISummaryAll(afi string) (map[string]bgp.SummaryAFI, error) {
+	if afi != "ipv4" && afi != "ipv6" {
+		return nil, fmt.Errorf("invalid BGP AFI %q", afi)
+	}
+	output, err := c.execVtysh("-c", "show bgp vrf all "+afi+" unicast summary json")
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]bgp.SummaryAFI{}
+	if err := json.Unmarshal(output, &out); err != nil {
+		return nil, fmt.Errorf("parse BGP %s unicast summary (vrf all): %w", afi, err)
+	}
+	return out, nil
+}
+
+func (c *Component) GetBGPStatisticsAll(ipv4 bool) (json.RawMessage, error) {
+	afi := "ipv4"
+	if !ipv4 {
+		afi = "ipv6"
+	}
+	output, err := c.execVtysh("-c", "show bgp vrf all "+afi+" unicast statistics json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
 }
 
 func (c *Component) fetchVPNSummary(cmd, af string) (*bgp.VPNSummary, error) {
