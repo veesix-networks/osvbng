@@ -12,6 +12,7 @@ vrfs:
       - "65000:100"
     address-families:
       ipv4-unicast: {}
+      ipv6-unicast: {}
 
 service-groups:
   customer-a:
@@ -99,6 +100,8 @@ interfaces:
     address:
       ipv4:
         - 10.254.0.1/32
+      ipv6:
+        - 2001:db8:254::1/128
   loop100:
     description: Default Subscriber Gateway
     enabled: true
@@ -111,6 +114,8 @@ interfaces:
     address:
       ipv4:
         - 192.168.123.1/32
+      ipv6:
+        - 2001:db8:200::1/128
     vrf: CUSTOMER-A
   eth1:
     description: Access Interface
@@ -121,6 +126,8 @@ interfaces:
     address:
       ipv4:
         - 10.0.0.1/30
+      ipv6:
+        - 2001:db8::1/64
 
 protocols:
   bgp:
@@ -134,6 +141,10 @@ protocols:
       neighbors:
         10.254.0.2:
           send-community: both
+    ipv6-vpn:
+      neighbors:
+        10.254.0.2:
+          send-community: both
     vrf:
       CUSTOMER-A:
         ipv4-unicast:
@@ -142,7 +153,24 @@ protocols:
           label-vpn: auto
           export-vpn: true
           import-vpn: true
+        ipv6-unicast:
+          redistribute:
+            connected: true
+          label-vpn: auto
+          export-vpn: true
+          import-vpn: true
   ospf:
+    enabled: true
+    router-id: 10.254.0.1
+    log-adjacency-changes: true
+    areas:
+      "0.0.0.0":
+        interfaces:
+          eth2:
+            network: point-to-point
+          loop0:
+            passive: true
+  ospf6:
     enabled: true
     router-id: 10.254.0.1
     log-adjacency-changes: true
@@ -161,6 +189,8 @@ protocols:
     address-families:
       ipv4:
         transport-address: 10.254.0.1
+      ipv6:
+        transport-address: 2001:db8:254::1
 
 aaa:
   auth_provider: local
