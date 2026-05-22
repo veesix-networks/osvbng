@@ -245,6 +245,50 @@ func peerKeys(m map[string]SummaryPeer) []string {
 	return out
 }
 
+func TestNeighborsAll_Parse(t *testing.T) {
+	t.Parallel()
+	data := loadFixture(t, "bgp-neighbors-vrf-all.json")
+
+	var raw map[string]VRFNeighborSummary
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal bgp-neighbors-vrf-all: %v", err)
+	}
+	if len(raw) == 0 {
+		t.Fatal("expected at least one VRF in fixture")
+	}
+	def, ok := raw["default"]
+	if !ok {
+		t.Fatal("missing default VRF in fixture")
+	}
+	if len(def.Neighbors) == 0 {
+		t.Fatal("default VRF has no neighbor entries; UnmarshalJSON likely dropped them")
+	}
+	n, ok := def.Neighbors["10.254.0.2"]
+	if !ok {
+		t.Fatalf("missing neighbor 10.254.0.2; got %v", neighborSummaryKeys(def.Neighbors))
+	}
+	if n.NeighborAddr != "10.254.0.2" {
+		t.Errorf("NeighborAddr = %q, want 10.254.0.2", n.NeighborAddr)
+	}
+	if n.State != "Established" {
+		t.Errorf("State = %q, want Established", n.State)
+	}
+	if n.Up != 1 {
+		t.Errorf("Up = %d, want 1 (Established → up)", n.Up)
+	}
+	if n.UptimeMS == 0 {
+		t.Error("UptimeMS zero; fixture should have non-zero uptime")
+	}
+}
+
+func neighborSummaryKeys(m map[string]NeighborSummary) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
 func TestVPNStatistics_Parse(t *testing.T) {
 	t.Parallel()
 	data := loadFixture(t, "vpn-ipv4-statistics.json")

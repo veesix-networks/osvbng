@@ -12,10 +12,13 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
+	"github.com/veesix-networks/osvbng/pkg/models/protocols/bgp"
+	"github.com/veesix-networks/osvbng/pkg/telemetry"
 )
 
 func init() {
 	show.RegisterFactory(NewBGPNeighborsAggregateAllHandler)
+	telemetry.RegisterMetric[bgp.NeighborsAll](paths.ProtocolsBGPNeighborsAggregateAll)
 }
 
 type BGPNeighborsAggregateAllHandler struct {
@@ -46,5 +49,5 @@ func (h *BGPNeighborsAggregateAllHandler) Summary() string {
 }
 
 func (h *BGPNeighborsAggregateAllHandler) Description() string {
-	return "Display BGP neighbors for every VRF keyed by VRF name; response forwarded as-is from FRR."
+	return "Display BGP neighbors summary across every VRF; backs Prometheus scrape of per-VRF, per-peer BGP session metrics under protocols.bgp.neighbor.all.*"
 }

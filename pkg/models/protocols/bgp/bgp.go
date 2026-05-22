@@ -9,9 +9,14 @@ package bgp
 type Statistics struct {
 	// AddressFamily is populated by the routing layer ("ipv4"/"ipv6")
 	// so IPv4 and IPv6 statistics emit as distinct metric series.
-	AddressFamily string `json:"-" metric:"label"`
+	AddressFamily string `json:"-" metric:"label=afi_safi"`
 
-	Instance string `json:"instance" metric:"label"`
+	// VRF is populated by the routing layer from the FRR "instance" string
+	// ("VRF default" → "default"). Replaces the older `instance` label for
+	// parity with the rest of routing.
+	VRF string `json:"-" metric:"label=vrf"`
+
+	Instance string `json:"instance"`
 
 	TotalAdvertisements          uint64  `json:"totalAdvertisements" metric:"name=protocols.bgp.statistics.advertisements,type=gauge,help=Total BGP advertisements."`
 	TotalPrefixes                uint64  `json:"totalPrefixes" metric:"name=protocols.bgp.statistics.prefixes,type=gauge,help=Total BGP prefixes."`

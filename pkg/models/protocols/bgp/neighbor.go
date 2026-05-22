@@ -5,12 +5,12 @@
 package bgp
 
 type Neighbor struct {
-	NeighborAddr    string `json:"neighborAddr" metric:"label"`
+	NeighborAddr    string `json:"neighborAddr" metric:"label=neighbor_addr,map_key"`
 	RemoteAs        uint32 `json:"remoteAs" metric:"name=protocols.bgp.neighbor.remote_as,type=gauge,help=BGP remote AS number."`
 	LocalAs         uint32 `json:"localAs" metric:"name=protocols.bgp.neighbor.local_as,type=gauge,help=BGP local AS number."`
 	NbrInternalLink bool   `json:"nbrInternalLink,omitempty"`
 	Hostname        string `json:"hostname,omitempty"`
-	BgpState        string `json:"bgpState" metric:"label"`
+	BgpState        string `json:"bgpState" metric:"label=state"`
 	BgpVersion      int    `json:"bgpVersion,omitempty"`
 	RemoteRouterId  string `json:"remoteRouterId,omitempty"`
 	LocalRouterId   string `json:"localRouterId,omitempty"`
