@@ -77,6 +77,7 @@ func (a *Autoconfig) deriveSVLANConfig(group *subscriber.SubscriberGroup, vlanRa
 	loopback := vlanRange.Interface
 	raConfig := a.getRAConfig(group)
 	resolvedVRF := resolveRangeVRF(group, vlanRange)
+	vrfHasIPv6 := a.vrfHasIPv6Unicast(resolvedVRF)
 
 	changes = append(changes, Change{
 		Path: fmt.Sprintf("interfaces.%s.subinterfaces.%d", a.parentInterface, svlan),
@@ -91,27 +92,29 @@ func (a *Autoconfig) deriveSVLANConfig(group *subscriber.SubscriberGroup, vlanRa
 		},
 	})
 
-	changes = append(changes, Change{
-		Path: fmt.Sprintf("interfaces.%s.ipv6", loopback),
-		Value: &interfaces.IPv6Config{
-			Enabled: true,
-		},
-	})
-
-	changes = append(changes, Change{
-		Path: fmt.Sprintf("interfaces.%s.subinterfaces.%d.ipv6", a.parentInterface, svlan),
-		Value: &interfaces.IPv6Config{
-			Enabled:   true,
-			Multicast: true,
-			RA: &interfaces.RAConfig{
-				Managed:        raConfig.Managed,
-				Other:          raConfig.Other,
-				RouterLifetime: raConfig.RouterLifetime,
-				MaxInterval:    raConfig.MaxInterval,
-				MinInterval:    raConfig.MinInterval,
+	if vrfHasIPv6 {
+		changes = append(changes, Change{
+			Path: fmt.Sprintf("interfaces.%s.ipv6", loopback),
+			Value: &interfaces.IPv6Config{
+				Enabled: true,
 			},
-		},
-	})
+		})
+
+		changes = append(changes, Change{
+			Path: fmt.Sprintf("interfaces.%s.subinterfaces.%d.ipv6", a.parentInterface, svlan),
+			Value: &interfaces.IPv6Config{
+				Enabled:   true,
+				Multicast: true,
+				RA: &interfaces.RAConfig{
+					Managed:        raConfig.Managed,
+					Other:          raConfig.Other,
+					RouterLifetime: raConfig.RouterLifetime,
+					MaxInterval:    raConfig.MaxInterval,
+					MinInterval:    raConfig.MinInterval,
+				},
+			},
+		})
+	}
 
 	changes = append(changes, Change{
 		Path: fmt.Sprintf("interfaces.%s.subinterfaces.%d.arp", a.parentInterface, svlan),
@@ -135,7 +138,11 @@ func (a *Autoconfig) deriveSVLANConfig(group *subscriber.SubscriberGroup, vlanRa
 	subIfEncoded := pkgpaths.EncodeInterfaceName(fmt.Sprintf("%s.%d", a.parentInterface, svlan))
 	parentEncoded := pkgpaths.EncodeInterfaceName(a.parentInterface)
 	if vlanRange.HasAccessType(subscriber.AccessTypeIPoE) {
-		for _, proto := range []string{"dhcpv4", "dhcpv6", "arp", "ipv6nd"} {
+		ipoePunts := []string{"dhcpv4", "arp"}
+		if vrfHasIPv6 {
+			ipoePunts = append(ipoePunts, "dhcpv6", "ipv6nd")
+		}
+		for _, proto := range ipoePunts {
 			changes = append(changes, Change{
 				Path:  fmt.Sprintf("_internal.punt.%s.%s", subIfEncoded, proto),
 				Value: &operations.PuntConfig{Enabled: true},
@@ -242,4 +249,18 @@ func (a *Autoconfig) deriveMSSClamp(group *subscriber.SubscriberGroup, vlanRange
 		IPv4MSS: group.MSSClamp.IPv4MSSAuto(),
 		IPv6MSS: group.MSSClamp.IPv6MSSAuto(),
 	}
+}
+
+func (a *Autoconfig) vrfHasIPv6Unicast(vrfName string) bool {
+	if vrfName == "" {
+		return true
+	}
+	if a.cfg == nil || a.cfg.VRFS == nil {
+		return true
+	}
+	v, ok := a.cfg.VRFS[vrfName]
+	if !ok {
+		return true
+	}
+	return v.AddressFamilies.IPv6Unicast != nil
 }
