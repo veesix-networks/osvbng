@@ -41,14 +41,16 @@ func (c *Component) GetLDPNeighbor(ip string) (*ldp.Neighbor, error) {
 	if err != nil {
 		return nil, err
 	}
-	var wrapper map[string]ldp.Neighbor
+	var wrapper struct {
+		Neighbors []ldp.Neighbor `json:"neighbors"`
+	}
 	if err := json.Unmarshal(output, &wrapper); err != nil {
 		return nil, fmt.Errorf("parse LDP neighbor %s: %w", ip, err)
 	}
-	n, ok := wrapper[ip]
-	if !ok {
+	if len(wrapper.Neighbors) == 0 {
 		return nil, nil
 	}
+	n := wrapper.Neighbors[0]
 	n.UpTimeSecs = parseLDPUpTime(n.UpTime)
 	return &n, nil
 }
