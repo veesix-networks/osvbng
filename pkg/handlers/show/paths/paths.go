@@ -43,6 +43,8 @@ const (
 	ProtocolsBGPNexthopIPv4 Path = "protocols.bgp.nexthop.ipv4"
 	ProtocolsBGPNexthopIPv6 Path = "protocols.bgp.nexthop.ipv6"
 
+	ProtocolsBGPImportCheckTable Path = "protocols.bgp.import-check-table"
+
 	ProtocolsBGPVPNIPv4        Path = "protocols.bgp.vpn.ipv4"
 	ProtocolsBGPVPNIPv6        Path = "protocols.bgp.vpn.ipv6"
 	ProtocolsBGPVPNIPv4Summary Path = "protocols.bgp.vpn.ipv4.summary"

@@ -444,6 +444,30 @@ var validBGPNeighborViews = map[string]struct{}{
 	"routes":            {},
 }
 
+func (c *Component) GetBGPNeighborsAll() (json.RawMessage, error) {
+	output, err := c.execVtysh("-c", "show bgp vrf all neighbors json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
+func (c *Component) GetBGPImportCheckTable(vrf string, detail bool) (json.RawMessage, error) {
+	prefix, err := bgpVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	cmd := "show bgp " + prefix + "import-check-table"
+	if detail {
+		cmd += " detail"
+	}
+	output, err := c.execVtysh("-c", cmd+" json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
 func (c *Component) GetBGPNeighborRoutes(vrf, neighbor, view string) (json.RawMessage, error) {
 	if _, ok := validBGPNeighborViews[view]; !ok {
 		return nil, fmt.Errorf("invalid BGP neighbor view %q", view)
