@@ -1,3 +1,7 @@
+// Copyright 2026 The osvbng Authors
+// Licensed under the GNU General Public License v3.0 or later.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package ldp
 
 import (
@@ -29,7 +33,7 @@ func (h *LDPDiscoveryHandler) Collect(ctx context.Context, req *show.Request) (i
 	if h.routing == nil {
 		return nil, fmt.Errorf("routing component not available")
 	}
-	return h.routing.GetLDPDiscovery()
+	return h.routing.GetLDPDiscovery(req.Options["afi"])
 }
 
 func (h *LDPDiscoveryHandler) PathPattern() paths.Path {
@@ -46,4 +50,12 @@ func (h *LDPDiscoveryHandler) Summary() string {
 
 func (h *LDPDiscoveryHandler) Description() string {
 	return "Display LDP discovery hello adjacencies."
+}
+
+type LDPDiscoveryOptions struct {
+	AFI string `query:"afi" description:"Address family: ipv4 or ipv6; empty means both"`
+}
+
+func (h *LDPDiscoveryHandler) OptionsType() interface{} {
+	return &LDPDiscoveryOptions{}
 }
