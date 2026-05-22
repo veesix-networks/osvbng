@@ -5,12 +5,12 @@
 package ospf6
 
 type Neighbor struct {
-	NeighborID     string `json:"neighborId"     metric:"label"`
+	NeighborID     string `json:"neighborId"     metric:"label=neighbor_router_id"`
 	Priority       int    `json:"priority"       metric:"name=protocols.ospf6.neighbor.priority,type=gauge,help=OSPFv3 neighbor priority."`
 	DeadTime       string `json:"deadTime"`
 	State          string `json:"state"          metric:"label"`
 	IfState        string `json:"ifState"`
 	Duration       string `json:"duration"`
-	InterfaceName  string `json:"interfaceName"  metric:"label"`
+	InterfaceName  string `json:"interfaceName"  metric:"label=interface"`
 	InterfaceState string `json:"interfaceState"`
 }
