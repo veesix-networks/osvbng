@@ -1,0 +1,14 @@
+{
+  "neighbors":[
+    {
+      "neighborId":"10.254.0.2",
+      "priority":1,
+      "deadTime":"00:00:30",
+      "state":"Full",
+      "ifState":"PointToPoint",
+      "duration":"13:36:57",
+      "interfaceName":"eth2",
+      "interfaceState":"PointToPoint"
+    }
+  ]
+}
