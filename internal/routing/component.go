@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/netip"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -324,20 +325,163 @@ func (c *Component) GetBGPNeighbor(neighborIP string) (*bgp.Neighbor, error) {
 	return nil, nil
 }
 
-func (c *Component) GetBGPVPNv4Routes() (*bgp.VPNRoutes, error) {
-	return c.fetchVPNRoutes("show bgp ipv4 vpn json", "ipv4")
+func (c *Component) GetBGPVPNRoutes(vrf, afi string) (*bgp.VPNRoutes, error) {
+	if afi != "ipv4" && afi != "ipv6" {
+		return nil, fmt.Errorf("invalid BGP AFI %q", afi)
+	}
+	prefix, err := bgpVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	return c.fetchVPNRoutes("show bgp "+prefix+afi+" vpn json", afi)
 }
 
-func (c *Component) GetBGPVPNv6Routes() (*bgp.VPNRoutes, error) {
-	return c.fetchVPNRoutes("show bgp ipv6 vpn json", "ipv6")
+func (c *Component) GetBGPVPNSummary(vrf, afi string) (*bgp.VPNSummary, error) {
+	if afi != "ipv4" && afi != "ipv6" {
+		return nil, fmt.Errorf("invalid BGP AFI %q", afi)
+	}
+	prefix, err := bgpVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	return c.fetchVPNSummary("show bgp "+prefix+afi+" vpn summary json", afi)
 }
 
-func (c *Component) GetBGPVPNv4Summary() (*bgp.VPNSummary, error) {
-	return c.fetchVPNSummary("show bgp ipv4 vpn summary json", "ipv4")
+func (c *Component) GetBGPVPNSummaryAll(afi string) (map[string]bgp.VPNSummary, error) {
+	if afi != "ipv4" && afi != "ipv6" {
+		return nil, fmt.Errorf("invalid BGP AFI %q", afi)
+	}
+	output, err := c.execVtysh("-c", "show bgp vrf all "+afi+" vpn summary json")
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]bgp.VPNSummary{}
+	if err := json.Unmarshal(output, &out); err != nil {
+		return nil, fmt.Errorf("parse BGP %s vpn summary (vrf all): %w", afi, err)
+	}
+	for k, v := range out {
+		if v.VrfName == "" {
+			v.VrfName = k
+		}
+		v.AddressFamily = afi
+		out[k] = v
+	}
+	return out, nil
 }
 
-func (c *Component) GetBGPVPNv6Summary() (*bgp.VPNSummary, error) {
-	return c.fetchVPNSummary("show bgp ipv6 vpn summary json", "ipv6")
+func (c *Component) GetBGPVPNStatistics(vrf, afi string) (*bgp.VPNStatistics, error) {
+	if afi != "ipv4" && afi != "ipv6" {
+		return nil, fmt.Errorf("invalid BGP AFI %q", afi)
+	}
+	prefix, err := bgpVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	output, err := c.execVtysh("-c", "show bgp "+prefix+afi+" vpn statistics json")
+	if err != nil {
+		return nil, err
+	}
+	wrapperKey := afi + "Vpn"
+	var wrapper map[string][]bgp.VPNStatistics
+	if err := json.Unmarshal(output, &wrapper); err != nil {
+		return nil, fmt.Errorf("parse BGP %s vpn statistics: %w", afi, err)
+	}
+	result := &bgp.VPNStatistics{AddressFamily: afi, VRF: bgpInstanceVRF(vrf)}
+	if entries, ok := wrapper[wrapperKey]; ok && len(entries) > 0 {
+		entries[0].AddressFamily = afi
+		entries[0].VRF = vrfFromInstance(entries[0].Instance)
+		*result = entries[0]
+	}
+	return result, nil
+}
+
+func (c *Component) GetBGPVPNStatisticsAll(afi string) (map[string]bgp.VPNStatistics, error) {
+	if afi != "ipv4" && afi != "ipv6" {
+		return nil, fmt.Errorf("invalid BGP AFI %q", afi)
+	}
+	output, err := c.execVtysh("-c", "show bgp vrf all "+afi+" vpn statistics json")
+	if err != nil {
+		return nil, err
+	}
+	wrapperKey := afi + "Vpn"
+	var wrapper map[string][]bgp.VPNStatistics
+	if err := json.Unmarshal(output, &wrapper); err != nil {
+		return nil, fmt.Errorf("parse BGP %s vpn statistics (vrf all): %w", afi, err)
+	}
+	out := map[string]bgp.VPNStatistics{}
+	for _, entry := range wrapper[wrapperKey] {
+		vrf := vrfFromInstance(entry.Instance)
+		entry.AddressFamily = afi
+		entry.VRF = vrf
+		out[vrf] = entry
+	}
+	return out, nil
+}
+
+// bgpInstanceVRF returns the VRF name to populate when the caller selects a
+// single BGP instance. Empty input means the default routing table.
+func bgpInstanceVRF(vrf string) string {
+	if vrf == "" {
+		return "default"
+	}
+	return vrf
+}
+
+// vrfFromInstance extracts the VRF name from FRR's "VRF <name>" instance
+// string used in bgp statistics output.
+func vrfFromInstance(instance string) string {
+	const prefix = "VRF "
+	if strings.HasPrefix(instance, prefix) {
+		return instance[len(prefix):]
+	}
+	return instance
+}
+
+var validBGPRDRE = regexp.MustCompile(`^[0-9A-Fa-f.:]{3,}$`)
+
+func (c *Component) GetBGPVPNRouteByRD(afi, rd string) (json.RawMessage, error) {
+	if afi != "ipv4" && afi != "ipv6" {
+		return nil, fmt.Errorf("invalid BGP AFI %q", afi)
+	}
+	if !validBGPRDRE.MatchString(rd) {
+		return nil, fmt.Errorf("invalid BGP route-distinguisher %q", rd)
+	}
+	output, err := c.execVtysh("-c", "show bgp "+afi+" vpn rd "+rd+" json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
+func (c *Component) GetBGPVPNRouteByPrefix(afi, prefix string) (json.RawMessage, error) {
+	if afi != "ipv4" && afi != "ipv6" {
+		return nil, fmt.Errorf("invalid BGP AFI %q", afi)
+	}
+	if _, err := netip.ParsePrefix(prefix); err != nil {
+		return nil, fmt.Errorf("invalid BGP VPN prefix %q: %w", prefix, err)
+	}
+	output, err := c.execVtysh("-c", "show bgp "+afi+" vpn "+prefix+" json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
+func (c *Component) GetBGPVPNNeighborRoutes(neighbor, afi, view string) (json.RawMessage, error) {
+	if afi != "ipv4" && afi != "ipv6" {
+		return nil, fmt.Errorf("invalid BGP AFI %q", afi)
+	}
+	if _, ok := validBGPNeighborViews[view]; !ok {
+		return nil, fmt.Errorf("invalid BGP neighbor view %q", view)
+	}
+	if _, err := netip.ParseAddr(neighbor); err != nil {
+		return nil, fmt.Errorf("invalid BGP neighbor address %q: %w", neighbor, err)
+	}
+	output, err := c.execVtysh("-c", "show bgp "+afi+" vpn neighbors "+neighbor+" "+view+" json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
 }
 
 func (c *Component) fetchVPNRoutes(cmd, af string) (*bgp.VPNRoutes, error) {
