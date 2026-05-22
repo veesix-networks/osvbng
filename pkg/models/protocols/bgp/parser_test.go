@@ -244,3 +244,30 @@ func peerKeys(m map[string]SummaryPeer) []string {
 	}
 	return out
 }
+
+func TestVPNStatistics_Parse(t *testing.T) {
+	t.Parallel()
+	data := loadFixture(t, "vpn-ipv4-statistics.json")
+
+	var wrapper struct {
+		IPv4Vpn []VPNStatistics `json:"ipv4Vpn"`
+	}
+	if err := json.Unmarshal(data, &wrapper); err != nil {
+		t.Fatalf("unmarshal vpn-ipv4-statistics: %v", err)
+	}
+	if len(wrapper.IPv4Vpn) == 0 {
+		t.Fatal("expected at least one ipv4Vpn entry")
+	}
+	for i, s := range wrapper.IPv4Vpn {
+		if s.Instance == "" {
+			t.Errorf("entry %d: Instance unset", i)
+		}
+	}
+	first := wrapper.IPv4Vpn[0]
+	if first.Instance != "VRF default" {
+		t.Errorf("first.Instance = %q, want %q", first.Instance, "VRF default")
+	}
+	if first.TotalPrefixes == 0 {
+		t.Error("first.TotalPrefixes zero; default VRF fixture should advertise prefixes")
+	}
+}
