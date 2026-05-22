@@ -467,6 +467,23 @@ func (c *Component) GetBGPVPNRouteByPrefix(afi, prefix string) (json.RawMessage,
 	return json.RawMessage(output), nil
 }
 
+func (c *Component) GetBGPVPNNeighborRoutes(neighbor, afi, view string) (json.RawMessage, error) {
+	if afi != "ipv4" && afi != "ipv6" {
+		return nil, fmt.Errorf("invalid BGP AFI %q", afi)
+	}
+	if _, ok := validBGPNeighborViews[view]; !ok {
+		return nil, fmt.Errorf("invalid BGP neighbor view %q", view)
+	}
+	if _, err := netip.ParseAddr(neighbor); err != nil {
+		return nil, fmt.Errorf("invalid BGP neighbor address %q: %w", neighbor, err)
+	}
+	output, err := c.execVtysh("-c", "show bgp "+afi+" vpn neighbors "+neighbor+" "+view+" json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
 func (c *Component) fetchVPNRoutes(cmd, af string) (*bgp.VPNRoutes, error) {
 	output, err := c.execVtysh("-c", cmd)
 	if err != nil {

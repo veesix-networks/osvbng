@@ -35,9 +35,15 @@ const (
 	ProtocolsBGPIPv6UnicastSelfOriginate Path = "protocols.bgp.ipv6.unicast.self-originate"
 	ProtocolsBGPIPv6UnicastCIDROnly      Path = "protocols.bgp.ipv6.unicast.cidr-only"
 
-	ProtocolsBGPNeighborAdvertised Path = "protocols.bgp.neighbors.<*:ip>.advertised-routes"
-	ProtocolsBGPNeighborReceived   Path = "protocols.bgp.neighbors.<*:ip>.received-routes"
-	ProtocolsBGPNeighborRoutes     Path = "protocols.bgp.neighbors.<*:ip>.routes"
+	ProtocolsBGPNeighborAdvertised        Path = "protocols.bgp.neighbors.<*:ip>.advertised-routes"
+	ProtocolsBGPNeighborReceived          Path = "protocols.bgp.neighbors.<*:ip>.received-routes"
+	ProtocolsBGPNeighborRoutes            Path = "protocols.bgp.neighbors.<*:ip>.routes"
+	ProtocolsBGPNeighborVPNIPv4Advertised Path = "protocols.bgp.neighbors.<*:ip>.vpn.ipv4.advertised-routes"
+	ProtocolsBGPNeighborVPNIPv4Received   Path = "protocols.bgp.neighbors.<*:ip>.vpn.ipv4.received-routes"
+	ProtocolsBGPNeighborVPNIPv4Routes     Path = "protocols.bgp.neighbors.<*:ip>.vpn.ipv4.routes"
+	ProtocolsBGPNeighborVPNIPv6Advertised Path = "protocols.bgp.neighbors.<*:ip>.vpn.ipv6.advertised-routes"
+	ProtocolsBGPNeighborVPNIPv6Received   Path = "protocols.bgp.neighbors.<*:ip>.vpn.ipv6.received-routes"
+	ProtocolsBGPNeighborVPNIPv6Routes     Path = "protocols.bgp.neighbors.<*:ip>.vpn.ipv6.routes"
 
 	ProtocolsBGPNexthop     Path = "protocols.bgp.nexthop"
 	ProtocolsBGPNexthopIPv4 Path = "protocols.bgp.nexthop.ipv4"
