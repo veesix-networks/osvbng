@@ -400,6 +400,287 @@ func (c *Component) GetOSPFSummaryAddress(vrf string, detail bool) (*ospf.Summar
 	return &sa, nil
 }
 
+func (c *Component) GetOSPF6Instance(vrf string) (*ospf6.Instance, error) {
+	prefix, err := ospfVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	output, err := c.execVtysh("-c", "show ipv6 ospf6 "+prefix+"json")
+	if err != nil {
+		return nil, err
+	}
+	var inst ospf6.Instance
+	if err := json.Unmarshal(output, &inst); err != nil {
+		return nil, fmt.Errorf("parse OSPFv3 instance: %w", err)
+	}
+	return &inst, nil
+}
+
+func (c *Component) GetOSPF6Interfaces(vrf, iface string) (map[string]ospf6.Interface, error) {
+	prefix, err := ospfVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	cmd := "show ipv6 ospf6 " + prefix + "interface"
+	if iface != "" {
+		cmd += " " + iface
+	}
+	output, err := c.execVtysh("-c", cmd+" json")
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]ospf6.Interface{}
+	if err := json.Unmarshal(output, &out); err != nil {
+		return nil, fmt.Errorf("parse OSPFv3 interfaces: %w", err)
+	}
+	return out, nil
+}
+
+func (c *Component) GetOSPF6InterfaceTraffic(vrf, iface string) (map[string]ospf6.InterfaceTraffic, error) {
+	prefix, err := ospfVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	cmd := "show ipv6 ospf6 " + prefix + "interface traffic"
+	if iface != "" {
+		cmd += " " + iface
+	}
+	output, err := c.execVtysh("-c", cmd+" json")
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]ospf6.InterfaceTraffic{}
+	if err := json.Unmarshal(output, &out); err != nil {
+		return nil, fmt.Errorf("parse OSPFv3 interface traffic: %w", err)
+	}
+	return out, nil
+}
+
+func (c *Component) GetOSPF6Neighbor(vrf, routerID string) (json.RawMessage, error) {
+	if err := ospfValidateIPv4("OSPFv3 router-id", routerID); err != nil {
+		return nil, err
+	}
+	prefix, err := ospfVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	output, err := c.execVtysh("-c", "show ipv6 ospf6 "+prefix+"neighbor "+routerID+" json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
+func (c *Component) GetOSPF6NeighborsDetail(vrf string) (json.RawMessage, error) {
+	prefix, err := ospfVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	output, err := c.execVtysh("-c", "show ipv6 ospf6 "+prefix+"neighbor detail json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
+func (c *Component) GetOSPF6NeighborsDRChoice(vrf string) (json.RawMessage, error) {
+	prefix, err := ospfVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	output, err := c.execVtysh("-c", "show ipv6 ospf6 "+prefix+"neighbor drchoice json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
+func (c *Component) GetOSPF6GRHelper(vrf string, detail bool) (*ospf6.GRHelper, error) {
+	prefix, err := ospfVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	cmd := "show ipv6 ospf6 " + prefix + "graceful-restart helper"
+	if detail {
+		cmd += " detail"
+	}
+	output, err := c.execVtysh("-c", cmd+" json")
+	if err != nil {
+		return nil, err
+	}
+	var gr ospf6.GRHelper
+	if err := json.Unmarshal(output, &gr); err != nil {
+		return nil, fmt.Errorf("parse OSPFv3 gr-helper: %w", err)
+	}
+	return &gr, nil
+}
+
+var validOSPF6LSATypes = map[string]struct{}{
+	"router":           {},
+	"network":          {},
+	"inter-prefix":     {},
+	"inter-router":     {},
+	"as-external":      {},
+	"group-membership": {},
+	"type-7":           {},
+	"link":             {},
+	"intra-prefix":     {},
+}
+
+func (c *Component) GetOSPF6Database(vrf, lsaType string, opts ospf6.DatabaseOpts) (json.RawMessage, error) {
+	vrfPrefix, err := ospfVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	cmd := "show ipv6 ospf6 " + vrfPrefix + "database"
+	if lsaType != "" {
+		if _, ok := validOSPF6LSATypes[lsaType]; !ok {
+			return nil, fmt.Errorf("invalid OSPFv3 LSA type %q", lsaType)
+		}
+		cmd += " " + lsaType
+	} else {
+		switch {
+		case opts.Detail:
+			cmd += " detail"
+		case opts.Dump:
+			cmd += " dump"
+		case opts.Internal:
+			cmd += " internal"
+		}
+	}
+	if opts.AdvRouter != "" {
+		if err := ospfValidateIPv4("LSA adv-router", opts.AdvRouter); err != nil {
+			return nil, err
+		}
+		cmd += " adv-router " + opts.AdvRouter
+	}
+	if opts.LinkStateID != "" {
+		if err := ospfValidateIPv4("LSA linkstate-id", opts.LinkStateID); err != nil {
+			return nil, err
+		}
+		cmd += " linkstate-id " + opts.LinkStateID
+	}
+	if opts.SelfOriginated {
+		cmd += " self-originated"
+	}
+	output, err := c.execVtysh("-c", cmd+" json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
+var validOSPF6RouteFilters = map[string]struct{}{
+	"intra-area": {},
+	"inter-area": {},
+	"external-1": {},
+	"external-2": {},
+	"detail":     {},
+	"summary":    {},
+}
+
+func (c *Component) GetOSPF6InterfacePrefix(vrf, iface, prefix string, detail, match bool) (json.RawMessage, error) {
+	vrfPrefix, err := ospfVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	cmd := "show ipv6 ospf6 " + vrfPrefix + "interface"
+	if iface != "" {
+		cmd += " " + iface
+	}
+	cmd += " prefix"
+	if prefix != "" {
+		cmd += " " + prefix
+		if match {
+			cmd += " match"
+		}
+	}
+	if detail {
+		cmd += " detail"
+	}
+	output, err := c.execVtysh("-c", cmd+" json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
+func (c *Component) GetOSPF6Route(vrf, filter, prefix string, detail, match bool) (*ospf6.RouteResponse, error) {
+	vrfPrefix, err := ospfVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	cmd := "show ipv6 ospf6 " + vrfPrefix + "route"
+	if filter != "" {
+		if _, ok := validOSPF6RouteFilters[filter]; !ok {
+			return nil, fmt.Errorf("invalid OSPFv3 route filter %q", filter)
+		}
+		cmd += " " + filter
+	}
+	if prefix != "" {
+		cmd += " " + prefix
+		if match {
+			cmd += " match"
+		}
+	}
+	if detail {
+		cmd += " detail"
+	}
+	output, err := c.execVtysh("-c", cmd+" json")
+	if err != nil {
+		return nil, err
+	}
+	var r ospf6.RouteResponse
+	if err := json.Unmarshal(output, &r); err != nil {
+		return nil, fmt.Errorf("parse OSPFv3 route: %w", err)
+	}
+	return &r, nil
+}
+
+func (c *Component) GetOSPF6SpfTree(vrf string) (json.RawMessage, error) {
+	vrfPrefix, err := ospfVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	output, err := c.execVtysh("-c", "show ipv6 ospf6 "+vrfPrefix+"spf tree json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
+func (c *Component) GetOSPF6Redistribute(vrf string) (json.RawMessage, error) {
+	vrfPrefix, err := ospfVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	output, err := c.execVtysh("-c", "show ipv6 ospf6 "+vrfPrefix+"redistribute json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
+func (c *Component) GetOSPF6Zebra() (json.RawMessage, error) {
+	output, err := c.execVtysh("-c", "show ipv6 ospf6 zebra json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
+func (c *Component) GetOSPF6SummaryAddress(detail bool) (json.RawMessage, error) {
+	cmd := "show ipv6 ospf6 summary-address"
+	if detail {
+		cmd += " detail"
+	}
+	output, err := c.execVtysh("-c", cmd+" json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
 func (c *Component) GetOSPF6Neighbors() ([]ospf6.Neighbor, error) {
 	output, err := c.execVtysh("-c", "show ipv6 ospf6 neighbor json")
 	if err != nil {

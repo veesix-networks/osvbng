@@ -1,0 +1,25 @@
+{
+  "areaScopedLinkStateDb":[
+    {
+      "areaId":"0.0.0.0",
+      "lsa":[
+        {
+          "type":"Rtr",
+          "lsId":"0.0.0.0",
+          "advRouter":"10.254.0.1",
+          "age":418,
+          "seqNum":2147483677,
+          "payload":"10.254.0.2/0.0.117.83"
+        },
+        {
+          "type":"Rtr",
+          "lsId":"0.0.0.0",
+          "advRouter":"10.254.0.2",
+          "age":419,
+          "seqNum":2147483677,
+          "payload":"10.254.0.1/0.0.0.7"
+        }
+      ]
+    }
+  ]
+}
