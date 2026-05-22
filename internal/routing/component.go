@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/netip"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -434,6 +435,36 @@ func vrfFromInstance(instance string) string {
 		return instance[len(prefix):]
 	}
 	return instance
+}
+
+var validBGPRDRE = regexp.MustCompile(`^[0-9A-Fa-f.:]{3,}$`)
+
+func (c *Component) GetBGPVPNRouteByRD(afi, rd string) (json.RawMessage, error) {
+	if afi != "ipv4" && afi != "ipv6" {
+		return nil, fmt.Errorf("invalid BGP AFI %q", afi)
+	}
+	if !validBGPRDRE.MatchString(rd) {
+		return nil, fmt.Errorf("invalid BGP route-distinguisher %q", rd)
+	}
+	output, err := c.execVtysh("-c", "show bgp "+afi+" vpn rd "+rd+" json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
+func (c *Component) GetBGPVPNRouteByPrefix(afi, prefix string) (json.RawMessage, error) {
+	if afi != "ipv4" && afi != "ipv6" {
+		return nil, fmt.Errorf("invalid BGP AFI %q", afi)
+	}
+	if _, err := netip.ParsePrefix(prefix); err != nil {
+		return nil, fmt.Errorf("invalid BGP VPN prefix %q: %w", prefix, err)
+	}
+	output, err := c.execVtysh("-c", "show bgp "+afi+" vpn "+prefix+" json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
 }
 
 func (c *Component) fetchVPNRoutes(cmd, af string) (*bgp.VPNRoutes, error) {
