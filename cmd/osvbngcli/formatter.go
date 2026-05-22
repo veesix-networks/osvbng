@@ -385,10 +385,14 @@ func (f *GenericFormatter) formatTree(data interface{}, indent int) (string, err
 				(fieldValue.Kind() == reflect.Ptr && !fieldValue.IsNil() && fieldValue.Elem().Kind() == reflect.Struct) ||
 				fieldValue.Kind() == reflect.Slice || fieldValue.Kind() == reflect.Map {
 				sb.WriteString(fmt.Sprintf("%s%s:\n", prefix, fieldName))
-				nested, _ := f.formatTree(fieldValue.Interface(), indent+1)
-				sb.WriteString(nested)
+				if isNilOrEmpty(fieldValue) {
+					sb.WriteString(fmt.Sprintf("%s  (none)\n", prefix))
+				} else {
+					nested, _ := f.formatTree(fieldValue.Interface(), indent+1)
+					sb.WriteString(nested)
+				}
 			} else {
-				sb.WriteString(fmt.Sprintf("%s%s: %v\n", prefix, fieldName, fieldValue.Interface()))
+				sb.WriteString(fmt.Sprintf("%s%s: %s\n", prefix, fieldName, formatLeafValue(fieldValue)))
 			}
 		}
 
@@ -482,4 +486,38 @@ func (f *GenericFormatter) formatPathHierarchy(v reflect.Value) (string, error) 
 		prevParts = parts
 	}
 	return sb.String(), nil
+}
+
+// isNilOrEmpty returns true when a struct field that would otherwise recurse
+// holds no usable value: nil slice/map, nil pointer, or invalid interface.
+func isNilOrEmpty(v reflect.Value) bool {
+	if !v.IsValid() {
+		return true
+	}
+	switch v.Kind() {
+	case reflect.Ptr, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func, reflect.Interface:
+		if v.IsNil() {
+			return true
+		}
+	}
+	switch v.Kind() {
+	case reflect.Map, reflect.Slice, reflect.Array:
+		return v.Len() == 0
+	}
+	return false
+}
+
+// formatLeafValue renders a scalar struct field value. Nil interfaces /
+// pointers print as "(none)" instead of Go's default `<nil>`.
+func formatLeafValue(v reflect.Value) string {
+	if !v.IsValid() {
+		return "(none)"
+	}
+	switch v.Kind() {
+	case reflect.Ptr, reflect.Interface:
+		if v.IsNil() {
+			return "(none)"
+		}
+	}
+	return fmt.Sprintf("%v", v.Interface())
 }

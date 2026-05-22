@@ -596,6 +596,11 @@ func (c *CLI) pathSuggestions(pathTokens []string, endsWithSpace bool, includePl
 		}
 	}
 
+	// At-end-of-path flag suggestions must come only from the most-specific
+	// matching command (literal wins over wildcard), to avoid options from
+	// sibling handlers leaking into the resolved handler's help.
+	winnerAtEnd, _, _ := c.contract.matchCommand(completed)
+
 	for _, command := range c.contract.Commands {
 		positionalFlag := command.positionalScalarFlag()
 
@@ -620,6 +625,12 @@ func (c *CLI) pathSuggestions(pathTokens []string, endsWithSpace bool, includePl
 		}
 		if len(completed) >= len(command.Segments) {
 			if endsWithSpace {
+				// Only the winning command (literal score tiebreak) contributes
+				// flags; otherwise sibling wildcard handlers leak their options
+				// into a literal-match resolution.
+				if winnerAtEnd != nil && command != winnerAtEnd {
+					continue
+				}
 				if positionalFlag != nil {
 					if len(positionalFlag.Enum) > 0 {
 						suggestions = append(suggestions, c.flagValueSuggestions(positionalFlag, "")...)
@@ -647,6 +658,13 @@ func (c *CLI) pathSuggestions(pathTokens []string, endsWithSpace bool, includePl
 					Description: strings.TrimSpace(next.Param.Description),
 				})
 			}
+			continue
+		}
+
+		// Hide `.all`-suffixed telemetry-sibling paths from CLI suggestions.
+		// Operators reach the same data via `--vrf=all` on the non-all sibling;
+		// the `.all` path exists only to register multi-VRF Prom telemetry.
+		if next.Literal == "all" && len(completed) == len(command.Segments)-1 {
 			continue
 		}
 
