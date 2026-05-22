@@ -431,6 +431,35 @@ func (c *Component) GetBGPStatisticsAll(ipv4 bool) (json.RawMessage, error) {
 	return json.RawMessage(output), nil
 }
 
+var validBGPRIBFilters = map[string]struct{}{
+	"":               {},
+	"self-originate": {},
+	"cidr-only":      {},
+	"detail":         {},
+}
+
+func (c *Component) GetBGPRIB(vrf, afi, filter string) (json.RawMessage, error) {
+	if afi != "ipv4" && afi != "ipv6" {
+		return nil, fmt.Errorf("invalid BGP AFI %q", afi)
+	}
+	if _, ok := validBGPRIBFilters[filter]; !ok {
+		return nil, fmt.Errorf("invalid BGP RIB filter %q", filter)
+	}
+	prefix, err := bgpVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	cmd := "show bgp " + prefix + afi + " unicast"
+	if filter != "" {
+		cmd += " " + filter
+	}
+	output, err := c.execVtysh("-c", cmd+" json")
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(output), nil
+}
+
 func (c *Component) fetchVPNSummary(cmd, af string) (*bgp.VPNSummary, error) {
 	output, err := c.execVtysh("-c", cmd)
 	if err != nil {

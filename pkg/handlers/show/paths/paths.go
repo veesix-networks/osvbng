@@ -27,6 +27,14 @@ const (
 	ProtocolsBGPIPv4UnicastSummaryAll Path = "protocols.bgp.ipv4.unicast.summary.all"
 	ProtocolsBGPIPv6UnicastSummary    Path = "protocols.bgp.ipv6.unicast.summary"
 	ProtocolsBGPIPv6UnicastSummaryAll Path = "protocols.bgp.ipv6.unicast.summary.all"
+
+	ProtocolsBGPIPv4Unicast              Path = "protocols.bgp.ipv4.unicast"
+	ProtocolsBGPIPv4UnicastSelfOriginate Path = "protocols.bgp.ipv4.unicast.self-originate"
+	ProtocolsBGPIPv4UnicastCIDROnly      Path = "protocols.bgp.ipv4.unicast.cidr-only"
+	ProtocolsBGPIPv6Unicast              Path = "protocols.bgp.ipv6.unicast"
+	ProtocolsBGPIPv6UnicastSelfOriginate Path = "protocols.bgp.ipv6.unicast.self-originate"
+	ProtocolsBGPIPv6UnicastCIDROnly      Path = "protocols.bgp.ipv6.unicast.cidr-only"
+
 	ProtocolsBGPVPNIPv4        Path = "protocols.bgp.vpn.ipv4"
 	ProtocolsBGPVPNIPv6        Path = "protocols.bgp.vpn.ipv6"
 	ProtocolsBGPVPNIPv4Summary Path = "protocols.bgp.vpn.ipv4.summary"
