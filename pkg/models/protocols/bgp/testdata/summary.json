@@ -1,0 +1,87 @@
+{
+"ipv4Unicast":{
+  "routerId":"10.254.0.1",
+  "as":65000,
+  "vrfId":0,
+  "vrfName":"default",
+  "tableVersion":1,
+  "ribCount":1,
+  "ribMemory":152,
+  "peerCount":1,
+  "peerMemory":24072,
+  "peers":{
+    "10.254.0.2":{
+      "hostname":"corerouter1",
+      "softwareVersion":"n/a",
+      "remoteAs":65000,
+      "localAs":65000,
+      "version":4,
+      "msgRcvd":23,
+      "msgSent":24,
+      "tableVersion":0,
+      "outq":0,
+      "inq":0,
+      "peerUptime":"00:19:01",
+      "peerUptimeMsec":1141000,
+      "peerUptimeEstablishedEpoch":1779454126,
+      "pfxRcd":0,
+      "pfxSnt":0,
+      "state":"Established",
+      "peerState":"OK",
+      "connectionsEstablished":1,
+      "connectionsDropped":0,
+      "idType":"ipv4"
+    }
+  },
+  "failedPeers":1,
+  "displayedPeers":1,
+  "totalPeers":1,
+  "dynamicPeers":0,
+  "bestPath":{
+    "multiPathRelax":"false"
+  }
+}
+,
+"ipv4Vpn":{
+  "routerId":"10.254.0.1",
+  "as":65000,
+  "vrfId":0,
+  "vrfName":"default",
+  "tableVersion":0,
+  "ribCount":1,
+  "ribMemory":152,
+  "peerCount":1,
+  "peerMemory":24072,
+  "peers":{
+    "10.254.0.2":{
+      "hostname":"corerouter1",
+      "softwareVersion":"n/a",
+      "remoteAs":65000,
+      "localAs":65000,
+      "version":4,
+      "msgRcvd":23,
+      "msgSent":24,
+      "tableVersion":3,
+      "outq":0,
+      "inq":0,
+      "peerUptime":"00:19:01",
+      "peerUptimeMsec":1141000,
+      "peerUptimeEstablishedEpoch":1779454126,
+      "pfxRcd":1,
+      "pfxSnt":2,
+      "state":"Established",
+      "peerState":"OK",
+      "connectionsEstablished":1,
+      "connectionsDropped":0,
+      "idType":"ipv4"
+    }
+  },
+  "failedPeers":0,
+  "displayedPeers":1,
+  "totalPeers":1,
+  "dynamicPeers":0,
+  "bestPath":{
+    "multiPathRelax":"false"
+  }
+}
+}
