@@ -564,16 +564,27 @@ func (c *Component) GetBGPAFISummaryAll(afi string) (map[string]bgp.SummaryAFI, 
 	return out, nil
 }
 
-func (c *Component) GetBGPStatisticsAll(ipv4 bool) (json.RawMessage, error) {
+func (c *Component) GetBGPStatisticsAll(ipv4 bool) ([]bgp.Statistics, error) {
 	afi := "ipv4"
+	wrapperKey := "ipv4Unicast"
 	if !ipv4 {
 		afi = "ipv6"
+		wrapperKey = "ipv6Unicast"
 	}
 	output, err := c.execVtysh("-c", "show bgp vrf all "+afi+" unicast statistics json")
 	if err != nil {
 		return nil, err
 	}
-	return json.RawMessage(output), nil
+	var wrapper map[string][]bgp.Statistics
+	if err := json.Unmarshal(output, &wrapper); err != nil {
+		return nil, fmt.Errorf("parse BGP %s unicast statistics (vrf all): %w", afi, err)
+	}
+	entries := wrapper[wrapperKey]
+	for i := range entries {
+		entries[i].AddressFamily = afi
+		entries[i].VRF = vrfFromInstance(entries[i].Instance)
+	}
+	return entries, nil
 }
 
 var validBGPRIBFilters = map[string]struct{}{
@@ -589,12 +600,16 @@ var validBGPNeighborViews = map[string]struct{}{
 	"routes":            {},
 }
 
-func (c *Component) GetBGPNeighborsAll() (json.RawMessage, error) {
+func (c *Component) GetBGPNeighborsAll() (*bgp.NeighborsAll, error) {
 	output, err := c.execVtysh("-c", "show bgp vrf all neighbors json")
 	if err != nil {
 		return nil, err
 	}
-	return json.RawMessage(output), nil
+	out := &bgp.NeighborsAll{VRFs: map[string]bgp.VRFNeighborSummary{}}
+	if err := json.Unmarshal(output, &out.VRFs); err != nil {
+		return nil, fmt.Errorf("parse BGP neighbors (vrf all): %w", err)
+	}
+	return out, nil
 }
 
 func (c *Component) GetBGPImportCheckTable(vrf string, detail bool) (json.RawMessage, error) {
