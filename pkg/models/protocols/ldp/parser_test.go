@@ -142,6 +142,119 @@ func TestEmptyResponses(t *testing.T) {
 	}
 }
 
+func TestNeighborDetail_Parse(t *testing.T) {
+	t.Parallel()
+	data := loadFixture(t, "neighbor-detail.json")
+
+	var raw map[string]NeighborDetail
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal neighbor-detail: %v", err)
+	}
+	if len(raw) == 0 {
+		t.Fatal("expected at least one neighbor in fixture")
+	}
+	for ip, d := range raw {
+		if d.PeerId == "" {
+			t.Errorf("neighbor %s: PeerId unset", ip)
+		}
+		if d.TCPLocalPort == 0 {
+			t.Errorf("neighbor %s: TCPLocalPort zero", ip)
+		}
+		if d.State == "" {
+			t.Errorf("neighbor %s: State unset", ip)
+		}
+		if len(d.SentMessages) == 0 {
+			t.Errorf("neighbor %s: SentMessages raw payload empty", ip)
+		}
+	}
+}
+
+func TestCapabilities_Parse(t *testing.T) {
+	t.Parallel()
+	data := loadFixture(t, "capabilities.json")
+
+	var wrapper struct {
+		Capabilities []CapabilityTLV `json:"capabilities"`
+	}
+	if err := json.Unmarshal(data, &wrapper); err != nil {
+		t.Fatalf("unmarshal capabilities: %v", err)
+	}
+	if len(wrapper.Capabilities) == 0 {
+		t.Fatal("expected at least one capability TLV")
+	}
+	for i, c := range wrapper.Capabilities {
+		if c.Description == "" {
+			t.Errorf("tlv %d: Description unset", i)
+		}
+		if c.TLVType == "" {
+			t.Errorf("tlv %d: TLVType unset", i)
+		}
+	}
+}
+
+func TestNeighborCapabilities_Parse(t *testing.T) {
+	t.Parallel()
+	data := loadFixture(t, "neighbor-capabilities.json")
+
+	var raw map[string]NeighborCapabilities
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal neighbor-capabilities: %v", err)
+	}
+	if len(raw) == 0 {
+		t.Fatal("expected at least one neighbor in fixture")
+	}
+	for ip, caps := range raw {
+		if len(caps.SentCapabilities) == 0 && len(caps.ReceivedCapabilities) == 0 {
+			t.Errorf("neighbor %s: both sent and received capabilities empty", ip)
+		}
+	}
+}
+
+func TestIGPSync_Parse(t *testing.T) {
+	t.Parallel()
+	data := loadFixture(t, "igp-sync.json")
+
+	var raw map[string]IGPSync
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal igp-sync: %v", err)
+	}
+	if len(raw) == 0 {
+		t.Fatal("expected at least one interface in fixture")
+	}
+	for iface, s := range raw {
+		if iface == "" {
+			t.Error("interface key empty")
+		}
+		if s.State == "" {
+			t.Errorf("interface %s: State unset", iface)
+		}
+	}
+}
+
+func TestInterface_Parse(t *testing.T) {
+	t.Parallel()
+	data := loadFixture(t, "interface.json")
+
+	var raw map[string]Interface
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal interface: %v", err)
+	}
+	if len(raw) == 0 {
+		t.Fatal("expected at least one interface in fixture")
+	}
+	for key, iface := range raw {
+		if key == "" {
+			t.Error("composite key empty")
+		}
+		if iface.State == "" {
+			t.Errorf("entry %s: State unset", key)
+		}
+		if iface.HelloInterval == 0 {
+			t.Errorf("entry %s: HelloInterval zero", key)
+		}
+	}
+}
+
 func TestUnmodeledKeysAreDroppedSilently(t *testing.T) {
 	t.Parallel()
 	junked := []byte(`{
