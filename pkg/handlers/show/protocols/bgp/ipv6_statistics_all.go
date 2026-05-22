@@ -12,10 +12,13 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
+	"github.com/veesix-networks/osvbng/pkg/models/protocols/bgp"
+	"github.com/veesix-networks/osvbng/pkg/telemetry"
 )
 
 func init() {
 	show.RegisterFactory(NewBGPIPv6StatisticsAllHandler)
+	telemetry.RegisterMetric[bgp.Statistics](paths.ProtocolsBGPIPv6StatisticsAll)
 }
 
 type BGPIPv6StatisticsAllHandler struct {

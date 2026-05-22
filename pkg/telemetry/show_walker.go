@@ -138,9 +138,11 @@ func (bc *bindContext) bindStruct(t reflect.Type) *structMetrics {
 			if spec.kind != "" || spec.name != "" {
 				panic(fmt.Errorf("telemetry: %s.%s: flatten cannot combine with a value-metric tag", t, f.Name))
 			}
-			if isMapShape(f.Type) && bc.insideFlatten {
-				panic(fmt.Errorf("telemetry: %s.%s: nested map flatten is not supported", t, f.Name))
-			}
+			// Nested map flatten is allowed: an outer map's value-struct may itself
+			// carry a flatten map field. Each level's inner struct must declare a
+			// metric:"...,map_key" field for the per-key label to project; the
+			// dispatch chain (emitFlattenField → emitMap → emitWithMapKey) iterates
+			// nested maps without modification.
 			innerType := unwrapFlatten(t, f)
 			saved := bc.inherited
 			savedInside := bc.insideFlatten
