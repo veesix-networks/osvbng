@@ -1,3 +1,7 @@
+// Copyright 2026 The osvbng Authors
+// Licensed under the GNU General Public License v3.0 or later.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package ldp
 
 import (
@@ -29,7 +33,11 @@ func (h *LDPBindingsHandler) Collect(ctx context.Context, req *show.Request) (in
 	if h.routing == nil {
 		return nil, fmt.Errorf("routing component not available")
 	}
-	return h.routing.GetLDPBindings()
+	return h.routing.GetLDPBindings(req.Options["afi"], routing.BindingFilter{
+		Neighbor:    req.Options["neighbor"],
+		LocalLabel:  req.Options["local_label"],
+		RemoteLabel: req.Options["remote_label"],
+	})
 }
 
 func (h *LDPBindingsHandler) PathPattern() paths.Path {
@@ -46,4 +54,15 @@ func (h *LDPBindingsHandler) Summary() string {
 
 func (h *LDPBindingsHandler) Description() string {
 	return "Display LDP label-to-prefix bindings from FRR."
+}
+
+type LDPBindingsOptions struct {
+	AFI         string `query:"afi" description:"Address family: ipv4 or ipv6; empty means both"`
+	Neighbor    string `query:"neighbor" description:"Filter by LDP neighbor LSR-ID"`
+	LocalLabel  string `query:"local_label" description:"Filter by local label (numeric or imp-null)"`
+	RemoteLabel string `query:"remote_label" description:"Filter by remote label (numeric or imp-null)"`
+}
+
+func (h *LDPBindingsHandler) OptionsType() interface{} {
+	return &LDPBindingsOptions{}
 }
