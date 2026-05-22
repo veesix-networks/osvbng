@@ -189,8 +189,10 @@ protocols:
     address-families:
       ipv4:
         transport-address: 10.254.0.1
-      ipv6:
-        transport-address: 2001:db8:254::1
+    # ipv6 LDP transport deferred — kernel-side LCP doesn't propagate the
+    # VPP-managed ipv6 interface addresses, so ldpd can't bind to the
+    # transport-address. Tracked as a separate follow-up; ipv6 LDP handler
+    # code lands via #82 but Robot integration is gated on this LCP gap.
 
 aaa:
   auth_provider: local
