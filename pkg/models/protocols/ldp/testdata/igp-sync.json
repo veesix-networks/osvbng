@@ -1,0 +1,9 @@
+{
+  "eth2":{
+    "state":"labelExchangeComplete",
+    "waitTime":10,
+    "waitTimeRemaining":0,
+    "timerRunning":false,
+    "peerLdpId":"10.254.0.3"
+  }
+}

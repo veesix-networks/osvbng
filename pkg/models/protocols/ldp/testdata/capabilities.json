@@ -1,0 +1,16 @@
+{
+  "capabilities":[
+    {
+      "description":"Dynamic Announcement",
+      "tlvType":"0x0506"
+    },
+    {
+      "description":"Typed Wildcard",
+      "tlvType":"0x050B"
+    },
+    {
+      "description":"Unrecognized Notification",
+      "tlvType":"0x0603"
+    }
+  ]
+}
