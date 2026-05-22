@@ -1,3 +1,7 @@
+// Copyright 2026 The osvbng Authors
+// Licensed under the GNU General Public License v3.0 or later.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package ipv6
 
 import (
@@ -29,7 +33,7 @@ func (h *BGPVPNIPv6Handler) Collect(ctx context.Context, req *show.Request) (int
 	if h.routing == nil {
 		return nil, fmt.Errorf("routing component not available")
 	}
-	return h.routing.GetBGPVPNv6Routes()
+	return h.routing.GetBGPVPNRoutes(req.Options["vrf"], "ipv6")
 }
 
 func (h *BGPVPNIPv6Handler) PathPattern() paths.Path {
@@ -46,4 +50,12 @@ func (h *BGPVPNIPv6Handler) Summary() string {
 
 func (h *BGPVPNIPv6Handler) Description() string {
 	return "Display the BGP VPNv6 unicast routing table."
+}
+
+type BGPVPNIPv6Options struct {
+	VRF string `query:"vrf" description:"VRF name; empty means the default routing table"`
+}
+
+func (h *BGPVPNIPv6Handler) OptionsType() interface{} {
+	return &BGPVPNIPv6Options{}
 }

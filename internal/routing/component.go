@@ -324,20 +324,26 @@ func (c *Component) GetBGPNeighbor(neighborIP string) (*bgp.Neighbor, error) {
 	return nil, nil
 }
 
-func (c *Component) GetBGPVPNv4Routes() (*bgp.VPNRoutes, error) {
-	return c.fetchVPNRoutes("show bgp ipv4 vpn json", "ipv4")
+func (c *Component) GetBGPVPNRoutes(vrf, afi string) (*bgp.VPNRoutes, error) {
+	if afi != "ipv4" && afi != "ipv6" {
+		return nil, fmt.Errorf("invalid BGP AFI %q", afi)
+	}
+	prefix, err := bgpVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	return c.fetchVPNRoutes("show bgp "+prefix+afi+" vpn json", afi)
 }
 
-func (c *Component) GetBGPVPNv6Routes() (*bgp.VPNRoutes, error) {
-	return c.fetchVPNRoutes("show bgp ipv6 vpn json", "ipv6")
-}
-
-func (c *Component) GetBGPVPNv4Summary() (*bgp.VPNSummary, error) {
-	return c.fetchVPNSummary("show bgp ipv4 vpn summary json", "ipv4")
-}
-
-func (c *Component) GetBGPVPNv6Summary() (*bgp.VPNSummary, error) {
-	return c.fetchVPNSummary("show bgp ipv6 vpn summary json", "ipv6")
+func (c *Component) GetBGPVPNSummary(vrf, afi string) (*bgp.VPNSummary, error) {
+	if afi != "ipv4" && afi != "ipv6" {
+		return nil, fmt.Errorf("invalid BGP AFI %q", afi)
+	}
+	prefix, err := bgpVRFPrefix(vrf)
+	if err != nil {
+		return nil, err
+	}
+	return c.fetchVPNSummary("show bgp "+prefix+afi+" vpn summary json", afi)
 }
 
 func (c *Component) fetchVPNRoutes(cmd, af string) (*bgp.VPNRoutes, error) {

@@ -1,3 +1,7 @@
+// Copyright 2026 The osvbng Authors
+// Licensed under the GNU General Public License v3.0 or later.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package ipv4
 
 import (
@@ -29,7 +33,7 @@ func (h *BGPVPNIPv4Handler) Collect(ctx context.Context, req *show.Request) (int
 	if h.routing == nil {
 		return nil, fmt.Errorf("routing component not available")
 	}
-	return h.routing.GetBGPVPNv4Routes()
+	return h.routing.GetBGPVPNRoutes(req.Options["vrf"], "ipv4")
 }
 
 func (h *BGPVPNIPv4Handler) PathPattern() paths.Path {
@@ -46,4 +50,12 @@ func (h *BGPVPNIPv4Handler) Summary() string {
 
 func (h *BGPVPNIPv4Handler) Description() string {
 	return "Display the BGP VPNv4 unicast routing table."
+}
+
+type BGPVPNIPv4Options struct {
+	VRF string `query:"vrf" description:"VRF name; empty means the default routing table"`
+}
+
+func (h *BGPVPNIPv4Handler) OptionsType() interface{} {
+	return &BGPVPNIPv4Options{}
 }
