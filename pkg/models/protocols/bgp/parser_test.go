@@ -206,3 +206,41 @@ func TestMissingKeyAndEmptyArrayDistinction(t *testing.T) {
 		t.Errorf("empty map should have zero entries, got %d", len(s2.Peers))
 	}
 }
+
+func TestSummaryAFI_Parse(t *testing.T) {
+	t.Parallel()
+	var s SummaryAFI
+	if err := json.Unmarshal(loadFixture(t, "ipv4-unicast-summary.json"), &s); err != nil {
+		t.Fatalf("unmarshal ipv4 unicast summary: %v", err)
+	}
+	if s.RouterID != "10.254.0.1" {
+		t.Errorf("RouterID = %q, want 10.254.0.1", s.RouterID)
+	}
+	if s.AS != 65000 {
+		t.Errorf("AS = %d, want 65000", s.AS)
+	}
+	if s.VRFName != "default" {
+		t.Errorf("VRFName = %q, want default", s.VRFName)
+	}
+	if s.PeerCount != 1 {
+		t.Errorf("PeerCount = %d, want 1", s.PeerCount)
+	}
+	peer, ok := s.Peers["10.254.0.2"]
+	if !ok {
+		t.Fatalf("missing peer 10.254.0.2; got %v", peerKeys(s.Peers))
+	}
+	if peer.State != "Established" {
+		t.Errorf("Peer.State = %q, want Established", peer.State)
+	}
+	if peer.RemoteAS != 65000 {
+		t.Errorf("Peer.RemoteAS = %d, want 65000", peer.RemoteAS)
+	}
+}
+
+func peerKeys(m map[string]SummaryPeer) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
