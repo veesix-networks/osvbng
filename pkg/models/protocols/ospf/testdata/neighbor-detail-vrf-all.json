@@ -1,0 +1,31 @@
+{
+  "default":{
+    "vrfName":"default",
+    "vrfId":0,
+    "neighbors":{
+      "10.254.0.2":[
+        {
+          "ifaceAddress":"10.0.0.2",
+          "areaId":"0.0.0.0",
+          "ifaceName":"eth2",
+          "localIfaceAddress":"10.0.0.1",
+          "nbrPriority":1,
+          "nbrState":"Full/-",
+          "role":"DROther",
+          "stateChangeCounter":5,
+          "lsaRetransmissions":1,
+          "lastPrgrsvChangeMsec":1766459,
+          "optionsCounter":2,
+          "optionsList":"*|-|-|-|-|-|E|-",
+          "routerDeadIntervalTimerDueMsec":33639,
+          "databaseSummaryListCounter":0,
+          "linkStateRequestListCounter":0,
+          "linkStateRetransmissionListCounter":0,
+          "threadInactivityTimer":"on",
+          "threadLinkStateRequestRetransmission":"on",
+          "grHelperStatus":"None"
+        }
+      ]
+    }
+  }
+}
