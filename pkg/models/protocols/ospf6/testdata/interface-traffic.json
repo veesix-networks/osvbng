@@ -1,0 +1,14 @@
+{
+  "eth2":{
+    "helloRx":4901,
+    "helloTx":4902,
+    "dbDescRx":2,
+    "dbDescTx":3,
+    "lsReqRx":1,
+    "lsReqTx":1,
+    "lsUpdateRx":57,
+    "lsUpdateTx":57,
+    "lsAckRx":56,
+    "lsAckTx":56
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "routerId":"10.254.0.1",
+  "helperSupport":"Disabled",
+  "strictLsaCheck":"Enabled",
+  "restartSupport":"Planned and Unplanned Restarts",
+  "supportedGracePeriod":1800
+}
