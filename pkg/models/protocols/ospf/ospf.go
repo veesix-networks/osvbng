@@ -4,11 +4,8 @@
 
 package ospf
 
-// Neighbor matches one entry inside the `neighbors` map of
-// `show ip ospf neighbor json`. The Area field receives the OSPF area
-// (the wrapping map key) via metric:"map_key".
 type Neighbor struct {
-	Area                               string `json:"-" metric:"label,map_key"`
+	RouterID                           string `json:"-" metric:"label=neighbor_router_id,map_key"`
 	NbrState                           string `json:"nbrState"                            metric:"label"`
 	NbrPriority                        int    `json:"nbrPriority"                         metric:"name=protocols.ospf.neighbor.priority,type=gauge,help=OSPF neighbor priority."`
 	Converged                          string `json:"converged"`

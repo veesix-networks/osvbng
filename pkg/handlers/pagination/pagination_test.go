@@ -5,6 +5,7 @@
 package pagination
 
 import (
+	"encoding/json"
 	"net/url"
 	"reflect"
 	"testing"
@@ -160,6 +161,24 @@ func TestPaginate_PassThroughNil(t *testing.T) {
 	}
 	if page.Paginated {
 		t.Fatal("nil pointer should pass through unpaginated")
+	}
+}
+
+func TestPaginate_PassThroughByteSlice(t *testing.T) {
+	in := json.RawMessage(`{"routerId":"10.254.0.1","areas":{"0.0.0.0":{"foo":1}}}`)
+	page, err := Paginate(in, Request{Limit: 10}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Paginated {
+		t.Fatal("json.RawMessage / []byte must not be paginated as items")
+	}
+	got, ok := page.Items.(json.RawMessage)
+	if !ok {
+		t.Fatalf("Items type = %T, want json.RawMessage", page.Items)
+	}
+	if string(got) != string(in) {
+		t.Fatalf("bytes mutated: got %q, want %q", got, in)
 	}
 }
 

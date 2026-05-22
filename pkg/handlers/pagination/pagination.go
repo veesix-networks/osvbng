@@ -70,6 +70,10 @@ func Paginate(data interface{}, req Request, sortKey string) (Page, error) {
 		return Page{Items: data, Paginated: false}, nil
 	}
 
+	if v.Type().Elem().Kind() == reflect.Uint8 {
+		return Page{Items: data, Paginated: false}, nil
+	}
+
 	total := v.Len()
 
 	if sortKey != "" && total > 1 {
