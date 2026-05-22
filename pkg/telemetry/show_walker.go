@@ -500,14 +500,6 @@ func formatMapKey(k reflect.Value) string {
 	return ""
 }
 
-// isMapShape returns true if t (after pointer unwrap) is a map kind.
-func isMapShape(t reflect.Type) bool {
-	for t.Kind() == reflect.Pointer {
-		t = t.Elem()
-	}
-	return t.Kind() == reflect.Map
-}
-
 func readUintField(fv reflect.Value) (uint64, bool) {
 	switch fv.Kind() {
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
