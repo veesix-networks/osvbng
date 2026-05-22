@@ -273,9 +273,10 @@ func (c *Component) GetBGPStatistics(ipv4 bool) (*bgp.Statistics, error) {
 		return nil, fmt.Errorf("parse BGP statistics: %w", err)
 	}
 
-	result := &bgp.Statistics{AddressFamily: af}
+	result := &bgp.Statistics{AddressFamily: af, VRF: "default"}
 	if entries, ok := wrapper[wrapperKey]; ok && len(entries) > 0 {
 		entries[0].AddressFamily = af
+		entries[0].VRF = vrfFromInstance(entries[0].Instance)
 		*result = entries[0]
 	}
 	return result, nil
