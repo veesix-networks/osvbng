@@ -86,7 +86,13 @@ func (c *CLI) Run() error {
 		if err != nil {
 			if err == readline.ErrInterrupt {
 				if len(line) == 0 {
-					break
+					// rl.Close() blocks for seconds waiting on the
+					// stdin-reader goroutine parked in read(2). Skip it on
+					// Ctrl+C and exit directly; rl.Clean() restores terminal
+					// state without the drain. History is still saved on
+					// the exit/quit/EOF paths below.
+					c.rl.Clean()
+					os.Exit(130)
 				}
 				continue
 			}
