@@ -317,7 +317,25 @@ func (cd *ConfigManager) Commit(id conf.SessionID) error {
 
 	diff := FormatChanges(sess.changes)
 
-	changes := make([]Change, 0)
+	cd.runningConfig = sess.config
+	cd.refreshMixedAccessSet()
+
+	cd.startupConfig = cd.deepCopyConfig(cd.runningConfig)
+	if err := SaveYAML(cd.startupConfigPath, cd.startupConfig); err != nil {
+		return fmt.Errorf("failed to save startup config: %w", err)
+	}
+
+	delete(cd.sessions, id)
+	if cd.lockOwner == id {
+		cd.lockOwner = ""
+	}
+
+	if diff.IsEmpty() {
+		cd.logger.Info("Commit produced no changes; skipping version record")
+		return nil
+	}
+
+	changes := make([]Change, 0, len(diff.Added)+len(diff.Modified)+len(diff.Deleted))
 	for _, line := range diff.Added {
 		changes = append(changes, Change{Type: "add", Path: line.Path, Value: line.Value})
 	}
@@ -336,23 +354,11 @@ func (cd *ConfigManager) Commit(id conf.SessionID) error {
 	}
 
 	cd.versions = append(cd.versions, version)
-	cd.runningConfig = sess.config
-	cd.refreshMixedAccessSet()
 
 	if !cd.disableVersions {
 		if err := cd.saveVersion(version); err != nil {
 			return fmt.Errorf("failed to save version: %w", err)
 		}
-	}
-
-	cd.startupConfig = cd.deepCopyConfig(cd.runningConfig)
-	if err := SaveYAML(cd.startupConfigPath, cd.startupConfig); err != nil {
-		return fmt.Errorf("failed to save startup config: %w", err)
-	}
-
-	delete(cd.sessions, id)
-	if cd.lockOwner == id {
-		cd.lockOwner = ""
 	}
 
 	cd.logger.Info("Configuration committed successfully", "version", version.Version, "added", len(diff.Added), "modified", len(diff.Modified), "deleted", len(diff.Deleted))
