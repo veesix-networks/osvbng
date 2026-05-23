@@ -11,6 +11,7 @@ type Southbound interface {
 	IPv6
 	Punt
 	MPLS
+	FIB
 	Multicast
 	Sessions
 	Statistics
