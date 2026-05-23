@@ -75,7 +75,6 @@ func (c *CLI) Run() error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize readline: %w", err)
 	}
-	defer c.rl.Close()
 
 	c.printBanner()
 
@@ -86,13 +85,7 @@ func (c *CLI) Run() error {
 		if err != nil {
 			if err == readline.ErrInterrupt {
 				if len(line) == 0 {
-					// rl.Close() blocks for seconds waiting on the
-					// stdin-reader goroutine parked in read(2). Skip it on
-					// Ctrl+C and exit directly; rl.Clean() restores terminal
-					// state without the drain. History is still saved on
-					// the exit/quit/EOF paths below.
-					c.rl.Clean()
-					os.Exit(130)
+					c.fastExit(130)
 				}
 				continue
 			}
@@ -100,8 +93,9 @@ func (c *CLI) Run() error {
 				if c.configMode {
 					_ = c.bestEffortDiscard()
 				}
-				break
+				c.fastExit(0)
 			}
+			c.restoreTerminal()
 			return err
 		}
 
@@ -115,11 +109,33 @@ func (c *CLI) Run() error {
 		}
 	}
 
+	c.fastExit(0)
 	return nil
 }
 
 func (c *CLI) Stop() {
 	c.running = false
+}
+
+// fastExit terminates the process without invoking readline.Close(). Close()
+// blocks on a WaitGroup that waits for the stdin-reader goroutine to wake from
+// a blocking read(2), which only happens on the next keystroke; that lag was
+// the multi-second pause on Ctrl+C / exit / quit / EOF. History is written
+// incrementally per command (chzyer/readline opHistory.Update with commit=true),
+// so skipping Close() doesn't lose history.
+func (c *CLI) fastExit(code int) {
+	c.restoreTerminal()
+	os.Exit(code)
+}
+
+func (c *CLI) restoreTerminal() {
+	if c.rl == nil {
+		return
+	}
+	c.rl.Clean()
+	if c.rl.Terminal != nil {
+		_ = c.rl.Terminal.ExitRawMode()
+	}
 }
 
 func (c *CLI) OnChange(line []rune, pos int, key rune) (newLine []rune, newPos int, ok bool) {
