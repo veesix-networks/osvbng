@@ -15,6 +15,7 @@ import (
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/protocols/bgp"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/protocols/bgp/vpn/ipv4"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/protocols/bgp/vpn/ipv6"
+	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/protocols/fib"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/protocols/isis"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/protocols/ldp"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/protocols/mpls"

@@ -110,6 +110,35 @@ type MPLSInterfaceInfo struct {
 	Name      string `json:"name,omitempty"  metric:"label"`
 }
 
+type IPFIBEntry struct {
+	TableID    uint32      `json:"table_id"`
+	Prefix     string      `json:"prefix"`
+	StatsIndex uint32      `json:"stats_index"`
+	Paths      []IPFIBPath `json:"paths,omitempty"`
+}
+
+type IPFIBPath struct {
+	SwIfIndex  uint32   `json:"sw_if_index"`
+	Interface  string   `json:"interface,omitempty"`
+	NextHop    string   `json:"next_hop,omitempty"`
+	Weight     uint8    `json:"weight"`
+	Preference uint8    `json:"preference"`
+	Type       string   `json:"type"`
+	Proto      string   `json:"proto"`
+	Labels     []uint32 `json:"labels,omitempty"`
+}
+
+type IPFIBSummary struct {
+	TableID    uint32 `json:"-"           metric:"label=table_id,map_key"`
+	Name       string `json:"name"        metric:"label=table_name"`
+	IsIPv6     bool   `json:"is_ipv6"`
+	EntryCount uint32 `json:"entry_count" metric:"name=protocols.fib.entry_count,type=gauge,help=Number of FIB entries in this table."`
+}
+
+type IPFIBSummaryAll struct {
+	Tables map[uint32]IPFIBSummary `json:"-" metric:"flatten"`
+}
+
 type SystemStats struct {
 	VectorRate          uint64   `json:"vector_rate"        metric:"name=dataplane.vpp.system.vector_rate,type=gauge,help=VPP vector rate."`
 	InputRate           uint64   `json:"input_rate"         metric:"name=dataplane.vpp.system.input_rate,type=gauge,help=VPP input rate."`
