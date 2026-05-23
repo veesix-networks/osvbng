@@ -754,10 +754,11 @@ func dotPathToURLPath(pattern, prefix string) (string, openapi3.Parameters) {
 			urlParts = append(urlParts, "{"+name+"}")
 			params = append(params, &openapi3.ParameterRef{
 				Value: &openapi3.Parameter{
-					Name:     name,
-					In:       "path",
-					Required: true,
-					Schema:   wildcardTypeToSchema(inner),
+					Name:        name,
+					In:          "path",
+					Required:    true,
+					Description: wildcardDescription(inner, parts, i),
+					Schema:      wildcardTypeToSchema(inner),
 				},
 			})
 			continue
@@ -767,6 +768,52 @@ func dotPathToURLPath(pattern, prefix string) (string, openapi3.Parameters) {
 	}
 
 	return prefix + strings.Join(urlParts, "/"), params
+}
+
+// wildcardDescription derives a human-readable description for a path wildcard
+// of the form `<*:type>` (or bare `<name>`). Falls back to a generic string when
+// the type isn't recognised. Operators see this in osvbngcli help and OpenAPI.
+func wildcardDescription(inner string, parts []string, index int) string {
+	if !strings.Contains(inner, ":") {
+		return ""
+	}
+	typeName := strings.SplitN(inner, ":", 2)[1]
+	var preceding string
+	if index > 0 {
+		preceding = parts[index-1]
+	}
+	switch typeName {
+	case "ip":
+		if preceding == "neighbors" || preceding == "neighbor" {
+			return "Neighbor address (IPv4 or IPv6)"
+		}
+		return "IP address (IPv4 or IPv6)"
+	case "ipv4":
+		if preceding == "neighbors" || preceding == "neighbor" {
+			return "Neighbor router-id (IPv4 address)"
+		}
+		return "IPv4 address"
+	case "ipv6":
+		return "IPv6 address"
+	case "prefix":
+		return "IP prefix in CIDR notation (A.B.C.D/M or X:X::X:X/M)"
+	case "mac":
+		return "MAC address"
+	case "rd":
+		return "BGP route-distinguisher (e.g. 65000:100 or 10.0.0.1:100)"
+	case "protocol":
+		return "Routing protocol name"
+	case "lsa-type":
+		return "OSPF LSA type (router|network|summary|asbr-summary|external|nssa-external|opaque-link|opaque-area|opaque-as)"
+	case "uint8", "uint16", "uint32", "uint64":
+		return "Unsigned integer"
+	case "int8", "int16", "int32", "int64":
+		return "Signed integer"
+	}
+	if preceding != "" {
+		return strings.TrimSuffix(preceding, "s") + " identifier"
+	}
+	return ""
 }
 
 func deriveParamName(inner string, parts []string, index int) string {
