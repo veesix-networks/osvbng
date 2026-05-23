@@ -37,13 +37,11 @@ func (h *LDPBindingPrefixHandler) Collect(ctx context.Context, req *show.Request
 	if len(wildcards) != 1 {
 		return nil, fmt.Errorf("invalid path: expected 1 wildcard, got %d", len(wildcards))
 	}
-	_, longerPrefixes := req.Options["longer_prefixes"]
-	_, detail := req.Options["detail"]
 	return h.routing.GetLDPBindingByPrefix(
 		req.Options["afi"],
 		wildcards[0],
-		longerPrefixes,
-		detail,
+		req.BoolOption("longer_prefixes"),
+		req.BoolOption("detail"),
 		routing.BindingFilter{
 			Neighbor:    req.Options["neighbor"],
 			LocalLabel:  req.Options["local_label"],
@@ -70,8 +68,8 @@ func (h *LDPBindingPrefixHandler) Description() string {
 
 type LDPBindingPrefixOptions struct {
 	AFI            string `query:"afi" description:"Address family: ipv4 or ipv6; empty means both"`
-	LongerPrefixes string `query:"longer_prefixes" description:"Set to include longer prefixes than the supplied one (presence flag)"`
-	Detail         string `query:"detail" description:"Set to include detailed binding state (presence flag)"`
+	LongerPrefixes bool   `query:"longer_prefixes" description:"Include longer prefixes than the supplied one"`
+	Detail         bool   `query:"detail" description:"Include detailed binding state"`
 	Neighbor       string `query:"neighbor" description:"Filter by LDP neighbor LSR-ID"`
 	LocalLabel     string `query:"local_label" description:"Filter by local label (numeric or imp-null)"`
 	RemoteLabel    string `query:"remote_label" description:"Filter by remote label (numeric or imp-null)"`

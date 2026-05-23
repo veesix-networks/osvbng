@@ -3,6 +3,7 @@ package show
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/veesix-networks/osvbng/pkg/deps"
@@ -21,6 +22,22 @@ type Request struct {
 
 func (r *Request) GetPath() string {
 	return r.Path
+}
+
+// BoolOption returns the parsed boolean value of the named option. Missing
+// key, empty value, or unparseable value all return false. Use this for
+// boolean query parameters — the older `_, ok := req.Options[key]` presence
+// check incorrectly returns true for `?key=false` and any other present value.
+func (r *Request) BoolOption(key string) bool {
+	v, ok := r.Options[key]
+	if !ok || v == "" {
+		return false
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return false
+	}
+	return b
 }
 
 type ShowHandler interface {

@@ -21,6 +21,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
 	"github.com/veesix-networks/osvbng/pkg/handlers/oper"
 	"github.com/veesix-networks/osvbng/pkg/handlers/show"
+	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
 	"github.com/veesix-networks/osvbng/pkg/version"
 )
 
@@ -754,10 +755,11 @@ func dotPathToURLPath(pattern, prefix string) (string, openapi3.Parameters) {
 			urlParts = append(urlParts, "{"+name+"}")
 			params = append(params, &openapi3.ParameterRef{
 				Value: &openapi3.Parameter{
-					Name:     name,
-					In:       "path",
-					Required: true,
-					Schema:   wildcardTypeToSchema(inner),
+					Name:        name,
+					In:          "path",
+					Required:    true,
+					Description: wildcardDescription(inner, parts, i),
+					Schema:      wildcardTypeToSchema(inner),
 				},
 			})
 			continue
@@ -769,20 +771,67 @@ func dotPathToURLPath(pattern, prefix string) (string, openapi3.Parameters) {
 	return prefix + strings.Join(urlParts, "/"), params
 }
 
+// wildcardDescription derives a human-readable description for a path wildcard
+// of the form `<*:type>` (or bare `<name>`). Falls back to a generic string when
+// the type isn't recognised. Operators see this in osvbngcli help and OpenAPI.
+func wildcardDescription(inner string, parts []string, index int) string {
+	if !strings.Contains(inner, ":") {
+		return ""
+	}
+	typeName := paths.WildcardType(strings.SplitN(inner, ":", 2)[1])
+	var preceding string
+	if index > 0 {
+		preceding = parts[index-1]
+	}
+	switch typeName {
+	case paths.WildcardIP:
+		if preceding == "neighbors" || preceding == "neighbor" {
+			return "Neighbor address (IPv4 or IPv6)"
+		}
+		return "IP address (IPv4 or IPv6)"
+	case paths.WildcardIPv4:
+		if preceding == "neighbors" || preceding == "neighbor" {
+			return "Neighbor router-id (IPv4 address)"
+		}
+		return "IPv4 address"
+	case paths.WildcardIPv6:
+		return "IPv6 address"
+	case paths.WildcardPrefix:
+		return "IP prefix in CIDR notation (A.B.C.D/M or X:X::X:X/M)"
+	case paths.WildcardMAC:
+		return "MAC address"
+	case paths.WildcardRD:
+		return "BGP route-distinguisher (e.g. 65000:100 or 10.0.0.1:100)"
+	case paths.WildcardProtocol:
+		return "Routing protocol name"
+	case paths.WildcardLSAType:
+		return "OSPF LSA type (router|network|summary|asbr-summary|external|nssa-external|opaque-link|opaque-area|opaque-as)"
+	case paths.WildcardUint8, paths.WildcardUint16, paths.WildcardUint32, paths.WildcardUint64:
+		return "Unsigned integer"
+	case paths.WildcardInt8, paths.WildcardInt16, paths.WildcardInt32, paths.WildcardInt64:
+		return "Signed integer"
+	}
+	if preceding != "" {
+		return strings.TrimSuffix(preceding, "s") + " identifier"
+	}
+	return ""
+}
+
 func deriveParamName(inner string, parts []string, index int) string {
 	if strings.Contains(inner, ":") {
 		typeParts := strings.SplitN(inner, ":", 2)
-		typeName := typeParts[1]
+		typeName := paths.WildcardType(typeParts[1])
 		if index > 0 {
 			preceding := parts[index-1]
 			switch typeName {
-			case "ip", "ipv4", "ipv6", "prefix", "mac", "protocol":
-				return typeName
+			case paths.WildcardIP, paths.WildcardIPv4, paths.WildcardIPv6,
+				paths.WildcardPrefix, paths.WildcardMAC, paths.WildcardProtocol:
+				return string(typeName)
 			default:
 				return preceding + "_id"
 			}
 		}
-		return typeName
+		return string(typeName)
 	}
 
 	if index > 0 {
@@ -799,14 +848,15 @@ func deriveParamName(inner string, parts []string, index int) string {
 func wildcardTypeToSchema(inner string) *openapi3.SchemaRef {
 	if strings.Contains(inner, ":") {
 		typeParts := strings.SplitN(inner, ":", 2)
-		switch typeParts[1] {
-		case "ip", "ipv4", "ipv6":
+		switch paths.WildcardType(typeParts[1]) {
+		case paths.WildcardIP, paths.WildcardIPv4, paths.WildcardIPv6:
 			return &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{"string"}, Format: "ip-address"}}
-		case "prefix":
+		case paths.WildcardPrefix:
 			return &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{"string"}, Description: "IP prefix in CIDR notation"}}
-		case "mac":
+		case paths.WildcardMAC:
 			return &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{"string"}, Format: "mac-address"}}
-		case "uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64":
+		case paths.WildcardUint8, paths.WildcardUint16, paths.WildcardUint32, paths.WildcardUint64,
+			paths.WildcardInt8, paths.WildcardInt16, paths.WildcardInt32, paths.WildcardInt64:
 			return &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{"integer"}}}
 		}
 	}

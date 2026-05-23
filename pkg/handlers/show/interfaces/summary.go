@@ -37,7 +37,7 @@ func (h *SummaryHandler) Collect(ctx context.Context, req *show.Request) (interf
 		}
 	}
 
-	_, includeAll := req.Options["all"]
+	includeAll := req.BoolOption("all")
 
 	var result []InterfaceSummary
 	for _, iface := range all {
