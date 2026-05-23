@@ -21,6 +21,7 @@ import (
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/protocols/mpls"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/protocols/ospf"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/protocols/ospf6"
+	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/protocols/zebra"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/qos"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/routing_policy"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/show/servicegroups"

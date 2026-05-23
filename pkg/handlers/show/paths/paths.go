@@ -144,6 +144,19 @@ const (
 	ProtocolsLDPBindingsDetail        Path = "protocols.ldp.bindings.detail"
 	ProtocolsLDPDiscoveryDetail       Path = "protocols.ldp.discovery.detail"
 
+	ProtocolsZebraRouteIPv4           Path = "protocols.zebra.route.ipv4"
+	ProtocolsZebraRouteIPv4All        Path = "protocols.zebra.route.ipv4.all"
+	ProtocolsZebraRouteIPv4Prefix     Path = "protocols.zebra.route.ipv4.<*:prefix>"
+	ProtocolsZebraRouteIPv4Summary    Path = "protocols.zebra.route.ipv4.summary"
+	ProtocolsZebraRouteIPv4SummaryAll Path = "protocols.zebra.route.ipv4.summary.all"
+	ProtocolsZebraRouteIPv6           Path = "protocols.zebra.route.ipv6"
+	ProtocolsZebraRouteIPv6All        Path = "protocols.zebra.route.ipv6.all"
+	ProtocolsZebraRouteIPv6Prefix     Path = "protocols.zebra.route.ipv6.<*:prefix>"
+	ProtocolsZebraRouteIPv6Summary    Path = "protocols.zebra.route.ipv6.summary"
+	ProtocolsZebraRouteIPv6SummaryAll Path = "protocols.zebra.route.ipv6.summary.all"
+	ProtocolsZebraInterface           Path = "protocols.zebra.interface"
+	ProtocolsZebraInterfaceName       Path = "protocols.zebra.interface.<*>"
+
 	ServiceGroups Path = "service-groups"
 	VRFS          Path = "vrfs"
 
