@@ -77,11 +77,12 @@ func (cd *ConfigManager) ApplyLoadedConfig() error {
 		return fmt.Errorf("failed to process CGNAT pools: %w", err)
 	}
 
+	versionsBefore := len(cd.versions)
 	if err := cd.Commit(sessionID); err != nil {
 		return fmt.Errorf("failed to commit: %w", err)
 	}
 
-	if !cd.disableVersions && len(cd.versions) > 0 {
+	if !cd.disableVersions && len(cd.versions) > versionsBefore {
 		lastVersion := &cd.versions[len(cd.versions)-1]
 		if len(cd.versions) == 1 {
 			lastVersion.CommitMsg = "Initial configuration"

@@ -1,7 +1,9 @@
 package configmgr
 
 import (
+	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
@@ -18,17 +20,28 @@ func FormatChanges(changes []*conf.HandlerContext) *DiffResult {
 			Value: formatValue(change.NewValue),
 		}
 
-		if change.OldValue == nil && change.NewValue != nil {
+		switch {
+		case change.OldValue == nil && change.NewValue != nil:
 			result.Added = append(result.Added, line)
-		} else if change.OldValue != nil && change.NewValue == nil {
+		case change.OldValue != nil && change.NewValue == nil:
 			line.Value = formatValue(change.OldValue)
 			result.Deleted = append(result.Deleted, line)
-		} else {
+		case reflect.DeepEqual(change.OldValue, change.NewValue):
+			// No-op: candidate session walks every leaf when applying the
+			// loaded YAML, so on a restart with unchanged config every field
+			// arrives here with OldValue == NewValue. Skip; these aren't
+			// modifications.
+		default:
 			result.Modified = append(result.Modified, line)
 		}
 	}
 
 	return result
+}
+
+// IsEmpty reports whether the diff has zero changes across all three buckets.
+func (r *DiffResult) IsEmpty() bool {
+	return len(r.Added) == 0 && len(r.Modified) == 0 && len(r.Deleted) == 0
 }
 
 func FormatDiff(result *DiffResult) string {
@@ -78,7 +91,23 @@ func formatValue(v interface{}) string {
 		return fmt.Sprintf("interface:%s", val.Name)
 	case *protocols.StaticRoute:
 		return fmt.Sprintf("%s via %s", val.Destination, val.NextHop)
-	default:
-		return fmt.Sprintf("%v", val)
 	}
+
+	// Deref pointers and fall back to JSON for anything structured; produces
+	// `{"enabled":false}` etc. instead of Go's `&{false}` default which hides
+	// field names and prints pointer addresses for embedded pointers.
+	rv := reflect.ValueOf(v)
+	for rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return ""
+		}
+		rv = rv.Elem()
+	}
+	switch rv.Kind() {
+	case reflect.Struct, reflect.Map, reflect.Slice, reflect.Array:
+		if data, err := json.Marshal(rv.Interface()); err == nil {
+			return string(data)
+		}
+	}
+	return fmt.Sprintf("%v", rv.Interface())
 }
