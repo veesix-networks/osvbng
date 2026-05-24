@@ -83,6 +83,8 @@ func (c *Component) Start(ctx context.Context) error {
 		return nil
 	}
 
+	c.SetReadyState(component.StateRestoring)
+
 	if err := c.configurePools(cfg.CGNAT); err != nil {
 		return fmt.Errorf("configure pools: %w", err)
 	}
@@ -98,12 +100,19 @@ func (c *Component) Start(ctx context.Context) error {
 	c.lifecycleSub = c.eventBus.Subscribe(events.TopicSessionLifecycle, c.handleSessionLifecycle)
 	c.programmedSub = c.eventBus.Subscribe(events.TopicSessionProgrammed, c.handleSessionProgrammed)
 
+	c.SetReadyState(component.StateReady)
+	c.eventBus.Publish(events.TopicComponentReady, events.Event{
+		Source: c.Name(),
+		Data:   &events.ComponentReadyEvent{Component: c.Name(), State: c.ReadyState().String()},
+	})
+
 	c.logger.Info("CGNAT component started", "pools", len(cfg.CGNAT.Pools))
 	return nil
 }
 
 func (c *Component) Stop(ctx context.Context) error {
 	c.logger.Info("Stopping CGNAT component")
+	c.SetReadyState(component.StateDraining)
 	if c.lifecycleSub != nil {
 		c.lifecycleSub.Unsubscribe()
 	}

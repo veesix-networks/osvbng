@@ -489,6 +489,8 @@ func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
 	c.logger.Info("Starting IPoE component")
 
+	c.SetReadyState(component.StateRestoring)
+
 	if err := c.restoreSessions(ctx); err != nil {
 		c.logger.Warn("Failed to restore sessions from OpDB", "error", err)
 	}
@@ -503,11 +505,19 @@ func (c *Component) Start(ctx context.Context) error {
 	c.Go(c.consumeDHCPv6Packets)
 	c.Go(c.consumeIPv6NDPackets)
 
+	c.SetReadyState(component.StateReady)
+	c.eventBus.Publish(events.TopicComponentReady, events.Event{
+		Source: c.Name(),
+		Data:   &events.ComponentReadyEvent{Component: c.Name(), State: c.ReadyState().String()},
+	})
+
 	return nil
 }
 
 func (c *Component) Stop(ctx context.Context) error {
 	c.logger.Info("Stopping IPoE component")
+
+	c.SetReadyState(component.StateDraining)
 
 	c.aaaRespSub.Unsubscribe()
 	c.haStateSub.Unsubscribe()
@@ -678,6 +688,12 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 	}
 
 	if sess == nil {
+		if !c.IsReady() {
+			c.logger.WithGroup(logger.IPoEDHCP4).Debug("DHCPDISCOVER dropped: component not ready",
+				"mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN,
+				"state", c.ReadyState().String())
+			return nil
+		}
 		if err := c.checkSessionLimit(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN); err != nil {
 			c.logger.WithGroup(logger.IPoEDHCP4).Debug("DHCPDISCOVER rejected", "error", err)
 			return nil
@@ -1918,6 +1934,12 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 	}
 
 	if sess == nil {
+		if !c.IsReady() {
+			c.logger.WithGroup(logger.IPoEDHCP6).Debug("DHCPv6 Solicit dropped: component not ready",
+				"mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN,
+				"state", c.ReadyState().String())
+			return nil
+		}
 		sessID := session.GenerateID()
 		newSess := &SessionState{
 			SessionID:     sessID,

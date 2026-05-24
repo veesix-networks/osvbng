@@ -365,6 +365,8 @@ func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
 	c.logger.Info("Starting PPPoE component", "ac_name", c.acName)
 
+	c.SetReadyState(component.StateRestoring)
+
 	if err := c.restoreSessions(ctx); err != nil {
 		c.logger.Warn("Failed to restore sessions from OpDB", "error", err)
 	}
@@ -378,11 +380,18 @@ func (c *Component) Start(ctx context.Context) error {
 	c.echoGen.Start()
 	c.Go(c.consumePPPoEPackets)
 
+	c.SetReadyState(component.StateReady)
+	c.eventBus.Publish(events.TopicComponentReady, events.Event{
+		Source: c.Name(),
+		Data:   &events.ComponentReadyEvent{Component: c.Name(), State: c.ReadyState().String()},
+	})
+
 	return nil
 }
 
 func (c *Component) Stop(ctx context.Context) error {
 	c.logger.Info("Stopping PPPoE component")
+	c.SetReadyState(component.StateDraining)
 	c.aaaRespSub.Unsubscribe()
 	c.haStateSub.Unsubscribe()
 	c.mutationSub.Unsubscribe()
@@ -468,6 +477,13 @@ func (c *Component) handleSession(pkt *dataplane.ParsedPacket) error {
 }
 
 func (c *Component) handlePADI(pkt *dataplane.ParsedPacket) error {
+	if !c.IsReady() {
+		c.logger.Debug("PADI dropped: component not ready",
+			"mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN,
+			"state", c.ReadyState().String())
+		return nil
+	}
+
 	tags, err := pppoe.ParseTags(pkt.PPPoE.Payload)
 	if err != nil {
 		return fmt.Errorf("parse PADI tags: %w", err)
