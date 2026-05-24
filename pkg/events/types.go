@@ -85,6 +85,15 @@ type SubscriberTerminateEvent struct {
 	Key           *session.TupleKey
 }
 
+// ComponentReadyEvent is the TopicComponentReady payload. Component is the
+// component's Name() (e.g. "ipoe", "pppoe", "cgnat"); State is the lowercase
+// readiness state string (always "ready" at publish time today, included so
+// future state transitions can reuse the topic).
+type ComponentReadyEvent struct {
+	Component string
+	State     string
+}
+
 // L2TPLACDecisionEvent communicates the LAC bring-up outcome back to
 // the PPPoE component. Published on TopicL2TPLACDecision once the L2TP
 // component has either established the tunneled session or exhausted

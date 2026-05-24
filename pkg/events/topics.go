@@ -23,4 +23,11 @@ const (
 	// §"Shared-core performance considerations" (spec-finalize C4).
 	TopicAAAResponseL2TP = "osvbng:events:aaa:response:l2tp"
 	TopicL2TPLACDecision = "osvbng:events:l2tp:lac:decision"
+
+	// TopicComponentReady fires when a component transitions out of its
+	// recovery window into StateReady. Carries a ComponentReadyEvent.
+	// Consumers that depend on a specific component's recovery completing
+	// (CGNAT waiting for IPoE/PPPoE TopicSessionRestored flush, etc.)
+	// subscribe to this rather than busy-polling the Base.ReadyState().
+	TopicComponentReady = "osvbng:events:component:ready"
 )
