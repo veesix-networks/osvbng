@@ -48,6 +48,7 @@ type ShowDeps struct {
 	CGNAT            *cgnatcomp.Component
 	L2TP             *l2tpcomp.Component
 	RunningConfig    RunningConfigReader
+	Orchestrator     *component.Orchestrator
 }
 
 type OperDeps struct {
