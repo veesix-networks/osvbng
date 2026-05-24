@@ -10,7 +10,11 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/veesix-networks/osvbng/pkg/config/qos"
+	"github.com/veesix-networks/osvbng/pkg/events"
+	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
+	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 )
 
 // SetupMode selects between fresh post-auth bring-up and synchronous opdb
@@ -44,7 +48,7 @@ func (c *Component) setupSession(ctx context.Context, sess *SessionState, mode S
 	}
 
 	if mode == SetupModeRestore {
-		return ErrSetupRestoreNotImplemented
+		return c.setupSessionRestore(ctx, sess)
 	}
 
 	sess.mu.Lock()
@@ -175,8 +179,124 @@ func (c *Component) onSessionCreated(ctx context.Context, sess *SessionState, se
 	c.forwardLatePendingPackets(sess, sessID, mac, svlan, cvlan, encapIfIndex, srgName, lateAllocCtx, lateV6DUID, latePendingV4Discover, latePendingV4Request, latePendingV6Solicit, latePendingV6Request)
 }
 
-// ErrSetupRestoreNotImplemented is returned by setupSession in restore mode
-// until the synchronous replay path lands. Allows the restoreSessions
-// rewrite to land call sites against the final signature without changing
-// it again later.
+// setupSessionRestore replays a checkpointed session into the dataplane
+// synchronously. Called by restoreSessions for each opdb entry once
+// installInMemoryState has populated the lookup indexes. The session
+// state on entry is assumed to be past the bring-up race — Pending*
+// fields nil — because checkpointed sessions are by construction
+// post-DHCP-bind / post-IPCP-up.
+//
+// Plugin-side idempotency (osvbng-context#93 §5.7) lets every step here
+// run safely whether the dataplane state already matches the request or
+// is empty, so the same code handles osvbngd-restart with VPP intact AND
+// VPP-recovery cold-start without branching. Per-session failure surfaces
+// as an error; the caller logs and continues with the next session
+// without deleting the opdb entry, so the next osvbngd restart retries.
+//
+// Publishes TopicSessionRestored (not Lifecycle/Programmed) on success so
+// AAA does not emit a duplicate Accounting-Start and HA does not
+// re-replicate to the standby (per §5.9 publication rules).
+func (c *Component) setupSessionRestore(ctx context.Context, sess *SessionState) error {
+	sessID := sess.SessionID
+
+	var decapVrfID uint32
+	if sess.VRF != "" && c.vrfMgr != nil {
+		tableID, _, _, err := c.vrfMgr.ResolveVRF(sess.VRF)
+		if err != nil {
+			return fmt.Errorf("resolve vrf %q: %w", sess.VRF, err)
+		}
+		decapVrfID = tableID
+	}
+
+	localMAC := c.getLocalMAC(sess.SRGName, sess.EncapIfIndex)
+	if localMAC == nil {
+		return fmt.Errorf("no local MAC for session %s svlan %d", sessID, sess.OuterVLAN)
+	}
+
+	swIfIndex, err := c.vpp.AddIPoESession(sess.MAC, localMAC, sess.EncapIfIndex,
+		sess.OuterVLAN, sess.InnerVLAN, decapVrfID)
+	if err != nil {
+		return fmt.Errorf("add ipoe session: %w", err)
+	}
+	sess.mu.Lock()
+	sess.IPoESwIfIndex = swIfIndex
+	sess.IPoESessionCreated = true
+	sess.mu.Unlock()
+
+	c.setupSessionUnnumbered(sessID, swIfIndex, c.resolveUnnumberedLoopback(sess))
+
+	if sess.IPv4 != nil {
+		if err := c.vpp.IPoESetSessionIPv4(swIfIndex, sess.IPv4, true); err != nil {
+			return fmt.Errorf("set ipoe ipv4: %w", err)
+		}
+	}
+	if sess.IPv6Address != nil {
+		if err := c.vpp.IPoESetSessionIPv6(swIfIndex, sess.IPv6Address, true); err != nil {
+			return fmt.Errorf("set ipoe ipv6: %w", err)
+		}
+	}
+	if sess.IPv6Prefix != nil {
+		nextHop := sess.IPv6Address
+		if nextHop == nil {
+			nextHop = net.ParseIP("::")
+		}
+		if err := c.vpp.IPoESetDelegatedPrefix(swIfIndex, *sess.IPv6Prefix, nextHop, true); err != nil {
+			return fmt.Errorf("set ipoe delegated prefix: %w", err)
+		}
+	}
+
+	cfg, _ := c.cfgMgr.GetRunning()
+	var qosPolicies map[string]*qos.Policy
+	if cfg != nil {
+		qosPolicies = cfg.QoSPolicies
+	}
+	if err := svcgroup.ApplyToSession(c.vpp, swIfIndex, sess.ServiceGroup, qosPolicies); err != nil {
+		return fmt.Errorf("apply service group bindings: %w", err)
+	}
+
+	if sess.MixedAccess {
+		c.claimTuple(sess)
+	}
+
+	c.eventBus.Publish(events.TopicSessionRestored, events.Event{
+		Source: c.Name(),
+		Data: &events.SessionRestoredEvent{
+			AccessType:   models.AccessTypeIPoE,
+			Protocol:     models.ProtocolDHCPv4,
+			SessionID:    sessID,
+			Session:      c.buildModelSnapshot(sess),
+			RestoreCause: c.currentRestoreCause,
+		},
+	})
+
+	return nil
+}
+
+// installInMemoryState rebuilds the in-memory lookup indexes for a
+// session loaded from opdb. Mutating fields like Pending* are reset
+// because checkpointed sessions are past the bring-up race; if a
+// half-established entry is found (AAAApproved without IPoESessionCreated)
+// the caller skips setupSession for it and lets the subscriber
+// re-establish via normal handshake.
+func (c *Component) installInMemoryState(sess *SessionState) {
+	sess.PendingDHCPDiscover = nil
+	sess.PendingDHCPRequest = nil
+	sess.PendingDHCPv6Solicit = nil
+	sess.PendingDHCPv6Request = nil
+	sess.PendingIPv4Binding = nil
+	sess.PendingIPv6Binding = nil
+	sess.PendingPDBinding = nil
+	sess.AAAInFlight = false
+	sess.Closing = false
+
+	lookupKey := c.makeSessionKeyV4(sess.MAC, sess.OuterVLAN, sess.InnerVLAN)
+	c.sessions.Store(lookupKey, sess)
+	c.sessionIndex.Store(sess.SessionID, sess)
+	c.addSessionToIndexes(sess)
+}
+
+// ErrSetupRestoreNotImplemented is the legacy sentinel for callers that
+// queue setupSession(SetupModeRestore) on a build where the restore path
+// is still under construction. Retained for source-compatibility; the
+// in-tree restore path now returns concrete errors from setupSessionRestore.
 var ErrSetupRestoreNotImplemented = errors.New("setupSession restore mode not yet implemented")

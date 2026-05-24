@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -76,6 +77,12 @@ type Component struct {
 	haStateSub  events.Subscription
 	mutationSub  events.Subscription
 	terminateSub events.Subscription
+
+	// currentRestoreCause is set by restoreSessions before iterating opdb
+	// entries and read by setupSessionRestore to populate the
+	// SessionRestoredEvent. Resets to empty after the loop completes;
+	// only valid while restoreSessions is in flight.
+	currentRestoreCause events.RestoreCause
 }
 
 type SessionState struct {
@@ -3198,18 +3205,12 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 		return nil
 	}
 
-	var count, expired, stale int
+	c.currentRestoreCause = c.detectRestoreCause()
+	defer func() { c.currentRestoreCause = "" }()
+
+	var count, expired, failed, halfEstablished int
 	sessionCounts := make(map[string]int)
 	now := time.Now()
-
-	validIfIndexes := make(map[uint32]bool)
-	if c.vpp != nil {
-		if ifaces, err := c.vpp.DumpInterfaces(); err == nil {
-			for _, iface := range ifaces {
-				validIfIndexes[iface.SwIfIndex] = true
-			}
-		}
-	}
 
 	err := c.opdb.Load(ctx, opdb.NamespaceIPoESessions, func(key string, value []byte) error {
 		var sess SessionState
@@ -3219,71 +3220,45 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 		}
 
 		if c.isSessionExpired(&sess, now) {
-			c.opdb.Delete(ctx, opdb.NamespaceIPoESessions, key)
+			if err := c.opdb.Delete(ctx, opdb.NamespaceIPoESessions, key); err != nil {
+				c.logger.Warn("Failed to delete expired session", "key", key, "error", err)
+			}
 			expired++
 			return nil
 		}
 
-		if sess.IPoESwIfIndex != 0 && !validIfIndexes[sess.IPoESwIfIndex] {
-			c.logger.Debug("Interface not found, recreating IPoE session",
-				"session_id", sess.SessionID,
-				"stale_sw_if_index", sess.IPoESwIfIndex)
-
-			var decapVrfID uint32
-			if sess.VRF != "" && c.vrfMgr != nil {
-				if tableID, _, _, err := c.vrfMgr.ResolveVRF(sess.VRF); err == nil {
-					decapVrfID = tableID
-				}
-			}
-
-			localMAC := c.getLocalMAC(sess.SRGName, sess.EncapIfIndex)
-			if localMAC != nil && c.vpp != nil {
-				swIfIndex, err := c.vpp.AddIPoESession(sess.MAC, localMAC, sess.EncapIfIndex, sess.OuterVLAN, sess.InnerVLAN, decapVrfID)
-				if err != nil {
-					c.logger.Error("Failed to recreate IPoE session", "session_id", sess.SessionID, "error", err)
-					sess.IPoESwIfIndex = 0
-					sess.IPoESessionCreated = false
-				} else {
-					c.logger.Debug("Recreated IPoE session", "session_id", sess.SessionID, "sw_if_index", swIfIndex)
-					sess.IPoESwIfIndex = swIfIndex
-					sess.IPoESessionCreated = true
-					c.setupSessionUnnumbered(sess.SessionID, swIfIndex, c.resolveUnnumberedLoopback(&sess))
-				}
-			} else {
-				sess.IPoESwIfIndex = 0
-				sess.IPoESessionCreated = false
-			}
-
-			sess.PendingDHCPDiscover = nil
-			sess.PendingDHCPRequest = nil
-			sess.PendingDHCPv6Solicit = nil
-			sess.PendingDHCPv6Request = nil
-			stale++
-
-			data, err := json.Marshal(&sess)
-			if err == nil {
-				c.opdb.Put(ctx, opdb.NamespaceIPoESessions, sess.SessionID, data)
-			}
-		} else if sess.AAAApproved && !sess.IPoESessionCreated {
+		// AAA-approved but VPP-side never created: the session was caught
+		// mid-handshake at crash time. Reset auth state and let the
+		// subscriber re-establish via normal handshake. No setupSession
+		// replay because there is nothing to replay.
+		if sess.AAAApproved && !sess.IPoESessionCreated {
 			c.logger.Debug("Session approved but IPoE never created, resetting AAA state",
 				"session_id", sess.SessionID)
 			sess.AAAApproved = false
-			stale++
-
-			data, err := json.Marshal(&sess)
-			if err == nil {
-				c.opdb.Put(ctx, opdb.NamespaceIPoESessions, sess.SessionID, data)
+			data, mErr := json.Marshal(&sess)
+			if mErr == nil {
+				if err := c.opdb.Put(ctx, opdb.NamespaceIPoESessions, sess.SessionID, data); err != nil {
+					c.logger.Warn("Failed to persist reset session", "session_id", sess.SessionID, "error", err)
+				}
 			}
+			c.installInMemoryState(&sess)
+			halfEstablished++
+			return nil
 		}
 
-		lookupKey := c.makeSessionKeyV4(sess.MAC, sess.OuterVLAN, sess.InnerVLAN)
+		c.installInMemoryState(&sess)
 
-		sessPtr := &sess
-		c.sessions.Store(lookupKey, sessPtr)
-		c.sessionIndex.Store(sess.SessionID, sessPtr)
+		if err := c.setupSession(ctx, &sess, SetupModeRestore); err != nil {
+			c.logger.Error("Failed to restore session in VPP",
+				"session_id", sess.SessionID, "error", err)
+			failed++
+			// Do NOT delete the opdb entry. Next osvbngd restart retries.
+			return nil
+		}
 
 		if sess.State == "bound" && sess.MAC != nil {
-			counterKey := fmt.Sprintf("osvbng:session_count:%s:%d:%d", sess.MAC.String(), sess.OuterVLAN, sess.InnerVLAN)
+			counterKey := fmt.Sprintf("osvbng:session_count:%s:%d:%d",
+				sess.MAC.String(), sess.OuterVLAN, sess.InnerVLAN)
 			sessionCounts[counterKey]++
 		}
 
@@ -3304,8 +3279,36 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 		}
 	}
 
-	c.logger.Debug("Restored sessions from OpDB", "count", count, "expired", expired, "stale_vpp", stale, "counters", len(sessionCounts))
+	c.logger.Info("Restored IPoE sessions from OpDB",
+		"restored", count,
+		"expired", expired,
+		"failed", failed,
+		"half_established", halfEstablished,
+		"cause", string(c.currentRestoreCause))
 	return nil
+}
+
+// detectRestoreCause inspects VPP state to identify which recovery
+// scenario produced this restoreSessions call. The cause is informational:
+// the unified setupSession path handles every case identically thanks to
+// plugin-side idempotency; only TopicSessionRestored consumers that care
+// to branch on the cause use this field.
+func (c *Component) detectRestoreCause() events.RestoreCause {
+	if c.vpp == nil {
+		return events.RestoreCauseColdBoot
+	}
+	ifaces, err := c.vpp.DumpInterfaces()
+	if err != nil || len(ifaces) == 0 {
+		return events.RestoreCauseColdBoot
+	}
+	// Any IPoE session interface still present in VPP means the dataplane
+	// was preserved across the osvbngd restart.
+	for _, iface := range ifaces {
+		if strings.HasPrefix(iface.Name, "ipoe_session") {
+			return events.RestoreCauseOsvbngdRestart
+		}
+	}
+	return events.RestoreCauseVPPRecovery
 }
 
 func (c *Component) isSessionExpired(sess *SessionState, now time.Time) bool {
