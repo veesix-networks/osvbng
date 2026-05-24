@@ -77,3 +77,47 @@ Verify VPP Sub-Interfaces Created
     [Arguments]    ${container}    ${pattern}
     ${output} =    Execute VPP Command    ${container}    show interface
     Should Contain    ${output}    ${pattern}
+
+Snapshot OpDB Sessions
+    [Arguments]    ${container}
+    ${output} =    Get osvbng API Response    ${container}    /api/show/system/opdb/sessions
+    RETURN    ${output}
+
+Verify OpDB Sessions Match Snapshot
+    [Arguments]    ${container}    ${snapshot}
+    ${current} =    Snapshot OpDB Sessions    ${container}
+    ${script} =    Catenate    SEPARATOR=${SPACE}
+    ...    import json,os,sys;
+    ...    b=json.loads(os.environ['BEFORE']).get('data') or [];
+    ...    a=json.loads(os.environ['AFTER']).get('data') or [];
+    ...    bk=sorted((e.get('namespace'),e.get('key')) for e in b);
+    ...    ak=sorted((e.get('namespace'),e.get('key')) for e in a);
+    ...    sys.exit(0 if bk==ak else (print(f'opdb session set drifted:\\n  before={bk}\\n  after={ak}') or 1))
+    ${result} =    Run Process    python3    -c    ${script}
+    ...    env:BEFORE=${snapshot}    env:AFTER=${current}    stderr=STDOUT
+    Log    ${result.stdout}
+    Should Be Equal As Integers    ${result.rc}    0    OpDB session set drifted across restart
+
+Verify OpDB Session IP Addresses Match
+    [Arguments]    ${container}    ${snapshot}
+    ${current} =    Snapshot OpDB Sessions    ${container}
+    ${script} =    Catenate    SEPARATOR=${SPACE}
+    ...    import json,os,sys;
+    ...    b={(e.get('namespace'),e.get('key')): e.get('data') or {} for e in json.loads(os.environ['BEFORE']).get('data') or []};
+    ...    a={(e.get('namespace'),e.get('key')): e.get('data') or {} for e in json.loads(os.environ['AFTER']).get('data') or []};
+    ...    drift=[];
+    ...    [drift.append((k, bf.get('IPv4') or bf.get('IPv4Address'), a.get(k,{}).get('IPv4') or a.get(k,{}).get('IPv4Address'), bf.get('IPv6Address'), a.get(k,{}).get('IPv6Address'))) for k,bf in b.items() if k in a and ((bf.get('IPv4') or bf.get('IPv4Address')) != (a[k].get('IPv4') or a[k].get('IPv4Address')) or bf.get('IPv6Address') != a[k].get('IPv6Address'))];
+    ...    sys.exit(0 if not drift else (print('Session IP drift:\\n' + '\\n'.join(f'  {k}: v4 {b4}->{a4}, v6 {b6}->{a6}' for k,b4,a4,b6,a6 in drift)) or 1))
+    ${result} =    Run Process    python3    -c    ${script}
+    ...    env:BEFORE=${snapshot}    env:AFTER=${current}    stderr=STDOUT
+    Log    ${result.stdout}
+    Should Be Equal As Integers    ${result.rc}    0    Session IP addresses drifted across restart
+
+Verify OpDB Session Count
+    [Arguments]    ${container}    ${expected}
+    ${output} =    Snapshot OpDB Sessions    ${container}
+    ${result} =    Run Process    python3    -c
+    ...    import json,os; print(len(json.loads(os.environ['JSON']).get('data') or []))
+    ...    env:JSON=${output}    stderr=STDOUT
+    Should Be Equal As Integers    ${result.rc}    0
+    Should Be Equal As Strings    ${result.stdout}    ${expected}    Expected ${expected} opdb sessions, got ${result.stdout}

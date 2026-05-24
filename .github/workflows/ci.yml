@@ -216,6 +216,11 @@ jobs:
     needs: [file-changes, build-image]
     if: (needs.file-changes.outputs.sessions == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
 
+  opdb-restore-tests:
+    uses: ./.github/workflows/opdb-restore-tests.yml
+    needs: [file-changes, build-image]
+    if: (needs.file-changes.outputs.sessions == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+
   vrf-lite-tests:
     uses: ./.github/workflows/vrf-lite-tests.yml
     needs: [file-changes, build-image]

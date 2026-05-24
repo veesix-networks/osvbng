@@ -1,0 +1,73 @@
+# Copyright 2026 The osvbng Authors
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: opdb-restore-tests
+
+on:
+  workflow_call:
+
+jobs:
+  ipoe-opdb-restore:
+    name: IPoE OpDB Restore
+    runs-on: self-hosted
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/test-setup
+        with:
+          topology: tests/32-ipoe-opdb-restore/32-ipoe-opdb-restore.clab.yml
+
+      - name: Pull bngtester image
+        run: docker pull veesixnetworks/bngtester:debian-latest
+
+      - name: Run IPoE opdb-restore tests
+        run: |
+          mkdir -p test-results
+          robot --loglevel DEBUG --output test-results/output.xml --log test-results/32-ipoe-opdb-restore-log.html --report NONE tests/32-ipoe-opdb-restore/
+
+      - uses: ./.github/actions/test-cleanup
+        if: always()
+        with:
+          topology: tests/32-ipoe-opdb-restore/32-ipoe-opdb-restore.clab.yml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipoe-opdb-restore-test-results
+          path: test-results/
+          retention-days: 14
+
+  pppoe-opdb-restore:
+    name: PPPoE OpDB Restore
+    runs-on: self-hosted
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/test-setup
+        with:
+          topology: tests/33-pppoe-opdb-restore/33-pppoe-opdb-restore.clab.yml
+
+      - name: Pull bngtester image
+        run: docker pull veesixnetworks/bngtester:debian-latest
+
+      - name: Run PPPoE opdb-restore tests
+        run: |
+          mkdir -p test-results
+          robot --loglevel DEBUG --output test-results/output.xml --log test-results/33-pppoe-opdb-restore-log.html --report NONE tests/33-pppoe-opdb-restore/
+
+      - uses: ./.github/actions/test-cleanup
+        if: always()
+        with:
+          topology: tests/33-pppoe-opdb-restore/33-pppoe-opdb-restore.clab.yml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pppoe-opdb-restore-test-results
+          path: test-results/
+          retention-days: 14

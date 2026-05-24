@@ -148,7 +148,27 @@ ip netns exec dataplane /usr/lib/frr/frrinit.sh status || true
 echo "Starting osvbng..."
 
 RESOLVED_CP="${OSVBNG_CP_CORES:-$OSVBNG_RESOLVED_CP_CORES}"
-if [ -n "$RESOLVED_CP" ]; then
+
+start_osvbngd() {
+    if [ -n "$RESOLVED_CP" ]; then
+        taskset -c ${RESOLVED_CP} /usr/local/bin/osvbngd -config /etc/osvbng/osvbng.yaml
+    else
+        /usr/local/bin/osvbngd -config /etc/osvbng/osvbng.yaml
+    fi
+}
+
+# OSVBNG_RESPAWN: test-only opt-in. When unset (prod default) the entrypoint
+# exec's osvbngd as PID 1 so signals and exit codes propagate normally. When
+# set to "true", osvbngd is supervised by this shell and respawned if it dies,
+# so `pkill osvbngd` does not exit the container — used by opdb restore tests.
+if [ "$OSVBNG_RESPAWN" = "true" ]; then
+    echo "OSVBNG_RESPAWN=true: supervising osvbngd in a respawn loop"
+    while true; do
+        start_osvbngd || true
+        echo "osvbngd exited, respawning in 2s..."
+        sleep 2
+    done
+elif [ -n "$RESOLVED_CP" ]; then
     exec taskset -c ${RESOLVED_CP} /usr/local/bin/osvbngd -config /etc/osvbng/osvbng.yaml
 else
     exec /usr/local/bin/osvbngd -config /etc/osvbng/osvbng.yaml
