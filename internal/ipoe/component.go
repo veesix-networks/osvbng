@@ -1492,15 +1492,12 @@ func (c *Component) handleAAAResponse(event events.Event) {
 	sess.mu.Unlock()
 
 	vrfName := resolved.VRF
-	var decapVrfID uint32
 	if vrfName != "" {
 		if c.vrfMgr != nil {
-			tableID, _, _, err := c.vrfMgr.ResolveVRF(vrfName)
-			if err != nil {
+			if _, _, _, err := c.vrfMgr.ResolveVRF(vrfName); err != nil {
 				c.logger.Error("Failed to resolve VRF for session", "session_id", sessID, "vrf", vrfName, "error", err)
 				return
 			}
-			decapVrfID = tableID
 		}
 		sess.mu.Lock()
 		sess.VRF = vrfName
@@ -1519,107 +1516,10 @@ func (c *Component) handleAAAResponse(event events.Event) {
 	sess.AllocCtx = allocCtx
 	sess.mu.Unlock()
 
-	if !ipoeCreated && c.vpp != nil {
-		sess.mu.Lock()
-		if sess.IPoESessionCreated {
-			sess.mu.Unlock()
-			c.logger.Debug("IPoE session already created by another handler", "session_id", sessID)
-		} else {
-			sess.mu.Unlock()
-
-			localMAC := c.getLocalMAC(srgName, encapIfIndex)
-			if localMAC == nil {
-				c.logger.Error("No local MAC available for IPoE session", "session_id", sessID, "svlan", svlan)
-				return
-			}
-
-			c.vpp.AddIPoESessionAsync(mac, localMAC, encapIfIndex, svlan, cvlan, decapVrfID, func(swIfIndex uint32, err error) {
-				sess.mu.Lock()
-				if sess.IPoESessionCreated {
-					sess.mu.Unlock()
-					c.logger.Debug("IPoE session already created by concurrent handler", "session_id", sessID)
-					return
-				}
-				if err != nil {
-					sess.mu.Unlock()
-					if errors.Is(err, southbound.ErrUnavailable) {
-						c.logger.Debug("VPP unavailable, cannot create IPoE session", "session_id", sessID)
-					} else {
-						c.logger.Error("Failed to create IPoE session in VPP", "session_id", sessID, "error", err)
-					}
-					return
-				}
-				sess.IPoESwIfIndex = swIfIndex
-				sess.IPoESessionCreated = true
-				pendingIPv4 := sess.PendingIPv4Binding
-				pendingIPv6 := sess.PendingIPv6Binding
-				pendingPD := sess.PendingPDBinding
-				sess.PendingIPv4Binding = nil
-				sess.PendingIPv6Binding = nil
-				sess.PendingPDBinding = nil
-				latePendingV6Solicit := sess.PendingDHCPv6Solicit
-				latePendingV6Request := sess.PendingDHCPv6Request
-				latePendingV4Discover := sess.PendingDHCPDiscover
-				latePendingV4Request := sess.PendingDHCPRequest
-				lateV6DUID := sess.DHCPv6DUID
-				lateAllocCtx := sess.AllocCtx
-				sess.PendingDHCPv6Solicit = nil
-				sess.PendingDHCPv6Request = nil
-				sess.PendingDHCPDiscover = nil
-				sess.PendingDHCPRequest = nil
-				unnumberedLoopback := c.resolveUnnumberedLoopback(sess)
-				sess.mu.Unlock()
-				c.logger.Debug("Created IPoE session in VPP", "session_id", sessID, "sw_if_index", swIfIndex)
-
-				c.setupSessionUnnumbered(sessID, swIfIndex, unnumberedLoopback)
-
-				if pendingIPv4 != nil {
-					c.vpp.IPoESetSessionIPv4Async(swIfIndex, pendingIPv4, true, func(err error) {
-						if err != nil {
-							if errors.Is(err, southbound.ErrUnavailable) {
-								c.logger.Debug("VPP unavailable, cannot bind pending IPv4", "session_id", sessID)
-							} else {
-								c.logger.Error("Failed to bind pending IPv4", "session_id", sessID, "error", err)
-							}
-							return
-						}
-						c.logger.Debug("Bound pending IPv4 to IPoE session", "session_id", sessID, "ipv4", pendingIPv4.String())
-						c.publishSessionProgrammed(sess, swIfIndex)
-					})
-				}
-				if pendingIPv6 != nil {
-					c.vpp.IPoESetSessionIPv6Async(swIfIndex, pendingIPv6, true, func(err error) {
-						if err != nil {
-							if errors.Is(err, southbound.ErrUnavailable) {
-								c.logger.Debug("VPP unavailable, cannot bind pending IPv6", "session_id", sessID)
-							} else {
-								c.logger.Error("Failed to bind pending IPv6", "session_id", sessID, "error", err)
-							}
-							return
-						}
-						c.logger.Debug("Bound pending IPv6 to IPoE session", "session_id", sessID, "ipv6", pendingIPv6.String())
-					})
-				}
-				if pendingPD != nil {
-					nextHop := pendingIPv6
-					if nextHop == nil {
-						nextHop = net.ParseIP("::")
-					}
-					c.vpp.IPoESetDelegatedPrefixAsync(swIfIndex, *pendingPD, nextHop, true, func(err error) {
-						if err != nil {
-							if errors.Is(err, southbound.ErrUnavailable) {
-								c.logger.Debug("VPP unavailable, cannot bind pending PD", "session_id", sessID)
-							} else {
-								c.logger.Error("Failed to bind pending delegated prefix", "session_id", sessID, "error", err)
-							}
-							return
-						}
-						c.logger.Debug("Bound pending delegated prefix", "session_id", sessID, "prefix", pendingPD.String())
-					})
-				}
-
-				c.forwardLatePendingPackets(sess, sessID, mac, svlan, cvlan, encapIfIndex, srgName, lateAllocCtx, lateV6DUID, latePendingV4Discover, latePendingV4Request, latePendingV6Solicit, latePendingV6Request)
-			})
+	if !ipoeCreated {
+		if err := c.setupSession(context.TODO(), sess, SetupModeFresh); err != nil {
+			c.logger.Error("setupSession (fresh) failed",
+				"session_id", sessID, "error", err)
 		}
 	}
 
