@@ -68,6 +68,12 @@ func (c *Component) Start(ctx context.Context) error {
 	c.logger.Info("Starting AAA component")
 
 	c.aaaReqSub = c.eventBus.Subscribe(events.TopicAAARequest, c.handleAAARequest)
+	// Subscribe to TopicSessionLifecycle only — NOT TopicSessionRestored.
+	// Acct-Start emission is bound to the Lifecycle(Active) path; restored
+	// sessions get a separate handleSessionRestored later (osvbng-context
+	// #93 §5.9a) that rebuilds the acct cache from the persisted counter
+	// baseline WITHOUT emitting Acct-Start, preserving the one-Start-per-
+	// session invariant required by RFC 2866.
 	c.lifecycleSub = c.eventBus.Subscribe(events.TopicSessionLifecycle, c.handleSessionLifecycle)
 
 	c.BuildAccountingBuckets()

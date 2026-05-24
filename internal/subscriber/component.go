@@ -34,6 +34,7 @@ type Component struct {
 	cache     cache.Cache
 
 	lifecycleSub    events.Subscription
+	restoredSub     events.Subscription
 	mutationResSub  events.Subscription
 	mutationWaiters sync.Map
 }
@@ -63,6 +64,7 @@ func (c *Component) Start(ctx context.Context) error {
 	c.expiryMgr.Start()
 
 	c.lifecycleSub = c.eventBus.Subscribe(events.TopicSessionLifecycle, c.handleSessionLifecycle)
+	c.restoredSub = c.eventBus.Subscribe(events.TopicSessionRestored, c.handleSessionRestored)
 	c.mutationResSub = c.eventBus.Subscribe(events.TopicSubscriberMutationResult, c.handleMutationResult)
 
 	return nil
@@ -74,6 +76,9 @@ func (c *Component) Stop(ctx context.Context) error {
 	c.expiryMgr.Stop()
 
 	c.lifecycleSub.Unsubscribe()
+	if c.restoredSub != nil {
+		c.restoredSub.Unsubscribe()
+	}
 	c.mutationResSub.Unsubscribe()
 
 	c.StopContext()
@@ -385,6 +390,35 @@ func (c *Component) handleSessionLifecycle(event events.Event) {
 		if err := c.releaseSession(sess); err != nil {
 			c.logger.Error("Error releasing session", "error", err)
 		}
+	}
+}
+
+// handleSessionRestored reapplies service-group policy programming (QoS,
+// ACLs, uRPF, rate limits via activateSession) for a session whose state
+// was replayed from opdb by the IPoE / PPPoE setupSession path. The
+// session has already been persisted to cache by the original bring-up
+// before crash, so persistSession is skipped here. emitLifecycleCounter
+// is also skipped — counting a restored session as a new lifecycle event
+// would double-count.
+//
+// Stays out of the SRG isActive gate too: setupSession on the publishing
+// side already evaluated and acted on the SRG state for this session
+// before publishing TopicSessionRestored, so re-evaluating here would
+// race against the standby's own restore cycle.
+func (c *Component) handleSessionRestored(event events.Event) {
+	data, ok := event.Data.(*events.SessionRestoredEvent)
+	if !ok {
+		c.logger.Error("Invalid event data for session restored")
+		return
+	}
+	if data.Session == nil {
+		return
+	}
+	if err := c.activateSession(data.Session); err != nil {
+		c.logger.Error("Failed to activate restored session",
+			"session_id", data.SessionID,
+			"restore_cause", string(data.RestoreCause),
+			"error", err)
 	}
 }
 

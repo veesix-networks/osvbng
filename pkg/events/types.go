@@ -85,6 +85,49 @@ type SubscriberTerminateEvent struct {
 	Key           *session.TupleKey
 }
 
+// RestoreCause identifies which recovery scenario produced a
+// TopicSessionRestored emission. Lets consumers that care to differentiate
+// (e.g. emit a "mappings restored from opdb" counter distinct from
+// "mappings installed fresh") branch on it; consumers that do not care
+// treat all causes identically.
+type RestoreCause string
+
+const (
+	// RestoreCauseOsvbngdRestart marks restoration after osvbngd
+	// respawned while the dataplane (VPP plugin state, ifMgr) remained
+	// intact. setupSession's idempotent path is the only work needed
+	// per-session in this case.
+	RestoreCauseOsvbngdRestart RestoreCause = "osvbngd_restart"
+
+	// RestoreCauseVPPRecovery marks restoration after VPP itself
+	// restarted while osvbngd continued running. Plugin pools are empty
+	// and every session is replayed through the plugin Add path.
+	RestoreCauseVPPRecovery RestoreCause = "vpp_recovery"
+
+	// RestoreCauseColdBoot marks restoration at full system bring-up
+	// where both osvbngd and VPP are starting fresh from opdb-on-disk
+	// state.
+	RestoreCauseColdBoot RestoreCause = "cold_boot"
+
+	// RestoreCauseHAFailover marks restoration on the just-promoted
+	// node of an HA pair. Reserved for the HA-side setupSession
+	// adoption (osvbng-context#94); not emitted by the in-this-spec
+	// recovery paths.
+	RestoreCauseHAFailover RestoreCause = "ha_failover"
+)
+
+// SessionRestoredEvent is the TopicSessionRestored payload. Carries the
+// same SubscriberSession shape as SessionLifecycleEvent so consumer
+// handlers can share code; the RestoreCause is supplied so a consumer
+// that needs to distinguish opdb-restore from fresh-install can.
+type SessionRestoredEvent struct {
+	AccessType   models.AccessType
+	Protocol     models.Protocol
+	SessionID    string
+	Session      models.SubscriberSession
+	RestoreCause RestoreCause
+}
+
 // ComponentReadyEvent is the TopicComponentReady payload. Component is the
 // component's Name() (e.g. "ipoe", "pppoe", "cgnat"); State is the lowercase
 // readiness state string (always "ready" at publish time today, included so
