@@ -45,7 +45,7 @@ func (c *Component) setupSession(ctx context.Context, sess *SessionState, mode S
 	if c.vpp == nil {
 		if c.echoGen != nil {
 			magic := sess.lcp.LocalConfig().Magic
-			c.echoGen.AddSession(sess.PPPoESessionID, magic)
+			c.echoGen.AddSession(sess.PPPoESessionID, magic, uint8(sess.EchoSeq))
 		}
 		return nil
 	}
@@ -58,7 +58,7 @@ func (c *Component) setupSession(ctx context.Context, sess *SessionState, mode S
 		return nil
 	}
 
-	localMAC := c.effectiveLocalMAC(sess.EncapIfIndex)
+	localMAC := c.effectiveLocalMAC(sess.SRGName, sess.EncapIfIndex)
 	if localMAC == nil {
 		c.logger.Error("Failed to get local MAC",
 			"session_id", sess.SessionID,
@@ -124,7 +124,7 @@ func (c *Component) setupSessionRestore(ctx context.Context, sess *SessionState)
 	encapIfIndex := c.resolveCurrentEncapIfIndex(sess)
 	sess.EncapIfIndex = encapIfIndex
 
-	localMAC := c.effectiveLocalMAC(encapIfIndex)
+	localMAC := c.effectiveLocalMAC(sess.SRGName, encapIfIndex)
 	if localMAC == nil {
 		return fmt.Errorf("no local MAC for session %s (encap_if_index=%d)", sess.SessionID, encapIfIndex)
 	}
@@ -173,7 +173,7 @@ func (c *Component) setupSessionRestore(ctx context.Context, sess *SessionState)
 	// separately). No explicit re-claim needed here.
 
 	if c.echoGen != nil {
-		c.echoGen.AddSession(sess.PPPoESessionID, sess.LCPMagic)
+		c.echoGen.AddSession(sess.PPPoESessionID, sess.LCPMagic, uint8(sess.EchoSeq))
 	}
 
 	// Persist the refreshed SessionState back to opdb so the new
@@ -222,12 +222,24 @@ func (c *Component) setupSessionRestore(ctx context.Context, sess *SessionState)
 }
 
 // effectiveLocalMAC returns the BNG-side source MAC the per-session
-// rewrite should carry on egress. Sub-interfaces in VPP report a zero
-// L2Address from swInterfaceDump (the physical MAC lives on the parent),
-// so reading ifMgr by the sub-interface's sw_if_index can give back a
-// zero MAC after VPP recovery. Walks up the SupSwIfIndex chain until it
-// finds a non-zero MAC or runs out of parents.
-func (c *Component) effectiveLocalMAC(encapIfIndex uint32) net.HardwareAddr {
+// rewrite should carry on egress. SRG virtual MAC takes precedence over
+// the physical interface MAC when redundancy is configured for the
+// session's SRG, so that failover-promoted sessions emit frames from
+// the same logical BNG identity as the prior active node (matches the
+// existing PADO emission path).
+//
+// Falls back to walking the SupSwIfIndex chain: sub-interfaces in VPP
+// report a zero L2Address from swInterfaceDump (the physical MAC lives
+// on the parent), so reading ifMgr by the sub-interface's sw_if_index
+// can give back a zero MAC after VPP recovery.
+func (c *Component) effectiveLocalMAC(srgName string, encapIfIndex uint32) net.HardwareAddr {
+	if c.srgMgr != nil && srgName != "" {
+		if vmac := c.srgMgr.GetVirtualMAC(srgName); vmac != nil {
+			out := make(net.HardwareAddr, len(vmac))
+			copy(out, vmac)
+			return out
+		}
+	}
 	if c.ifMgr == nil {
 		return nil
 	}

@@ -232,8 +232,27 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 	}
 
 	c.echoGen = NewEchoGenerator(DefaultEchoConfig(), c.sendEchoRequest, c.handleDeadPeer)
+	c.echoGen.SetSeqAdvanceHook(c.recordEchoSeqAdvance)
 
 	return c, nil
+}
+
+// recordEchoSeqAdvance keeps SessionState.EchoSeq in lockstep with the
+// echo generator's on-wire LCP Identifier. Invoked from the time-wheel
+// tick after each successful echo-send so the next checkpointSession
+// persists the latest sequence; on osvbngd restart the echo generator's
+// AddSession is seeded with the persisted value and the post-restore
+// cadence picks up where pre-restart left off (spec §5.4d).
+func (c *Component) recordEchoSeqAdvance(pppoeSessionID uint16, lastEchoID uint8) {
+	c.sessionMu.RLock()
+	sess := c.sidIndex[pppoeSessionID]
+	c.sessionMu.RUnlock()
+	if sess == nil {
+		return
+	}
+	sess.mu.Lock()
+	sess.EchoSeq = uint32(lastEchoID)
+	sess.mu.Unlock()
 }
 
 func (c *Component) resolveSRGName(svlan uint16) string {
@@ -1491,7 +1510,7 @@ func (c *Component) restoreFromHASync(srgName string) {
 		c.checkpointSession(sess)
 
 		if c.echoGen != nil {
-			c.echoGen.AddSession(pppoeSessionID, sess.LCPMagic)
+			c.echoGen.AddSession(pppoeSessionID, sess.LCPMagic, uint8(sess.EchoSeq))
 		}
 
 		c.publishSessionProgrammed(&models.PPPSession{

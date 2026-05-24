@@ -801,7 +801,7 @@ func (s *SessionState) onVPPSessionCreated(swIfIndex uint32, err error) {
 
 	if s.component.echoGen != nil {
 		magic := s.lcp.LocalConfig().Magic
-		s.component.echoGen.AddSession(s.PPPoESessionID, magic)
+		s.component.echoGen.AddSession(s.PPPoESessionID, magic, 0)
 	}
 }
 

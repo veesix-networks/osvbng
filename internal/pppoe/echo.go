@@ -11,10 +11,14 @@ type EchoGenerator struct {
 	timeWheel  *ppp.TimeWheel
 	sendEcho   func(sessionID uint16, echoID uint8)
 	onDeadPeer func(sessionID uint16)
-	interval   time.Duration
-	maxMisses  int
-	maxPerTick int
-	logger     *logger.Logger
+	// onSeqAdvance is fired AFTER each successful echo-send with the new
+	// LastEchoID, so the SessionState's EchoSeq stays current for the
+	// next opdb checkpoint. nil disables the hook (used by tests).
+	onSeqAdvance func(sessionID uint16, lastEchoID uint8)
+	interval     time.Duration
+	maxMisses    int
+	maxPerTick   int
+	logger       *logger.Logger
 }
 
 type EchoConfig struct {
@@ -52,6 +56,15 @@ func NewEchoGenerator(cfg EchoConfig, sendEcho func(uint16, uint8), onDeadPeer f
 	return g
 }
 
+// SetSeqAdvanceHook installs the callback the echo generator invokes
+// after each successful echo-send, with the new Identifier value. The
+// PPPoE component uses this to keep SessionState.EchoSeq in sync with
+// the wire sequence so the next opdb checkpoint persists the latest
+// value (spec §5.4d).
+func (g *EchoGenerator) SetSeqAdvanceHook(hook func(sessionID uint16, lastEchoID uint8)) {
+	g.onSeqAdvance = hook
+}
+
 func (g *EchoGenerator) Start() {
 	go g.timeWheel.Start()
 }
@@ -60,17 +73,24 @@ func (g *EchoGenerator) Stop() {
 	g.timeWheel.Stop()
 }
 
-func (g *EchoGenerator) AddSession(sessionID uint16, magic uint32) {
+// AddSession registers sessionID with the echo wheel. lastEchoID seeds
+// the per-session sequence number — pass 0 for fresh sessions and the
+// persisted SessionState.EchoSeq for restored sessions, so the
+// post-restore echo cadence picks up where the pre-restart sequence
+// left off (avoids LCP Identifier reuse confusion per spec §5.4d).
+func (g *EchoGenerator) AddSession(sessionID uint16, magic uint32, lastEchoID uint8) {
 	state := &ppp.EchoState{
 		SessionID:  sessionID,
 		Magic:      magic,
-		LastEchoID: 0,
+		LastEchoID: lastEchoID,
 		MissCount:  0,
 		LastSeen:   time.Now(),
 	}
 
 	g.timeWheel.Add(sessionID, state)
-	g.logger.Debug("Added session to echo generator", "session_id", sessionID)
+	g.logger.Debug("Added session to echo generator",
+		"session_id", sessionID,
+		"seed_echo_id", lastEchoID)
 }
 
 func (g *EchoGenerator) RemoveSession(sessionID uint16) {
@@ -124,6 +144,9 @@ func (g *EchoGenerator) processTick(sessions []*ppp.EchoState) {
 					"echo_id", state.LastEchoID,
 					"miss_count", state.MissCount)
 				g.sendEcho(state.SessionID, state.LastEchoID)
+				if g.onSeqAdvance != nil {
+					g.onSeqAdvance(state.SessionID, state.LastEchoID)
+				}
 			}
 		}
 	}
