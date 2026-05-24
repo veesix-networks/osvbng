@@ -126,9 +126,12 @@ func (c *Component) setupSessionRestore(ctx context.Context, sess *SessionState)
 		return nil
 	}
 
+	encapIfIndex := c.resolveCurrentEncapIfIndex(sess)
+	sess.EncapIfIndex = encapIfIndex
+
 	var localMAC net.HardwareAddr
 	if c.ifMgr != nil {
-		if iface := c.ifMgr.Get(sess.EncapIfIndex); iface != nil && len(iface.MAC) >= 6 {
+		if iface := c.ifMgr.Get(encapIfIndex); iface != nil && len(iface.MAC) >= 6 {
 			localMAC = net.HardwareAddr(iface.MAC[:6])
 		}
 	}
@@ -152,7 +155,7 @@ func (c *Component) setupSessionRestore(ctx context.Context, sess *SessionState)
 		sess.IPv4Address,
 		sess.MAC,
 		localMAC,
-		sess.EncapIfIndex,
+		encapIfIndex,
 		sess.OuterVLAN,
 		sess.InnerVLAN,
 		decapVrfID,
@@ -221,6 +224,46 @@ func (c *Component) setupSessionRestore(ctx context.Context, sess *SessionState)
 	})
 
 	return nil
+}
+
+// resolveCurrentEncapIfIndex re-resolves the access sub-interface
+// sw_if_index for sess against the live VPP state. The sw_if_index
+// stored in the opdb checkpoint becomes stale across a VPP restart
+// because VPP re-numbers sub-interfaces on cold boot from the order
+// LoadFromDataplane / autoconfig replays them. Resolves via the
+// subscriber-group (parent-interface, svlan) -> "parent.svlan" naming
+// convention. Returns the checkpoint value unchanged when no subscriber
+// group matches (operator-authored sessions outside autoconfig).
+func (c *Component) resolveCurrentEncapIfIndex(sess *SessionState) uint32 {
+	if c.vpp == nil || c.cfgMgr == nil {
+		return sess.EncapIfIndex
+	}
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+		return sess.EncapIfIndex
+	}
+	group, vlanRange := cfg.SubscriberGroups.FindGroupBySVLAN(sess.OuterVLAN)
+	if group == nil || vlanRange == nil || vlanRange.ParentInterface == "" {
+		return sess.EncapIfIndex
+	}
+	name := fmt.Sprintf("%s.%d", vlanRange.ParentInterface, sess.OuterVLAN)
+	idx, err := c.vpp.GetInterfaceIndex(name)
+	if err != nil || idx == 0 {
+		c.logger.Warn("Failed to resolve current encap sw_if_index, using checkpoint value",
+			"session_id", sess.SessionID,
+			"name", name,
+			"checkpoint_index", sess.EncapIfIndex,
+			"error", err)
+		return sess.EncapIfIndex
+	}
+	if uint32(idx) != sess.EncapIfIndex {
+		c.logger.Info("encap sw_if_index drifted across restart; using current value",
+			"session_id", sess.SessionID,
+			"name", name,
+			"checkpoint", sess.EncapIfIndex,
+			"current", idx)
+	}
+	return uint32(idx)
 }
 
 // resolveUnnumberedLoopback returns the loopback the per-session interface

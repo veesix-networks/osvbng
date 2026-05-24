@@ -179,6 +179,51 @@ func (c *Component) onSessionCreated(ctx context.Context, sess *SessionState, se
 	c.forwardLatePendingPackets(sess, sessID, mac, svlan, cvlan, encapIfIndex, srgName, lateAllocCtx, lateV6DUID, latePendingV4Discover, latePendingV4Request, latePendingV6Solicit, latePendingV6Request)
 }
 
+// resolveCurrentEncapIfIndex re-resolves the access sub-interface
+// sw_if_index for sess against the live VPP state. The sw_if_index
+// stored in the opdb checkpoint becomes stale across a VPP restart
+// because VPP re-numbers sub-interfaces on cold boot from the order
+// LoadFromDataplane / autoconfig replays them, so blindly trusting the
+// checkpoint value programs the per-session rewrite onto whatever
+// sub-interface happens to occupy that index now — typically the wrong
+// S-VLAN, which silently breaks forwarding.
+//
+// Resolves via subscriber-group config: the (parent-interface, svlan)
+// pair maps to the conventional VPP sub-interface name "parent.svlan".
+// Returns the checkpoint value unchanged when no subscriber group matches
+// (operator-authored sessions outside autoconfig — rare).
+func (c *Component) resolveCurrentEncapIfIndex(sess *SessionState) uint32 {
+	if c.vpp == nil || c.cfgMgr == nil {
+		return sess.EncapIfIndex
+	}
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+		return sess.EncapIfIndex
+	}
+	group, vlanRange := cfg.SubscriberGroups.FindGroupBySVLAN(sess.OuterVLAN)
+	if group == nil || vlanRange == nil || vlanRange.ParentInterface == "" {
+		return sess.EncapIfIndex
+	}
+	name := fmt.Sprintf("%s.%d", vlanRange.ParentInterface, sess.OuterVLAN)
+	idx, err := c.vpp.GetInterfaceIndex(name)
+	if err != nil || idx == 0 {
+		c.logger.Warn("Failed to resolve current encap sw_if_index, using checkpoint value",
+			"session_id", sess.SessionID,
+			"name", name,
+			"checkpoint_index", sess.EncapIfIndex,
+			"error", err)
+		return sess.EncapIfIndex
+	}
+	if uint32(idx) != sess.EncapIfIndex {
+		c.logger.Info("encap sw_if_index drifted across restart; using current value",
+			"session_id", sess.SessionID,
+			"name", name,
+			"checkpoint", sess.EncapIfIndex,
+			"current", idx)
+	}
+	return uint32(idx)
+}
+
 // setupSessionRestore replays a checkpointed session into the dataplane
 // synchronously. Called by restoreSessions for each opdb entry once
 // installInMemoryState has populated the lookup indexes. The session
@@ -208,12 +253,15 @@ func (c *Component) setupSessionRestore(ctx context.Context, sess *SessionState)
 		decapVrfID = tableID
 	}
 
-	localMAC := c.getLocalMAC(sess.SRGName, sess.EncapIfIndex)
+	encapIfIndex := c.resolveCurrentEncapIfIndex(sess)
+	sess.EncapIfIndex = encapIfIndex
+
+	localMAC := c.getLocalMAC(sess.SRGName, encapIfIndex)
 	if localMAC == nil {
 		return fmt.Errorf("no local MAC for session %s svlan %d", sessID, sess.OuterVLAN)
 	}
 
-	swIfIndex, err := c.vpp.AddIPoESession(sess.MAC, localMAC, sess.EncapIfIndex,
+	swIfIndex, err := c.vpp.AddIPoESession(sess.MAC, localMAC, encapIfIndex,
 		sess.OuterVLAN, sess.InnerVLAN, decapVrfID)
 	if err != nil {
 		return fmt.Errorf("add ipoe session: %w", err)
