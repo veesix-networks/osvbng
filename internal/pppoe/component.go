@@ -162,17 +162,34 @@ type SessionState struct {
 	IPv4MSS          uint16
 	IPv6MSS          uint16
 
+	// ACFCEnabled / PFCEnabled / VJEnabled are LCP / IPCP option flags
+	// the BNG would need to keep honouring after restore to interpret
+	// CPE frames correctly. osvbng today Configure-Rejects all three
+	// during negotiation so they are always false in practice; the
+	// fields are persisted as forward-compatible schema for the day
+	// plugin-side ACFC/PFC decap support lands. See spec §5.4.
+	ACFCEnabled bool
+	PFCEnabled  bool
+	VJEnabled   bool
+
+	// EchoSeq is the next LCP-Echo-Request Identifier the echo generator
+	// should emit. Persisted with pre-increment-on-emit semantics so a
+	// crash between send and checkpoint never causes a duplicate
+	// Identifier to be reused on restore (spec §5.4d).
+	EchoSeq uint32
+
 	AllocCtx          *allocator.Context
 	allocatedPool     string
 	allocatedIANAPool string
 
 	MixedAccess bool
 
-	// l2tpBinding is set when this PPPoE session has been handed off to
+	// L2TPBinding is set when this PPPoE session has been handed off to
 	// LAC mode and the L2TPv2 tunnel/session IDs are known. Non-nil
-	// only while Phase == PhaseLACTunneled. Surfaced through the
-	// SubscriberSession API as the L2TP sub-struct.
-	l2tpBinding *models.L2TPBinding
+	// only while Phase == PhaseLACTunneled. Persisted to opdb so the
+	// LAC binding can be replayed via SetPPPoESessionLACTunneled on
+	// restore (spec §5.4a).
+	L2TPBinding *models.L2TPBinding
 
 	component *Component
 	mu        sync.Mutex
@@ -1121,10 +1138,12 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 }
 
 // installInMemoryState rebuilds the in-memory PPP FSM and lookup indexes
-// for a session loaded from opdb. Restored sessions are post-handshake by
-// construction so we only restore the LCP magic; full FSM force-restore
-// (Phase, IPCP/IPv6CP addresses) lands in the FSM force-restore phase
-// alongside the persisted PPP option state.
+// for a session loaded from opdb. Restored sessions in PhaseOpen are
+// past the LCP / auth / NCP handshake by construction, so each FSM is
+// force-restored directly to Opened via FSM.Restore — no Configure
+// exchange with the CPE is initiated, which preserves the CPE's view of
+// the session (matching state machine + magic) and lets traffic flow
+// the moment setupSessionRestore programs the dataplane.
 func (c *Component) installInMemoryState(sess *SessionState) {
 	c.sessionMu.Lock()
 	defer c.sessionMu.Unlock()
@@ -1134,6 +1153,24 @@ func (c *Component) installInMemoryState(sess *SessionState) {
 	if sess.LCPMagic != 0 {
 		sess.lcp.SetMagic(sess.LCPMagic)
 	}
+
+	if sess.Phase == ppp.PhaseOpen {
+		if sess.lcp != nil {
+			sess.lcp.FSM().Restore()
+		}
+		if sess.ipcp != nil && sess.IPv4Address != nil {
+			sess.ipcp.FSM().Restore()
+			sess.ipcpOpen = true
+		}
+		if sess.ipv6cp != nil && sess.IPv6Address != nil {
+			sess.ipv6cp.FSM().Restore()
+			sess.ipv6cpOpen = true
+		}
+		if sess.NegotiatedPPPMTU > 0 && sess.lcp != nil {
+			sess.lcp.SetMRU(sess.NegotiatedPPPMTU)
+		}
+	}
+
 	c.addToIndexes(sess)
 	if sess.PPPoESessionID > 0 {
 		c.sidIndex[sess.PPPoESessionID] = sess
@@ -1341,13 +1378,7 @@ func (c *Component) restoreFromHASync(srgName string) {
 			decapVrfID = tableID
 		}
 
-		var localMAC net.HardwareAddr
-		if c.srgMgr != nil {
-			localMAC = c.srgMgr.GetVirtualMAC(srgName)
-		}
-		if localMAC == nil {
-			localMAC = c.effectiveLocalMAC(encapIfIndex)
-		}
+		localMAC := c.effectiveLocalMAC(srgName, encapIfIndex)
 		if localMAC == nil {
 			c.logger.Error("No local MAC available for HA restore", "session_id", cp.SessionId)
 			failed++
@@ -1650,8 +1681,8 @@ func (c *Component) buildModelSnapshot(sess *SessionState) *models.PPPSession {
 	}
 	if sess.Phase == ppp.PhaseLACTunneled {
 		snapshot.State = models.SessionStateTunneled
-		if sess.l2tpBinding != nil {
-			binding := *sess.l2tpBinding
+		if sess.L2TPBinding != nil {
+			binding := *sess.L2TPBinding
 			snapshot.L2TP = &binding
 		}
 	}

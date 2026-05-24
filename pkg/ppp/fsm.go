@@ -96,6 +96,31 @@ func (f *FSM) State() State {
 	return f.state
 }
 
+// Restore transitions the FSM directly to Opened without running the
+// LCP / NCP handshake. Used by the unified-session-recovery setupSession
+// path (osvbng-context#93 §5.4) to replay a checkpointed PPPoE session
+// without disturbing the CPE.
+//
+// Pre-conditions encoded by the caller (no per-protocol option state is
+// re-negotiated here — the caller is asserting the session was already
+// in Opened on the wire before crash):
+//   - LCP magic is restored separately via SetMagic before Restore
+//   - For NCP FSMs (IPCP / IPv6CP), the address state is restored via
+//     the protocol-specific path before Restore
+//
+// No tlu/tld callbacks are fired — Restore is silent so the session
+// reaches Opened without re-triggering layer-up notifications that
+// would publish duplicate TopicSessionLifecycle / Programmed events.
+func (f *FSM) Restore() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.stopTimer()
+	f.state = Opened
+	f.restartCount = 0
+	f.failCount = 0
+}
+
 func (f *FSM) Up() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
