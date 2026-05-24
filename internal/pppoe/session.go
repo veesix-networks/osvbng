@@ -1,6 +1,7 @@
 package pppoe
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/hex"
@@ -701,49 +702,9 @@ func (s *SessionState) checkOpen() {
 				IPv6MSS:          s.IPv6MSS,
 			})
 
-			if s.component.vpp != nil && s.IPv4Address != nil {
-				var localMAC net.HardwareAddr
-				if s.component.ifMgr != nil {
-					if iface := s.component.ifMgr.Get(s.EncapIfIndex); iface != nil && len(iface.MAC) >= 6 {
-						localMAC = net.HardwareAddr(iface.MAC[:6])
-					}
-				}
-				if localMAC == nil {
-					s.component.logger.Error("Failed to get local MAC",
-						"session_id", s.SessionID,
-						"sw_if_index", s.EncapIfIndex)
-					return
-				}
-
-				var decapVrfID uint32
-				if s.VRF != "" && s.component.vrfMgr != nil {
-					tableID, _, _, err := s.component.vrfMgr.ResolveVRF(s.VRF)
-					if err != nil {
-						s.component.logger.Error("Failed to resolve VRF for session",
-							"session_id", s.SessionID,
-							"vrf", s.VRF,
-							"error", err)
-						return
-					}
-					decapVrfID = tableID
-				}
-
-				s.component.vpp.AddPPPoESessionAsync(
-					s.PPPoESessionID,
-					s.IPv4Address,
-					s.MAC,
-					localMAC,
-					s.EncapIfIndex,
-					s.OuterVLAN,
-					s.InnerVLAN,
-					decapVrfID,
-					pppMTU,
-					policy,
-					s.onVPPSessionCreated,
-				)
-			} else if s.component.echoGen != nil {
-				magic := s.lcp.LocalConfig().Magic
-				s.component.echoGen.AddSession(s.PPPoESessionID, magic)
+			if err := s.component.setupSession(context.TODO(), s, SetupModeFresh); err != nil {
+				s.component.logger.Error("setupSession (fresh) failed",
+					"session_id", s.SessionID, "error", err)
 			}
 		}
 	}
@@ -835,9 +796,12 @@ func (s *SessionState) onVPPSessionCreated(swIfIndex uint32, err error) {
 		IPv6MSS:          s.IPv6MSS,
 	})
 
+	s.component.setupSessionUnnumbered(s.SessionID, swIfIndex,
+		s.component.resolveUnnumberedLoopback(s))
+
 	if s.component.echoGen != nil {
 		magic := s.lcp.LocalConfig().Magic
-		s.component.echoGen.AddSession(s.PPPoESessionID, magic)
+		s.component.echoGen.AddSession(s.PPPoESessionID, magic, 0)
 	}
 }
 

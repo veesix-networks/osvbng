@@ -7,6 +7,13 @@ package events
 const (
 	TopicSessionLifecycle   = "osvbng:events:session:lifecycle"
 	TopicSessionProgrammed  = "osvbng:events:session:programmed"
+	// TopicSessionRestored fires once per session after setupSession
+	// successfully replays an opdb checkpoint into the dataplane during
+	// component start. Distinct from TopicSessionLifecycle(Active) so
+	// AAA does not emit duplicate Accounting-Start (RFC 2866) and HA
+	// does not re-replicate a session the standby already has. Carries
+	// SessionRestoredEvent.
+	TopicSessionRestored    = "osvbng:events:session:restored"
 	TopicAAARequest        = "osvbng:events:aaa:request"
 	TopicAAAResponse       = "osvbng:events:aaa:response"
 	TopicAAAResponseIPoE   = "osvbng:events:aaa:response:ipoe"
@@ -23,4 +30,11 @@ const (
 	// §"Shared-core performance considerations" (spec-finalize C4).
 	TopicAAAResponseL2TP = "osvbng:events:aaa:response:l2tp"
 	TopicL2TPLACDecision = "osvbng:events:l2tp:lac:decision"
+
+	// TopicComponentReady fires when a component transitions out of its
+	// recovery window into StateReady. Carries a ComponentReadyEvent.
+	// Consumers that depend on a specific component's recovery completing
+	// (CGNAT waiting for IPoE/PPPoE TopicSessionRestored flush, etc.)
+	// subscribe to this rather than busy-polling the Base.ReadyState().
+	TopicComponentReady = "osvbng:events:component:ready"
 )

@@ -321,7 +321,7 @@ func (cd *ConfigManager) Commit(id conf.SessionID) error {
 	cd.refreshMixedAccessSet()
 
 	cd.startupConfig = cd.deepCopyConfig(cd.runningConfig)
-	if err := SaveYAML(cd.startupConfigPath, cd.startupConfig); err != nil {
+	if err := SaveYAML(cd.startupConfigPath, cd.scrubPersistedConfig(cd.startupConfig)); err != nil {
 		return fmt.Errorf("failed to save startup config: %w", err)
 	}
 
@@ -739,7 +739,7 @@ func (cd *ConfigManager) SaveStartup() error {
 	defer cd.mu.Unlock()
 
 	cd.startupConfig = cd.deepCopyConfig(cd.runningConfig)
-	return SaveYAML(cd.startupConfigPath, cd.startupConfig)
+	return SaveYAML(cd.startupConfigPath, cd.scrubPersistedConfig(cd.startupConfig))
 }
 
 func (cd *ConfigManager) ReloadFRR() error {

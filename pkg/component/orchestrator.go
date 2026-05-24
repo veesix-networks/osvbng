@@ -99,6 +99,53 @@ func (o *Orchestrator) WaitReady(ctx context.Context, pluginTimeout time.Duratio
 	return nil
 }
 
+// ReadinessSnapshot returns a per-component snapshot of every registered
+// component that implements ReadinessReporter (i.e. embeds *Base). Used by
+// the /api/show/system/recovery/status handler and the Prometheus
+// component-readiness gauge for operator visibility into the recovery
+// lifecycle.
+func (o *Orchestrator) ReadinessSnapshot() map[string]ComponentReadiness {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+
+	out := make(map[string]ComponentReadiness, len(o.components))
+	for _, comp := range o.components {
+		rr, ok := comp.(ReadinessReporter)
+		if !ok {
+			continue
+		}
+		out[rr.Name()] = ComponentReadiness{
+			State:    rr.ReadyState().String(),
+			Progress: rr.Progress(),
+		}
+	}
+	return out
+}
+
+// ComponentReadiness is one row of the recovery-status API payload.
+type ComponentReadiness struct {
+	State    string           `json:"state"`
+	Progress *RestoreProgress `json:"progress,omitempty"`
+}
+
+// AllReady reports whether every registered component that exposes a
+// ReadinessReporter is in StateReady. Components that do not embed *Base
+// are treated as always-ready (they have no recovery lifecycle).
+func (o *Orchestrator) AllReady() bool {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	for _, comp := range o.components {
+		rr, ok := comp.(ReadinessReporter)
+		if !ok {
+			continue
+		}
+		if rr.ReadyState() != StateReady {
+			return false
+		}
+	}
+	return true
+}
+
 func (o *Orchestrator) Stop(ctx context.Context) error {
 	o.mu.RLock()
 	defer o.mu.RUnlock()

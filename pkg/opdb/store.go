@@ -27,4 +27,10 @@ const (
 	NamespaceHASyncedIPoE      = "ha_synced_ipoe"
 	NamespaceHASyncedPPPoE     = "ha_synced_pppoe"
 	NamespaceHASyncedCGNAT     = "ha_synced_cgnat"
+	// NamespaceAcctSessions holds per-session accounting state owned and
+	// evolved entirely by the internal/aaa component. Kept separate from
+	// the per-protocol session namespaces so AAA can extend its schema
+	// (per-CoS counters, Gigawords, NAT-NAT'd byte tracking, additional
+	// RADIUS attributes, etc.) without touching PPPoE/IPoE SessionState.
+	NamespaceAcctSessions      = "acct_sessions"
 )

@@ -433,6 +433,8 @@ func main() {
 				ProxyAuthenResponse:  attrs.ProxyAuthenResponse,
 			})
 		})
+
+		pppoeComp.SetLACResolver(l2tpComp.ResolveLACSessionIndex)
 	}
 
 	var cgnat *cgnatcomp.Component
@@ -592,6 +594,7 @@ func main() {
 		CGNAT:            cgnat,
 		L2TP:             l2tpComp,
 		RunningConfig:    configd,
+		Orchestrator:     orch,
 	})
 
 	operRegistry.AutoRegisterAll(&deps.OperDeps{

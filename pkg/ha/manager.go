@@ -215,6 +215,12 @@ func (m *Manager) Start(ctx context.Context) error {
 			srgNames = append(srgNames, name)
 		}
 		m.syncSender = NewSyncSender(m.peer, m.cfg.GetSyncBacklogSize(), srgNames, m.logger)
+		// Subscribe to TopicSessionLifecycle only — NOT TopicSessionRestored.
+		// A session restored from opdb on this node is already represented
+		// on the standby via the prior HA sync round, so re-replicating it
+		// after recovery would push a duplicate the standby would discard.
+		// HA-side adoption of setupSession + RestoreCauseHAFailover is
+		// tracked separately.
 		m.eventBus.Subscribe(events.TopicSessionLifecycle, m.syncSender.HandleEvent)
 		m.eventBus.Subscribe(events.TopicSubscriberMutationResult, m.syncSender.HandleMutationResult)
 		m.Go(func() { m.syncSender.Run(m.Ctx) })

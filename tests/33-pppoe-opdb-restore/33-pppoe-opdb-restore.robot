@@ -32,8 +32,10 @@ ${bng1}                 clab-${lab-name}-bng1
 ${subscribers}          clab-${lab-name}-subscribers
 ${corerouter1}          clab-${lab-name}-corerouter1
 ${subscriber-image}     veesixnetworks/bngtester:debian-latest
-${v4-gateway}           10.64.64.64
+${v4-gateway}           10.255.0.1
 ${v6-gateway}           2001:db8:0:1::1
+${core-router-v4}       10.0.0.2
+${core-router-v6}       2001:db8:c0:e::2
 ${session-count}        1
 
 *** Test Cases ***
@@ -54,15 +56,18 @@ ${session-count}        1
     Verify OpDB Sessions Match Snapshot            ${bng1}    ${OPDB_SNAPSHOT}
     Verify PPPoE Session Has Not Re-Established
     Verify Subscriber Can Ping                     ${v4-gateway}
+    Verify Subscriber Can Ping                     ${core-router-v4}
 
 2b — Restart VPP Only
-    [Documentation]    SKIPPED — PPPoE recovery from a local VPP crash is
-    ...    not implemented: stale-sw_if_index opdb entries are deleted
-    ...    rather than recreated via AddPPPoESession. The test
-    ...    infrastructure lands here so that when the recovery path ships,
-    ...    its PR only needs to delete the Skip statement below.
-    [Tags]    skip    pppoe-vpp-recovery-pending
-    Skip    PPPoE VPP-crash recovery not implemented — see 2b documentation
+    [Documentation]    Kill VPP; the watchdog respawns it and the cold
+    ...    bootstrap path replays the startup config + opdb sessions
+    ...    through setupSession(SetupModeRestore). Subscriber traffic
+    ...    resumes without operator action.
+    ...
+    ...    IPv6 ping verification deferred: same RA source-IP issue as 2a
+    ...    (RAs emitted from global loopback rather than link-local;
+    ...    Linux subscribers per RFC 4861 §6.1.2 discard them). Add the
+    ...    v6 checks back once osvbng-context#89 lands.
     Restart VPP                                    ${bng1}
     Wait For VPP Recovery                          ${bng1}
     Wait Until Keyword Succeeds    60s    2s
@@ -70,7 +75,7 @@ ${session-count}        1
     Verify OpDB Sessions Match Snapshot            ${bng1}    ${OPDB_SNAPSHOT}
     Verify PPPoE Session Has Not Re-Established
     Verify Subscriber Can Ping                     ${v4-gateway}
-    Verify Subscriber Can Ping                     ${v6-gateway}    -6
+    Verify Subscriber Can Ping                     ${core-router-v4}
 
 2c — Restart Full Container
     [Documentation]    SKIPPED — containerlab veth pairs to access/core do
@@ -86,6 +91,7 @@ ${session-count}        1
     Verify OpDB Sessions Match Snapshot            ${bng1}    ${OPDB_SNAPSHOT}
     Verify PPPoE Session Has Not Re-Established
     Verify Subscriber Can Ping                     ${v4-gateway}
+    Verify Subscriber Can Ping                     ${core-router-v4}
 
 *** Keywords ***
 Suite Setup PPPoE OpDB Restore
