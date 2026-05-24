@@ -13,6 +13,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/config/qos"
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/models"
+	"github.com/veesix-networks/osvbng/pkg/ppp"
 	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 )
 
@@ -110,11 +111,10 @@ func (c *Component) setupSession(ctx context.Context, sess *SessionState, mode S
 // Programmed) on success so AAA does not emit a duplicate
 // Accounting-Start and HA does not re-replicate to the standby.
 func (c *Component) setupSessionRestore(ctx context.Context, sess *SessionState) error {
+	if sess.Phase == ppp.PhaseLACTunneled {
+		return c.setupSessionRestoreLAC(ctx, sess)
+	}
 	if sess.IPv4Address == nil {
-		// PhaseLACTunneled subscribers carry no local IP. Replaying them
-		// without the L2TP-side LAC binding (added in the next phase)
-		// would forward subscriber traffic to the wrong path; skip for
-		// now and leave the session in its loaded in-memory state.
 		c.logger.Debug("PPPoE restore: no IPv4 address, skipping VPP add",
 			"session_id", sess.SessionID,
 			"phase", sess.Phase)
@@ -354,6 +354,144 @@ func (c *Component) setupSessionUnnumbered(sessID string, swIfIndex uint32, loop
 				"error", err)
 		}
 	})
+}
+
+// setupSessionRestoreLAC replays a checkpointed LAC-tunneled PPPoE
+// session into the dataplane. Unlike locally-decapped sessions, a LAC
+// subscriber has no local IP and forwards encapsulated PPP frames into
+// an L2TPv2 session via SetPPPoESessionLACTunneled.
+//
+// Sequence:
+//  1. AddPPPoESession (idempotent — plugin returns existing sw_if_index
+//     if the lookup key matches, ENTRY_NEEDS_REFRESH on drift).
+//  2. Resolve the L2TP session sw_if_index via the lacResolver
+//     (osvbng-context#93 §5.4a Option B — stable across L2TP re-init).
+//  3. Bind PPPoE -> L2TP via SetPPPoESessionLACTunneled.
+//
+// On resolver miss or VPP failure the session is left in
+// PhaseLACTunnelPending, the in-memory state stays loaded, and the opdb
+// entry is preserved. The PPPoE plugin's locally-decap-with-no-IP path
+// drops subscriber traffic at ip4-not-enabled — preferable to silently
+// forwarding wrong-class traffic into the local datapath.
+//
+// Auto-retry on subsequent L2TP tunnel recovery is a follow-up; for now
+// operators can re-run osvbngd or wait for the natural disconnect path.
+func (c *Component) setupSessionRestoreLAC(ctx context.Context, sess *SessionState) error {
+	binding := sess.L2TPBinding
+	if binding == nil {
+		c.logger.Error("LAC-tunneled session has no L2TPBinding, cannot restore",
+			"session_id", sess.SessionID)
+		sess.Phase = ppp.PhaseLACTunnelPending
+		return nil
+	}
+
+	encapIfIndex := c.resolveCurrentEncapIfIndex(sess)
+	sess.EncapIfIndex = encapIfIndex
+
+	localMAC := c.effectiveLocalMAC(sess.SRGName, encapIfIndex)
+	if localMAC == nil {
+		return fmt.Errorf("no local MAC for LAC session %s", sess.SessionID)
+	}
+
+	var decapVrfID uint32
+	if sess.VRF != "" && c.vrfMgr != nil {
+		tableID, _, _, err := c.vrfMgr.ResolveVRF(sess.VRF)
+		if err != nil {
+			return fmt.Errorf("resolve vrf %q: %w", sess.VRF, err)
+		}
+		decapVrfID = tableID
+	}
+
+	// LAC sessions don't program MTU/MSS-clamp (no local PPP termination)
+	// but AddPPPoESession still needs a placeholder client_ip for plugin
+	// FIB / reverse-route bookkeeping. Match the LAC bring-up path's
+	// TEST-NET-1 placeholder (internal/pppoe/lac.go).
+	clientIP := sess.IPv4Address
+	if clientIP == nil {
+		clientIP = net.ParseIP("192.0.2.1")
+	}
+	pppMTU, policy := c.resolveMSSClampPolicy(sess)
+
+	swIfIndex, err := c.vpp.AddPPPoESession(
+		sess.PPPoESessionID,
+		clientIP,
+		sess.MAC,
+		localMAC,
+		encapIfIndex,
+		sess.OuterVLAN,
+		sess.InnerVLAN,
+		decapVrfID,
+		pppMTU,
+		policy,
+	)
+	if err != nil {
+		return fmt.Errorf("add pppoe session for LAC restore: %w", err)
+	}
+	sess.SwIfIndex = swIfIndex
+
+	if c.lacResolver == nil {
+		c.logger.Warn("LAC resolver not installed; leaving session in LACTunnelPending",
+			"session_id", sess.SessionID,
+			"local_tunnel", binding.LocalTunnelID,
+			"local_session", binding.LocalSessionID)
+		sess.Phase = ppp.PhaseLACTunnelPending
+		c.checkpointSession(sess)
+		return nil
+	}
+
+	lacIdx, ok := c.lacResolver(binding.LocalTunnelID, binding.LocalSessionID)
+	if !ok {
+		c.logger.Error("LAC session sw_if_index not resolvable; tunnel likely not restored yet",
+			"session_id", sess.SessionID,
+			"local_tunnel", binding.LocalTunnelID,
+			"local_session", binding.LocalSessionID)
+		sess.Phase = ppp.PhaseLACTunnelPending
+		c.checkpointSession(sess)
+		return nil
+	}
+
+	if err := c.vpp.SetPPPoESessionLACTunneled(swIfIndex, lacIdx, true); err != nil {
+		c.logger.Error("Failed to replay LAC tunnel binding",
+			"session_id", sess.SessionID,
+			"sw_if_index", swIfIndex,
+			"lac_l2tp_session_index", lacIdx,
+			"error", err)
+		sess.Phase = ppp.PhaseLACTunnelPending
+		c.checkpointSession(sess)
+		return nil
+	}
+
+	c.checkpointSession(sess)
+
+	c.eventBus.Publish(events.TopicSessionRestored, events.Event{
+		Source: c.Name(),
+		Data: &events.SessionRestoredEvent{
+			AccessType: models.AccessTypePPPoE,
+			Protocol:   models.ProtocolPPPoESession,
+			SessionID:  sess.SessionID,
+			Session: &models.PPPSession{
+				SessionID:    sess.SessionID,
+				State:        models.SessionStateActive,
+				AccessType:   string(models.AccessTypePPPoE),
+				Protocol:     string(models.ProtocolPPPoESession),
+				PPPSessionID: sess.PPPoESessionID,
+				MAC:          sess.MAC,
+				OuterVLAN:    sess.OuterVLAN,
+				InnerVLAN:    sess.InnerVLAN,
+				IfIndex:      sess.SwIfIndex,
+				VRF:          sess.VRF,
+				ServiceGroup: sess.ServiceGroup.Name,
+				SRGName:      sess.SRGName,
+				Username:     sess.Username,
+				AAASessionID: sess.AcctSessionID,
+				ActivatedAt:  sess.BoundAt,
+				L2TP:         binding,
+			},
+			RestoreCause: c.currentRestoreCause,
+		},
+	})
+
+	return nil
 }
 
 // ErrSetupRestoreNotImplemented is the legacy sentinel for callers that

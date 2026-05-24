@@ -433,6 +433,8 @@ func main() {
 				ProxyAuthenResponse:  attrs.ProxyAuthenResponse,
 			})
 		})
+
+		pppoeComp.SetLACResolver(l2tpComp.ResolveLACSessionIndex)
 	}
 
 	var cgnat *cgnatcomp.Component

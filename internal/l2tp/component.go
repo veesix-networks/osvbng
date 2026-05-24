@@ -221,6 +221,39 @@ func (c *Component) LookupTunnel(peerIP net.IP, localTunnelID uint16) *Tunnel {
 	return t
 }
 
+// ResolveLACSessionIndex maps a persisted (localTunnelID, localSessionID)
+// pair back to the L2TP session's current dataplane sw_if_index. Used by
+// the PPPoE component to replay SetPPPoESessionLACTunneled on a restored
+// LAC subscriber (osvbng-context#93 §5.4a Option B) — keeps the binding
+// stable across L2TP component re-init because the resolver consults
+// whatever the L2TP component currently knows rather than a stale
+// checkpointed sw_if_index.
+//
+// Returns (sw_if_index, true) on hit. Returns (0, false) when no tunnel
+// or session matches the IDs — caller should leave the PPPoE session in
+// PhaseLACTunnelPending and wait for the L2TP tunnel to come back up
+// before retrying.
+func (c *Component) ResolveLACSessionIndex(localTunnelID, localSessionID uint16) (uint32, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	for _, t := range c.tunnels {
+		if t.LocalID != localTunnelID {
+			continue
+		}
+		t.mu.Lock()
+		s := t.Sessions[localSessionID]
+		t.mu.Unlock()
+		if s == nil {
+			continue
+		}
+		if s.SwIfIndex == 0 {
+			return 0, false
+		}
+		return s.SwIfIndex, true
+	}
+	return 0, false
+}
+
 // LookupSession returns the session for an incoming data packet, or
 // nil if no match.
 func (c *Component) LookupSession(peerIP net.IP, localTunnelID, localSessionID uint16) *Session {

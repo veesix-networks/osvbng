@@ -88,6 +88,13 @@ type Component struct {
 	// `access-type: lac` then fail back to local PPP termination.
 	lacTrigger LACTrigger
 
+	// lacResolver maps persisted (localTunnelID, localSessionID) pairs
+	// back to the L2TP session's current sw_if_index. Used by the
+	// restore path to replay SetPPPoESessionLACTunneled across L2TP
+	// component re-init (§5.4a Option B). nil disables LAC restore;
+	// restored LAC sessions then stay in PhaseLACTunnelPending.
+	lacResolver LACSessionIndexResolver
+
 	pppoeChan <-chan *dataplane.ParsedPacket
 
 	nextSessionID uint16

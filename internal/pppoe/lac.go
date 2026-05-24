@@ -61,6 +61,23 @@ type LACTrigger func(attrs LACBringUpAttrs) error
 // constructed.
 func (c *Component) SetLACTrigger(fn LACTrigger) { c.lacTrigger = fn }
 
+// LACSessionIndexResolver maps a persisted L2TP (localTunnelID,
+// localSessionID) pair back to the current dataplane sw_if_index of
+// the L2TP session interface. Used by setupSessionRestore to replay
+// SetPPPoESessionLACTunneled across L2TP re-init without persisting the
+// volatile sw_if_index in the PPPoE checkpoint (osvbng-context#93
+// §5.4a Option B).
+type LACSessionIndexResolver func(localTunnelID, localSessionID uint16) (uint32, bool)
+
+// SetLACResolver installs the L2TP-side sw_if_index resolver. Called
+// once from cmd-level wiring after the L2TP component is constructed.
+// nil leaves restored LAC sessions in PhaseLACTunnelPending until the
+// L2TP tunnel is back up; their opdb entries persist and forwarding
+// stays down (the PPPoE plugin's locally-decap-with-no-IP path drops
+// subscriber traffic at ip4-not-enabled — preferable to silently
+// forwarding wrong-class traffic into the local datapath).
+func (c *Component) SetLACResolver(fn LACSessionIndexResolver) { c.lacResolver = fn }
+
 // handleLACDecision is subscribed to TopicL2TPLACDecision. It looks up
 // the PPPoE session by PPPoESessionID and either completes the local
 // PAP/CHAP-Ack and transitions the session into PhaseLACTunneled (on
