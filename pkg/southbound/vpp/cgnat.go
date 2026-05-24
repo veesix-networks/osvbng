@@ -206,6 +206,39 @@ func (v *VPP) CGNATAddDelSubscriberMapping(poolID uint32, swIfIndex uint32,
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
 		return fmt.Errorf("subscriber mapping: %w", err)
 	}
+
+	if isAdd && reply.Retval == retvalEntryNeedsRefresh {
+		v.logger.Info("CGNAT mapping exists with drifted mutable inputs; refreshing",
+			"pool_id", poolID,
+			"inside_ip", insideIP.String(),
+			"inside_vrf", insideVRFID)
+
+		delReq := &osvbng_cgnat.OsvbngCgnatAddDelSubscriberMapping{
+			IsAdd:         false,
+			PoolID:        poolID,
+			SwIfIndex:     interface_types.InterfaceIndex(swIfIndex),
+			InsideIP:      ip4Addr(insideIP),
+			InsideVrfID:   insideVRFID,
+			EnableFeature: enableFeature,
+		}
+		delReply := &osvbng_cgnat.OsvbngCgnatAddDelSubscriberMappingReply{}
+		if err := ch.SendRequest(delReq).ReceiveReply(delReply); err != nil {
+			return fmt.Errorf("refresh cgnat mapping: del: %w", err)
+		}
+		if delReply.Retval != 0 {
+			return fmt.Errorf("refresh cgnat mapping: del retval=%d", delReply.Retval)
+		}
+
+		reply = &osvbng_cgnat.OsvbngCgnatAddDelSubscriberMappingReply{}
+		if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+			return fmt.Errorf("refresh cgnat mapping: re-add: %w", err)
+		}
+		if reply.Retval != 0 {
+			return fmt.Errorf("refresh cgnat mapping: re-add retval=%d", reply.Retval)
+		}
+		return nil
+	}
+
 	if reply.Retval != 0 {
 		return fmt.Errorf("subscriber mapping failed: retval=%d", reply.Retval)
 	}
@@ -235,6 +268,53 @@ func (v *VPP) CGNATAddDelSubscriberMappingAsync(poolID uint32, swIfIndex uint32,
 			return
 		}
 		rmp := reply.(*osvbng_cgnat.OsvbngCgnatAddDelSubscriberMappingReply)
+		if isAdd && rmp.Retval == retvalEntryNeedsRefresh {
+			v.logger.Info("CGNAT mapping exists with drifted mutable inputs; refreshing (async)",
+				"pool_id", poolID,
+				"inside_ip", insideIP.String(),
+				"inside_vrf", insideVRFID)
+
+			delReq := &osvbng_cgnat.OsvbngCgnatAddDelSubscriberMapping{
+				IsAdd:         false,
+				PoolID:        poolID,
+				SwIfIndex:     interface_types.InterfaceIndex(swIfIndex),
+				InsideIP:      ip4Addr(insideIP),
+				InsideVrfID:   insideVRFID,
+				EnableFeature: enableFeature,
+			}
+			v.asyncWorker.SendAsync(delReq, func(delReply api.Message, delErr error) {
+				if delErr != nil {
+					callback(fmt.Errorf("refresh cgnat mapping: del: %w", delErr))
+					return
+				}
+				dr, ok := delReply.(*osvbng_cgnat.OsvbngCgnatAddDelSubscriberMappingReply)
+				if !ok {
+					callback(fmt.Errorf("refresh cgnat mapping: del unexpected reply type: %T", delReply))
+					return
+				}
+				if dr.Retval != 0 {
+					callback(fmt.Errorf("refresh cgnat mapping: del retval=%d", dr.Retval))
+					return
+				}
+				v.asyncWorker.SendAsync(req, func(reReply api.Message, reErr error) {
+					if reErr != nil {
+						callback(fmt.Errorf("refresh cgnat mapping: re-add: %w", reErr))
+						return
+					}
+					rr, ok := reReply.(*osvbng_cgnat.OsvbngCgnatAddDelSubscriberMappingReply)
+					if !ok {
+						callback(fmt.Errorf("refresh cgnat mapping: re-add unexpected reply type: %T", reReply))
+						return
+					}
+					if rr.Retval != 0 {
+						callback(fmt.Errorf("refresh cgnat mapping: re-add retval=%d", rr.Retval))
+						return
+					}
+					callback(nil)
+				})
+			})
+			return
+		}
 		if rmp.Retval != 0 {
 			callback(fmt.Errorf("subscriber mapping failed: retval=%d", rmp.Retval))
 			return
