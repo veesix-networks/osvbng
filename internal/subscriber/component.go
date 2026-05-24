@@ -400,8 +400,7 @@ func (c *Component) handleSessionLifecycle(event events.Event) {
 // program QoS / ACL / uRPF, so re-running activateSession here would
 // double-apply. Other access types (currently only L2TP LNS) fall
 // through to activateSession because they don't yet adopt the
-// svcgroup.ApplyToSession SDK — that's tracked alongside the HA-side
-// migration in osvbng-context#94.
+// svcgroup.ApplyToSession SDK.
 func (c *Component) handleSessionRestored(event events.Event) {
 	data, ok := event.Data.(*events.SessionRestoredEvent)
 	if !ok {
@@ -428,16 +427,16 @@ func (c *Component) handleSessionRestored(event events.Event) {
 // (pkg/svcgroup.ApplyToSession), rather than by the subscriber
 // component's legacy activateSession path.
 //
-// Returns true for IPoE and PPPoE (non-LAC) — both adopted setupSession
-// in the unified-session-recovery work. PPPoE-LAC sessions take a
-// different dataplane path (the L2TP side owns policy on the tunnel
-// interface, not the PPPoE session interface) and are filtered out by
-// the existing handleSessionLifecycle skip on PhaseLACTunneled (no
-// IfIndex set on the PPPoE side for those).
+// Returns true for IPoE and PPPoE (non-LAC) — both invoke
+// svcgroup.ApplyToSession directly from setupSession. PPPoE-LAC
+// sessions take a different dataplane path (the L2TP side owns policy
+// on the tunnel interface, not the PPPoE session interface) and are
+// filtered out by the existing handleSessionLifecycle skip on
+// PhaseLACTunneled (no IfIndex set on the PPPoE side for those).
 //
-// Returns false for L2TP LNS, which has not adopted setupSession yet
-// (osvbng-context#94). activateSession remains the QoS-apply path for
-// those sessions for now.
+// Returns false for L2TP LNS, which has not adopted setupSession yet —
+// activateSession remains the QoS-apply path for those sessions until
+// it does.
 func isUnifiedSetupAccessType(t models.AccessType) bool {
 	switch t {
 	case models.AccessTypeIPoE, models.AccessTypePPPoE:

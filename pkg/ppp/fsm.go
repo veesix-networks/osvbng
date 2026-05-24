@@ -97,9 +97,8 @@ func (f *FSM) State() State {
 }
 
 // Restore transitions the FSM directly to Opened without running the
-// LCP / NCP handshake. Used by the unified-session-recovery setupSession
-// path (osvbng-context#93 §5.4) to replay a checkpointed PPPoE session
-// without disturbing the CPE.
+// LCP / NCP handshake. Used to replay a checkpointed PPPoE session on
+// the recovery path without disturbing the CPE.
 //
 // Pre-conditions encoded by the caller (no per-protocol option state is
 // re-negotiated here — the caller is asserting the session was already

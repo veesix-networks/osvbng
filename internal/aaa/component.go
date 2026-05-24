@@ -121,7 +121,7 @@ func (c *Component) Start(ctx context.Context) error {
 	// separate TopicSessionRestored path which rebuilds the in-memory
 	// acctCache entry from the opdb-persisted baseline WITHOUT emitting
 	// Start, preserving the one-Start-per-session invariant required by
-	// RFC 2866 (spec §5.9a).
+	// RFC 2866.
 	c.lifecycleSub = c.eventBus.Subscribe(events.TopicSessionLifecycle, c.handleSessionLifecycle)
 	c.restoredSub = c.eventBus.Subscribe(events.TopicSessionRestored, c.handleSessionRestored)
 
@@ -422,7 +422,7 @@ func (c *Component) handleSessionLifecycle(event events.Event) {
 //
 // Also re-resolves the dataplane sw_if_index from the event payload so
 // the next Acct-Interim reads VPP counters at the correct (possibly
-// re-numbered post-restart) interface (spec §5.9a).
+// re-numbered post-restart) interface.
 func (c *Component) handleSessionRestored(event events.Event) {
 	data, ok := event.Data.(*events.SessionRestoredEvent)
 	if !ok || data == nil || data.Session == nil {

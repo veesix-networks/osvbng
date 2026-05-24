@@ -110,9 +110,8 @@ const (
 	RestoreCauseColdBoot RestoreCause = "cold_boot"
 
 	// RestoreCauseHAFailover marks restoration on the just-promoted
-	// node of an HA pair. Reserved for the HA-side setupSession
-	// adoption (osvbng-context#94); not emitted by the in-this-spec
-	// recovery paths.
+	// node of an HA pair. Reserved for the future HA-side setupSession
+	// adoption; not emitted by the current recovery paths.
 	RestoreCauseHAFailover RestoreCause = "ha_failover"
 )
 

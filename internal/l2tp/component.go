@@ -224,7 +224,7 @@ func (c *Component) LookupTunnel(peerIP net.IP, localTunnelID uint16) *Tunnel {
 // ResolveLACSessionIndex maps a persisted (localTunnelID, localSessionID)
 // pair back to the L2TP session's current dataplane sw_if_index. Used by
 // the PPPoE component to replay SetPPPoESessionLACTunneled on a restored
-// LAC subscriber (osvbng-context#93 §5.4a Option B) — keeps the binding
+// LAC subscriber — keeps the binding
 // stable across L2TP component re-init because the resolver consults
 // whatever the L2TP component currently knows rather than a stale
 // checkpointed sw_if_index.

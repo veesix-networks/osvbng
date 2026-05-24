@@ -220,7 +220,7 @@ func (m *Manager) Start(ctx context.Context) error {
 		// on the standby via the prior HA sync round, so re-replicating it
 		// after recovery would push a duplicate the standby would discard.
 		// HA-side adoption of setupSession + RestoreCauseHAFailover is
-		// tracked separately in osvbng-context#94.
+		// tracked separately.
 		m.eventBus.Subscribe(events.TopicSessionLifecycle, m.syncSender.HandleEvent)
 		m.eventBus.Subscribe(events.TopicSubscriberMutationResult, m.syncSender.HandleMutationResult)
 		m.Go(func() { m.syncSender.Run(m.Ctx) })

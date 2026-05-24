@@ -38,10 +38,11 @@ const (
 // Preserves the contract between checkOpen and the async southbound add
 // that fresh PPPoE bring-up relies on.
 //
-// Restore mode (returns ErrSetupRestoreNotImplemented here): the synchronous
-// replay path that the unified-session-recovery work will add in a later
-// commit. Documented at the call site so callers can prepare for it without
-// changing signatures again.
+// Restore mode (returns ErrSetupRestoreNotImplemented in earlier
+// staging commits, then concrete behaviour once setupSessionRestore
+// lands): the synchronous replay path used by restoreSessions to
+// replay opdb-checkpointed sessions through the same idempotent
+// step sequence as fresh bring-up.
 func (c *Component) setupSession(ctx context.Context, sess *SessionState, mode SetupMode) error {
 	if c.vpp == nil {
 		if c.echoGen != nil {
@@ -365,7 +366,7 @@ func (c *Component) setupSessionUnnumbered(sessID string, swIfIndex uint32, loop
 //  1. AddPPPoESession (idempotent — plugin returns existing sw_if_index
 //     if the lookup key matches, ENTRY_NEEDS_REFRESH on drift).
 //  2. Resolve the L2TP session sw_if_index via the lacResolver
-//     (osvbng-context#93 §5.4a Option B — stable across L2TP re-init).
+//     (stable across L2TP component re-init — see SetLACResolver).
 //  3. Bind PPPoE -> L2TP via SetPPPoESessionLACTunneled.
 //
 // On resolver miss or VPP failure the session is left in

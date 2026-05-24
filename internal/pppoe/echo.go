@@ -60,7 +60,7 @@ func NewEchoGenerator(cfg EchoConfig, sendEcho func(uint16, uint8), onDeadPeer f
 // after each successful echo-send, with the new Identifier value. The
 // PPPoE component uses this to keep SessionState.EchoSeq in sync with
 // the wire sequence so the next opdb checkpoint persists the latest
-// value (spec §5.4d).
+// value.
 func (g *EchoGenerator) SetSeqAdvanceHook(hook func(sessionID uint16, lastEchoID uint8)) {
 	g.onSeqAdvance = hook
 }
@@ -77,7 +77,7 @@ func (g *EchoGenerator) Stop() {
 // the per-session sequence number — pass 0 for fresh sessions and the
 // persisted SessionState.EchoSeq for restored sessions, so the
 // post-restore echo cadence picks up where the pre-restart sequence
-// left off (avoids LCP Identifier reuse confusion per spec §5.4d).
+// left off (avoids LCP Identifier reuse confusion).
 func (g *EchoGenerator) AddSession(sessionID uint16, magic uint32, lastEchoID uint8) {
 	state := &ppp.EchoState{
 		SessionID:  sessionID,

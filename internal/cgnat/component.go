@@ -273,7 +273,7 @@ func (c *Component) handleSessionProgrammed(event events.Event) {
 // handleSessionRestored installs / re-installs the CGNAT mapping for a
 // session whose state was replayed from opdb by setupSession on the
 // IPoE / PPPoE side. The CGNAT plugin add_mapping API is idempotent under
-// the three-state contract (osvbng-context#93 §5.7), so the same code
+// the three-state contract, so the same code
 // path that handles fresh TopicSessionProgrammed handles restore safely
 // here. Splitting into a dedicated handler keeps the option of branching
 // on RestoreCause later (e.g. distinct counters for opdb-restore vs

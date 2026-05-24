@@ -38,10 +38,11 @@ const (
 // DHCPv6 discover/request packets. This preserves the concurrency contract
 // already in place at handleAAAResponse.
 //
-// Restore mode (returns ErrSetupRestoreNotImplemented here): the synchronous
-// replay path that the unified-session-recovery work will add in a later
-// commit. Documented at the call site so callers can prepare for it without
-// changing signatures again.
+// Restore mode (returns ErrSetupRestoreNotImplemented in earlier
+// staging commits, then concrete behaviour once setupSessionRestore
+// lands): the synchronous replay path used by restoreSessions to
+// replay opdb-checkpointed sessions through the same idempotent
+// step sequence as fresh bring-up.
 func (c *Component) setupSession(ctx context.Context, sess *SessionState, mode SetupMode) error {
 	if c.vpp == nil {
 		return nil
@@ -231,7 +232,7 @@ func (c *Component) resolveCurrentEncapIfIndex(sess *SessionState) uint32 {
 // fields nil — because checkpointed sessions are by construction
 // post-DHCP-bind / post-IPCP-up.
 //
-// Plugin-side idempotency (osvbng-context#93 §5.7) lets every step here
+// Plugin-side idempotency lets every step here
 // run safely whether the dataplane state already matches the request or
 // is empty, so the same code handles osvbngd-restart with VPP intact AND
 // VPP-recovery cold-start without branching. Per-session failure surfaces
@@ -240,7 +241,7 @@ func (c *Component) resolveCurrentEncapIfIndex(sess *SessionState) uint32 {
 //
 // Publishes TopicSessionRestored (not Lifecycle/Programmed) on success so
 // AAA does not emit a duplicate Accounting-Start and HA does not
-// re-replicate to the standby (per §5.9 publication rules).
+// re-replicate to the standby.
 func (c *Component) setupSessionRestore(ctx context.Context, sess *SessionState) error {
 	sessID := sess.SessionID
 

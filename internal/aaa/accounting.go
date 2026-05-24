@@ -20,7 +20,7 @@ import (
 // attributes) is local to AAA — no coordination with PPPoE / IPoE
 // SessionState required.
 //
-// Field design notes (spec §5.5):
+// Field design notes:
 //   - LastReported* are the cumulative values most recently acknowledged
 //     by the RADIUS Accounting server. They are the billing system's
 //     source of truth and only advance on Accounting-Response success.

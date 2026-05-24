@@ -7,8 +7,7 @@ package events
 const (
 	TopicSessionLifecycle   = "osvbng:events:session:lifecycle"
 	TopicSessionProgrammed  = "osvbng:events:session:programmed"
-	// TopicSessionRestored is the unified-session-recovery event topic
-	// (osvbng-context#93). Fires once per session after setupSession
+	// TopicSessionRestored fires once per session after setupSession
 	// successfully replays an opdb checkpoint into the dataplane during
 	// component start. Distinct from TopicSessionLifecycle(Active) so
 	// AAA does not emit duplicate Accounting-Start (RFC 2866) and HA

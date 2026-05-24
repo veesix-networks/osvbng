@@ -91,7 +91,7 @@ type Component struct {
 	// lacResolver maps persisted (localTunnelID, localSessionID) pairs
 	// back to the L2TP session's current sw_if_index. Used by the
 	// restore path to replay SetPPPoESessionLACTunneled across L2TP
-	// component re-init (§5.4a Option B). nil disables LAC restore;
+	// component re-init. nil disables LAC restore;
 	// restored LAC sessions then stay in PhaseLACTunnelPending.
 	lacResolver LACSessionIndexResolver
 
@@ -174,7 +174,7 @@ type SessionState struct {
 	// CPE frames correctly. osvbng today Configure-Rejects all three
 	// during negotiation so they are always false in practice; the
 	// fields are persisted as forward-compatible schema for the day
-	// plugin-side ACFC/PFC decap support lands. See spec §5.4.
+	// plugin-side ACFC/PFC decap support lands.
 	ACFCEnabled bool
 	PFCEnabled  bool
 	VJEnabled   bool
@@ -182,7 +182,7 @@ type SessionState struct {
 	// EchoSeq is the next LCP-Echo-Request Identifier the echo generator
 	// should emit. Persisted with pre-increment-on-emit semantics so a
 	// crash between send and checkpoint never causes a duplicate
-	// Identifier to be reused on restore (spec §5.4d).
+	// Identifier to be reused on restore.
 	EchoSeq uint32
 
 	AllocCtx          *allocator.Context
@@ -195,7 +195,7 @@ type SessionState struct {
 	// LAC mode and the L2TPv2 tunnel/session IDs are known. Non-nil
 	// only while Phase == PhaseLACTunneled. Persisted to opdb so the
 	// LAC binding can be replayed via SetPPPoESessionLACTunneled on
-	// restore (spec §5.4a).
+	// restore.
 	L2TPBinding *models.L2TPBinding
 
 	component *Component
@@ -249,7 +249,7 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 // tick after each successful echo-send so the next checkpointSession
 // persists the latest sequence; on osvbngd restart the echo generator's
 // AddSession is seeded with the persisted value and the post-restore
-// cadence picks up where pre-restart left off (spec §5.4d).
+// cadence picks up where pre-restart left off.
 func (c *Component) recordEchoSeqAdvance(pppoeSessionID uint16, lastEchoID uint8) {
 	c.sessionMu.RLock()
 	sess := c.sidIndex[pppoeSessionID]

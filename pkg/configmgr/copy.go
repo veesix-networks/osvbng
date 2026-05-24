@@ -17,16 +17,16 @@ import (
 // snapshot so callers that read these in-memory-only fields off the clone
 // see the same values as the source.
 //
-// Why this matters (osvbng-context#91):
+// Why this matters:
 //   - Autoconfig stamps SubscriberAccess=true on the subinterfaces it
 //     derives from subscriber-group VLAN expansions.
 //   - The sub-interface validator (pkg/handlers/conf/interface/subinterfaces)
 //     rejects any non-SubscriberAccess subinterface whose VLAN overlaps a
 //     subscriber-group expansion.
-//   - Before this fix, deepCopyConfig was a plain JSON round-trip, so the
-//     `json:"-"` tag on SubscriberAccess dropped the flag on the clone,
-//     the cloned subinterface then looked like a regular operator-authored
-//     entry, and the validator rejected it on reload as a conflict.
+//   - A plain JSON round-trip here drops the `json:"-"` SubscriberAccess
+//     flag, the cloned subinterface then looks like a regular
+//     operator-authored entry, and the validator rejects it on reload as
+//     a conflict — preserving the flag closes that gap.
 //
 // Save-to-disk has a separate concern (scrubPersistedConfig) that drops
 // the derived subinterface entries entirely before writing to startup.yaml
@@ -125,9 +125,11 @@ func restoreHiddenInterfaceState(cfg *config.Config, h *hiddenInterfaceState) {
 // scrubPersistedConfig returns a clone of cfg with autoconfig-derived
 // subinterfaces stripped, suitable for writing to startup.yaml. On next
 // bootstrap, autoconfig re-derives those entries from the subscriber-group
-// configuration, avoiding the validator conflict described in
-// osvbng-context#91. Operator-authored subinterfaces (SubscriberAccess
-// false or unset) are preserved verbatim.
+// configuration, avoiding the validator conflict that would otherwise
+// fire when the persisted entries are loaded back without the
+// SubscriberAccess flag (stripped by YAML marshal). Operator-authored
+// subinterfaces (SubscriberAccess false or unset) are preserved
+// verbatim.
 func (cd *ConfigManager) scrubPersistedConfig(cfg *config.Config) *config.Config {
 	if cfg == nil {
 		return nil
