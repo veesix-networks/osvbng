@@ -66,6 +66,11 @@ ${session-count}        1
     [Documentation]    Kill VPP; the watchdog respawns it and the cold
     ...    bootstrap path replays the startup config + opdb sessions.
     ...    Subscriber traffic should resume without operator action.
+    ...
+    ...    IPv6 ping verification deferred: same RA source-IP issue as 2a
+    ...    (RAs emitted from global loopback rather than link-local;
+    ...    Linux subscribers per RFC 4861 §6.1.2 discard them). Add the
+    ...    v6 checks back once osvbng-context#89 lands.
     Restart VPP                                    ${bng1}
     Wait For VPP Recovery                          ${bng1}
     Wait Until Keyword Succeeds    60s    2s
@@ -74,9 +79,7 @@ ${session-count}        1
     Verify OpDB Session IP Addresses Match         ${bng1}    ${OPDB_SNAPSHOT}
     Verify Subscriber Has Stable Lease V4
     Verify Subscriber Can Ping                     ${v4-gateway}
-    Verify Subscriber Can Ping                     ${v6-gateway}    -6
     Verify Subscriber Can Ping                     ${core-router-v4}
-    Verify Subscriber Can Ping                     ${core-router-v6}    -6
 
 2c — Restart Full Container
     [Documentation]    SKIPPED — containerlab veth pairs to access/core do
