@@ -306,6 +306,14 @@ func (c *Component) setupSessionRestore(ctx context.Context, sess *SessionState)
 		c.claimTuple(sess)
 	}
 
+	// Persist the refreshed SessionState back to opdb so the new
+	// EncapIfIndex / IPoESwIfIndex (post-VPP-restart renumbering) and
+	// any other derived state survive any subsequent osvbngd restart.
+	// Without this the next restore loads stale sw_if_indexes from
+	// opdb and other readers (cache, API, HA sync) see incorrect
+	// values until the next setupSession cycle re-resolves them.
+	c.checkpointSession(sess)
+
 	c.eventBus.Publish(events.TopicSessionRestored, events.Event{
 		Source: c.Name(),
 		Data: &events.SessionRestoredEvent{

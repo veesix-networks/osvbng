@@ -58,12 +58,7 @@ func (c *Component) setupSession(ctx context.Context, sess *SessionState, mode S
 		return nil
 	}
 
-	var localMAC net.HardwareAddr
-	if c.ifMgr != nil {
-		if iface := c.ifMgr.Get(sess.EncapIfIndex); iface != nil && len(iface.MAC) >= 6 {
-			localMAC = net.HardwareAddr(iface.MAC[:6])
-		}
-	}
+	localMAC := c.effectiveLocalMAC(sess.EncapIfIndex)
 	if localMAC == nil {
 		c.logger.Error("Failed to get local MAC",
 			"session_id", sess.SessionID,
@@ -129,14 +124,9 @@ func (c *Component) setupSessionRestore(ctx context.Context, sess *SessionState)
 	encapIfIndex := c.resolveCurrentEncapIfIndex(sess)
 	sess.EncapIfIndex = encapIfIndex
 
-	var localMAC net.HardwareAddr
-	if c.ifMgr != nil {
-		if iface := c.ifMgr.Get(encapIfIndex); iface != nil && len(iface.MAC) >= 6 {
-			localMAC = net.HardwareAddr(iface.MAC[:6])
-		}
-	}
+	localMAC := c.effectiveLocalMAC(encapIfIndex)
 	if localMAC == nil {
-		return fmt.Errorf("no local MAC for session %s", sess.SessionID)
+		return fmt.Errorf("no local MAC for session %s (encap_if_index=%d)", sess.SessionID, encapIfIndex)
 	}
 
 	var decapVrfID uint32
@@ -186,6 +176,11 @@ func (c *Component) setupSessionRestore(ctx context.Context, sess *SessionState)
 		c.echoGen.AddSession(sess.PPPoESessionID, sess.LCPMagic)
 	}
 
+	// Persist the refreshed SessionState back to opdb so the new
+	// EncapIfIndex / SwIfIndex (post-VPP-restart renumbering) and any
+	// other derived state survive any subsequent osvbngd restart.
+	c.checkpointSession(sess)
+
 	payload := &models.PPPSession{
 		SessionID:        sess.SessionID,
 		State:            models.SessionStateActive,
@@ -224,6 +219,44 @@ func (c *Component) setupSessionRestore(ctx context.Context, sess *SessionState)
 	})
 
 	return nil
+}
+
+// effectiveLocalMAC returns the BNG-side source MAC the per-session
+// rewrite should carry on egress. Sub-interfaces in VPP report a zero
+// L2Address from swInterfaceDump (the physical MAC lives on the parent),
+// so reading ifMgr by the sub-interface's sw_if_index can give back a
+// zero MAC after VPP recovery. Walks up the SupSwIfIndex chain until it
+// finds a non-zero MAC or runs out of parents.
+func (c *Component) effectiveLocalMAC(encapIfIndex uint32) net.HardwareAddr {
+	if c.ifMgr == nil {
+		return nil
+	}
+	idx := encapIfIndex
+	for hop := 0; hop < 4; hop++ {
+		iface := c.ifMgr.Get(idx)
+		if iface == nil {
+			return nil
+		}
+		if len(iface.MAC) >= 6 && !macIsZero(iface.MAC[:6]) {
+			out := make(net.HardwareAddr, 6)
+			copy(out, iface.MAC[:6])
+			return out
+		}
+		if iface.SupSwIfIndex == idx || iface.SupSwIfIndex == 0 {
+			return nil
+		}
+		idx = iface.SupSwIfIndex
+	}
+	return nil
+}
+
+func macIsZero(mac []byte) bool {
+	for _, b := range mac {
+		if b != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // resolveCurrentEncapIfIndex re-resolves the access sub-interface

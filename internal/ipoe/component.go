@@ -1808,12 +1808,40 @@ func (c *Component) getLocalMAC(srgName string, encapIfIndex uint32) net.Hardwar
 			return vmac
 		}
 	}
-	if c.ifMgr != nil {
-		if iface := c.ifMgr.Get(encapIfIndex); iface != nil && len(iface.MAC) >= 6 {
-			return net.HardwareAddr(iface.MAC[:6])
+	// Walk up the SupSwIfIndex chain because sub-interfaces in VPP report
+	// a zero L2Address from swInterfaceDump — the physical MAC lives on
+	// the parent. Without this, the per-session rewrite ends up with a
+	// zero source MAC on restore-mode bring-up after VPP recovery (and
+	// likely also on fresh bring-up against access sub-interfaces).
+	if c.ifMgr == nil {
+		return nil
+	}
+	idx := encapIfIndex
+	for hop := 0; hop < 4; hop++ {
+		iface := c.ifMgr.Get(idx)
+		if iface == nil {
+			return nil
 		}
+		if len(iface.MAC) >= 6 && !macIsZero(iface.MAC[:6]) {
+			out := make(net.HardwareAddr, 6)
+			copy(out, iface.MAC[:6])
+			return out
+		}
+		if iface.SupSwIfIndex == idx || iface.SupSwIfIndex == 0 {
+			return nil
+		}
+		idx = iface.SupSwIfIndex
 	}
 	return nil
+}
+
+func macIsZero(mac []byte) bool {
+	for _, b := range mac {
+		if b != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *Component) getSessionMode(svlan uint16) subscriber.SessionMode {

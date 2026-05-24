@@ -1345,10 +1345,8 @@ func (c *Component) restoreFromHASync(srgName string) {
 		if c.srgMgr != nil {
 			localMAC = c.srgMgr.GetVirtualMAC(srgName)
 		}
-		if localMAC == nil && c.ifMgr != nil {
-			if iface := c.ifMgr.Get(encapIfIndex); iface != nil && len(iface.MAC) >= 6 {
-				localMAC = net.HardwareAddr(iface.MAC[:6])
-			}
+		if localMAC == nil {
+			localMAC = c.effectiveLocalMAC(encapIfIndex)
 		}
 		if localMAC == nil {
 			c.logger.Error("No local MAC available for HA restore", "session_id", cp.SessionId)
