@@ -34,6 +34,7 @@ type Component struct {
 	cache     cache.Cache
 
 	lifecycleSub    events.Subscription
+	restoredSub     events.Subscription
 	mutationResSub  events.Subscription
 	mutationWaiters sync.Map
 }
@@ -63,6 +64,7 @@ func (c *Component) Start(ctx context.Context) error {
 	c.expiryMgr.Start()
 
 	c.lifecycleSub = c.eventBus.Subscribe(events.TopicSessionLifecycle, c.handleSessionLifecycle)
+	c.restoredSub = c.eventBus.Subscribe(events.TopicSessionRestored, c.handleSessionRestored)
 	c.mutationResSub = c.eventBus.Subscribe(events.TopicSubscriberMutationResult, c.handleMutationResult)
 
 	return nil
@@ -74,6 +76,9 @@ func (c *Component) Stop(ctx context.Context) error {
 	c.expiryMgr.Stop()
 
 	c.lifecycleSub.Unsubscribe()
+	if c.restoredSub != nil {
+		c.restoredSub.Unsubscribe()
+	}
 	c.mutationResSub.Unsubscribe()
 
 	c.StopContext()
@@ -388,9 +393,76 @@ func (c *Component) handleSessionLifecycle(event events.Event) {
 	}
 }
 
+// handleSessionRestored exists for completeness so the subscriber
+// component is still subscribed to TopicSessionRestored, but for the
+// IPoE / PPPoE access types it is a no-op: the publishing component's
+// setupSessionRestore already invoked pkg/svcgroup.ApplyToSession to
+// program QoS / ACL / uRPF, so re-running activateSession here would
+// double-apply. Other access types (currently only L2TP LNS) fall
+// through to activateSession because they don't yet adopt the
+// svcgroup.ApplyToSession SDK.
+func (c *Component) handleSessionRestored(event events.Event) {
+	data, ok := event.Data.(*events.SessionRestoredEvent)
+	if !ok {
+		c.logger.Error("Invalid event data for session restored")
+		return
+	}
+	if data.Session == nil {
+		return
+	}
+	if isUnifiedSetupAccessType(data.AccessType) {
+		return
+	}
+	if err := c.activateSession(data.Session); err != nil {
+		c.logger.Error("Failed to activate restored session",
+			"session_id", data.SessionID,
+			"restore_cause", string(data.RestoreCause),
+			"error", err)
+	}
+}
+
+// isUnifiedSetupAccessType reports whether sessions of this access type
+// have their service-group bindings (QoS / ACL / uRPF) programmed
+// directly by the publishing component's setupSession path
+// (pkg/svcgroup.ApplyToSession), rather than by the subscriber
+// component's legacy activateSession path.
+//
+// Returns true for IPoE and PPPoE (non-LAC) — both invoke
+// svcgroup.ApplyToSession directly from setupSession. PPPoE-LAC
+// sessions take a different dataplane path (the L2TP side owns policy
+// on the tunnel interface, not the PPPoE session interface) and are
+// filtered out by the existing handleSessionLifecycle skip on
+// PhaseLACTunneled (no IfIndex set on the PPPoE side for those).
+//
+// Returns false for L2TP LNS, which has not adopted setupSession yet —
+// activateSession remains the QoS-apply path for those sessions until
+// it does.
+func isUnifiedSetupAccessType(t models.AccessType) bool {
+	switch t {
+	case models.AccessTypeIPoE, models.AccessTypePPPoE:
+		return true
+	}
+	return false
+}
+
 func (c *Component) activateSession(sess models.SubscriberSession) error {
 	swIfIndex := sess.GetIfIndex()
 	if swIfIndex == 0 {
+		return nil
+	}
+
+	// HA-restored sessions and L2TP-LNS sessions still flow through
+	// activateSession because their bring-up paths don't yet invoke
+	// pkg/svcgroup.ApplyToSession. For IPoE / PPPoE (non-LAC) on the
+	// fresh + opdb-restore paths, setupSession already programmed the
+	// service-group bindings via svcgroup.ApplyToSession; running this
+	// path again would double-apply. Skip and let the publisher's
+	// direct apply stand.
+	if accessType := sess.GetAccessType(); isUnifiedSetupAccessType(accessType) {
+		c.logger.Debug("Skipping subscriber.activateSession; setupSession already applied svcgroup bindings",
+			"session_id", sess.GetSessionID(),
+			"access_type", accessType,
+			"sw_if_index", swIfIndex)
 		return nil
 	}
 

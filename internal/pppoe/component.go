@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -87,10 +88,23 @@ type Component struct {
 	// `access-type: lac` then fail back to local PPP termination.
 	lacTrigger LACTrigger
 
+	// lacResolver maps persisted (localTunnelID, localSessionID) pairs
+	// back to the L2TP session's current sw_if_index. Used by the
+	// restore path to replay SetPPPoESessionLACTunneled across L2TP
+	// component re-init. nil disables LAC restore;
+	// restored LAC sessions then stay in PhaseLACTunnelPending.
+	lacResolver LACSessionIndexResolver
+
 	pppoeChan <-chan *dataplane.ParsedPacket
 
 	nextSessionID uint16
 	sidMu         sync.Mutex
+
+	// currentRestoreCause is set by restoreSessions before iterating opdb
+	// entries and read by setupSessionRestore to populate the
+	// SessionRestoredEvent. Resets to empty after the loop completes;
+	// only valid while restoreSessions is in flight.
+	currentRestoreCause events.RestoreCause
 }
 
 type SessionState struct {
@@ -155,17 +169,34 @@ type SessionState struct {
 	IPv4MSS          uint16
 	IPv6MSS          uint16
 
+	// ACFCEnabled / PFCEnabled / VJEnabled are LCP / IPCP option flags
+	// the BNG would need to keep honouring after restore to interpret
+	// CPE frames correctly. osvbng today Configure-Rejects all three
+	// during negotiation so they are always false in practice; the
+	// fields are persisted as forward-compatible schema for the day
+	// plugin-side ACFC/PFC decap support lands.
+	ACFCEnabled bool
+	PFCEnabled  bool
+	VJEnabled   bool
+
+	// EchoSeq is the next LCP-Echo-Request Identifier the echo generator
+	// should emit. Persisted with pre-increment-on-emit semantics so a
+	// crash between send and checkpoint never causes a duplicate
+	// Identifier to be reused on restore.
+	EchoSeq uint32
+
 	AllocCtx          *allocator.Context
 	allocatedPool     string
 	allocatedIANAPool string
 
 	MixedAccess bool
 
-	// l2tpBinding is set when this PPPoE session has been handed off to
+	// L2TPBinding is set when this PPPoE session has been handed off to
 	// LAC mode and the L2TPv2 tunnel/session IDs are known. Non-nil
-	// only while Phase == PhaseLACTunneled. Surfaced through the
-	// SubscriberSession API as the L2TP sub-struct.
-	l2tpBinding *models.L2TPBinding
+	// only while Phase == PhaseLACTunneled. Persisted to opdb so the
+	// LAC binding can be replayed via SetPPPoESessionLACTunneled on
+	// restore.
+	L2TPBinding *models.L2TPBinding
 
 	component *Component
 	mu        sync.Mutex
@@ -208,8 +239,27 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 	}
 
 	c.echoGen = NewEchoGenerator(DefaultEchoConfig(), c.sendEchoRequest, c.handleDeadPeer)
+	c.echoGen.SetSeqAdvanceHook(c.recordEchoSeqAdvance)
 
 	return c, nil
+}
+
+// recordEchoSeqAdvance keeps SessionState.EchoSeq in lockstep with the
+// echo generator's on-wire LCP Identifier. Invoked from the time-wheel
+// tick after each successful echo-send so the next checkpointSession
+// persists the latest sequence; on osvbngd restart the echo generator's
+// AddSession is seeded with the persisted value and the post-restore
+// cadence picks up where pre-restart left off.
+func (c *Component) recordEchoSeqAdvance(pppoeSessionID uint16, lastEchoID uint8) {
+	c.sessionMu.RLock()
+	sess := c.sidIndex[pppoeSessionID]
+	c.sessionMu.RUnlock()
+	if sess == nil {
+		return
+	}
+	sess.mu.Lock()
+	sess.EchoSeq = uint32(lastEchoID)
+	sess.mu.Unlock()
 }
 
 func (c *Component) resolveSRGName(svlan uint16) string {
@@ -365,6 +415,8 @@ func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
 	c.logger.Info("Starting PPPoE component", "ac_name", c.acName)
 
+	c.SetReadyState(component.StateRestoring)
+
 	if err := c.restoreSessions(ctx); err != nil {
 		c.logger.Warn("Failed to restore sessions from OpDB", "error", err)
 	}
@@ -378,11 +430,18 @@ func (c *Component) Start(ctx context.Context) error {
 	c.echoGen.Start()
 	c.Go(c.consumePPPoEPackets)
 
+	c.SetReadyState(component.StateReady)
+	c.eventBus.Publish(events.TopicComponentReady, events.Event{
+		Source: c.Name(),
+		Data:   &events.ComponentReadyEvent{Component: c.Name(), State: c.ReadyState().String()},
+	})
+
 	return nil
 }
 
 func (c *Component) Stop(ctx context.Context) error {
 	c.logger.Info("Stopping PPPoE component")
+	c.SetReadyState(component.StateDraining)
 	c.aaaRespSub.Unsubscribe()
 	c.haStateSub.Unsubscribe()
 	c.mutationSub.Unsubscribe()
@@ -468,6 +527,13 @@ func (c *Component) handleSession(pkt *dataplane.ParsedPacket) error {
 }
 
 func (c *Component) handlePADI(pkt *dataplane.ParsedPacket) error {
+	if !c.IsReady() {
+		c.logger.Debug("PADI dropped: component not ready",
+			"mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN,
+			"state", c.ReadyState().String())
+		return nil
+	}
+
 	tags, err := pppoe.ParseTags(pkt.PPPoE.Payload)
 	if err != nil {
 		return fmt.Errorf("parse PADI tags: %w", err)
@@ -1047,17 +1113,11 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 		return nil
 	}
 
-	var count, expired, stale int
-	now := time.Now()
+	c.currentRestoreCause = c.detectRestoreCause()
+	defer func() { c.currentRestoreCause = "" }()
 
-	validIfIndexes := make(map[uint32]bool)
-	if c.vpp != nil {
-		if ifaces, err := c.vpp.DumpInterfaces(); err == nil {
-			for _, iface := range ifaces {
-				validIfIndexes[iface.SwIfIndex] = true
-			}
-		}
-	}
+	var count, expired, failed int
+	now := time.Now()
 
 	err := c.opdb.Load(ctx, opdb.NamespacePPPoESessions, func(key string, value []byte) error {
 		var sess SessionState
@@ -1067,40 +1127,24 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 		}
 
 		if c.isSessionExpired(&sess, now) {
-			c.opdb.Delete(ctx, opdb.NamespacePPPoESessions, key)
+			if err := c.opdb.Delete(ctx, opdb.NamespacePPPoESessions, key); err != nil {
+				c.logger.Warn("Failed to delete expired session", "key", key, "error", err)
+			}
 			expired++
 			return nil
 		}
 
-		if sess.SwIfIndex != 0 && !validIfIndexes[sess.SwIfIndex] {
-			c.logger.Info("VPP interface not found, deleting stale PPPoE session",
-				"session_id", sess.SessionID,
-				"stale_sw_if_index", sess.SwIfIndex)
-			c.opdb.Delete(ctx, opdb.NamespacePPPoESessions, key)
-			stale++
-			return nil
-		}
-
-		c.sessionMu.Lock()
-		sess.component = c
-		sess.initPPP()
-		if sess.LCPMagic != 0 {
-			sess.lcp.SetMagic(sess.LCPMagic)
-		}
-		c.addToIndexes(&sess)
-		if sess.PPPoESessionID > 0 {
-			c.sidIndex[sess.PPPoESessionID] = &sess
-			if sess.PPPoESessionID >= c.nextSessionID {
-				c.nextSessionID = sess.PPPoESessionID + 1
-			}
-		}
-		c.sessionMu.Unlock()
+		c.installInMemoryState(&sess)
 
 		if sess.Phase == ppp.PhaseOpen {
-			c.restoreSessionToCache(ctx, &sess, now)
-			if c.echoGen != nil {
-				c.echoGen.AddSession(sess.PPPoESessionID, sess.LCPMagic)
+			if err := c.setupSession(ctx, &sess, SetupModeRestore); err != nil {
+				c.logger.Error("Failed to restore PPPoE session in VPP",
+					"session_id", sess.SessionID, "error", err)
+				failed++
+				// Do NOT delete the opdb entry. Next osvbngd restart retries.
+				return nil
 			}
+			c.restoreSessionToCache(ctx, &sess, now)
 		}
 
 		count++
@@ -1111,8 +1155,76 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 		return fmt.Errorf("restore pppoe sessions: %w", err)
 	}
 
-	c.logger.Info("Restored PPPoE sessions from OpDB", "count", count, "expired", expired, "stale_vpp", stale)
+	c.logger.Info("Restored PPPoE sessions from OpDB",
+		"restored", count,
+		"expired", expired,
+		"failed", failed,
+		"cause", string(c.currentRestoreCause))
 	return nil
+}
+
+// installInMemoryState rebuilds the in-memory PPP FSM and lookup indexes
+// for a session loaded from opdb. Restored sessions in PhaseOpen are
+// past the LCP / auth / NCP handshake by construction, so each FSM is
+// force-restored directly to Opened via FSM.Restore — no Configure
+// exchange with the CPE is initiated, which preserves the CPE's view of
+// the session (matching state machine + magic) and lets traffic flow
+// the moment setupSessionRestore programs the dataplane.
+func (c *Component) installInMemoryState(sess *SessionState) {
+	c.sessionMu.Lock()
+	defer c.sessionMu.Unlock()
+
+	sess.component = c
+	sess.initPPP()
+	if sess.LCPMagic != 0 {
+		sess.lcp.SetMagic(sess.LCPMagic)
+	}
+
+	if sess.Phase == ppp.PhaseOpen {
+		if sess.lcp != nil {
+			sess.lcp.FSM().Restore()
+		}
+		if sess.ipcp != nil && sess.IPv4Address != nil {
+			sess.ipcp.FSM().Restore()
+			sess.ipcpOpen = true
+		}
+		if sess.ipv6cp != nil && sess.IPv6Address != nil {
+			sess.ipv6cp.FSM().Restore()
+			sess.ipv6cpOpen = true
+		}
+		if sess.NegotiatedPPPMTU > 0 && sess.lcp != nil {
+			sess.lcp.SetMRU(sess.NegotiatedPPPMTU)
+		}
+	}
+
+	c.addToIndexes(sess)
+	if sess.PPPoESessionID > 0 {
+		c.sidIndex[sess.PPPoESessionID] = sess
+		if sess.PPPoESessionID >= c.nextSessionID {
+			c.nextSessionID = sess.PPPoESessionID + 1
+		}
+	}
+}
+
+// detectRestoreCause inspects VPP state to identify which recovery
+// scenario produced this restoreSessions call. The cause is informational
+// for TopicSessionRestored consumers; the unified setupSession path
+// handles every scenario identically via plugin-side idempotency.
+func (c *Component) detectRestoreCause() events.RestoreCause {
+	if c.vpp == nil {
+		return events.RestoreCauseColdBoot
+	}
+	ifaces, err := c.vpp.DumpInterfaces()
+	if err != nil || len(ifaces) == 0 {
+		return events.RestoreCauseColdBoot
+	}
+	for _, iface := range ifaces {
+		if strings.HasPrefix(iface.Name, "pppoe_session") ||
+			strings.HasPrefix(iface.Name, "PPPoE") {
+			return events.RestoreCauseOsvbngdRestart
+		}
+	}
+	return events.RestoreCauseVPPRecovery
 }
 
 func (c *Component) isSessionExpired(sess *SessionState, now time.Time) bool {
@@ -1292,15 +1404,7 @@ func (c *Component) restoreFromHASync(srgName string) {
 			decapVrfID = tableID
 		}
 
-		var localMAC net.HardwareAddr
-		if c.srgMgr != nil {
-			localMAC = c.srgMgr.GetVirtualMAC(srgName)
-		}
-		if localMAC == nil && c.ifMgr != nil {
-			if iface := c.ifMgr.Get(encapIfIndex); iface != nil && len(iface.MAC) >= 6 {
-				localMAC = net.HardwareAddr(iface.MAC[:6])
-			}
-		}
+		localMAC := c.effectiveLocalMAC(srgName, encapIfIndex)
 		if localMAC == nil {
 			c.logger.Error("No local MAC available for HA restore", "session_id", cp.SessionId)
 			failed++
@@ -1413,7 +1517,7 @@ func (c *Component) restoreFromHASync(srgName string) {
 		c.checkpointSession(sess)
 
 		if c.echoGen != nil {
-			c.echoGen.AddSession(pppoeSessionID, sess.LCPMagic)
+			c.echoGen.AddSession(pppoeSessionID, sess.LCPMagic, uint8(sess.EchoSeq))
 		}
 
 		c.publishSessionProgrammed(&models.PPPSession{
@@ -1603,8 +1707,8 @@ func (c *Component) buildModelSnapshot(sess *SessionState) *models.PPPSession {
 	}
 	if sess.Phase == ppp.PhaseLACTunneled {
 		snapshot.State = models.SessionStateTunneled
-		if sess.l2tpBinding != nil {
-			binding := *sess.l2tpBinding
+		if sess.L2TPBinding != nil {
+			binding := *sess.L2TPBinding
 			snapshot.L2TP = &binding
 		}
 	}

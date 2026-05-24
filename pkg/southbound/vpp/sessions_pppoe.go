@@ -48,7 +48,35 @@ func (v *VPP) AddPPPoESession(sessionID uint16, clientIP net.IP, clientMAC net.H
 		return 0, fmt.Errorf("add pppoe session: %w", err)
 	}
 
-	if reply.Retval != 0 {
+	if reply.Retval == retvalEntryNeedsRefresh {
+		v.logger.Info("PPPoE session exists with drifted mutable inputs; refreshing",
+			"session_id", sessionID,
+			"client_mac", clientMAC.String(),
+			"stale_sw_if_index", reply.SwIfIndex)
+
+		delReq := &osvbng_pppoe.OsvbngPppoeAddDelSession{
+			IsAdd:     false,
+			SessionID: sessionID,
+			ClientIP:  clientAddr,
+			ClientMac: clientMacAddr,
+		}
+		delReply := &osvbng_pppoe.OsvbngPppoeAddDelSessionReply{}
+		if err := ch.SendRequest(delReq).ReceiveReply(delReply); err != nil {
+			return 0, fmt.Errorf("refresh pppoe session: del: %w", err)
+		}
+		if delReply.Retval != 0 {
+			return 0, fmt.Errorf("refresh pppoe session: del retval=%d", delReply.Retval)
+		}
+		v.ifMgr.Remove(uint32(delReply.SwIfIndex))
+
+		reply = &osvbng_pppoe.OsvbngPppoeAddDelSessionReply{}
+		if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+			return 0, fmt.Errorf("refresh pppoe session: re-add: %w", err)
+		}
+		if reply.Retval != 0 {
+			return 0, fmt.Errorf("refresh pppoe session: re-add retval=%d", reply.Retval)
+		}
+	} else if reply.Retval != 0 {
 		return 0, fmt.Errorf("add pppoe session failed: retval=%d", reply.Retval)
 	}
 
@@ -250,7 +278,7 @@ func (v *VPP) AddPPPoESessionAsync(sessionID uint16, clientIP net.IP, clientMAC 
 		InnerVlan:    innerVLAN,
 	}
 
-	v.asyncWorker.SendAsync(req, func(reply api.Message, err error) {
+	onAdd := func(reply api.Message, err error) {
 		if err != nil {
 			callback(0, err)
 			return
@@ -296,6 +324,50 @@ func (v *VPP) AddPPPoESessionAsync(sessionID uint16, clientIP net.IP, clientMAC 
 			"ipv4_mss", policy.IPv4MSS,
 			"ipv6_mss", policy.IPv6MSS)
 		callback(swIdx, nil)
+	}
+
+	v.asyncWorker.SendAsync(req, func(reply api.Message, err error) {
+		if err != nil {
+			callback(0, err)
+			return
+		}
+		r, ok := reply.(*osvbng_pppoe.OsvbngPppoeAddDelSessionReply)
+		if !ok {
+			callback(0, fmt.Errorf("unexpected reply type: %T", reply))
+			return
+		}
+		if r.Retval == retvalEntryNeedsRefresh {
+			v.logger.Info("PPPoE session exists with drifted mutable inputs; refreshing (async)",
+				"session_id", sessionID,
+				"client_mac", clientMAC.String(),
+				"stale_sw_if_index", r.SwIfIndex)
+
+			delReq := &osvbng_pppoe.OsvbngPppoeAddDelSession{
+				IsAdd:     false,
+				SessionID: sessionID,
+				ClientIP:  clientAddr,
+				ClientMac: clientMacAddr,
+			}
+			v.asyncWorker.SendAsync(delReq, func(delReply api.Message, delErr error) {
+				if delErr != nil {
+					callback(0, fmt.Errorf("refresh pppoe session: del: %w", delErr))
+					return
+				}
+				dr, ok := delReply.(*osvbng_pppoe.OsvbngPppoeAddDelSessionReply)
+				if !ok {
+					callback(0, fmt.Errorf("refresh pppoe session: del unexpected reply type: %T", delReply))
+					return
+				}
+				if dr.Retval != 0 {
+					callback(0, fmt.Errorf("refresh pppoe session: del retval=%d", dr.Retval))
+					return
+				}
+				v.ifMgr.Remove(uint32(dr.SwIfIndex))
+				v.asyncWorker.SendAsync(req, onAdd)
+			})
+			return
+		}
+		onAdd(reply, nil)
 	})
 }
 

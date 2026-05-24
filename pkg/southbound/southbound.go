@@ -19,4 +19,5 @@ type Southbound interface {
 	System
 	CGNATDataplane
 	MSSClamp
+	Policy
 }

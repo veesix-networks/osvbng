@@ -39,7 +39,36 @@ func (v *VPP) AddIPoESession(clientMAC net.HardwareAddr, localMAC net.HardwareAd
 		return 0, fmt.Errorf("add ipoe session: %w", err)
 	}
 
-	if reply.Retval != 0 {
+	if reply.Retval == retvalEntryNeedsRefresh {
+		v.logger.Info("IPoE session exists with drifted mutable inputs; refreshing",
+			"client_mac", clientMAC.String(),
+			"encap_if_index", encapIfIndex,
+			"inner_vlan", innerVLAN,
+			"stale_sw_if_index", reply.SwIfIndex)
+
+		delReq := &osvbng_ipoe.OsvbngIpoeAddDelSession{
+			IsAdd:        false,
+			EncapIfIndex: interface_types.InterfaceIndex(encapIfIndex),
+			ClientMac:    clientMacAddr,
+			InnerVlan:    innerVLAN,
+		}
+		delReply := &osvbng_ipoe.OsvbngIpoeAddDelSessionReply{}
+		if err := ch.SendRequest(delReq).ReceiveReply(delReply); err != nil {
+			return 0, fmt.Errorf("refresh ipoe session: del: %w", err)
+		}
+		if delReply.Retval != 0 {
+			return 0, fmt.Errorf("refresh ipoe session: del retval=%d", delReply.Retval)
+		}
+		v.ifMgr.Remove(uint32(delReply.SwIfIndex))
+
+		reply = &osvbng_ipoe.OsvbngIpoeAddDelSessionReply{}
+		if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+			return 0, fmt.Errorf("refresh ipoe session: re-add: %w", err)
+		}
+		if reply.Retval != 0 {
+			return 0, fmt.Errorf("refresh ipoe session: re-add retval=%d", reply.Retval)
+		}
+	} else if reply.Retval != 0 {
 		return 0, fmt.Errorf("add ipoe session failed: retval=%d", reply.Retval)
 	}
 
@@ -249,7 +278,7 @@ func (v *VPP) AddIPoESessionAsync(clientMAC net.HardwareAddr, localMAC net.Hardw
 		DecapVrfID:   decapVrfID,
 	}
 
-	v.asyncWorker.SendAsync(req, func(reply api.Message, err error) {
+	onAdd := func(reply api.Message, err error) {
 		if err != nil {
 			callback(0, err)
 			return
@@ -280,6 +309,51 @@ func (v *VPP) AddIPoESessionAsync(clientMAC net.HardwareAddr, localMAC net.Hardw
 			"inner_vlan", innerVLAN,
 			"sw_if_index", r.SwIfIndex)
 		callback(swIdx, nil)
+	}
+
+	v.asyncWorker.SendAsync(req, func(reply api.Message, err error) {
+		if err != nil {
+			callback(0, err)
+			return
+		}
+		r, ok := reply.(*osvbng_ipoe.OsvbngIpoeAddDelSessionReply)
+		if !ok {
+			callback(0, fmt.Errorf("unexpected reply type: %T", reply))
+			return
+		}
+		if r.Retval == retvalEntryNeedsRefresh {
+			v.logger.Info("IPoE session exists with drifted mutable inputs; refreshing (async)",
+				"client_mac", clientMAC.String(),
+				"encap_if_index", encapIfIndex,
+				"inner_vlan", innerVLAN,
+				"stale_sw_if_index", r.SwIfIndex)
+
+			delReq := &osvbng_ipoe.OsvbngIpoeAddDelSession{
+				IsAdd:        false,
+				EncapIfIndex: interface_types.InterfaceIndex(encapIfIndex),
+				ClientMac:    clientMacAddr,
+				InnerVlan:    innerVLAN,
+			}
+			v.asyncWorker.SendAsync(delReq, func(delReply api.Message, delErr error) {
+				if delErr != nil {
+					callback(0, fmt.Errorf("refresh ipoe session: del: %w", delErr))
+					return
+				}
+				dr, ok := delReply.(*osvbng_ipoe.OsvbngIpoeAddDelSessionReply)
+				if !ok {
+					callback(0, fmt.Errorf("refresh ipoe session: del unexpected reply type: %T", delReply))
+					return
+				}
+				if dr.Retval != 0 {
+					callback(0, fmt.Errorf("refresh ipoe session: del retval=%d", dr.Retval))
+					return
+				}
+				v.ifMgr.Remove(uint32(dr.SwIfIndex))
+				v.asyncWorker.SendAsync(req, onAdd)
+			})
+			return
+		}
+		onAdd(reply, nil)
 	})
 }
 

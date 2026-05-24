@@ -46,6 +46,7 @@ type Component struct {
 
 	lifecycleSub   events.Subscription
 	programmedSub  events.Subscription
+	restoredSub    events.Subscription
 }
 
 func NewComponent(deps component.Dependencies, ifMgr *ifmgr.Manager, vrfMgr *vrfmgr.Manager) (*Component, error) {
@@ -83,6 +84,8 @@ func (c *Component) Start(ctx context.Context) error {
 		return nil
 	}
 
+	c.SetReadyState(component.StateRestoring)
+
 	if err := c.configurePools(cfg.CGNAT); err != nil {
 		return fmt.Errorf("configure pools: %w", err)
 	}
@@ -97,6 +100,13 @@ func (c *Component) Start(ctx context.Context) error {
 
 	c.lifecycleSub = c.eventBus.Subscribe(events.TopicSessionLifecycle, c.handleSessionLifecycle)
 	c.programmedSub = c.eventBus.Subscribe(events.TopicSessionProgrammed, c.handleSessionProgrammed)
+	c.restoredSub = c.eventBus.Subscribe(events.TopicSessionRestored, c.handleSessionRestored)
+
+	c.SetReadyState(component.StateReady)
+	c.eventBus.Publish(events.TopicComponentReady, events.Event{
+		Source: c.Name(),
+		Data:   &events.ComponentReadyEvent{Component: c.Name(), State: c.ReadyState().String()},
+	})
 
 	c.logger.Info("CGNAT component started", "pools", len(cfg.CGNAT.Pools))
 	return nil
@@ -104,11 +114,15 @@ func (c *Component) Start(ctx context.Context) error {
 
 func (c *Component) Stop(ctx context.Context) error {
 	c.logger.Info("Stopping CGNAT component")
+	c.SetReadyState(component.StateDraining)
 	if c.lifecycleSub != nil {
 		c.lifecycleSub.Unsubscribe()
 	}
 	if c.programmedSub != nil {
 		c.programmedSub.Unsubscribe()
+	}
+	if c.restoredSub != nil {
+		c.restoredSub.Unsubscribe()
 	}
 	c.StopContext()
 	return nil
@@ -254,6 +268,28 @@ func (c *Component) handleSessionProgrammed(event events.Event) {
 	}
 
 	c.handleSessionActivate(data)
+}
+
+// handleSessionRestored installs / re-installs the CGNAT mapping for a
+// session whose state was replayed from opdb by setupSession on the
+// IPoE / PPPoE side. The CGNAT plugin add_mapping API is idempotent under
+// the three-state contract, so the same code
+// path that handles fresh TopicSessionProgrammed handles restore safely
+// here. Splitting into a dedicated handler keeps the option of branching
+// on RestoreCause later (e.g. distinct counters for opdb-restore vs
+// VPP-recovery) without changing the wiring.
+func (c *Component) handleSessionRestored(event events.Event) {
+	data, ok := event.Data.(*events.SessionRestoredEvent)
+	if !ok {
+		return
+	}
+	c.handleSessionActivate(&events.SessionLifecycleEvent{
+		AccessType: data.AccessType,
+		Protocol:   data.Protocol,
+		SessionID:  data.SessionID,
+		State:      models.SessionStateActive,
+		Session:    data.Session,
+	})
 }
 
 func (c *Component) handleSessionActivate(data *events.SessionLifecycleEvent) {

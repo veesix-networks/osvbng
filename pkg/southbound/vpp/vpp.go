@@ -32,6 +32,7 @@ type VPP struct {
 	policerMu      sync.Mutex
 	schedulerIfs   map[uint32]bool
 	schedulerMu    sync.Mutex
+	aclReg         *aclRegistry
 }
 
 type VPPConfig struct {
@@ -80,6 +81,7 @@ func NewVPP(cfg VPPConfig) (*VPP, error) {
 		statsClient:    statsClient,
 		policerNames: make(map[uint32][2]string),
 		schedulerIfs: make(map[uint32]bool),
+		aclReg:       newACLRegistry(),
 	}
 
 	if err := v.LoadInterfaces(); err != nil {
