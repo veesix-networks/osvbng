@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -91,6 +92,12 @@ type Component struct {
 
 	nextSessionID uint16
 	sidMu         sync.Mutex
+
+	// currentRestoreCause is set by restoreSessions before iterating opdb
+	// entries and read by setupSessionRestore to populate the
+	// SessionRestoredEvent. Resets to empty after the loop completes;
+	// only valid while restoreSessions is in flight.
+	currentRestoreCause events.RestoreCause
 }
 
 type SessionState struct {
@@ -1063,17 +1070,11 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 		return nil
 	}
 
-	var count, expired, stale int
-	now := time.Now()
+	c.currentRestoreCause = c.detectRestoreCause()
+	defer func() { c.currentRestoreCause = "" }()
 
-	validIfIndexes := make(map[uint32]bool)
-	if c.vpp != nil {
-		if ifaces, err := c.vpp.DumpInterfaces(); err == nil {
-			for _, iface := range ifaces {
-				validIfIndexes[iface.SwIfIndex] = true
-			}
-		}
-	}
+	var count, expired, failed int
+	now := time.Now()
 
 	err := c.opdb.Load(ctx, opdb.NamespacePPPoESessions, func(key string, value []byte) error {
 		var sess SessionState
@@ -1083,40 +1084,24 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 		}
 
 		if c.isSessionExpired(&sess, now) {
-			c.opdb.Delete(ctx, opdb.NamespacePPPoESessions, key)
+			if err := c.opdb.Delete(ctx, opdb.NamespacePPPoESessions, key); err != nil {
+				c.logger.Warn("Failed to delete expired session", "key", key, "error", err)
+			}
 			expired++
 			return nil
 		}
 
-		if sess.SwIfIndex != 0 && !validIfIndexes[sess.SwIfIndex] {
-			c.logger.Info("VPP interface not found, deleting stale PPPoE session",
-				"session_id", sess.SessionID,
-				"stale_sw_if_index", sess.SwIfIndex)
-			c.opdb.Delete(ctx, opdb.NamespacePPPoESessions, key)
-			stale++
-			return nil
-		}
-
-		c.sessionMu.Lock()
-		sess.component = c
-		sess.initPPP()
-		if sess.LCPMagic != 0 {
-			sess.lcp.SetMagic(sess.LCPMagic)
-		}
-		c.addToIndexes(&sess)
-		if sess.PPPoESessionID > 0 {
-			c.sidIndex[sess.PPPoESessionID] = &sess
-			if sess.PPPoESessionID >= c.nextSessionID {
-				c.nextSessionID = sess.PPPoESessionID + 1
-			}
-		}
-		c.sessionMu.Unlock()
+		c.installInMemoryState(&sess)
 
 		if sess.Phase == ppp.PhaseOpen {
-			c.restoreSessionToCache(ctx, &sess, now)
-			if c.echoGen != nil {
-				c.echoGen.AddSession(sess.PPPoESessionID, sess.LCPMagic)
+			if err := c.setupSession(ctx, &sess, SetupModeRestore); err != nil {
+				c.logger.Error("Failed to restore PPPoE session in VPP",
+					"session_id", sess.SessionID, "error", err)
+				failed++
+				// Do NOT delete the opdb entry. Next osvbngd restart retries.
+				return nil
 			}
+			c.restoreSessionToCache(ctx, &sess, now)
 		}
 
 		count++
@@ -1127,8 +1112,56 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 		return fmt.Errorf("restore pppoe sessions: %w", err)
 	}
 
-	c.logger.Info("Restored PPPoE sessions from OpDB", "count", count, "expired", expired, "stale_vpp", stale)
+	c.logger.Info("Restored PPPoE sessions from OpDB",
+		"restored", count,
+		"expired", expired,
+		"failed", failed,
+		"cause", string(c.currentRestoreCause))
 	return nil
+}
+
+// installInMemoryState rebuilds the in-memory PPP FSM and lookup indexes
+// for a session loaded from opdb. Restored sessions are post-handshake by
+// construction so we only restore the LCP magic; full FSM force-restore
+// (Phase, IPCP/IPv6CP addresses) lands in the FSM force-restore phase
+// alongside the persisted PPP option state.
+func (c *Component) installInMemoryState(sess *SessionState) {
+	c.sessionMu.Lock()
+	defer c.sessionMu.Unlock()
+
+	sess.component = c
+	sess.initPPP()
+	if sess.LCPMagic != 0 {
+		sess.lcp.SetMagic(sess.LCPMagic)
+	}
+	c.addToIndexes(sess)
+	if sess.PPPoESessionID > 0 {
+		c.sidIndex[sess.PPPoESessionID] = sess
+		if sess.PPPoESessionID >= c.nextSessionID {
+			c.nextSessionID = sess.PPPoESessionID + 1
+		}
+	}
+}
+
+// detectRestoreCause inspects VPP state to identify which recovery
+// scenario produced this restoreSessions call. The cause is informational
+// for TopicSessionRestored consumers; the unified setupSession path
+// handles every scenario identically via plugin-side idempotency.
+func (c *Component) detectRestoreCause() events.RestoreCause {
+	if c.vpp == nil {
+		return events.RestoreCauseColdBoot
+	}
+	ifaces, err := c.vpp.DumpInterfaces()
+	if err != nil || len(ifaces) == 0 {
+		return events.RestoreCauseColdBoot
+	}
+	for _, iface := range ifaces {
+		if strings.HasPrefix(iface.Name, "pppoe_session") ||
+			strings.HasPrefix(iface.Name, "PPPoE") {
+			return events.RestoreCauseOsvbngdRestart
+		}
+	}
+	return events.RestoreCauseVPPRecovery
 }
 
 func (c *Component) isSessionExpired(sess *SessionState, now time.Time) bool {
