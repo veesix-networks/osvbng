@@ -37,6 +37,8 @@ ${subscriber-image}     veesixnetworks/bngtester:debian-latest
 ${access-iface}         eth1.100
 ${v4-gateway}           10.255.0.1
 ${v6-gateway}           2001:db8:0:1::1
+${core-router-v4}       10.0.0.2
+${core-router-v6}       2001:db8:c0:e::2
 ${session-count}        1
 
 *** Test Cases ***
@@ -58,6 +60,7 @@ ${session-count}        1
     Verify OpDB Session IP Addresses Match         ${bng1}    ${OPDB_SNAPSHOT}
     Verify Subscriber Has Stable Lease V4
     Verify Subscriber Can Ping                     ${v4-gateway}
+    Verify Subscriber Can Ping                     ${core-router-v4}
 
 2b — Restart VPP Only
     [Documentation]    SKIPPED — the watchdog OnRecover bootstrap path
@@ -77,6 +80,8 @@ ${session-count}        1
     Verify Subscriber Has Stable Lease V4
     Verify Subscriber Can Ping                     ${v4-gateway}
     Verify Subscriber Can Ping                     ${v6-gateway}    -6
+    Verify Subscriber Can Ping                     ${core-router-v4}
+    Verify Subscriber Can Ping                     ${core-router-v6}    -6
 
 2c — Restart Full Container
     [Documentation]    SKIPPED — containerlab veth pairs to access/core do
@@ -96,6 +101,8 @@ ${session-count}        1
     Verify Subscriber Has Stable Lease V4
     Verify Subscriber Can Ping                     ${v4-gateway}
     Verify Subscriber Can Ping                     ${v6-gateway}    -6
+    Verify Subscriber Can Ping                     ${core-router-v4}
+    Verify Subscriber Can Ping                     ${core-router-v6}    -6
 
 *** Keywords ***
 Suite Setup IPoE OpDB Restore
