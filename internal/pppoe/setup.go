@@ -173,6 +173,8 @@ func (c *Component) setupSessionRestore(ctx context.Context, sess *SessionState)
 		return fmt.Errorf("apply service group bindings: %w", err)
 	}
 
+	c.setupSessionUnnumbered(sess.SessionID, swIfIndex, c.resolveUnnumberedLoopback(sess))
+
 	// MixedAccess exclusivity is claimed inside installInMemoryState ->
 	// addToIndexes for PPPoE (unlike IPoE which holds the claim
 	// separately). No explicit re-claim needed here.
@@ -219,6 +221,51 @@ func (c *Component) setupSessionRestore(ctx context.Context, sess *SessionState)
 	})
 
 	return nil
+}
+
+// resolveUnnumberedLoopback returns the loopback the per-session interface
+// should be unnumbered against — the service-group's explicit loopback if
+// set, otherwise the subscriber-group's gateway loopback for the session's
+// S-VLAN. Empty string means no unnumbered binding (the session interface
+// stays with no IP; subscribers can route through but cannot ping the BNG
+// directly). Mirrors the IPoE component's implementation.
+func (c *Component) resolveUnnumberedLoopback(sess *SessionState) string {
+	if sess.ServiceGroup.Unnumbered != "" {
+		return sess.ServiceGroup.Unnumbered
+	}
+
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+		return ""
+	}
+
+	if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(sess.OuterVLAN); group != nil {
+		return group.FindGatewayForSVLAN(sess.OuterVLAN)
+	}
+
+	return ""
+}
+
+// setupSessionUnnumbered binds the per-session interface to the given
+// loopback so the BNG can source ICMP replies (and any other locally
+// terminated traffic) for the subscriber. Empty loopback is a no-op.
+// Uses the async southbound API and fires-and-forgets errors to match
+// the existing IPoE pattern; setup-time failures are logged but do not
+// abort the session bring-up because the dataplane retries on the next
+// adjacency event.
+func (c *Component) setupSessionUnnumbered(sessID string, swIfIndex uint32, loopback string) {
+	if loopback == "" || c.vpp == nil {
+		return
+	}
+	c.vpp.SetUnnumberedAsync(swIfIndex, loopback, func(err error) {
+		if err != nil {
+			c.logger.Error("Failed to set unnumbered on PPPoE session",
+				"session_id", sessID,
+				"sw_if_index", swIfIndex,
+				"loopback", loopback,
+				"error", err)
+		}
+	})
 }
 
 // ErrSetupRestoreNotImplemented is the legacy sentinel for callers that

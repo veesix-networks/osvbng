@@ -796,6 +796,9 @@ func (s *SessionState) onVPPSessionCreated(swIfIndex uint32, err error) {
 		IPv6MSS:          s.IPv6MSS,
 	})
 
+	s.component.setupSessionUnnumbered(s.SessionID, swIfIndex,
+		s.component.resolveUnnumberedLoopback(s))
+
 	if s.component.echoGen != nil {
 		magic := s.lcp.LocalConfig().Magic
 		s.component.echoGen.AddSession(s.PPPoESessionID, magic)
