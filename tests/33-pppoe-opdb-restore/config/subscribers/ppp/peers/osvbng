@@ -1,0 +1,22 @@
+# Copyright 2026 The osvbng Authors
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+plugin pppoe.so
+eth1.200.10
+user user1
+password test
+noauth
+nodetach
++ipv6
+defaultroute
+usepeerdns
+persist
+maxfail 0
+holdoff 5
+lcp-echo-interval 30
+lcp-echo-failure 20
+mtu 1492
+mru 1492
+debug
+logfile /var/log/pppd.log
