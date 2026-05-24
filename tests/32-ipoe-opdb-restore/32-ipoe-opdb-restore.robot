@@ -63,14 +63,9 @@ ${session-count}        1
     Verify Subscriber Can Ping                     ${core-router-v4}
 
 2b — Restart VPP Only
-    [Documentation]    SKIPPED — the watchdog OnRecover bootstrap path
-    ...    re-applies the full startup config including auto-derived
-    ...    subscriber-group sub-interfaces, which then fail validation
-    ...    against the running subscriber-group definition. Recovery
-    ...    never completes. Drop the Skip when bootstrap recovery stops
-    ...    double-applying subscriber-group sub-interfaces.
-    [Tags]    skip    bootstrap-validation-conflict
-    Skip    Watchdog VPP-recovery bootstrap re-applies the subscriber-group expansion and fails validation. Drop this Skip once bootstrap recovery is idempotent.
+    [Documentation]    Kill VPP; the watchdog respawns it and the cold
+    ...    bootstrap path replays the startup config + opdb sessions.
+    ...    Subscriber traffic should resume without operator action.
     Restart VPP                                    ${bng1}
     Wait For VPP Recovery                          ${bng1}
     Wait Until Keyword Succeeds    60s    2s

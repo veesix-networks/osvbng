@@ -59,13 +59,10 @@ ${session-count}        1
     Verify Subscriber Can Ping                     ${core-router-v4}
 
 2b — Restart VPP Only
-    [Documentation]    SKIPPED — PPPoE recovery from a local VPP crash is
-    ...    not implemented: stale-sw_if_index opdb entries are deleted
-    ...    rather than recreated via AddPPPoESession. The test
-    ...    infrastructure lands here so that when the recovery path ships,
-    ...    its PR only needs to delete the Skip statement below.
-    [Tags]    skip    pppoe-vpp-recovery-pending
-    Skip    PPPoE VPP-crash recovery not implemented — see 2b documentation
+    [Documentation]    Kill VPP; the watchdog respawns it and the cold
+    ...    bootstrap path replays the startup config + opdb sessions
+    ...    through setupSession(SetupModeRestore). Subscriber traffic
+    ...    resumes without operator action.
     Restart VPP                                    ${bng1}
     Wait For VPP Recovery                          ${bng1}
     Wait Until Keyword Succeeds    60s    2s
