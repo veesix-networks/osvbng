@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.1](https://github.com/veesix-networks/osvbng/compare/v0.12.0...v0.12.1) (2026-05-25)
+
+
+### Bug Fixes
+
+* **southbound:** populate ifmgr.Interface.OuterTPID on CreateSubinterface ([#328](https://github.com/veesix-networks/osvbng/issues/328)) ([5765716](https://github.com/veesix-networks/osvbng/commit/5765716a1ecc45c071514f084c91e19008fddada))
+
 ## [0.12.0](https://github.com/veesix-networks/osvbng/compare/v0.11.0...v0.12.0) (2026-05-25)
 
 
