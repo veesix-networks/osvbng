@@ -65,7 +65,6 @@ type IPoESession struct {
 	IPv4Pool   string
 	IANAPool   string
 	PDPool     string
-	OuterTPID  uint16
 	Attributes map[string]string
 }
 
@@ -174,7 +173,6 @@ type PPPSession struct {
 
 	IPv4Pool   string
 	IANAPool   string
-	OuterTPID  uint16
 	LCPMagic   uint32
 	Attributes map[string]string
 

@@ -125,7 +125,6 @@ type SessionState struct {
 
 	Username     string
 	Attributes   map[string]string
-	OuterTPID    uint16
 	VRF          string
 	ServiceGroup svcgroup.ServiceGroup
 	SRGName      string
@@ -436,27 +435,6 @@ func (c *Component) allowRelayForward(svlan uint16) bool {
 	}
 	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(svlan)
 	return group.GetAllowRelayForward()
-}
-
-func (c *Component) resolveOuterTPID(svlan uint16) uint16 {
-	cfg, err := c.cfgMgr.GetRunning()
-	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
-		return 0x88A8
-	}
-	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(svlan)
-	if group == nil {
-		return 0x88A8
-	}
-	return group.GetOuterTPID()
-}
-
-func (c *Component) getSessionOuterTPID(sess *SessionState) uint16 {
-	if sess.OuterTPID != 0 {
-		return sess.OuterTPID
-	}
-	tpid := c.resolveOuterTPID(sess.OuterVLAN)
-	sess.OuterTPID = tpid
-	return tpid
 }
 
 type raPrefixInfo struct {
@@ -1309,7 +1287,7 @@ func (c *Component) handleServerResponse(pkt *dataplane.ParsedPacket) error {
 		SrcMAC:    vmac.String(),
 		OuterVLAN: sess.OuterVLAN,
 		InnerVLAN: sess.InnerVLAN,
-		OuterTPID: c.getSessionOuterTPID(sess),
+		OuterTPID: c.ifMgr.OuterTPID(sess.EncapIfIndex),
 		SwIfIndex: parentSwIfIndex,
 		RawData:   finalBuf.Bytes(),
 	}
@@ -1415,7 +1393,6 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 		Username:      sess.Username,
 		AAASessionID:  sess.AcctSessionID,
 		ActivatedAt:   time.Now(),
-		OuterTPID:     sess.OuterTPID,
 	}
 	if sess.AllocCtx != nil {
 		ipoeSess.IPv4Pool = sess.AllocCtx.AllocatedPool
@@ -1665,19 +1642,16 @@ func (c *Component) countExistingSessions(mac net.HardwareAddr, svlan, cvlan uin
 func (c *Component) sendDHCPResponse(sessID string, svlan, cvlan uint16, encapIfIndex uint32, mac net.HardwareAddr, rawData []byte, msgType string) error {
 	var srcMAC string
 	var parentSwIfIndex uint32
-	var outerTPID uint16
 	var srgName string
 
 	if val, ok := c.sessionIndex.Load(sessID); ok {
 		sess := val.(*SessionState)
 		sess.mu.Lock()
-		outerTPID = c.getSessionOuterTPID(sess)
 		srgName = sess.SRGName
 		sess.mu.Unlock()
 	}
-	if outerTPID == 0 {
-		outerTPID = c.resolveOuterTPID(svlan)
-	}
+
+	outerTPID := c.ifMgr.OuterTPID(encapIfIndex)
 
 	if c.srgMgr != nil {
 		if vmac := c.srgMgr.GetVirtualMAC(srgName); vmac != nil {
@@ -2758,7 +2732,6 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, msg *dhcp6.Message) er
 		Username:      sess.Username,
 		AAASessionID:  sess.AcctSessionID,
 		ActivatedAt:   time.Now(),
-		OuterTPID:     sess.OuterTPID,
 	}
 	if sess.AllocCtx != nil {
 		ipoeSess.IPv4Pool = sess.AllocCtx.AllocatedPool
@@ -2802,7 +2775,7 @@ func (c *Component) sendDHCPv6Response(sess *SessionState, rawDHCPv6 []byte) err
 		SrcMAC:    srcMAC,
 		OuterVLAN: sess.OuterVLAN,
 		InnerVLAN: sess.InnerVLAN,
-		OuterTPID: c.getSessionOuterTPID(sess),
+		OuterTPID: c.ifMgr.OuterTPID(sess.EncapIfIndex),
 		SwIfIndex: parentSwIfIndex,
 		RawData:   frame,
 	}
@@ -3061,7 +3034,7 @@ func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbo
 		SrcMAC:    srcMACBytes.String(),
 		OuterVLAN: pkt.OuterVLAN,
 		InnerVLAN: pkt.InnerVLAN,
-		OuterTPID: c.resolveOuterTPID(pkt.OuterVLAN),
+		OuterTPID: c.ifMgr.OuterTPID(pkt.SwIfIndex),
 		SwIfIndex: parentSwIfIndex,
 		RawData:   buf.Bytes(),
 	}
@@ -3186,7 +3159,7 @@ func (c *Component) sendNAResponse(pkt *dataplane.ParsedPacket, parentSwIfIndex 
 		SrcMAC:    localMAC.String(),
 		OuterVLAN: pkt.OuterVLAN,
 		InnerVLAN: pkt.InnerVLAN,
-		OuterTPID: c.resolveOuterTPID(pkt.OuterVLAN),
+		OuterTPID: c.ifMgr.OuterTPID(pkt.SwIfIndex),
 		SwIfIndex: parentSwIfIndex,
 		RawData:   buf.Bytes(),
 	}
@@ -3682,7 +3655,6 @@ func (c *Component) restoreFromHASync(srgName string) {
 			MAC:                mac,
 			OuterVLAN:          outerVLAN,
 			InnerVLAN:          innerVLAN,
-			OuterTPID:          uint16(cp.OuterTpid),
 			EncapIfIndex:       encapIfIndex,
 			IPoESwIfIndex:      swIfIndex,
 			IPoESessionCreated: true,
@@ -3806,7 +3778,6 @@ func (c *Component) ForEachSession(fn func(models.SubscriberSession) bool) {
 			Username:      sess.Username,
 			AAASessionID:  sess.AcctSessionID,
 			ActivatedAt:   sess.BoundAt,
-			OuterTPID:     sess.OuterTPID,
 			Attributes:    sess.Attributes,
 			RelayInfo:     map[uint8][]byte{},
 		}
@@ -3898,7 +3869,6 @@ func (c *Component) buildModelSnapshot(sess *SessionState) *models.IPoESession {
 		Username:     sess.Username,
 		AAASessionID: sess.AcctSessionID,
 		ActivatedAt:  sess.BoundAt,
-		OuterTPID:    sess.OuterTPID,
 		Attributes:   sess.Attributes,
 	}
 	if sess.IPv6Prefix != nil {

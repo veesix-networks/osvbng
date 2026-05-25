@@ -202,7 +202,6 @@ func TestSessionToCheckpoint_IPoE(t *testing.T) {
 		IPv4Pool:      "residential/pool-1",
 		IANAPool:      "residential-v6/iana-1",
 		PDPool:        "residential-v6/pd-1",
-		OuterTPID:     0x88a8,
 	}
 
 	cp := sessionToCheckpoint(sess)
@@ -228,7 +227,6 @@ func TestSessionToCheckpoint_IPoE(t *testing.T) {
 	assert.Equal(t, "residential/pool-1", cp.Ipv4Pool)
 	assert.Equal(t, "residential-v6/iana-1", cp.IanaPool)
 	assert.Equal(t, "residential-v6/pd-1", cp.PdPool)
-	assert.Equal(t, uint32(0x88a8), cp.OuterTpid)
 }
 
 func TestSessionToCheckpoint_PPPoE(t *testing.T) {
@@ -250,7 +248,6 @@ func TestSessionToCheckpoint_PPPoE(t *testing.T) {
 		ActivatedAt:  time.Unix(2000000, 0),
 		IPv4Pool:     "business/pool-1",
 		IANAPool:     "business-v6/iana-1",
-		OuterTPID:    0x8100,
 	}
 
 	cp := sessionToCheckpoint(sess)
@@ -264,5 +261,4 @@ func TestSessionToCheckpoint_PPPoE(t *testing.T) {
 
 	assert.Equal(t, "business/pool-1", cp.Ipv4Pool)
 	assert.Equal(t, "business-v6/iana-1", cp.IanaPool)
-	assert.Equal(t, uint32(0x8100), cp.OuterTpid)
 }

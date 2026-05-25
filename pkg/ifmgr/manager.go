@@ -73,6 +73,24 @@ func (m *Manager) GetByName(name string) *Interface {
 	return nil
 }
 
+func (m *Manager) OuterTPID(swIfIndex uint32) uint16 {
+	idx := swIfIndex
+	for hop := 0; hop < 4; hop++ {
+		iface := m.Get(idx)
+		if iface == nil {
+			return 0
+		}
+		if iface.OuterTPID != 0 {
+			return iface.OuterTPID
+		}
+		if iface.SupSwIfIndex == idx || iface.SupSwIfIndex == 0 {
+			return 0
+		}
+		idx = iface.SupSwIfIndex
+	}
+	return 0
+}
+
 func (m *Manager) GetSupSwIfIndex(swIfIndex uint32) (uint32, bool) {
 	if v, ok := m.bySwIfIndex.Load(swIfIndex); ok {
 		return v.(*Interface).SupSwIfIndex, true
