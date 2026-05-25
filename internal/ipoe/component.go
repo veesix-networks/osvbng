@@ -1844,6 +1844,24 @@ func macIsZero(mac []byte) bool {
 	return true
 }
 
+func linkLocalFromMAC(mac net.HardwareAddr) net.IP {
+	if len(mac) < 6 {
+		return nil
+	}
+	addr := make(net.IP, 16)
+	addr[0] = 0xfe
+	addr[1] = 0x80
+	addr[8] = mac[0] ^ 0x02
+	addr[9] = mac[1]
+	addr[10] = mac[2]
+	addr[11] = 0xff
+	addr[12] = 0xfe
+	addr[13] = mac[3]
+	addr[14] = mac[4]
+	addr[15] = mac[5]
+	return addr
+}
+
 func (c *Component) getSessionMode(svlan uint16) subscriber.SessionMode {
 	cfg, err := c.cfgMgr.GetRunning()
 	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
@@ -2752,28 +2770,20 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, msg *dhcp6.Message) er
 }
 
 func (c *Component) sendDHCPv6Response(sess *SessionState, rawDHCPv6 []byte) error {
-	var srcMACBytes net.HardwareAddr
 	var parentSwIfIndex uint32
-
-	if c.srgMgr != nil {
-		srcMACBytes = c.srgMgr.GetVirtualMAC(sess.SRGName)
-	}
 	if c.ifMgr != nil {
 		if iface := c.ifMgr.Get(sess.EncapIfIndex); iface != nil {
 			parentSwIfIndex = iface.SupSwIfIndex
 		}
-		if srcMACBytes == nil {
-			if parent := c.ifMgr.Get(parentSwIfIndex); parent != nil && len(parent.MAC) >= 6 {
-				srcMACBytes = net.HardwareAddr(parent.MAC[:6])
-			}
-		}
 	}
+
+	srcMACBytes := c.getLocalMAC(sess.SRGName, parentSwIfIndex)
 	if srcMACBytes == nil {
 		return fmt.Errorf("no source MAC available")
 	}
 
 	srcMAC := srcMACBytes.String()
-	srcIP := c.getLoopbackIPv6(sess.OuterVLAN)
+	srcIP := linkLocalFromMAC(srcMACBytes)
 	if srcIP == nil {
 		return fmt.Errorf("no IPv6 source address available for S-VLAN %d", sess.OuterVLAN)
 	}
@@ -2810,52 +2820,6 @@ func (c *Component) sendDHCPv6Response(sess *SessionState, rawDHCPv6 []byte) err
 }
 
 
-func (c *Component) getLoopbackIPv6(svlan uint16) net.IP {
-	cfg, err := c.cfgMgr.GetRunning()
-	if err != nil || cfg == nil {
-		return nil
-	}
-
-	if cfg.SubscriberGroups == nil {
-		return nil
-	}
-
-	group, vlanCfg := cfg.SubscriberGroups.FindGroupBySVLAN(svlan)
-	if group == nil || vlanCfg == nil {
-		return nil
-	}
-
-	loopbackName := vlanCfg.Interface
-	if loopbackName == "" {
-		return nil
-	}
-
-	iface, ok := cfg.Interfaces[loopbackName]
-	if !ok || iface.Address == nil {
-		return nil
-	}
-
-	for _, cidr := range iface.Address.IPv6 {
-		ip, _, err := net.ParseCIDR(cidr)
-		if err != nil {
-			continue
-		}
-		if ip.IsLinkLocalUnicast() {
-			return ip
-		}
-	}
-
-	for _, cidr := range iface.Address.IPv6 {
-		ip, _, err := net.ParseCIDR(cidr)
-		if err != nil {
-			continue
-		}
-		return ip
-	}
-
-	return nil
-}
-
 func (c *Component) consumeIPv6NDPackets() {
 	if c.ipv6NDChan == nil {
 		c.logger.Debug("IPv6 ND channel not configured, skipping IPv6 ND consumer")
@@ -2868,8 +2832,18 @@ func (c *Component) consumeIPv6NDPackets() {
 			return
 		case pkt := <-c.ipv6NDChan:
 			go func(pkt *dataplane.ParsedPacket) {
-				if err := c.processRSPacket(pkt); err != nil {
-					c.logger.Error("Error processing RS packet", "error", err)
+				if pkt.ICMPv6 == nil {
+					return
+				}
+				switch pkt.ICMPv6.TypeCode.Type() {
+				case layers.ICMPv6TypeRouterSolicitation:
+					if err := c.processRSPacket(pkt); err != nil {
+						c.logger.Error("Error processing RS packet", "error", err)
+					}
+				case layers.ICMPv6TypeNeighborSolicitation:
+					if err := c.processNSPacket(pkt); err != nil {
+						c.logger.Error("Error processing NS packet", "error", err)
+					}
 				}
 			}(pkt)
 		}
@@ -2980,28 +2954,20 @@ func (c *Component) processRSPacket(pkt *dataplane.ParsedPacket) error {
 }
 
 func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbound.IPv6RAConfig, prefixes []raPrefixInfo) error {
-	var srcMACBytes net.HardwareAddr
 	var parentSwIfIndex uint32
-
-	if c.srgMgr != nil {
-		srgName := c.resolveSRGName(pkt.OuterVLAN)
-		srcMACBytes = c.srgMgr.GetVirtualMAC(srgName)
-	}
 	if c.ifMgr != nil {
 		if iface := c.ifMgr.Get(pkt.SwIfIndex); iface != nil {
 			parentSwIfIndex = iface.SupSwIfIndex
 		}
-		if srcMACBytes == nil {
-			if parent := c.ifMgr.Get(parentSwIfIndex); parent != nil && len(parent.MAC) >= 6 {
-				srcMACBytes = net.HardwareAddr(parent.MAC[:6])
-			}
-		}
 	}
+
+	srgName := c.resolveSRGName(pkt.OuterVLAN)
+	srcMACBytes := c.getLocalMAC(srgName, parentSwIfIndex)
 	if srcMACBytes == nil {
 		return fmt.Errorf("no source MAC available")
 	}
 
-	srcIP := c.getLoopbackIPv6(pkt.OuterVLAN)
+	srcIP := linkLocalFromMAC(srcMACBytes)
 	if srcIP == nil {
 		return fmt.Errorf("no IPv6 source address available for S-VLAN %d", pkt.OuterVLAN)
 	}
@@ -3107,6 +3073,130 @@ func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbo
 		"cvlan", pkt.InnerVLAN,
 		"managed", raConfig.Managed,
 		"other", raConfig.Other,
+	)
+
+	c.eventBus.Publish(events.TopicEgress, events.Event{
+		Source: c.Name(),
+		Data: &events.EgressEvent{
+			Protocol: models.ProtocolIPv6ND,
+			Packet:   *egressPayload,
+		},
+	})
+	return nil
+}
+
+func (c *Component) processNSPacket(pkt *dataplane.ParsedPacket) error {
+	if pkt.ICMPv6 == nil {
+		return fmt.Errorf("no ICMPv6 layer")
+	}
+	if pkt.ICMPv6.TypeCode.Type() != layers.ICMPv6TypeNeighborSolicitation {
+		return nil
+	}
+	if pkt.IPv6 == nil {
+		return fmt.Errorf("no IPv6 layer")
+	}
+	if pkt.OuterVLAN == 0 {
+		return fmt.Errorf("packet rejected: S-VLAN required")
+	}
+
+	body := pkt.ICMPv6.LayerPayload()
+	if len(body) < 20 {
+		return fmt.Errorf("NS body too short: %d bytes", len(body))
+	}
+	target := net.IP(body[4:20])
+
+	srgName := c.resolveSRGName(pkt.OuterVLAN)
+	if c.srgMgr != nil && !c.srgMgr.IsActive(srgName) {
+		return nil
+	}
+
+	var parentSwIfIndex uint32
+	if c.ifMgr != nil {
+		if iface := c.ifMgr.Get(pkt.SwIfIndex); iface != nil {
+			parentSwIfIndex = iface.SupSwIfIndex
+		}
+	}
+
+	localMAC := c.getLocalMAC(srgName, parentSwIfIndex)
+	if localMAC == nil {
+		return fmt.Errorf("no source MAC available for NS reply")
+	}
+
+	expected := linkLocalFromMAC(localMAC)
+	if expected == nil {
+		return fmt.Errorf("no IPv6 source address for NS reply S-VLAN %d", pkt.OuterVLAN)
+	}
+
+	if !target.Equal(expected) {
+		return nil
+	}
+
+	return c.sendNAResponse(pkt, parentSwIfIndex, localMAC, expected)
+}
+
+func (c *Component) sendNAResponse(pkt *dataplane.ParsedPacket, parentSwIfIndex uint32, localMAC net.HardwareAddr, srcIP net.IP) error {
+	dstIP := pkt.IPv6.SrcIP
+	solicited := !dstIP.IsUnspecified()
+	if !solicited {
+		dstIP = net.ParseIP("ff02::1")
+	}
+
+	var naFlags uint8 = 0x80 | 0x20
+	if solicited {
+		naFlags |= 0x40
+	}
+
+	naOptions := layers.ICMPv6Options{
+		{
+			Type: layers.ICMPv6OptTargetAddress,
+			Data: localMAC,
+		},
+	}
+
+	naLayer := &layers.ICMPv6NeighborAdvertisement{
+		Flags:         naFlags,
+		TargetAddress: srcIP,
+		Options:       naOptions,
+	}
+
+	icmpv6Layer := &layers.ICMPv6{
+		TypeCode: layers.CreateICMPv6TypeCode(layers.ICMPv6TypeNeighborAdvertisement, 0),
+	}
+
+	ipv6Layer := &layers.IPv6{
+		Version:    6,
+		HopLimit:   255,
+		NextHeader: layers.IPProtocolICMPv6,
+		SrcIP:      srcIP,
+		DstIP:      dstIP,
+	}
+	icmpv6Layer.SetNetworkLayerForChecksum(ipv6Layer)
+
+	buf := gopacket.NewSerializeBuffer()
+	opts := gopacket.SerializeOptions{
+		ComputeChecksums: true,
+		FixLengths:       true,
+	}
+	if err := gopacket.SerializeLayers(buf, opts, ipv6Layer, icmpv6Layer, naLayer); err != nil {
+		return fmt.Errorf("serialize NA: %w", err)
+	}
+
+	egressPayload := &models.EgressPacketPayload{
+		DstMAC:    pkt.MAC.String(),
+		SrcMAC:    localMAC.String(),
+		OuterVLAN: pkt.OuterVLAN,
+		InnerVLAN: pkt.InnerVLAN,
+		OuterTPID: c.resolveOuterTPID(pkt.OuterVLAN),
+		SwIfIndex: parentSwIfIndex,
+		RawData:   buf.Bytes(),
+	}
+
+	c.logger.Debug("Sending NA response",
+		"dst_mac", pkt.MAC.String(),
+		"src_mac", localMAC.String(),
+		"svlan", pkt.OuterVLAN,
+		"cvlan", pkt.InnerVLAN,
+		"solicited", solicited,
 	)
 
 	c.eventBus.Publish(events.TopicEgress, events.Event{
