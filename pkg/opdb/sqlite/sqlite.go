@@ -3,13 +3,22 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
+	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/mattn/go-sqlite3"
 	"github.com/veesix-networks/osvbng/pkg/opdb"
+)
+
+const (
+	writeRetryAttempts = 4
+	writeRetryBaseWait = 10 * time.Millisecond
 )
 
 type Store struct {
@@ -18,6 +27,7 @@ type Store struct {
 	deletes atomic.Uint64
 	loads   atomic.Uint64
 	clears  atomic.Uint64
+	retries atomic.Uint64
 }
 
 func Open(path string) (*Store, error) {
@@ -25,22 +35,10 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 
-	db, err := sql.Open("sqlite3", path)
+	dsn := buildDSN(path)
+	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		return nil, err
-	}
-
-	pragmas := []string{
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA synchronous=NORMAL",
-		"PRAGMA cache_size=-64000",
-		"PRAGMA busy_timeout=5000",
-	}
-	for _, p := range pragmas {
-		if _, err := db.Exec(p); err != nil {
-			db.Close()
-			return nil, fmt.Errorf("pragma %s: %w", p, err)
-		}
 	}
 
 	_, err = db.Exec(`
@@ -66,8 +64,55 @@ func Open(path string) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
+// buildDSN encodes SQLite pragmas as DSN query parameters so they apply to
+// every connection database/sql opens from the pool. PRAGMA statements
+// issued via db.Exec only affect the connection they ran on, leaving newly-
+// pooled connections without WAL / busy_timeout — which silently restores
+// the lock-contention behaviour this code is meant to avoid.
+func buildDSN(path string) string {
+	params := url.Values{}
+	params.Set("_journal_mode", "WAL")
+	params.Set("_synchronous", "NORMAL")
+	params.Set("_busy_timeout", "5000")
+	params.Set("_cache_size", "-64000")
+	return fmt.Sprintf("file:%s?%s", path, params.Encode())
+}
+
+func isBusy(err error) bool {
+	if err == nil {
+		return false
+	}
+	var sErr sqlite3.Error
+	if errors.As(err, &sErr) {
+		return sErr.Code == sqlite3.ErrBusy || sErr.Code == sqlite3.ErrLocked
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "database is locked") || strings.Contains(msg, "database table is locked")
+}
+
+func (s *Store) execRetry(ctx context.Context, query string, args ...any) error {
+	for attempt := 0; attempt < writeRetryAttempts; attempt++ {
+		_, err := s.db.ExecContext(ctx, query, args...)
+		if err == nil {
+			return nil
+		}
+		if !isBusy(err) {
+			return err
+		}
+		s.retries.Add(1)
+		wait := writeRetryBaseWait << attempt
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(wait):
+		}
+	}
+	_, err := s.db.ExecContext(ctx, query, args...)
+	return err
+}
+
 func (s *Store) Put(ctx context.Context, namespace, key string, value []byte) error {
-	_, err := s.db.ExecContext(ctx, `
+	err := s.execRetry(ctx, `
 		INSERT INTO opdb (namespace, key, value, updated_at)
 		VALUES (?, ?, ?, strftime('%s', 'now'))
 		ON CONFLICT(namespace, key) DO UPDATE SET
@@ -81,7 +126,7 @@ func (s *Store) Put(ctx context.Context, namespace, key string, value []byte) er
 }
 
 func (s *Store) Delete(ctx context.Context, namespace, key string) error {
-	_, err := s.db.ExecContext(ctx, `
+	err := s.execRetry(ctx, `
 		DELETE FROM opdb WHERE namespace = ? AND key = ?
 	`, namespace, key)
 	if err == nil {
@@ -120,7 +165,7 @@ func (s *Store) Count(ctx context.Context, namespace string) (int, error) {
 }
 
 func (s *Store) Clear(ctx context.Context, namespace string) error {
-	_, err := s.db.ExecContext(ctx, `
+	err := s.execRetry(ctx, `
 		DELETE FROM opdb WHERE namespace = ?
 	`, namespace)
 	if err == nil {
