@@ -131,6 +131,7 @@ func (v *VPP) CreateSubinterface(params *southbound.SubinterfaceParams) error {
 	} else {
 		ifEntry.SubNumberOfTags = 1
 	}
+	ifEntry.OuterTPID = outerTPIDFromSubIfFlags(flags, ifEntry.SubNumberOfTags)
 	v.ifMgr.Add(ifEntry)
 
 	v.logger.Info("Created sub-interface", "interface", subIfName, "sw_if_index", reply.SwIfIndex, "flags", flags)
