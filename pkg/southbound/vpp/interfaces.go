@@ -156,6 +156,16 @@ func (v *VPP) BindInterfaceToVRF(vppIfName, vrfName string, hasLCP bool) error {
 	return v.bindInterfaceToVRF(vppIfName, vppIfName, vrfName, hasLCP)
 }
 
+func outerTPIDFromSubIfFlags(flags interface_types.SubIfFlags, numTags uint8) uint16 {
+	if numTags == 0 {
+		return 0
+	}
+	if flags&interface_types.SUB_IF_API_FLAG_DOT1AD != 0 {
+		return 0x88A8
+	}
+	return 0x8100
+}
+
 func (v *VPP) computeSubIfFlags(params *southbound.SubinterfaceParams) interface_types.SubIfFlags {
 	tpid := params.VLANTpid
 	if tpid == "" {
@@ -312,6 +322,7 @@ func (v *VPP) GetInterfaceIndex(name string) (int, error) {
 				SubNumberOfTags: reply.SubNumberOfTags,
 				OuterVlanID:     reply.SubOuterVlanID,
 				InnerVlanID:     reply.SubInnerVlanID,
+				OuterTPID:       outerTPIDFromSubIfFlags(reply.SubIfFlags, reply.SubNumberOfTags),
 			})
 			return int(reply.SwIfIndex), nil
 		}
@@ -610,6 +621,7 @@ func (v *VPP) LoadInterfaces() error {
 			SubNumberOfTags: reply.SubNumberOfTags,
 			OuterVlanID:     reply.SubOuterVlanID,
 			InnerVlanID:     reply.SubInnerVlanID,
+			OuterTPID:       outerTPIDFromSubIfFlags(reply.SubIfFlags, reply.SubNumberOfTags),
 			Tag:             strings.TrimRight(reply.Tag, "\x00"),
 		})
 	}

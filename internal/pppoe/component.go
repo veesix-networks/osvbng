@@ -160,7 +160,6 @@ type SessionState struct {
 	pendingPAPID         uint8
 	pendingCHAPID        uint8
 
-	OuterTPID    uint16
 	VRF          string
 	ServiceGroup svcgroup.ServiceGroup
 	SRGName      string
@@ -388,27 +387,6 @@ func (c *Component) resolveTerminateTargetLocked(ev *events.SubscriberTerminateE
 		return c.ipv6Index[ev.FramedIPv6]
 	}
 	return nil
-}
-
-func (c *Component) resolveOuterTPID(svlan uint16) uint16 {
-	cfg, err := c.cfgMgr.GetRunning()
-	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
-		return 0x88A8
-	}
-	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(svlan)
-	if group == nil {
-		return 0x88A8
-	}
-	return group.GetOuterTPID()
-}
-
-func (c *Component) getSessionOuterTPID(sess *SessionState) uint16 {
-	if sess.OuterTPID != 0 {
-		return sess.OuterTPID
-	}
-	tpid := c.resolveOuterTPID(sess.OuterVLAN)
-	sess.OuterTPID = tpid
-	return tpid
 }
 
 func (c *Component) Start(ctx context.Context) error {
@@ -929,7 +907,7 @@ func (c *Component) sendDiscoveryPacket(pkt *dataplane.ParsedPacket, code layers
 		SrcMAC:    srcMAC,
 		OuterVLAN: pkt.OuterVLAN,
 		InnerVLAN: pkt.InnerVLAN,
-		OuterTPID: c.resolveOuterTPID(pkt.OuterVLAN),
+		OuterTPID: c.ifMgr.OuterTPID(pkt.SwIfIndex),
 		SwIfIndex: parentSwIfIndex,
 		RawData:   rawPPPoE,
 	}
@@ -1466,7 +1444,6 @@ func (c *Component) restoreFromHASync(srgName string) {
 			MAC:            mac,
 			OuterVLAN:      outerVLAN,
 			InnerVLAN:      innerVLAN,
-			OuterTPID:      uint16(cp.OuterTpid),
 			EncapIfIndex:   encapIfIndex,
 			SwIfIndex:      swIfIndex,
 			Phase:          ppp.PhaseOpen,
@@ -1539,7 +1516,6 @@ func (c *Component) restoreFromHASync(srgName string) {
 			AAASessionID: cp.AaaSessionId,
 			IPv4Pool:     cp.Ipv4Pool,
 			IANAPool:     cp.IanaPool,
-			OuterTPID:    uint16(cp.OuterTpid),
 			ActivatedAt:  boundAt,
 		})
 
@@ -1589,7 +1565,6 @@ func (c *Component) ForEachSession(fn func(models.SubscriberSession) bool) {
 			ActivatedAt:  sess.BoundAt,
 			IPv4Pool:     sess.allocatedPool,
 			IANAPool:     sess.allocatedIANAPool,
-			OuterTPID:    sess.OuterTPID,
 			LCPMagic:     sess.LCPMagic,
 			Attributes:   sess.Attributes,
 			NegotiatedPPPMTU: sess.NegotiatedPPPMTU,
@@ -1686,7 +1661,6 @@ func (c *Component) buildModelSnapshot(sess *SessionState) *models.PPPSession {
 		Username:     sess.Username,
 		AAASessionID: sess.AcctSessionID,
 		ActivatedAt:  sess.BoundAt,
-		OuterTPID:    sess.OuterTPID,
 		LCPMagic:     sess.LCPMagic,
 		Attributes:   sess.Attributes,
 		NegotiatedPPPMTU: sess.NegotiatedPPPMTU,

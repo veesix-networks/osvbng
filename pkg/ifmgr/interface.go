@@ -30,6 +30,7 @@ type Interface struct {
 	SubNumberOfTags uint8
 	OuterVlanID     uint16
 	InnerVlanID     uint16
+	OuterTPID       uint16
 	Tag             string
 	IPv4Addresses   []net.IP
 	IPv6Addresses   []net.IP

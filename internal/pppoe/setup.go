@@ -202,7 +202,6 @@ func (c *Component) setupSessionRestore(ctx context.Context, sess *SessionState)
 		ActivatedAt:      sess.BoundAt,
 		IPv4Pool:         sess.allocatedPool,
 		IANAPool:         sess.allocatedIANAPool,
-		OuterTPID:        sess.OuterTPID,
 		NegotiatedPPPMTU: sess.NegotiatedPPPMTU,
 		IPv4MSS:          sess.IPv4MSS,
 		IPv6MSS:          sess.IPv6MSS,
