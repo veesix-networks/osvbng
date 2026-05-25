@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.12.0](https://github.com/veesix-networks/osvbng/compare/v0.11.0...v0.12.0) (2026-05-25)
+
+
+### Features
+
+* **bgp:** add BGP L3VPN show command coverage ([#316](https://github.com/veesix-networks/osvbng/issues/316)) ([15bf36d](https://github.com/veesix-networks/osvbng/commit/15bf36d10e775ee8d46713c99883e81a5e6ab550))
+* **bgp:** add BGP unicast show command coverage ([#315](https://github.com/veesix-networks/osvbng/issues/315)) ([844335c](https://github.com/veesix-networks/osvbng/commit/844335c832c87accd106b262dede6f9cd2dab896))
+* **ipoe:** emit RA + DHCPv6 + NA from link-local source per RFC 4861 ([#325](https://github.com/veesix-networks/osvbng/issues/325)) ([6089d8a](https://github.com/veesix-networks/osvbng/commit/6089d8a546f7f12e64150871b67f6b564b97c484))
+* **ldp:** finalize LDP show command coverage ([#317](https://github.com/veesix-networks/osvbng/issues/317)) ([15612cf](https://github.com/veesix-networks/osvbng/commit/15612cf16b4ad82a3a9f9331630b1c44fff4025a))
+* **ospf6:** add OSPFv3 show command coverage ([#313](https://github.com/veesix-networks/osvbng/issues/313)) ([06dec0b](https://github.com/veesix-networks/osvbng/commit/06dec0be06927f22358fefeebef07bacce79825b))
+* **ospf:** add instance, interface, neighbor, lsdb, mpls-te show handlers ([#311](https://github.com/veesix-networks/osvbng/issues/311)) ([d4c955d](https://github.com/veesix-networks/osvbng/commit/d4c955d7dccf6cb2e71f3141d5819e377ac2a734))
+* **pppoe,ipoe:** unify session recovery via setupSession SDK ([#324](https://github.com/veesix-networks/osvbng/issues/324)) ([e5487e3](https://github.com/veesix-networks/osvbng/commit/e5487e380218d66eb7cb6f87f794239a54adf6bc))
+* **routing:** consolidate label rename, .all telemetry, and ipv6 lab ([#318](https://github.com/veesix-networks/osvbng/issues/318)) ([7fb6983](https://github.com/veesix-networks/osvbng/commit/7fb6983f26f90cbe214a585a0b5fe73126c2a19d))
+* **routing:** expose VPP FIB + FRR zebra RIB via protocols.fib.* and protocols.zebra.* paths ([#321](https://github.com/veesix-networks/osvbng/issues/321)) ([766d2b9](https://github.com/veesix-networks/osvbng/commit/766d2b9bb538382cd6b845bbcf2fe19fb0037362))
+
+
+### Bug Fixes
+
+* **autoconfig:** gate subscriber IPv6 derivation on VRF IPv6 unicast ([#314](https://github.com/veesix-networks/osvbng/issues/314)) ([5bb681b](https://github.com/veesix-networks/osvbng/commit/5bb681b1cc7aa356516dac3d86f23ab532664979))
+* **configmgr:** skip no-op changes, suppress empty versions on restart, render values as JSON ([#320](https://github.com/veesix-networks/osvbng/issues/320)) ([b0046c5](https://github.com/veesix-networks/osvbng/commit/b0046c5c3fd4f9a9320c8043e85f9d5ac410e61a))
+* **show, osvbngcli:** typed BoolOption, fast exit on all paths, hide .all paths, scope flag help, render wildcard descriptions ([#319](https://github.com/veesix-networks/osvbng/issues/319)) ([6c758ff](https://github.com/veesix-networks/osvbng/commit/6c758ffd24427cfcccc314a6ee848aef71d0dd5d))
+
 ## [0.11.0](https://github.com/veesix-networks/osvbng/compare/v0.10.0...v0.11.0) (2026-05-18)
 
 
