@@ -194,6 +194,11 @@ func (c *HAConfig) Validate(lookup netbind.VRFLookup) error {
 		if len(srg.SubscriberGroups) == 0 {
 			return fmt.Errorf("ha.srgs.%s.subscriber_groups: at least one subscriber group is required", name)
 		}
+		if srg.VirtualMAC == "" {
+			return fmt.Errorf("ha.srgs.%s.virtual_mac: required when subscriber_groups is non-empty "+
+				"(IPv6 RA and ND source link-local is derived from this MAC; a node-local fallback "+
+				"would change the gateway link-local across failover)", name)
+		}
 	}
 
 	if c.TLS.CACert != "" || c.TLS.Cert != "" || c.TLS.Key != "" {

@@ -48,11 +48,12 @@ ${session-count}        1
     ...    sw_if_index. Subscriber traffic must resume with the same
     ...    opdb session set and the same IP addresses.
     ...
-    ...    IPv6 ping verification deferred: RAs are emitted from the
-    ...    global loopback source IPv6 rather than a link-local, so
-    ...    Linux subscribers per RFC 4861 §6.1.2 discard them and never
-    ...    install the on-link prefix. Add the v6 ping check back once
-    ...    RA source IP is link-local.
+    ...    v6 gateway ping is intentionally omitted: with a link-local
+    ...    RA source per RFC 4861 §6.1.2, the subscriber routes
+    ...    off-prefix traffic via the link-local default route, so the
+    ...    BNG's loopback global IP is not directly reachable from the
+    ...    subscriber side. Reaching ${core-router-v6} via the link-local
+    ...    default gateway is the end-to-end check.
     Restart osvbngd                                ${bng1}
     Wait For osvbngd Down                          ${bng1}
     Wait For osvbng Healthy                        bng1    ${lab-name}
@@ -61,16 +62,22 @@ ${session-count}        1
     Verify Subscriber Has Stable Lease V4
     Verify Subscriber Can Ping                     ${v4-gateway}
     Verify Subscriber Can Ping                     ${core-router-v4}
+    Verify Subscriber Can Ping                     ${core-router-v6}    -6
 
 2b — Restart VPP Only
     [Documentation]    Kill VPP; the watchdog respawns it and the cold
     ...    bootstrap path replays the startup config + opdb sessions.
     ...    Subscriber traffic should resume without operator action.
     ...
-    ...    IPv6 ping verification deferred: same RA source-IP issue as 2a
-    ...    (RAs emitted from global loopback rather than link-local;
-    ...    Linux subscribers per RFC 4861 §6.1.2 discard them). Add the
-    ...    v6 checks back once osvbng-context#89 lands.
+    ...    v6 forwarding verification omitted: during the ~15s VPP
+    ...    downtime, host-side ND probes to the BNG link-local fail and
+    ...    the neighbour entry transitions to FAILED. Linux NUD then
+    ...    backs off and recovery from FAILED takes longer than a 30s
+    ...    ping retry window. The end-state is correct (cache eventually
+    ...    re-resolves and forwarding resumes) but the subscriber UX gap
+    ...    needs the BNG to send Unsolicited Neighbour Advertisement on
+    ...    recovery per RFC 4861 §7.2.6 to proactively refresh
+    ...    subscriber ND caches. Tracked separately.
     Restart VPP                                    ${bng1}
     Wait For VPP Recovery                          ${bng1}
     Wait Until Keyword Succeeds    60s    2s
