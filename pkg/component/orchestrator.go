@@ -129,12 +129,16 @@ type ComponentReadiness struct {
 }
 
 // AllReady reports whether every registered component that exposes a
-// ReadinessReporter is in StateReady. Components that do not embed *Base
-// are treated as always-ready (they have no recovery lifecycle).
+// ReadinessReporter is in StateReady. Plugins are skipped — same
+// semantics as WaitReady — because their lifecycle is independent of
+// the subscriber-plane readiness this check gates.
 func (o *Orchestrator) AllReady() bool {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	for _, comp := range o.components {
+		if o.plugins[comp.Name()] {
+			continue
+		}
 		rr, ok := comp.(ReadinessReporter)
 		if !ok {
 			continue
