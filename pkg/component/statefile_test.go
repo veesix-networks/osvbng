@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -18,7 +19,7 @@ import (
 func TestStateFileWriterBasicTransitions(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "state")
-	w := NewStateFileWriter(path)
+	w := NewStateFileWriter(path, "")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -33,10 +34,54 @@ func TestStateFileWriterBasicTransitions(t *testing.T) {
 	w.Stop()
 }
 
+func TestStateFileWriterStampsVersion(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state")
+	w := NewStateFileWriter(path, "0.13.0-rc7")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w.Run(ctx)
+
+	w.Set(StateFileReady)
+	waitForState(t, path, StateFileReady)
+	w.Stop()
+
+	p, err := ReadStateFile(path)
+	if err != nil {
+		t.Fatalf("ReadStateFile: %v", err)
+	}
+	if p.Version != "0.13.0-rc7" {
+		t.Fatalf("Version = %q, want %q", p.Version, "0.13.0-rc7")
+	}
+}
+
+func TestStateFileWriterEmptyVersionOmitsField(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state")
+	w := NewStateFileWriter(path, "")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w.Run(ctx)
+
+	w.Set(StateFileReady)
+	waitForState(t, path, StateFileReady)
+	w.Stop()
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if strings.Contains(string(raw), "\"version\"") {
+		t.Fatalf("empty version should be omitted from JSON, got: %s", string(raw))
+	}
+}
+
 func TestStateFileWriterSequenceMonotonic(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "state")
-	w := NewStateFileWriter(path)
+	w := NewStateFileWriter(path, "")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -67,7 +112,7 @@ func TestStateFileWriterSequenceMonotonic(t *testing.T) {
 func TestStateFileWriterConcurrentSetSerialises(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "state")
-	w := NewStateFileWriter(path)
+	w := NewStateFileWriter(path, "")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -133,7 +178,7 @@ func TestStateFileWriterConcurrentSetSerialises(t *testing.T) {
 func TestStateFileWriterAtomicWriteIntegrity(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "state")
-	w := NewStateFileWriter(path)
+	w := NewStateFileWriter(path, "")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -169,7 +214,7 @@ func TestStateFileWriterAtomicWriteIntegrity(t *testing.T) {
 
 func TestStateFileWriterStopIsIdempotent(t *testing.T) {
 	dir := t.TempDir()
-	w := NewStateFileWriter(filepath.Join(dir, "state"))
+	w := NewStateFileWriter(filepath.Join(dir, "state"), "")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	w.Run(ctx)
@@ -181,7 +226,7 @@ func TestStateFileWriterStopIsIdempotent(t *testing.T) {
 
 func TestStateFileWriterContextCancellationStopsLoop(t *testing.T) {
 	dir := t.TempDir()
-	w := NewStateFileWriter(filepath.Join(dir, "state"))
+	w := NewStateFileWriter(filepath.Join(dir, "state"), "")
 	ctx, cancel := context.WithCancel(context.Background())
 	w.Run(ctx)
 
@@ -203,7 +248,7 @@ func TestStateFileWriterContextCancellationStopsLoop(t *testing.T) {
 func TestStateFileWriterSetAfterStopIsNoOp(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "state")
-	w := NewStateFileWriter(path)
+	w := NewStateFileWriter(path, "")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	w.Run(ctx)
@@ -243,7 +288,7 @@ func (f *fakeReadiness) setReady(v bool) {
 func TestTrackReadinessRestoringToReadyTransition(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "state")
-	w := NewStateFileWriter(path)
+	w := NewStateFileWriter(path, "")
 	defer w.Stop()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -268,7 +313,7 @@ func TestTrackReadinessRestoringToReadyTransition(t *testing.T) {
 func TestTrackReadinessReadyToDegradedTransition(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "state")
-	w := NewStateFileWriter(path)
+	w := NewStateFileWriter(path, "")
 	defer w.Stop()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -288,7 +333,7 @@ func TestTrackReadinessReadyToDegradedTransition(t *testing.T) {
 
 func TestTrackReadinessStopsOnContextCancel(t *testing.T) {
 	dir := t.TempDir()
-	w := NewStateFileWriter(filepath.Join(dir, "state"))
+	w := NewStateFileWriter(filepath.Join(dir, "state"), "")
 	defer w.Stop()
 
 	ctx, cancel := context.WithCancel(context.Background())

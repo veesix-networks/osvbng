@@ -143,13 +143,14 @@ artifacts:
 	}
 }
 
-func (h *testHarness) writeStateFile(state string, sequence uint64) {
+func (h *testHarness) writeStateFile(state string, sequence uint64, version string) {
 	h.t.Helper()
 	payload, _ := json.Marshal(struct {
 		State     string    `json:"state"`
 		Sequence  uint64    `json:"sequence"`
 		UpdatedAt time.Time `json:"updated_at"`
-	}{State: state, Sequence: sequence, UpdatedAt: time.Now().UTC()})
+		Version   string    `json:"version,omitempty"`
+	}{State: state, Sequence: sequence, UpdatedAt: time.Now().UTC(), Version: version})
 	if err := os.WriteFile(h.runner.StateFile, payload, 0o644); err != nil {
 		h.t.Fatalf("write state file: %v", err)
 	}
@@ -321,7 +322,7 @@ func TestRunnerApplyHappyPath(t *testing.T) {
 	h.configureSystemctlReady()
 	// State file must show "ready" so health-poll exits OK on the
 	// first iteration.
-	h.writeStateFile("ready", 5)
+	h.writeStateFile("ready", 5, "0.13.1")
 
 	res, err := h.runner.Apply(context.Background(), tarball)
 	if err != nil {
@@ -424,7 +425,7 @@ func TestRunnerStatusAfterSuccessfulApply(t *testing.T) {
 	h.plantFromVersion("0.13.0")
 	tarball := h.buildSignedTarball(t, "0.13.0", "0.13.1")
 	h.configureSystemctlReady()
-	h.writeStateFile("ready", 1)
+	h.writeStateFile("ready", 1, "0.13.1")
 
 	if _, err := h.runner.Apply(context.Background(), tarball); err != nil {
 		t.Fatalf("Apply: %v", err)
@@ -450,7 +451,7 @@ func TestRunnerRollbackRestoresOldContent(t *testing.T) {
 	h.plantFromVersion("0.13.0")
 	tarball := h.buildSignedTarball(t, "0.13.0", "0.13.1")
 	h.configureSystemctlReady()
-	h.writeStateFile("ready", 1)
+	h.writeStateFile("ready", 1, "0.13.1")
 
 	if _, err := h.runner.Apply(context.Background(), tarball); err != nil {
 		t.Fatalf("Apply: %v", err)
@@ -461,6 +462,11 @@ func TestRunnerRollbackRestoresOldContent(t *testing.T) {
 	if !strings.Contains(string(got), "NEW-osvbngd") {
 		t.Fatalf("pre-rollback: expected NEW content, got %q", string(got))
 	}
+
+	// After apply the planted "ready" state matches the new (0.13.1)
+	// daemon. Simulate the rolled-back (0.13.0) daemon publishing its
+	// own ready state so the rollback's health-poll passes.
+	h.writeStateFile("ready", 1, "0.13.0")
 
 	rb, err := h.runner.Rollback(context.Background())
 	if err != nil {
@@ -481,7 +487,7 @@ func TestRunnerApplyRefusesWhenChainExpectedFromMismatch(t *testing.T) {
 	h := newHarness(t)
 	tarball := h.buildSignedTarball(t, "0.12.0", "0.13.1")
 	h.configureSystemctlReady()
-	h.writeStateFile("ready", 1)
+	h.writeStateFile("ready", 1, "0.13.1")
 
 	// Plant a current-manifest declaring 0.99.0 — ApplyOne's
 	// ExpectedFrom=0.13.0 will not match.
@@ -570,7 +576,7 @@ func TestRunnerApplyRestartsVPPWhenPluginSwapped(t *testing.T) {
 
 	tarball := h.buildSignedTarballWithPlugin(t, "0.13.0", "0.13.1", pluginPath)
 	h.configureSystemctlReady()
-	h.writeStateFile("ready", 5)
+	h.writeStateFile("ready", 5, "0.13.1")
 
 	if _, err := h.runner.Apply(context.Background(), tarball); err != nil {
 		t.Fatalf("Apply: %v", err)
@@ -595,7 +601,7 @@ func TestRunnerApplyDoesNotRestartVPPForBinaryOnlySwap(t *testing.T) {
 	h.plantFromVersion("0.13.0")
 	tarball := h.buildSignedTarball(t, "0.13.0", "0.13.1")
 	h.configureSystemctlReady()
-	h.writeStateFile("ready", 5)
+	h.writeStateFile("ready", 5, "0.13.1")
 
 	if _, err := h.runner.Apply(context.Background(), tarball); err != nil {
 		t.Fatalf("Apply: %v", err)
@@ -627,4 +633,3 @@ func TestRunnerEnsureStateDirsCreatesMissingPaths(t *testing.T) {
 		}
 	}
 }
-

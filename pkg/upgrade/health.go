@@ -79,6 +79,15 @@ type HealthChecker struct {
 	Supervisor    *Supervisor
 	StateFilePath string
 
+	// ExpectedVersion, when non-empty, gates state-file evaluation: any
+	// state read whose `version` field does not match (including the
+	// empty string from a pre-version-tracking daemon) is treated as a
+	// stale write from a previous process and the poll continues. This
+	// is the deterministic signal that we are looking at the new
+	// daemon's state and not whatever the outgoing process happened to
+	// leave on disk.
+	ExpectedVersion string
+
 	// Tunables. Zero values pick the spec defaults.
 	OverallTimeout time.Duration // default 60s
 	StallLimit     time.Duration // default 30s
@@ -97,6 +106,7 @@ type healthStateFile struct {
 	State     string    `json:"state"`
 	Sequence  uint64    `json:"sequence"`
 	UpdatedAt time.Time `json:"updated_at"`
+	Version   string    `json:"version,omitempty"`
 	ModTime   time.Time `json:"-"`
 }
 
@@ -176,6 +186,15 @@ func (h *HealthChecker) WaitHealthy(ctx context.Context) (HealthResult, string, 
 				return HealthTimeout, fmt.Sprintf("read state file %s: %v", h.StateFilePath, sfErr), sfErr
 			}
 
+			// Version stamping is the primary cross-daemon signal: if the
+			// caller declared an expected version and what we just read
+			// doesn't match, this is the outgoing daemon's stale write
+			// and we keep polling until the new daemon publishes.
+			if h.ExpectedVersion != "" && sf.Version != h.ExpectedVersion {
+				h.Sleep(h.PollInterval)
+				continue
+			}
+
 			// A new daemon process resets its in-memory sequence to 1, so a
 			// regression means a restart — reset the stall window so we
 			// stop comparing the new daemon's progress to the old one's.
@@ -208,7 +227,11 @@ func (h *HealthChecker) WaitHealthy(ctx context.Context) (HealthResult, string, 
 
 		if st.IsActivating() {
 			sf, sfErr := h.readStateFile()
-			if sfErr == nil {
+			// Same version-stale gate as the active branch — don't let
+			// the previous daemon's sequence advance our progress
+			// tracking while the new daemon hasn't published yet.
+			versionStale := sfErr == nil && h.ExpectedVersion != "" && sf.Version != h.ExpectedVersion
+			if sfErr == nil && !versionStale {
 				if sf.Sequence < lastSeq {
 					lastSeq = 0
 					lastSeqAt = h.Now()

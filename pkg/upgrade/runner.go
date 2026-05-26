@@ -294,7 +294,7 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 	}
 
 	r.Reporter.Stage(11, totalStages, "Waiting for daemon to become ready")
-	healthOutcome, healthMsg := r.waitHealthy(ctx, supervisor)
+	healthOutcome, healthMsg := r.waitHealthy(ctx, supervisor, manifest.OsvbngVersion)
 	if healthOutcome != HealthOK {
 		r.Reporter.Warn(fmt.Sprintf("health failed: %s — %s", healthOutcome, healthMsg))
 		_ = journal.SetPhase("health_failed")
@@ -404,7 +404,7 @@ func (r *Runner) Rollback(ctx context.Context) (*RollbackResult, error) {
 	}
 
 	r.Reporter.Stage(5, totalStages, "Waiting for daemon to become ready")
-	outcome, msg := r.waitHealthy(ctx, supervisor)
+	outcome, msg := r.waitHealthy(ctx, supervisor, from)
 	if outcome != HealthOK {
 		_ = journal.SetPhase("rollback_failed")
 		return nil, fmt.Errorf("rollback health failed: %s — %s", outcome, msg)
@@ -541,14 +541,15 @@ func (r *Runner) restartVPP(ctx context.Context) error {
 	return nil
 }
 
-func (r *Runner) waitHealthy(ctx context.Context, sv *Supervisor) (HealthResult, string) {
+func (r *Runner) waitHealthy(ctx context.Context, sv *Supervisor, expectedVersion string) (HealthResult, string) {
 	hc := &HealthChecker{
-		Supervisor:     sv,
-		StateFilePath:  r.StateFile,
-		OverallTimeout: r.HealthTimeout,
-		StallLimit:     r.StallLimit,
-		PollInterval:   r.PollInterval,
-		StateFileGrace: r.StateFileGrace,
+		Supervisor:      sv,
+		StateFilePath:   r.StateFile,
+		ExpectedVersion: expectedVersion,
+		OverallTimeout:  r.HealthTimeout,
+		StallLimit:      r.StallLimit,
+		PollInterval:    r.PollInterval,
+		StateFileGrace:  r.StateFileGrace,
 	}
 	out, msg, _ := hc.WaitHealthy(ctx)
 	return out, msg
