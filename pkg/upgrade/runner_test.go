@@ -211,6 +211,67 @@ artifacts:
 	return tarballPath
 }
 
+// buildSignedTarballWithPlugin builds a signed tarball that includes
+// a VPP plugin alongside the daemon binaries, used to assert the
+// VPP-restart code path in Apply.
+func (h *testHarness) buildSignedTarballWithPlugin(t *testing.T, fromVersion, toVersion, pluginPath string) string {
+	t.Helper()
+	tarballDir := t.TempDir()
+	tarballPath := filepath.Join(tarballDir, fmt.Sprintf("osvbng-v%s.tar.gz", toVersion))
+
+	newOsvbngd := []byte("NEW-osvbngd-" + toVersion)
+	newOsvbngcli := []byte("NEW-osvbngcli-" + toVersion)
+	newPlugin := []byte("NEW-plugin-" + toVersion)
+
+	manifestYAML := fmt.Sprintf(`osvbng_version: %s
+min_compatible_version: %s
+type: A
+build_commit: testabc
+artifacts:
+  - path: %s
+    source: osvbngd
+    sha256: %s
+    mode: "0755"
+    uid: -1
+    gid: -1
+  - path: %s
+    source: osvbngcli
+    sha256: %s
+    mode: "0755"
+    uid: -1
+    gid: -1
+  - path: %s
+    source: plugins/osvbng_ipoe_plugin.so
+    sha256: %s
+    mode: "0644"
+    uid: -1
+    gid: -1
+`,
+		toVersion, fromVersion,
+		h.binaryPath, sha256Hex(newOsvbngd),
+		h.cliPath, sha256Hex(newOsvbngcli),
+		pluginPath, sha256Hex(newPlugin))
+
+	writeTarball(t, tarballDir, filepath.Base(tarballPath), []tarEntry{
+		{name: "manifest.yaml", body: []byte(manifestYAML)},
+		{name: "osvbngd", body: newOsvbngd, mode: 0o755},
+		{name: "osvbngcli", body: newOsvbngcli, mode: 0o755},
+		{name: "plugins/osvbng_ipoe_plugin.so", body: newPlugin, mode: 0o644},
+	})
+
+	tarballBytes, _ := os.ReadFile(tarballPath)
+	digest := sha256.Sum256(tarballBytes)
+	sigDER, err := ecdsa.SignASN1(rand.Reader, h.privKey, digest[:])
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	if err := os.WriteFile(tarballPath+".sig",
+		[]byte(base64.StdEncoding.EncodeToString(sigDER)+"\n"), 0o644); err != nil {
+		t.Fatalf("write sig: %v", err)
+	}
+	return tarballPath
+}
+
 // configureSystemctlReady arms the fake Commander so every
 // "systemctl show" returns "active/running/success". Tests that want
 // to model a stop/start/show sequence override this directly.
@@ -451,6 +512,101 @@ func TestRunnerNullReporterIsDefault(t *testing.T) {
 	r := NewRunner(nil)
 	if _, ok := r.Reporter.(NullReporter); !ok {
 		t.Fatalf("NewRunner(nil).Reporter is %T, want NullReporter", r.Reporter)
+	}
+}
+
+func TestRunnerSwapTouchesPluginsDetectsPluginPaths(t *testing.T) {
+	r := &Runner{PluginDir: "/usr/lib/x86_64-linux-gnu/vpp_plugins"}
+
+	cases := map[string]struct {
+		paths []string
+		want  bool
+	}{
+		"no plugins": {
+			paths: []string{"/usr/local/bin/osvbngd", "/usr/local/bin/osvbngcli"},
+			want:  false,
+		},
+		"single plugin": {
+			paths: []string{"/usr/lib/x86_64-linux-gnu/vpp_plugins/osvbng_ipoe_plugin.so"},
+			want:  true,
+		},
+		"mixed": {
+			paths: []string{
+				"/usr/local/bin/osvbngd",
+				"/usr/lib/x86_64-linux-gnu/vpp_plugins/osvbng_pppoe_plugin.so",
+			},
+			want: true,
+		},
+		"empty": {
+			paths: nil,
+			want:  false,
+		},
+	}
+
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := r.swapTouchesPlugins(c.paths); got != c.want {
+				t.Fatalf("got %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+func TestRunnerSwapTouchesPluginsTrailingSlashSafe(t *testing.T) {
+	r := &Runner{PluginDir: "/usr/lib/x86_64-linux-gnu/vpp_plugins/"}
+	if !r.swapTouchesPlugins([]string{"/usr/lib/x86_64-linux-gnu/vpp_plugins/x.so"}) {
+		t.Fatal("trailing-slash PluginDir failed to match")
+	}
+}
+
+func TestRunnerApplyRestartsVPPWhenPluginSwapped(t *testing.T) {
+	h := newHarness(t)
+	h.plantFromVersion("0.13.0")
+
+	pluginPath := filepath.Join(h.pluginDir, "osvbng_ipoe_plugin.so")
+	if err := os.WriteFile(pluginPath, []byte("OLD-plugin"), 0o644); err != nil {
+		t.Fatalf("plant old plugin: %v", err)
+	}
+
+	tarball := h.buildSignedTarballWithPlugin(t, "0.13.0", "0.13.1", pluginPath)
+	h.configureSystemctlReady()
+	h.writeStateFile("ready", 5)
+
+	if _, err := h.runner.Apply(context.Background(), tarball); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	sawRestart := false
+	h.cmd.mu.Lock()
+	defer h.cmd.mu.Unlock()
+	for _, c := range h.cmd.calls {
+		if c.name == "systemctl" && len(c.args) >= 2 && c.args[0] == "restart" && c.args[1] == "vpp.service" {
+			sawRestart = true
+			break
+		}
+	}
+	if !sawRestart {
+		t.Fatalf("expected systemctl restart vpp.service for plugin swap; saw calls: %+v", h.cmd.calls)
+	}
+}
+
+func TestRunnerApplyDoesNotRestartVPPForBinaryOnlySwap(t *testing.T) {
+	h := newHarness(t)
+	h.plantFromVersion("0.13.0")
+	tarball := h.buildSignedTarball(t, "0.13.0", "0.13.1")
+	h.configureSystemctlReady()
+	h.writeStateFile("ready", 5)
+
+	if _, err := h.runner.Apply(context.Background(), tarball); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	h.cmd.mu.Lock()
+	defer h.cmd.mu.Unlock()
+	for _, c := range h.cmd.calls {
+		if c.name == "systemctl" && len(c.args) >= 2 && c.args[0] == "restart" && c.args[1] == "vpp.service" {
+			t.Fatalf("unexpected systemctl restart vpp.service for binary-only swap; calls: %+v", h.cmd.calls)
+		}
 	}
 }
 
