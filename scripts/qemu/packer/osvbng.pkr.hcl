@@ -87,6 +87,11 @@ build {
     destination = "/tmp/templates/"
   }
 
+  provisioner "file" {
+    source      = "../../../release-keys/cosign.pub"
+    destination = "/tmp/cosign.pub"
+  }
+
   provisioner "shell" {
     environment_vars = [
       "DATAPLANE_VERSION=${var.dataplane_version}",
