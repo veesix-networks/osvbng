@@ -176,6 +176,13 @@ func (h *HealthChecker) WaitHealthy(ctx context.Context) (HealthResult, string, 
 				return HealthTimeout, fmt.Sprintf("read state file %s: %v", h.StateFilePath, sfErr), sfErr
 			}
 
+			// A new daemon process resets its in-memory sequence to 1, so a
+			// regression means a restart — reset the stall window so we
+			// stop comparing the new daemon's progress to the old one's.
+			if sf.Sequence < lastSeq {
+				lastSeq = 0
+				lastSeqAt = h.Now()
+			}
 			if sf.Sequence > lastSeq {
 				lastSeq = sf.Sequence
 				lastSeqAt = h.Now()
@@ -186,8 +193,11 @@ func (h *HealthChecker) WaitHealthy(ctx context.Context) (HealthResult, string, 
 				return HealthOK, "daemon ready", nil
 			case "degraded":
 				return HealthDegraded, fmt.Sprintf("daemon reports degraded state (sequence=%d)", sf.Sequence), nil
-			case "starting", "restoring":
-				// keep polling
+			case "starting", "restoring", "stopping":
+				// "stopping" is transitional: the outgoing daemon writes it
+				// on SIGTERM, the incoming daemon overwrites it on first
+				// publish, so a "stopping" read during the active branch is
+				// the brief race window across a restart.
 			default:
 				return HealthInvalidState, fmt.Sprintf("state file holds unknown state %q", sf.State), nil
 			}
@@ -198,9 +208,15 @@ func (h *HealthChecker) WaitHealthy(ctx context.Context) (HealthResult, string, 
 
 		if st.IsActivating() {
 			sf, sfErr := h.readStateFile()
-			if sfErr == nil && sf.Sequence > lastSeq {
-				lastSeq = sf.Sequence
-				lastSeqAt = h.Now()
+			if sfErr == nil {
+				if sf.Sequence < lastSeq {
+					lastSeq = 0
+					lastSeqAt = h.Now()
+				}
+				if sf.Sequence > lastSeq {
+					lastSeq = sf.Sequence
+					lastSeqAt = h.Now()
+				}
 			}
 			if h.Now().Sub(lastSeqAt) > h.StallLimit {
 				return HealthStalled, fmt.Sprintf("no state-file progress in %v (last sequence=%d)", h.StallLimit, lastSeq), nil
