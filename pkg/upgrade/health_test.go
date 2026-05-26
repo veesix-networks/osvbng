@@ -259,6 +259,87 @@ func TestWaitHealthyProgressResetsStall(t *testing.T) {
 	}
 }
 
+func TestWaitHealthyTreatsStoppingAsTransitional(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state")
+	writeStateFile(t, statePath, "stopping", 4)
+
+	fake := &fakeCommander{scripts: []fakeResp{
+		{matchName: "systemctl", out: "ActiveState=active\nSubState=running\nResult=success\n"},
+	}}
+	sv := &Supervisor{Unit: "osvbng.service", DropInRoot: t.TempDir(), Cmd: fake}
+
+	clk := newClock(time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC))
+	hc := &HealthChecker{
+		Supervisor:     sv,
+		StateFilePath:  statePath,
+		OverallTimeout: 30 * time.Second,
+		StallLimit:     20 * time.Second,
+		PollInterval:   1 * time.Second,
+		Now:            clk.Now,
+		Sleep: func(d time.Duration) {
+			clk.Advance(d)
+			// New daemon publishes ready a couple of polls in.
+			if clk.Now().Sub(time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)) >= 2*time.Second {
+				writeStateFile(t, statePath, "ready", 1)
+			}
+		},
+	}
+
+	res, msg, _ := hc.WaitHealthy(context.Background())
+	if res != HealthOK {
+		t.Fatalf("res = %v (%s), want HealthOK after stopping -> ready", res, msg)
+	}
+}
+
+func TestWaitHealthyHandlesSequenceRegression(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state")
+	// Stale state file from the outgoing daemon at sequence 50; the
+	// incoming daemon will start publishing from sequence 1. Without
+	// the regression reset, lastSeq stays pinned at 50, the new
+	// daemon's progress (1, 2, 3, ...) never counts as forward, and
+	// the activating-branch stall guard trips at StallLimit.
+	writeStateFile(t, statePath, "restoring", 50)
+
+	fake := &fakeCommander{scripts: []fakeResp{
+		{matchName: "systemctl", out: "ActiveState=activating\nSubState=start\nResult=success\n"},
+	}}
+	sv := &Supervisor{Unit: "osvbng.service", DropInRoot: t.TempDir(), Cmd: fake}
+
+	start := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+	clk := newClock(start)
+	newSeq := uint64(0)
+	hc := &HealthChecker{
+		Supervisor:     sv,
+		StateFilePath:  statePath,
+		OverallTimeout: 60 * time.Second,
+		StallLimit:     10 * time.Second,
+		PollInterval:   1 * time.Second,
+		Now:            clk.Now,
+		Sleep: func(d time.Duration) {
+			clk.Advance(d)
+			elapsed := clk.Now().Sub(start)
+			newSeq++
+			state := "restoring"
+			active := "ActiveState=activating\nSubState=start\nResult=success\n"
+			if elapsed >= 15*time.Second {
+				state = "ready"
+				active = "ActiveState=active\nSubState=running\nResult=success\n"
+			}
+			writeStateFile(t, statePath, state, newSeq)
+			fake.mu.Lock()
+			fake.scripts = []fakeResp{{matchName: "systemctl", out: active}}
+			fake.mu.Unlock()
+		},
+	}
+
+	res, msg, _ := hc.WaitHealthy(context.Background())
+	if res != HealthOK {
+		t.Fatalf("res = %v (%s), want HealthOK after sequence regression resets stall window", res, msg)
+	}
+}
+
 func TestHealthResultStringHasNoUnknownForKnownValues(t *testing.T) {
 	for _, res := range []HealthResult{HealthOK, HealthFailed, HealthStalled, HealthTimeout, HealthDegraded, HealthInvalidState} {
 		s := res.String()
@@ -267,4 +348,3 @@ func TestHealthResultStringHasNoUnknownForKnownValues(t *testing.T) {
 		}
 	}
 }
-
