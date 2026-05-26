@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -272,6 +273,17 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 		return r.rollbackAfterFailedApply(ctx, supervisor, journal, "swap loop failure")
 	}
 
+	// VPP keeps plugins loaded in memory; a fresh .so on disk only
+	// takes effect after a VPP restart. osvbng.service is already
+	// stopped so there's no cascade to worry about.
+	if r.swapTouchesPlugins(swapped) {
+		r.Reporter.Progress("plugin changed, restarting VPP")
+		if err := r.restartVPP(ctx); err != nil {
+			_ = journal.SetPhase("aborted_post_swap")
+			return r.rollbackAfterFailedApply(ctx, supervisor, journal, fmt.Sprintf("vpp restart failed: %v", err))
+		}
+	}
+
 	r.Reporter.Stage(10, totalStages, "Starting daemon")
 	if err := supervisor.Start(ctx); err != nil {
 		_ = journal.SetPhase("aborted_post_swap")
@@ -375,6 +387,14 @@ func (r *Runner) Rollback(ctx context.Context) (*RollbackResult, error) {
 	if err != nil {
 		_ = journal.SetPhase("rollback_failed")
 		return nil, err
+	}
+
+	if r.swapTouchesPlugins(restored) {
+		r.Reporter.Progress("plugin restored, restarting VPP")
+		if err := r.restartVPP(ctx); err != nil {
+			_ = journal.SetPhase("rollback_failed")
+			return nil, fmt.Errorf("vpp restart during rollback: %w", err)
+		}
 	}
 
 	r.Reporter.Stage(4, totalStages, "Starting daemon")
@@ -498,6 +518,27 @@ func (r *Runner) verifySignature(tarballPath string) error {
 
 func (r *Runner) discoverCurrentVersion(ctx context.Context) (string, error) {
 	return CurrentInstalledVersion(ctx, r.StateRoot, r.BinaryPath, r.Cmd)
+}
+
+func (r *Runner) swapTouchesPlugins(paths []string) bool {
+	if r.PluginDir == "" {
+		return false
+	}
+	prefix := strings.TrimRight(r.PluginDir, "/") + "/"
+	for _, p := range paths {
+		if strings.HasPrefix(p, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Runner) restartVPP(ctx context.Context) error {
+	out, err := r.Cmd.Run(ctx, "systemctl", "restart", "vpp.service")
+	if err != nil {
+		return fmt.Errorf("systemctl restart vpp.service: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 func (r *Runner) waitHealthy(ctx context.Context, sv *Supervisor) (HealthResult, string) {
