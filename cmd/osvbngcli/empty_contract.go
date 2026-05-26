@@ -8,7 +8,7 @@ package main
 // value while the northbound API is unreachable. Holding a non-nil value
 // lets every consumer that ranges Commands or calls matchCommand operate
 // without nil-guarding: the range yields zero iterations, matchCommand
-// returns "unrecognized command", and the REPL surfaces a clean error
+// returns "unrecognized command", and osvbngcli surfaces a clean error
 // instead of a panic.
 func NewEmptyContract() *Contract {
 	return &Contract{
