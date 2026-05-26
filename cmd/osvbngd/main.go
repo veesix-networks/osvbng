@@ -619,15 +619,39 @@ func main() {
 	}
 
 	ctx := context.Background()
+
+	stateWriter := component.NewStateFileWriter("/run/osvbng/state")
+	stateWriter.Run(ctx)
+	stateWriter.Set(component.StateFileStarting)
+	defer stateWriter.Stop()
+
 	if err := orch.Start(ctx); err != nil {
 		log.Fatalf("Failed to start components: %v", err)
 	}
 
 	telemetry.StartShowPollers(ctx, showRegistry, mainLog)
 
+	// AllReady checks every component's punt-side ReadyState
+	// (StateReady vs StateRestoring etc). Components doing opdb
+	// recovery (IPoE / PPPoE / CGNAT) stay in StateRestoring after
+	// Start returns and only flip to StateReady when their async
+	// recovery goroutine finishes. orch.WaitReady, in contrast, only
+	// gates on the synchronous-Start signal, so it returns before
+	// recovery completes.
+	if orch.AllReady() {
+		stateWriter.Set(component.StateFileReady)
+	} else {
+		stateWriter.Set(component.StateFileRestoring)
+	}
+
 	if err := orch.WaitReady(ctx, 10*time.Second); err != nil {
 		log.Fatalf("Failed waiting for components to be ready: %v", err)
 	}
+
+	// Poll AllReady() and update the state file as recovery
+	// goroutines complete. Also flips back to degraded if a component
+	// fault transitions us out of all-ready in steady state.
+	go component.TrackReadiness(ctx, stateWriter, orch, 500*time.Millisecond)
 
 	mainLog.Info("osvbng started successfully")
 
@@ -636,6 +660,7 @@ func main() {
 	<-sigCh
 
 	mainLog.Info("Shutting down osvbng...")
+	stateWriter.Set(component.StateFileStopping)
 
 	if err := orch.Stop(ctx); err != nil {
 		mainLog.Error("Error stopping components", "error", err)

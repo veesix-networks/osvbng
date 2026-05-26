@@ -548,3 +548,86 @@ func TestLoadContractUsesCached304(t *testing.T) {
 		t.Fatalf("requestCount = %d, want 2", requestCount)
 	}
 }
+
+// TestNewCLIWithUnreachableDaemonLaunchesWithEmptyContract verifies that
+// NewCLI no longer aborts when the northbound API is unreachable. The
+// REPL must launch with an empty Contract so builtins (help/exit/upgrade)
+// remain usable — which is what makes `osvbngcli upgrade` work even when
+// the daemon has crashed or is mid-upgrade.
+func TestNewCLIWithUnreachableDaemonLaunchesWithEmptyContract(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	// 127.0.0.1:1 is reserved (tcpmux); connect attempts get ECONNREFUSED
+	// immediately. Suppress the launch banner + warning so test output is
+	// readable.
+	prevStderr := os.Stderr
+	os.Stderr, _ = os.Open(os.DevNull)
+	defer func() { os.Stderr = prevStderr }()
+
+	cli, err := NewCLI("http://127.0.0.1:1")
+	if err != nil {
+		t.Fatalf("NewCLI() returned error with unreachable daemon: %v (want nil)", err)
+	}
+	if cli.contract == nil {
+		t.Fatal("cli.contract is nil; want non-nil empty contract")
+	}
+	if got := len(cli.contract.Commands); got != 0 {
+		t.Fatalf("cli.contract.Commands len = %d, want 0 (empty contract)", got)
+	}
+}
+
+// TestCLIWithEmptyContractDoesNotPanic drives every contract-consuming
+// CLI method against a fresh empty Contract value. Every audited call
+// site in cli.go (executeGeneratedCommand, showHelpForInput,
+// rootSuggestions, pathSuggestions, flagSuggestions, etc.) must return
+// a clean result or error rather than nil-deref panic.
+func TestCLIWithEmptyContractDoesNotPanic(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	prevStderr := os.Stderr
+	os.Stderr, _ = os.Open(os.DevNull)
+	defer func() { os.Stderr = prevStderr }()
+
+	cli, err := NewCLI("http://127.0.0.1:1")
+	if err != nil {
+		t.Fatalf("NewCLI() error = %v", err)
+	}
+
+	// rootSuggestions ranges contract.Commands; empty contract must yield
+	// builtins-only (help/exit/configure/commit/discard) without panicking.
+	got := cli.rootSuggestions()
+	for _, s := range got {
+		if s.Text == "show" || s.Text == "set" || s.Text == "exec" {
+			t.Fatalf("rootSuggestions on empty contract included contract-derived %q", s.Text)
+		}
+	}
+
+	// suggestionsForInput on a contract-derived path must not panic on
+	// empty contract; an empty result is fine.
+	cli.suggestionsForInput("show subscriber sessions", true)
+
+	// showHelpForInput exercises matchCommand for detailed help and
+	// ranges contract.Commands for top-level help; both paths must be
+	// nil-panic-safe on empty contract.
+	captureStdout(t, func() {
+		cli.showHelpForInput("")
+		cli.showHelpForInput("show subscriber sessions")
+	})
+
+	// processCommand on an API-driven command must return a clear error
+	// (not panic, not "unrecognized command"). The ensureContract lazy
+	// reload will also fail because the daemon is still down — that's
+	// the expected path and the error message must surface that.
+	err = cli.processCommand("show subscriber sessions")
+	if err == nil {
+		t.Fatal("processCommand on API-driven command with daemon down: err = nil, want clean error")
+	}
+	if !strings.Contains(err.Error(), "northbound API unavailable") {
+		t.Fatalf("processCommand error = %q, want substring \"northbound API unavailable\"", err.Error())
+	}
+
+	// Builtins must still work.
+	if err := cli.processCommand("help"); err != nil {
+		t.Fatalf("help builtin on empty contract returned error: %v", err)
+	}
+}

@@ -49,7 +49,12 @@ func NewCLI(serverAddr string) (*CLI, error) {
 
 	contract, err := api.loadContract(ctx)
 	if err != nil {
-		return nil, err
+		fmt.Fprintf(os.Stderr,
+			"WARNING: northbound API at %s unreachable: %v\n"+
+				"         Builtins (help/exit/configure/commit/discard) work normally.\n"+
+				"         show/conf/oper commands are unavailable until the daemon is reachable.\n",
+			api.baseURLString(), err)
+		contract = NewEmptyContract()
 	}
 
 	return &CLI{
@@ -59,6 +64,20 @@ func NewCLI(serverAddr string) (*CLI, error) {
 		formatter:  NewGenericFormatter(),
 		contract:   contract,
 	}, nil
+}
+
+func (c *CLI) ensureContract(timeout time.Duration) error {
+	if len(c.contract.Commands) > 0 {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	contract, err := c.api.loadContract(ctx)
+	if err != nil {
+		return fmt.Errorf("northbound API unavailable at %s: %w", c.serverAddr, err)
+	}
+	c.contract = contract
+	return nil
 }
 
 func (c *CLI) Run() error {
@@ -226,6 +245,8 @@ func (c *CLI) handleBuiltin(invocation *Invocation) error {
 			return fmt.Errorf("usage: commit")
 		}
 		return c.commitConfig()
+	case "upgrade":
+		return c.handleUpgrade(invocation)
 	case "discard":
 		if len(invocation.PathTokens) != 1 || len(invocation.FlagTokens) != 0 {
 			return fmt.Errorf("usage: discard")
@@ -317,6 +338,10 @@ func (c *CLI) bestEffortDiscard() error {
 }
 
 func (c *CLI) executeGeneratedCommand(invocation *Invocation) error {
+	if err := c.ensureContract(2 * time.Second); err != nil {
+		return err
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
