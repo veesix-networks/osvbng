@@ -35,6 +35,7 @@ nav:
   - Get Started:
     - Intro: index.md
     - API: getting-started/api.md
+    - Upgrades: operations/upgrade.md
     - Testing & QA: qa/testing-methodology.md
   - Configuration:
     - Overview: configuration/index.md

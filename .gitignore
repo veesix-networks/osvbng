@@ -275,3 +275,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# Private signing keys — never commit. release-keys/cosign.pub IS
+# committed (that's the trust anchor); only *.key files are blocked.
+*.key
