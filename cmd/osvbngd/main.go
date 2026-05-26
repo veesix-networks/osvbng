@@ -52,8 +52,8 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/netbind"
 	"github.com/veesix-networks/osvbng/pkg/northbound"
 	"github.com/veesix-networks/osvbng/pkg/opdb/sqlite"
-	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
 	"github.com/veesix-networks/osvbng/pkg/session"
+	"github.com/veesix-networks/osvbng/pkg/southbound/vpp"
 	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/telemetry"
 	"github.com/veesix-networks/osvbng/pkg/version"
@@ -620,7 +620,7 @@ func main() {
 
 	ctx := context.Background()
 
-	stateWriter := component.NewStateFileWriter("/run/osvbng/state")
+	stateWriter := component.NewStateFileWriter("/run/osvbng/state", version.Version)
 	stateWriter.Run(ctx)
 	stateWriter.Set(component.StateFileStarting)
 	defer stateWriter.Stop()
@@ -648,10 +648,22 @@ func main() {
 		log.Fatalf("Failed waiting for components to be ready: %v", err)
 	}
 
-	// Poll AllReady() and update the state file as recovery
-	// goroutines complete. Also flips back to degraded if a component
-	// fault transitions us out of all-ready in steady state.
-	go component.TrackReadiness(ctx, stateWriter, orch, 500*time.Millisecond)
+	// Poll AllReady() and update the state file as recovery goroutines
+	// complete. Also flips back to degraded if a component fault
+	// transitions us out of all-ready in steady state.
+	//
+	// The tracker owns "ready" and "degraded" writes; the daemon's
+	// lifecycle owns "starting", "restoring", and "stopping". They share
+	// the state file, so on shutdown the tracker must exit before the
+	// orchestrator drops components — otherwise AllReady() flips false
+	// as components stop and the tracker writes "degraded" right on top
+	// of the "stopping" the shutdown sequence just published.
+	trackerCtx, cancelTracker := context.WithCancel(ctx)
+	trackerDone := make(chan struct{})
+	go func() {
+		component.TrackReadiness(trackerCtx, stateWriter, orch, 500*time.Millisecond)
+		close(trackerDone)
+	}()
 
 	mainLog.Info("osvbng started successfully")
 
@@ -660,6 +672,8 @@ func main() {
 	<-sigCh
 
 	mainLog.Info("Shutting down osvbng...")
+	cancelTracker()
+	<-trackerDone
 	stateWriter.Set(component.StateFileStopping)
 
 	if err := orch.Stop(ctx); err != nil {

@@ -259,6 +259,107 @@ func TestWaitHealthyProgressResetsStall(t *testing.T) {
 	}
 }
 
+func TestWaitHealthyIgnoresStaleStateWithVersionMismatch(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state")
+	// Old daemon's last write before exit — would normally trip
+	// HealthDegraded immediately, but the version mismatch flags it
+	// as stale and the poll continues.
+	writeStateFileVersion(t, statePath, "degraded", 5, "0.13.0-rc2")
+
+	fake := &fakeCommander{scripts: []fakeResp{
+		{matchName: "systemctl", out: "ActiveState=active\nSubState=running\nResult=success\n"},
+	}}
+	sv := &Supervisor{Unit: "osvbng.service", DropInRoot: t.TempDir(), Cmd: fake}
+
+	clk := newClock(time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC))
+	hc := &HealthChecker{
+		Supervisor:      sv,
+		StateFilePath:   statePath,
+		ExpectedVersion: "0.13.0-rc3",
+		OverallTimeout:  30 * time.Second,
+		PollInterval:    1 * time.Second,
+		Now:             clk.Now,
+		Sleep: func(d time.Duration) {
+			clk.Advance(d)
+			// New daemon publishes its first state two polls in.
+			if clk.Now().Sub(time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)) >= 2*time.Second {
+				writeStateFileVersion(t, statePath, "ready", 1, "0.13.0-rc3")
+			}
+		},
+	}
+
+	res, msg, _ := hc.WaitHealthy(context.Background())
+	if res != HealthOK {
+		t.Fatalf("res = %v (%s), want HealthOK after version match", res, msg)
+	}
+}
+
+func TestWaitHealthyEmptyExpectedVersionFallsBackToStateRules(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state")
+	// State file has no version field. With ExpectedVersion unset the
+	// poller must keep the pre-version-tracking behaviour.
+	writeStateFile(t, statePath, "ready", 1)
+
+	fake := &fakeCommander{scripts: []fakeResp{
+		{matchName: "systemctl", out: "ActiveState=active\nSubState=running\nResult=success\n"},
+	}}
+	sv := &Supervisor{Unit: "osvbng.service", DropInRoot: t.TempDir(), Cmd: fake}
+
+	hc := &HealthChecker{Supervisor: sv, StateFilePath: statePath}
+	res, msg, _ := hc.WaitHealthy(context.Background())
+	if res != HealthOK {
+		t.Fatalf("res = %v (%s), want HealthOK with no ExpectedVersion", res, msg)
+	}
+}
+
+func TestWaitHealthyEmptyStateVersionWithExpectedIsStale(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state")
+	// Pre-version-tracking daemon's "ready" state must NOT short-circuit
+	// an upgrade whose expected version is set — that file is from the
+	// outgoing daemon. Force a timeout to prove the gate holds.
+	writeStateFile(t, statePath, "ready", 1)
+
+	fake := &fakeCommander{scripts: []fakeResp{
+		{matchName: "systemctl", out: "ActiveState=active\nSubState=running\nResult=success\n"},
+	}}
+	sv := &Supervisor{Unit: "osvbng.service", DropInRoot: t.TempDir(), Cmd: fake}
+
+	clk := newClock(time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC))
+	hc := &HealthChecker{
+		Supervisor:      sv,
+		StateFilePath:   statePath,
+		ExpectedVersion: "0.13.0-rc3",
+		OverallTimeout:  3 * time.Second,
+		PollInterval:    1 * time.Second,
+		Now:             clk.Now,
+		Sleep:           func(d time.Duration) { clk.Advance(d) },
+	}
+
+	res, _, _ := hc.WaitHealthy(context.Background())
+	if res != HealthTimeout {
+		t.Fatalf("res = %v, want HealthTimeout (empty state version must be treated as stale)", res)
+	}
+}
+
+func writeStateFileVersion(t *testing.T, path, state string, sequence uint64, version string) {
+	t.Helper()
+	payload, err := json.Marshal(struct {
+		State     string    `json:"state"`
+		Sequence  uint64    `json:"sequence"`
+		UpdatedAt time.Time `json:"updated_at"`
+		Version   string    `json:"version,omitempty"`
+	}{State: state, Sequence: sequence, UpdatedAt: time.Now().UTC(), Version: version})
+	if err != nil {
+		t.Fatalf("marshal state: %v", err)
+	}
+	if err := os.WriteFile(path, payload, 0o644); err != nil {
+		t.Fatalf("write state file: %v", err)
+	}
+}
+
 func TestWaitHealthyTreatsStoppingAsTransitional(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "state")
