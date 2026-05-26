@@ -245,6 +245,8 @@ func (c *CLI) handleBuiltin(invocation *Invocation) error {
 			return fmt.Errorf("usage: commit")
 		}
 		return c.commitConfig()
+	case "upgrade":
+		return c.handleUpgrade(invocation)
 	case "discard":
 		if len(invocation.PathTokens) != 1 || len(invocation.FlagTokens) != 0 {
 			return fmt.Errorf("usage: discard")
