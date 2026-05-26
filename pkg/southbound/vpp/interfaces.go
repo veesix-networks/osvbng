@@ -944,6 +944,15 @@ func (v *VPP) createBondInterface(cfg *interfaces.InterfaceConfig) error {
 		return fmt.Errorf("invalid bond config for %s: %w", cfg.Name, err)
 	}
 
+	// Check if bond already exists in VPP
+	if existing := v.ifMgr.GetByName(cfg.Name); existing != nil {
+		if existing.DevType != "bond" {
+			return fmt.Errorf("bond %q conflicts with existing %s interface", cfg.Name, existing.DevType)
+		}
+		v.logger.Info("Bond already exists in VPP, skipping creation", "interface", cfg.Name, "sw_if_index", existing.SwIfIndex)
+		return nil
+	}
+
 	for _, member := range cfg.Bond.Members {
 		iface := v.ifMgr.GetByName(member.Name)
 		if iface == nil {
