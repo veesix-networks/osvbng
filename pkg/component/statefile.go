@@ -37,6 +37,12 @@ type StateFilePayload struct {
 	State     string    `json:"state"`
 	Sequence  uint64    `json:"sequence"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// Version is the running daemon's pkg/version.Version. The upgrade
+	// health-poll uses this to distinguish a new daemon's writes from a
+	// previous daemon's stale state during the post-swap race window —
+	// otherwise the poller can read the outgoing daemon's last write and
+	// short-circuit before the new daemon publishes.
+	Version string `json:"version,omitempty"`
 }
 
 // StateFileWriter is a single-goroutine writer for /run/osvbng/state.
@@ -48,11 +54,12 @@ type StateFilePayload struct {
 // Set on a stopped writer is a no-op so callers do not need to track
 // the lifecycle precisely.
 type StateFileWriter struct {
-	path string
-	mu   sync.Mutex
-	ch   chan string
-	done chan struct{}
-	seq  uint64
+	path    string
+	version string
+	mu      sync.Mutex
+	ch      chan string
+	done    chan struct{}
+	seq     uint64
 
 	startOnce sync.Once
 	stopOnce  sync.Once
@@ -60,19 +67,25 @@ type StateFileWriter struct {
 	stopped   bool
 }
 
-// NewStateFileWriter returns a writer bound to a path. The parent
-// directory must exist before Run is called — osvbng.service uses
-// `RuntimeDirectory=osvbng` so systemd handles /run/osvbng/ lifecycle
-// automatically; the writer does not MkdirAll.
+// NewStateFileWriter returns a writer bound to a path, stamping the
+// supplied version into every write so external readers (the upgrade
+// health-poll) can tell which daemon process owns the on-disk state.
+// Pass "" to omit the version field — tests and pre-version-tracking
+// callers may rely on that.
+//
+// The parent directory must exist before Run is called — osvbng.service
+// uses `RuntimeDirectory=osvbng` so systemd handles /run/osvbng/
+// lifecycle automatically; the writer does not MkdirAll.
 //
 // Bufsize controls the channel capacity. The default (8) is enough for
 // the small number of transitions that happen in a normal lifecycle;
 // callers in a hot path should not be calling Set directly.
-func NewStateFileWriter(path string) *StateFileWriter {
+func NewStateFileWriter(path, version string) *StateFileWriter {
 	return &StateFileWriter{
-		path: path,
-		ch:   make(chan string, 8),
-		done: make(chan struct{}),
+		path:    path,
+		version: version,
+		ch:      make(chan string, 8),
+		done:    make(chan struct{}),
 	}
 }
 
@@ -146,6 +159,7 @@ func (w *StateFileWriter) write(state string) {
 		State:     state,
 		Sequence:  w.seq,
 		UpdatedAt: time.Now().UTC(),
+		Version:   w.version,
 	}
 	w.mu.Unlock()
 
