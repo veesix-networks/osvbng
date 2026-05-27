@@ -7,6 +7,90 @@ Carrier-Grade NAT enables multiple subscribers to share a smaller pool of public
 
 CGNAT is assigned to subscribers through [subscriber groups](subscriber-groups.md) or [service groups](service-groups.md), and can be overridden per subscriber via AAA.
 
+## Outside interfaces
+
+Each pool declares its own `outside_interfaces`: the L3 interface(s) facing the upstream network. The listed interfaces resolve to a single outside VRF (FIB table) per pool, which the CGNAT plugin uses to install return-direction FIB entries for that pool's outside prefixes. Within a single pool, all listed interfaces must share the same VRF.
+
+Different pools may use different outside VRFs, which is what enables wholesale CGNAT.
+
+### Single uplink
+
+```yaml
+cgnat:
+  pools:
+    residential:
+      outside_interfaces:
+        - eth2
+      mode: pba
+      inside-prefixes:
+        - prefix: 100.64.0.0/16
+      outside-addresses:
+        - 203.0.113.0/28
+```
+
+### Multiple uplinks for one pool (ECMP / VPC topology)
+
+For deployments with two L3 subinterfaces on a LAG facing a VPC / MC-LAG peer pair (each running its own OSPF adjacency to a different upstream SVI), list both subinterfaces under the pool. Both must be in the same VRF so OSPF can ECMP across them and the upstream switches can hash return traffic onto either link.
+
+```yaml
+cgnat:
+  pools:
+    residential:
+      outside_interfaces:
+        - bond0.100
+        - bond0.101
+      mode: pba
+      inside-prefixes:
+        - prefix: 100.64.0.0/16
+      outside-addresses:
+        - 203.0.113.0/28
+```
+
+Return traffic is classified by destination match against the pool's outside prefixes installed in the outside VRF, not by ingress interface. Asymmetric replies (forward out one subinterface, reply back on the other) are handled automatically by the 5-tuple session lookup.
+
+### Wholesale CGNAT (multiple ISP customers)
+
+Hosting NAT services for multiple downstream ISP customers — each with their own inside VRF, public address allocation, and upstream peering — is expressed as one pool per customer. Inside-VRF isolation lets overlapping subscriber address space (e.g. each ISP using 100.64.0.0/16) coexist; outside-VRF isolation lets each ISP's pool addresses be advertised only to that ISP's transit.
+
+```yaml
+cgnat:
+  pools:
+    ispA:
+      outside_interfaces:
+        - bond0.100
+        - bond0.101
+      mode: pba
+      inside-prefixes:
+        - prefix: 100.64.0.0/16
+          vrf: ispA-inside
+      outside-addresses:
+        - 203.0.113.0/24
+    ispB:
+      outside_interfaces:
+        - bond0.200
+        - bond0.201
+      mode: pba
+      inside-prefixes:
+        - prefix: 100.64.0.0/16
+          vrf: ispB-inside
+      outside-addresses:
+        - 198.51.100.0/24
+```
+
+The CGNAT plugin keys mappings on `(inside_ip, inside_fib_index)` and stores per-pool outside FIB indices, so sessions from ISP A and ISP B are isolated end-to-end even with overlapping inside addresses. Subscribers map to a specific pool via [subscriber groups](subscriber-groups.md) or [service groups](service-groups.md).
+
+An outside interface may appear in more than one pool's list, but only if those pools target the same outside VRF.
+
+### Validation
+
+osvbng rejects the configuration at startup if:
+
+- Any configured pool is missing `outside_interfaces`.
+- A pool's listed interfaces resolve to different VRFs.
+- An outside interface in any pool is also a subscriber access interface (subscriber and outside roles must not overlap on the same physical interface).
+- A pool's `outside-addresses` overlap with an IP address owned by a local interface (the BNG's own control-plane traffic would otherwise be intercepted by the NAT path).
+- A legacy top-level `outside_interface` or `outside_interfaces` field is set (the field moved into each pool block).
+
 ## Pools
 
 Pools define the translation parameters: which subscriber address ranges to translate, which public addresses to use, and how ports are allocated.
@@ -177,6 +261,8 @@ curl -X POST http://localhost:8080/api/oper/cgnat/test-mapping -d '{"inside_ip":
 cgnat:
   pools:
     residential:
+      outside_interfaces:
+        - eth2
       mode: pba
       inside-prefixes:
         - prefix: 100.64.0.0/16

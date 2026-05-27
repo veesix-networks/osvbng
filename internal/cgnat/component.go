@@ -206,38 +206,135 @@ func (c *Component) configurePools(cfg *cgnat.Config) error {
 }
 
 func (c *Component) setupOutsideInterfaces(cfg *config.Config) error {
-	var outsideIfName string
-	if cfg.CGNAT != nil {
-		outsideIfName = cfg.CGNAT.OutsideInterface
-	}
-	if outsideIfName == "" {
-		c.logger.Warn("No cgnat.outside_interface configured, outside VRF not set")
+	if cfg.CGNAT == nil || len(cfg.CGNAT.Pools) == 0 {
 		return nil
 	}
 
-	swIfIndex, ok := c.ifMgr.GetSwIfIndex(outsideIfName)
-	if !ok {
-		return fmt.Errorf("cgnat outside interface %s not found in dataplane", outsideIfName)
-	}
-
-	iface := c.ifMgr.Get(swIfIndex)
-
-	var vrfTableID uint32
-	if iface != nil {
-		vrfTableID = iface.FIBTableID
-	}
-
-	for poolName, poolID := range c.poolIDMap {
-		if err := c.dataplane.CGNATSetOutsideVRF(poolID, vrfTableID); err != nil {
-			return fmt.Errorf("set outside VRF for pool %s: %w", poolName, err)
+	for poolName, pool := range cfg.CGNAT.Pools {
+		if pool == nil {
+			continue
 		}
 
+		vrfTableID, err := c.resolveOutsideVRF(poolName, pool.OutsideInterfaces)
+		if err != nil {
+			return err
+		}
+
+		if err := c.rejectOutsideSubscriberOverlap(cfg, poolName, pool.OutsideInterfaces); err != nil {
+			return err
+		}
+
+		if err := c.rejectLocalAddressOverlap(poolName, pool); err != nil {
+			return err
+		}
+
+		poolID, ok := c.poolIDMap[poolName]
+		if !ok {
+			return fmt.Errorf("cgnat: pool %q: not registered in poolIDMap (configurePools must run first)", poolName)
+		}
+		if err := c.dataplane.CGNATSetOutsideVRF(poolID, vrfTableID); err != nil {
+			return fmt.Errorf("cgnat: pool %q: set outside VRF: %w", poolName, err)
+		}
 		c.logger.Info("Outside VRF configured",
 			"pool", poolName,
-			"interface", outsideIfName,
+			"interfaces", pool.OutsideInterfaces,
 			"vrf_table_id", vrfTableID)
 	}
 
+	return nil
+}
+
+func (c *Component) resolveOutsideVRF(poolName string, names []string) (uint32, error) {
+	var (
+		vrfTableID uint32
+		anchorName string
+		first      = true
+	)
+	for _, name := range names {
+		swIfIndex, ok := c.ifMgr.GetSwIfIndex(name)
+		if !ok {
+			return 0, fmt.Errorf("cgnat: pool %q: outside interface %q not found in dataplane", poolName, name)
+		}
+		iface := c.ifMgr.Get(swIfIndex)
+		var tableID uint32
+		if iface != nil {
+			tableID = iface.FIBTableID
+		}
+		if first {
+			vrfTableID = tableID
+			anchorName = name
+			first = false
+			continue
+		}
+		if tableID != vrfTableID {
+			return 0, fmt.Errorf("cgnat: pool %q: outside_interfaces span multiple VRFs (got table %d for %q, table %d for %q); a pool's outside interfaces must share one VRF for ECMP",
+				poolName, vrfTableID, anchorName, tableID, name)
+		}
+	}
+	return vrfTableID, nil
+}
+
+func (c *Component) rejectOutsideSubscriberOverlap(cfg *config.Config, poolName string, outsideNames []string) error {
+	if cfg.SubscriberGroups == nil {
+		return nil
+	}
+	outsideSet := make(map[string]struct{}, len(outsideNames))
+	for _, n := range outsideNames {
+		outsideSet[n] = struct{}{}
+	}
+	for groupName, group := range cfg.SubscriberGroups.Groups {
+		if group == nil {
+			continue
+		}
+		for _, vr := range group.VLANs {
+			if vr.ParentInterface == "" {
+				continue
+			}
+			if _, hit := outsideSet[vr.ParentInterface]; hit {
+				return fmt.Errorf("cgnat: pool %q: outside interface %q is also a subscriber access interface (parent of subscriber-group %q); subscriber and outside roles must not overlap",
+					poolName, vr.ParentInterface, groupName)
+			}
+		}
+	}
+	return nil
+}
+
+func (c *Component) rejectLocalAddressOverlap(poolName string, pool *cgnat.Pool) error {
+	var prefixes []*net.IPNet
+	for _, addrStr := range pool.OutsideAddresses {
+		_, prefix, err := net.ParseCIDR(addrStr)
+		if err != nil {
+			ip := net.ParseIP(addrStr)
+			if ip == nil {
+				continue
+			}
+			prefix = &net.IPNet{IP: ip.To4(), Mask: net.CIDRMask(32, 32)}
+		}
+		prefixes = append(prefixes, prefix)
+	}
+	if len(prefixes) == 0 {
+		return nil
+	}
+	for _, iface := range c.ifMgr.List() {
+		if iface == nil {
+			continue
+		}
+		for _, addr := range iface.IPv4Addresses {
+			if addr == nil {
+				continue
+			}
+			v4 := addr.To4()
+			if v4 == nil {
+				continue
+			}
+			for _, prefix := range prefixes {
+				if prefix.Contains(v4) {
+					return fmt.Errorf("cgnat: pool %q: outside prefix %s overlaps with locally-owned address %s on %s; the DPO redirect would catch the BNG's own control-plane reply traffic and break it",
+						poolName, prefix.String(), v4.String(), iface.Name)
+				}
+			}
+		}
+	}
 	return nil
 }
 

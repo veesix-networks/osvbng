@@ -3,9 +3,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 cgnat:
-  outside_interface: eth2
   pools:
     residential:
+      outside_interfaces:
+        - eth2
       mode: deterministic
       inside-prefixes:
         - prefix: 100.64.0.0/16

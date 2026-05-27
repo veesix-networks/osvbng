@@ -7,23 +7,46 @@ package cgnat
 import "fmt"
 
 type Config struct {
-	Standalone       bool             `json:"standalone,omitempty" yaml:"standalone,omitempty"`
-	OutsideInterface string           `json:"outside_interface,omitempty" yaml:"outside_interface,omitempty"`
-	Pools            map[string]*Pool `json:"pools,omitempty" yaml:"pools,omitempty"`
-	Logging          *LoggingConfig   `json:"logging,omitempty" yaml:"logging,omitempty"`
+	Standalone                bool             `json:"standalone,omitempty" yaml:"standalone,omitempty"`
+	LegacyOutsideInterfaces   []string         `json:"outside_interfaces,omitempty" yaml:"outside_interfaces,omitempty"`
+	LegacyOutsideInterface    *string          `json:"outside_interface,omitempty" yaml:"outside_interface,omitempty"`
+	Pools                     map[string]*Pool `json:"pools,omitempty" yaml:"pools,omitempty"`
+	Logging                   *LoggingConfig   `json:"logging,omitempty" yaml:"logging,omitempty"`
 }
 
 func (c *Config) Validate() error {
 	if c == nil {
 		return nil
 	}
-	if len(c.Pools) > 0 && c.OutsideInterface == "" {
-		return fmt.Errorf("cgnat: outside_interface is required when pools are configured")
+	if c.LegacyOutsideInterface != nil {
+		return fmt.Errorf("cgnat: outside_interface (string) has been replaced by per-pool outside_interfaces (list); move it under each pool block")
+	}
+	if len(c.LegacyOutsideInterfaces) > 0 {
+		return fmt.Errorf("cgnat: outside_interfaces at the top level has moved into each pool block; move 'outside_interfaces: [...]' under 'cgnat.pools.<name>.outside_interfaces' for each pool")
+	}
+	for name, pool := range c.Pools {
+		if pool == nil {
+			continue
+		}
+		if len(pool.OutsideInterfaces) == 0 {
+			return fmt.Errorf("cgnat: pool %q: outside_interfaces is required", name)
+		}
+		seen := make(map[string]struct{}, len(pool.OutsideInterfaces))
+		for i, entry := range pool.OutsideInterfaces {
+			if entry == "" {
+				return fmt.Errorf("cgnat: pool %q: outside_interfaces[%d]: empty interface name", name, i)
+			}
+			if _, dup := seen[entry]; dup {
+				return fmt.Errorf("cgnat: pool %q: outside_interfaces: duplicate entry %q", name, entry)
+			}
+			seen[entry] = struct{}{}
+		}
 	}
 	return nil
 }
 
 type Pool struct {
+	OutsideInterfaces        []string       `json:"outside_interfaces,omitempty" yaml:"outside_interfaces,omitempty"`
 	Mode                     string         `json:"mode,omitempty" yaml:"mode,omitempty"`
 	AutoConfigure            bool           `json:"auto-configure,omitempty" yaml:"auto-configure,omitempty"`
 	InsidePrefixes           []InsidePrefix `json:"inside-prefixes,omitempty" yaml:"inside-prefixes,omitempty"`
