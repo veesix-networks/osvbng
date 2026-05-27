@@ -77,6 +77,29 @@ func (v *VPP) CGNATPoolAddDel(poolID uint32, mode uint8, addressPooling uint8,
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
 		return fmt.Errorf("pool add/del: %w", err)
 	}
+
+	if isAdd && reply.Retval == retvalEntryNeedsRefresh {
+		v.logger.Info("CGNAT pool params hard-drifted; replacing",
+			"pool_id", poolID)
+		delReq := *req
+		delReq.IsAdd = false
+		delReply := &osvbng_cgnat.OsvbngCgnatPoolAddDelReply{}
+		if err := ch.SendRequest(&delReq).ReceiveReply(delReply); err != nil {
+			return fmt.Errorf("pool refresh: del: %w", err)
+		}
+		if delReply.Retval != 0 {
+			return fmt.Errorf("pool refresh: del retval=%d", delReply.Retval)
+		}
+		reply = &osvbng_cgnat.OsvbngCgnatPoolAddDelReply{}
+		if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+			return fmt.Errorf("pool refresh: re-add: %w", err)
+		}
+		if reply.Retval != 0 {
+			return fmt.Errorf("pool refresh: re-add retval=%d", reply.Retval)
+		}
+		return nil
+	}
+
 	if reply.Retval != 0 {
 		return fmt.Errorf("pool add/del failed: retval=%d", reply.Retval)
 	}
@@ -403,6 +426,123 @@ func (v *VPP) CGNATAddDelBypass(prefix net.IPNet, vrfID uint32, isAdd bool) erro
 		return fmt.Errorf("bypass failed: retval=%d", reply.Retval)
 	}
 	return nil
+}
+
+func (v *VPP) CGNATPoolDump() ([]southbound.CGNATPoolState, error) {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return nil, fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	req := &osvbng_cgnat.OsvbngCgnatPoolDump{PoolID: ^uint32(0)}
+	var results []southbound.CGNATPoolState
+	multi := ch.SendMultiRequest(req)
+	for {
+		d := &osvbng_cgnat.OsvbngCgnatPoolDetails{}
+		stop, err := multi.ReceiveReply(d)
+		if stop {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("receive pool details: %w", err)
+		}
+		results = append(results, southbound.CGNATPoolState{
+			PoolID:            d.PoolID,
+			Mode:              uint8(d.Mode),
+			AddressPooling:    uint8(d.AddressPooling),
+			Filtering:         uint8(d.Filtering),
+			BlockSize:         d.BlockSize,
+			MaxBlocksPerSub:   d.MaxBlocksPerSub,
+			MaxSessionsPerSub: d.MaxSessionsPerSub,
+			PortRangeStart:    d.PortRangeStart,
+			PortRangeEnd:      d.PortRangeEnd,
+			PortReuseTimeout:  d.PortReuseTimeout,
+			ALGBitmask:        d.AlgBitmask,
+			Timeouts: [4]uint32{
+				d.Timeouts.TCPEstablished,
+				d.Timeouts.TCPTransitory,
+				d.Timeouts.UDP,
+				d.Timeouts.ICMP,
+			},
+			OutsideVRFTableID: d.OutsideVrfTableID,
+			ActiveMappings:    d.ActiveMappings,
+		})
+	}
+	return results, nil
+}
+
+func (v *VPP) CGNATPoolInsidePrefixDump(poolID uint32) ([]southbound.CGNATInsidePrefixState, error) {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return nil, fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	filter := poolID
+	if filter == 0 {
+		filter = ^uint32(0)
+	}
+	req := &osvbng_cgnat.OsvbngCgnatPoolInsidePrefixDump{PoolID: filter}
+	var results []southbound.CGNATInsidePrefixState
+	multi := ch.SendMultiRequest(req)
+	for {
+		d := &osvbng_cgnat.OsvbngCgnatPoolInsidePrefixDetails{}
+		stop, err := multi.ReceiveReply(d)
+		if stop {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("receive inside-prefix details: %w", err)
+		}
+		var v4 net.IP
+		if d.Prefix.Address.Af == ip_types.ADDRESS_IP4 {
+			a := d.Prefix.Address.Un.GetIP4()
+			v4 = net.IP(a[:]).To4()
+		}
+		results = append(results, southbound.CGNATInsidePrefixState{
+			PoolID: d.PoolID,
+			Prefix: net.IPNet{IP: v4, Mask: net.CIDRMask(int(d.Prefix.Len), 32)},
+			VRFID:  d.VrfID,
+		})
+	}
+	return results, nil
+}
+
+func (v *VPP) CGNATPoolOutsideAddressDump(poolID uint32) ([]southbound.CGNATOutsideAddressState, error) {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return nil, fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	filter := poolID
+	if filter == 0 {
+		filter = ^uint32(0)
+	}
+	req := &osvbng_cgnat.OsvbngCgnatPoolOutsideAddressDump{PoolID: filter}
+	var results []southbound.CGNATOutsideAddressState
+	multi := ch.SendMultiRequest(req)
+	for {
+		d := &osvbng_cgnat.OsvbngCgnatPoolOutsideAddressDetails{}
+		stop, err := multi.ReceiveReply(d)
+		if stop {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("receive outside-address details: %w", err)
+		}
+		var v4 net.IP
+		if d.Prefix.Address.Af == ip_types.ADDRESS_IP4 {
+			a := d.Prefix.Address.Un.GetIP4()
+			v4 = net.IP(a[:]).To4()
+		}
+		results = append(results, southbound.CGNATOutsideAddressState{
+			PoolID: d.PoolID,
+			Prefix: net.IPNet{IP: v4, Mask: net.CIDRMask(int(d.Prefix.Len), 32)},
+		})
+	}
+	return results, nil
 }
 
 func (v *VPP) CGNATDumpSubscriberMappings(poolID uint32) ([]southbound.CGNATMapping, error) {

@@ -12,6 +12,34 @@ type Config struct {
 	LegacyOutsideInterface    *string          `json:"outside_interface,omitempty" yaml:"outside_interface,omitempty"`
 	Pools                     map[string]*Pool `json:"pools,omitempty" yaml:"pools,omitempty"`
 	Logging                   *LoggingConfig   `json:"logging,omitempty" yaml:"logging,omitempty"`
+	Reconcile                 *ReconcileConfig `json:"reconcile,omitempty" yaml:"reconcile,omitempty"`
+}
+
+type ReconcileConfig struct {
+	OnDivergence        string `json:"on_divergence,omitempty" yaml:"on_divergence,omitempty"`
+	DropOrphans         *bool  `json:"drop_orphans,omitempty" yaml:"drop_orphans,omitempty"`
+	AllowPoolDisruption *bool  `json:"allow_pool_disruption,omitempty" yaml:"allow_pool_disruption,omitempty"`
+}
+
+func (r *ReconcileConfig) GetOnDivergence() string {
+	if r == nil || r.OnDivergence == "" {
+		return "reconcile"
+	}
+	return r.OnDivergence
+}
+
+func (r *ReconcileConfig) GetDropOrphans() bool {
+	if r == nil || r.DropOrphans == nil {
+		return true
+	}
+	return *r.DropOrphans
+}
+
+func (r *ReconcileConfig) GetAllowPoolDisruption() bool {
+	if r == nil || r.AllowPoolDisruption == nil {
+		return false
+	}
+	return *r.AllowPoolDisruption
 }
 
 func (c *Config) Validate() error {
@@ -23,6 +51,11 @@ func (c *Config) Validate() error {
 	}
 	if len(c.LegacyOutsideInterfaces) > 0 {
 		return fmt.Errorf("cgnat: outside_interfaces at the top level has moved into each pool block; move 'outside_interfaces: [...]' under 'cgnat.pools.<name>.outside_interfaces' for each pool")
+	}
+	if c.Reconcile != nil && c.Reconcile.OnDivergence != "" &&
+		c.Reconcile.OnDivergence != "reconcile" &&
+		c.Reconcile.OnDivergence != "fail" {
+		return fmt.Errorf("cgnat: reconcile.on_divergence must be \"reconcile\" or \"fail\", got %q", c.Reconcile.OnDivergence)
 	}
 	for name, pool := range c.Pools {
 		if pool == nil {

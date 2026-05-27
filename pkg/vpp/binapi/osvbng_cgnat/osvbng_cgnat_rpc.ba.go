@@ -20,6 +20,9 @@ type RPCService interface {
 	OsvbngCgnatPoolAddDel(ctx context.Context, in *OsvbngCgnatPoolAddDel) (*OsvbngCgnatPoolAddDelReply, error)
 	OsvbngCgnatPoolAddDelInsidePrefix(ctx context.Context, in *OsvbngCgnatPoolAddDelInsidePrefix) (*OsvbngCgnatPoolAddDelInsidePrefixReply, error)
 	OsvbngCgnatPoolAddDelOutsideAddress(ctx context.Context, in *OsvbngCgnatPoolAddDelOutsideAddress) (*OsvbngCgnatPoolAddDelOutsideAddressReply, error)
+	OsvbngCgnatPoolDump(ctx context.Context, in *OsvbngCgnatPoolDump) (RPCService_OsvbngCgnatPoolDumpClient, error)
+	OsvbngCgnatPoolInsidePrefixDump(ctx context.Context, in *OsvbngCgnatPoolInsidePrefixDump) (RPCService_OsvbngCgnatPoolInsidePrefixDumpClient, error)
+	OsvbngCgnatPoolOutsideAddressDump(ctx context.Context, in *OsvbngCgnatPoolOutsideAddressDump) (RPCService_OsvbngCgnatPoolOutsideAddressDumpClient, error)
 	OsvbngCgnatPoolUpdate(ctx context.Context, in *OsvbngCgnatPoolUpdate) (*OsvbngCgnatPoolUpdateReply, error)
 	OsvbngCgnatSetOutsideFib(ctx context.Context, in *OsvbngCgnatSetOutsideFib) (*OsvbngCgnatSetOutsideFibReply, error)
 	OsvbngCgnatSubscriberMappingDump(ctx context.Context, in *OsvbngCgnatSubscriberMappingDump) (RPCService_OsvbngCgnatSubscriberMappingDumpClient, error)
@@ -94,6 +97,135 @@ func (c *serviceClient) OsvbngCgnatPoolAddDelOutsideAddress(ctx context.Context,
 		return nil, err
 	}
 	return out, api.RetvalToVPPApiError(out.Retval)
+}
+
+func (c *serviceClient) OsvbngCgnatPoolDump(ctx context.Context, in *OsvbngCgnatPoolDump) (RPCService_OsvbngCgnatPoolDumpClient, error) {
+	stream, err := c.conn.NewStream(ctx)
+	if err != nil {
+		return nil, err
+	}
+	x := &serviceClient_OsvbngCgnatPoolDumpClient{stream}
+	if err := x.Stream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err = x.Stream.SendMsg(&memclnt.ControlPing{}); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type RPCService_OsvbngCgnatPoolDumpClient interface {
+	Recv() (*OsvbngCgnatPoolDetails, error)
+	api.Stream
+}
+
+type serviceClient_OsvbngCgnatPoolDumpClient struct {
+	api.Stream
+}
+
+func (c *serviceClient_OsvbngCgnatPoolDumpClient) Recv() (*OsvbngCgnatPoolDetails, error) {
+	msg, err := c.Stream.RecvMsg()
+	if err != nil {
+		return nil, err
+	}
+	switch m := msg.(type) {
+	case *OsvbngCgnatPoolDetails:
+		return m, nil
+	case *memclnt.ControlPingReply:
+		err = c.Stream.Close()
+		if err != nil {
+			return nil, err
+		}
+		return nil, io.EOF
+	default:
+		return nil, fmt.Errorf("unexpected message: %T %v", m, m)
+	}
+}
+
+func (c *serviceClient) OsvbngCgnatPoolInsidePrefixDump(ctx context.Context, in *OsvbngCgnatPoolInsidePrefixDump) (RPCService_OsvbngCgnatPoolInsidePrefixDumpClient, error) {
+	stream, err := c.conn.NewStream(ctx)
+	if err != nil {
+		return nil, err
+	}
+	x := &serviceClient_OsvbngCgnatPoolInsidePrefixDumpClient{stream}
+	if err := x.Stream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err = x.Stream.SendMsg(&memclnt.ControlPing{}); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type RPCService_OsvbngCgnatPoolInsidePrefixDumpClient interface {
+	Recv() (*OsvbngCgnatPoolInsidePrefixDetails, error)
+	api.Stream
+}
+
+type serviceClient_OsvbngCgnatPoolInsidePrefixDumpClient struct {
+	api.Stream
+}
+
+func (c *serviceClient_OsvbngCgnatPoolInsidePrefixDumpClient) Recv() (*OsvbngCgnatPoolInsidePrefixDetails, error) {
+	msg, err := c.Stream.RecvMsg()
+	if err != nil {
+		return nil, err
+	}
+	switch m := msg.(type) {
+	case *OsvbngCgnatPoolInsidePrefixDetails:
+		return m, nil
+	case *memclnt.ControlPingReply:
+		err = c.Stream.Close()
+		if err != nil {
+			return nil, err
+		}
+		return nil, io.EOF
+	default:
+		return nil, fmt.Errorf("unexpected message: %T %v", m, m)
+	}
+}
+
+func (c *serviceClient) OsvbngCgnatPoolOutsideAddressDump(ctx context.Context, in *OsvbngCgnatPoolOutsideAddressDump) (RPCService_OsvbngCgnatPoolOutsideAddressDumpClient, error) {
+	stream, err := c.conn.NewStream(ctx)
+	if err != nil {
+		return nil, err
+	}
+	x := &serviceClient_OsvbngCgnatPoolOutsideAddressDumpClient{stream}
+	if err := x.Stream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err = x.Stream.SendMsg(&memclnt.ControlPing{}); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type RPCService_OsvbngCgnatPoolOutsideAddressDumpClient interface {
+	Recv() (*OsvbngCgnatPoolOutsideAddressDetails, error)
+	api.Stream
+}
+
+type serviceClient_OsvbngCgnatPoolOutsideAddressDumpClient struct {
+	api.Stream
+}
+
+func (c *serviceClient_OsvbngCgnatPoolOutsideAddressDumpClient) Recv() (*OsvbngCgnatPoolOutsideAddressDetails, error) {
+	msg, err := c.Stream.RecvMsg()
+	if err != nil {
+		return nil, err
+	}
+	switch m := msg.(type) {
+	case *OsvbngCgnatPoolOutsideAddressDetails:
+		return m, nil
+	case *memclnt.ControlPingReply:
+		err = c.Stream.Close()
+		if err != nil {
+			return nil, err
+		}
+		return nil, io.EOF
+	default:
+		return nil, fmt.Errorf("unexpected message: %T %v", m, m)
+	}
 }
 
 func (c *serviceClient) OsvbngCgnatPoolUpdate(ctx context.Context, in *OsvbngCgnatPoolUpdate) (*OsvbngCgnatPoolUpdateReply, error) {
