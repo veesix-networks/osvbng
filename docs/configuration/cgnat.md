@@ -310,3 +310,46 @@ ipv4-profiles:
     dhcp:
       lease-time: 3600
 ```
+
+## Restart reconciliation
+
+On `osvbngd` start the CGNAT component reconciles VPP's running pool / inside-prefix / outside-address state against the declared YAML. Each pool is processed as a per-pool transaction (parent then children) and a post-apply re-dump verifies convergence before the daemon proceeds.
+
+| Class | What | Default policy |
+|-------|------|----------------|
+| Missing in VPP | Pool / prefix / address in YAML, not in VPP | Add |
+| Identical | Pool / prefix / address in both, same params | No-op |
+| Soft drift | Pool params differ on `timeouts`, `max-sessions-per-subscriber`, ALG bitmask, `port-reuse-timeout` | Plugin updates in place, mappings preserved |
+| Hard drift | Pool params differ on `mode`, `block-size`, `port-range`, `address-pooling`, `filtering`; or outside-VRF flip | Replace (del + add) — drops active mappings |
+| Orphan in VPP | Pool / prefix / address VPP has but no YAML entry | Remove |
+
+### Reconcile block
+
+```yaml
+cgnat:
+  reconcile:
+    on_divergence: reconcile      # reconcile (default) | fail
+    drop_orphans: true            # bool (default true)
+    allow_pool_disruption: false  # bool (default false)
+```
+
+- **`on_divergence: fail`** — apply reconcile actions, log every divergence, then return error from `Start()`. Useful in high-assurance environments where any drift is treated as a bug. Note: this is converge-and-notify, not preflight-fail-no-change.
+- **`drop_orphans: false`** — VPP-only entries are kept (with WARN). Useful during brownfield migration when another tool may own some entries.
+- **`allow_pool_disruption: false`** *(default)* — any reconcile action that would drop active subscriber NAT state aborts `Start()` with an actionable error naming the affected pools and mapping counts. Operator must explicitly set `true` (or schedule a maintenance window) to apply destructive changes. This is the safety gate that prevents an innocent-looking `block-size` edit from dropping a production-load of subscribers on restart.
+
+### Operator workflow for a destructive change
+
+```
+1. Edit cgnat.pools.<name>.block-size in osvbng.yaml.
+2. systemctl restart osvbng
+   → Daemon refuses to start, journalctl shows:
+     "cgnat: reconcile: refusing to disrupt active subscriber NAT state.
+      Set cgnat.reconcile.allow_pool_disruption: true to proceed..."
+3. Schedule maintenance window. Set cgnat.reconcile.allow_pool_disruption: true.
+4. systemctl restart osvbng
+   → Daemon WARN-logs "replace pool" with drift_fields and dropped_mappings count.
+   → New mappings allocate under the new block size.
+5. Optionally remove allow_pool_disruption from the config after.
+```
+
+
