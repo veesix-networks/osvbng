@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"net"
+	"strings"
 
 	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/config/cgnat"
@@ -408,6 +409,14 @@ func buildDesiredOutside(desiredPools map[string]*cgnat.Pool, desiredIDByName ma
 	return out
 }
 
+func isNoSuchEntry(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "No such entry") || strings.Contains(s, "retval=-6")
+}
+
 func parseOutsideAddr(s string) *net.IPNet {
 	if _, n, err := net.ParseCIDR(s); err == nil {
 		return n
@@ -432,9 +441,15 @@ func reconcileChildren(deps reconcileDeps, plans []poolPlan, desiredPools map[st
 	actualOutside []southbound.CGNATOutsideAddressState, rc *cgnat.ReconcileConfig) error {
 
 	replacedOrAddedPool := make(map[uint32]bool)
+	droppedPool := make(map[uint32]bool)
 	for _, plan := range plans {
-		if plan.action == poolActionAdd || plan.action == poolActionReplace {
+		switch plan.action {
+		case poolActionAdd, poolActionReplace:
 			replacedOrAddedPool[plan.poolID] = true
+		case poolActionDrop:
+			if rc.GetDropOrphans() {
+				droppedPool[plan.poolID] = true
+			}
 		}
 	}
 
@@ -469,7 +484,13 @@ func reconcileChildren(deps reconcileDeps, plans []poolPlan, desiredPools map[st
 			if replacedOrAddedPool[k.poolID] {
 				continue
 			}
+			if droppedPool[k.poolID] {
+				continue
+			}
 			if err := deps.dp.CGNATPoolAddInsidePrefix(k.poolID, pfx, k.vrfID, false); err != nil {
+				if isNoSuchEntry(err) {
+					continue
+				}
 				return fmt.Errorf("drop orphan inside-prefix pool=%d %s: %w", k.poolID, pfx.String(), err)
 			}
 			if deps.log != nil {
@@ -508,7 +529,13 @@ func reconcileChildren(deps reconcileDeps, plans []poolPlan, desiredPools map[st
 			if replacedOrAddedPool[k.poolID] {
 				continue
 			}
+			if droppedPool[k.poolID] {
+				continue
+			}
 			if err := deps.dp.CGNATPoolAddOutsideAddress(k.poolID, pfx, false); err != nil {
+				if isNoSuchEntry(err) {
+					continue
+				}
 				return fmt.Errorf("drop orphan outside-address pool=%d %s: %w", k.poolID, pfx.String(), err)
 			}
 			if deps.log != nil {
