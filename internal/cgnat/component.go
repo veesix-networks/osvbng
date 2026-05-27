@@ -42,7 +42,6 @@ type Component struct {
 
 	poolIDMap      map[string]uint32
 	sessionPoolMap map[string]string
-	nextPoolID     uint32
 
 	lifecycleSub   events.Subscription
 	programmedSub  events.Subscription
@@ -86,8 +85,8 @@ func (c *Component) Start(ctx context.Context) error {
 
 	c.SetReadyState(component.StateRestoring)
 
-	if err := c.configurePools(cfg.CGNAT); err != nil {
-		return fmt.Errorf("configure pools: %w", err)
+	if err := c.reconcile(ctx, cfg); err != nil {
+		return fmt.Errorf("reconcile: %w", err)
 	}
 
 	if err := c.setupOutsideInterfaces(cfg); err != nil {
@@ -125,83 +124,6 @@ func (c *Component) Stop(ctx context.Context) error {
 		c.restoredSub.Unsubscribe()
 	}
 	c.StopContext()
-	return nil
-}
-
-func (c *Component) configurePools(cfg *cgnat.Config) error {
-	for name, poolCfg := range cfg.Pools {
-		c.nextPoolID++
-		poolID := c.nextPoolID
-		c.poolIDMap[name] = poolID
-
-		if err := c.pools.ConfigurePool(name, poolID, poolCfg); err != nil {
-			return fmt.Errorf("pool %s: %w", name, err)
-		}
-
-		var mode uint8
-		if poolCfg.GetMode() == "deterministic" {
-			mode = 1
-		}
-		var addrPooling uint8
-		if poolCfg.GetAddressPooling() == "arbitrary" {
-			addrPooling = 1
-		}
-		var filtering uint8
-		if poolCfg.GetFiltering() == "endpoint-dependent" {
-			filtering = 1
-		}
-
-		timeouts := poolCfg.GetTimeouts()
-		t := [4]uint32{timeouts.TCPEstablished, timeouts.TCPTransitory, timeouts.UDP, timeouts.ICMP}
-
-		if err := c.dataplane.CGNATPoolAddDel(poolID, mode, addrPooling, filtering,
-			poolCfg.GetBlockSize(), poolCfg.GetMaxBlocksPerSubscriber(),
-			poolCfg.GetMaxSessionsPerSubscriber(), poolCfg.GetPortRangeStart(),
-			poolCfg.GetPortRangeEnd(), poolCfg.GetPortReuseTimeout(),
-			poolCfg.GetALGBitmask(), t, true); err != nil {
-			return fmt.Errorf("pool add %s: %w", name, err)
-		}
-
-		for _, prefix := range poolCfg.InsidePrefixes {
-			_, ipNet, err := net.ParseCIDR(prefix.Prefix)
-			if err != nil {
-				return fmt.Errorf("pool %s inside prefix %s: %w", name, prefix.Prefix, err)
-			}
-			vrfID := uint32(0)
-			if prefix.VRF != "" && c.vrfMgr != nil {
-				if tableID, _, _, err := c.vrfMgr.ResolveVRF(prefix.VRF); err == nil {
-					vrfID = tableID
-				}
-			}
-			if err := c.dataplane.CGNATPoolAddInsidePrefix(poolID, *ipNet, vrfID, true); err != nil {
-				return fmt.Errorf("inside prefix: %w", err)
-			}
-		}
-
-		for _, addrStr := range poolCfg.OutsideAddresses {
-			_, ipNet, err := net.ParseCIDR(addrStr)
-			if err != nil {
-				ip := net.ParseIP(addrStr)
-				if ip == nil {
-					return fmt.Errorf("pool %s outside address %s: invalid", name, addrStr)
-				}
-				ipNet = &net.IPNet{IP: ip.To4(), Mask: net.CIDRMask(32, 32)}
-			}
-			if err := c.dataplane.CGNATPoolAddOutsideAddress(poolID, *ipNet, true); err != nil {
-				return fmt.Errorf("outside address: %w", err)
-			}
-		}
-
-		for _, excluded := range poolCfg.ExcludedAddresses {
-			ip := net.ParseIP(excluded)
-			if ip != nil {
-				c.blacklist.Exclude(name, ip)
-			}
-		}
-
-		c.logger.Info("Pool configured", "name", name, "id", poolID, "mode", poolCfg.GetMode())
-	}
-
 	return nil
 }
 

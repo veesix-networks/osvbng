@@ -20,6 +20,34 @@ type CGNATMapping struct {
 	ActiveSessions uint32
 }
 
+type CGNATPoolState struct {
+	PoolID             uint32
+	Mode               uint8
+	AddressPooling     uint8
+	Filtering          uint8
+	BlockSize          uint16
+	MaxBlocksPerSub    uint8
+	MaxSessionsPerSub  uint32
+	PortRangeStart     uint16
+	PortRangeEnd       uint16
+	PortReuseTimeout   uint16
+	ALGBitmask         uint8
+	Timeouts           [4]uint32
+	OutsideVRFTableID  uint32
+	ActiveMappings     uint32
+}
+
+type CGNATInsidePrefixState struct {
+	PoolID uint32
+	Prefix net.IPNet
+	VRFID  uint32
+}
+
+type CGNATOutsideAddressState struct {
+	PoolID uint32
+	Prefix net.IPNet
+}
+
 type CGNATDataplane interface {
 	CGNATPoolAddDel(poolID uint32, mode uint8, addressPooling uint8,
 		filtering uint8, blockSize uint16, maxBlocksPerSub uint8,
@@ -48,4 +76,7 @@ type CGNATDataplane interface {
 	CGNATAddDelBypass(prefix net.IPNet, vrfID uint32, isAdd bool) error
 
 	CGNATDumpSubscriberMappings(poolID uint32) ([]CGNATMapping, error)
+	CGNATPoolDump() ([]CGNATPoolState, error)
+	CGNATPoolInsidePrefixDump(poolID uint32) ([]CGNATInsidePrefixState, error)
+	CGNATPoolOutsideAddressDump(poolID uint32) ([]CGNATOutsideAddressState, error)
 }
