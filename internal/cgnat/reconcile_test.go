@@ -493,6 +493,44 @@ func TestReconcile_OnDivergenceFail_AppliesThenReturnsError(t *testing.T) {
 	}
 }
 
+func TestReconcile_OrphanPoolWithChildren_DropsCascadeCleanly(t *testing.T) {
+	dp := &stubDP{}
+	const orphanID uint32 = 1
+	dp.pools = []southbound.CGNATPoolState{{
+		PoolID: orphanID, BlockSize: 512, ActiveMappings: 0,
+		MaxBlocksPerSub: 4, MaxSessionsPerSub: 2000,
+		PortRangeStart: 1024, PortRangeEnd: 65535,
+		PortReuseTimeout: 120,
+		ALGBitmask:       0x1F,
+		Timeouts:         [4]uint32{7200, 240, 300, 60},
+	}}
+	dp.inside = []southbound.CGNATInsidePrefixState{
+		{PoolID: orphanID, Prefix: mustCIDR("100.64.0.0/11")},
+	}
+	dp.outside = []southbound.CGNATOutsideAddressState{
+		{PoolID: orphanID, Prefix: mustCIDR("203.0.113.64/26")},
+	}
+
+	deps := mkDeps(dp)
+	cfg := cfgFor(map[string]*cgnat.Pool{
+		"subscribers": makePool(512, 7200, []string{"100.64.0.0/11"}, []string{"203.0.113.64/26"}),
+	}, nil)
+
+	if err := reconcileWith(context.Background(), deps, cfg); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	for _, c := range dp.addInsideCalls {
+		if c.poolID == orphanID && !c.isAdd {
+			t.Fatalf("must not attempt to del inside-prefix on dropped pool %d", orphanID)
+		}
+	}
+	for _, c := range dp.addOutsideCalls {
+		if c.poolID == orphanID && !c.isAdd {
+			t.Fatalf("must not attempt to del outside-address on dropped pool %d", orphanID)
+		}
+	}
+}
+
 func TestPoolID_ZeroGuard(t *testing.T) {
 	if poolID("") == 0 {
 		t.Fatalf("poolID must never return 0 (plugin treats 0 as wildcard)")
