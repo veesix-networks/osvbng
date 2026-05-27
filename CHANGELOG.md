@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.13.0](https://github.com/veesix-networks/osvbng/compare/v0.12.1...v0.13.0) (2026-05-27)
+
+
+### Features
+
+* **cgnat:** restart-idempotent reconciler with active-mapping preflight gate ([#341](https://github.com/veesix-networks/osvbng/issues/341)) ([0462e72](https://github.com/veesix-networks/osvbng/commit/0462e7226643bf2fd4dcbcda35eaa61611c40b3c))
+* **upgrade:** add osvbngcli upgrade builtin (Tier A file-swap) ([#332](https://github.com/veesix-networks/osvbng/issues/332)) ([11c3254](https://github.com/veesix-networks/osvbng/commit/11c3254f7d19cb49087137a247e09f4e479cda55))
+
+
+### Bug Fixes
+
+* **component:** AllReady skips plugin components, matching WaitReady semantics ([#335](https://github.com/veesix-networks/osvbng/issues/335)) ([46d3497](https://github.com/veesix-networks/osvbng/commit/46d34979ae469ce5f398b6aa8873e0d1496e4f76))
+* **opdb:** apply SQLite pragmas via DSN to all pool connections + retry on busy ([#330](https://github.com/veesix-networks/osvbng/issues/330)) ([4f24093](https://github.com/veesix-networks/osvbng/commit/4f24093081ee54d21e7e9af93e12325b5383f4f8))
+* **southbound:** make bond create idempotent on osvbngd restart ([#333](https://github.com/veesix-networks/osvbng/issues/333)) ([34e4d57](https://github.com/veesix-networks/osvbng/commit/34e4d57b5543cf7d483324ea8639d291c6a058f8))
+* **upgrade:** restart vpp.service when apply or rollback swaps a plugin ([#334](https://github.com/veesix-networks/osvbng/issues/334)) ([b45cab9](https://github.com/veesix-networks/osvbng/commit/b45cab992bc1901b3b1f1c050d12185e67571c69))
+* **upgrade:** stamp daemon version in state file + order shutdown so tracker can't clobber "stopping" ([#338](https://github.com/veesix-networks/osvbng/issues/338)) ([9619a2c](https://github.com/veesix-networks/osvbng/commit/9619a2c1654c7633b4e2ac7e5509cfd9c9a6b55e))
+* **upgrade:** tolerate "stopping" state and reset stall window on daemon restart ([#336](https://github.com/veesix-networks/osvbng/issues/336)) ([42196e6](https://github.com/veesix-networks/osvbng/commit/42196e6dcf78c957ddb13a5f429e791bbd756340))
+
 ## [0.12.1](https://github.com/veesix-networks/osvbng/compare/v0.12.0...v0.12.1) (2026-05-25)
 
 
