@@ -9,7 +9,7 @@
 // Contents:
 // -  3 enums
 // -  3 structs
-// - 20 messages
+// - 26 messages
 package osvbng_cgnat
 
 import (
@@ -30,7 +30,7 @@ const _ = api.GoVppAPIPackageIsVersion2
 const (
 	APIFile    = "osvbng_cgnat"
 	APIVersion = "1.0.0"
-	VersionCrc = 0x1945a0fc
+	VersionCrc = 0xf53ef34
 )
 
 // OsvbngCgnatAddressPooling defines enum 'osvbng_cgnat_address_pooling'.
@@ -865,6 +865,300 @@ func (m *OsvbngCgnatPoolAddDelReply) Unmarshal(b []byte) error {
 	return nil
 }
 
+// OsvbngCgnatPoolDetails defines message 'osvbng_cgnat_pool_details'.
+type OsvbngCgnatPoolDetails struct {
+	PoolID            uint32                    `binapi:"u32,name=pool_id" json:"pool_id,omitempty"`
+	Mode              OsvbngCgnatPoolMode       `binapi:"osvbng_cgnat_pool_mode,name=mode" json:"mode,omitempty"`
+	AddressPooling    OsvbngCgnatAddressPooling `binapi:"osvbng_cgnat_address_pooling,name=address_pooling" json:"address_pooling,omitempty"`
+	Filtering         OsvbngCgnatFiltering      `binapi:"osvbng_cgnat_filtering,name=filtering" json:"filtering,omitempty"`
+	BlockSize         uint16                    `binapi:"u16,name=block_size" json:"block_size,omitempty"`
+	MaxBlocksPerSub   uint8                     `binapi:"u8,name=max_blocks_per_sub" json:"max_blocks_per_sub,omitempty"`
+	MaxSessionsPerSub uint32                    `binapi:"u32,name=max_sessions_per_sub" json:"max_sessions_per_sub,omitempty"`
+	PortRangeStart    uint16                    `binapi:"u16,name=port_range_start" json:"port_range_start,omitempty"`
+	PortRangeEnd      uint16                    `binapi:"u16,name=port_range_end" json:"port_range_end,omitempty"`
+	PortReuseTimeout  uint16                    `binapi:"u16,name=port_reuse_timeout" json:"port_reuse_timeout,omitempty"`
+	AlgBitmask        uint8                     `binapi:"u8,name=alg_bitmask" json:"alg_bitmask,omitempty"`
+	Timeouts          OsvbngCgnatTimeouts       `binapi:"osvbng_cgnat_timeouts,name=timeouts" json:"timeouts,omitempty"`
+	OutsideVrfTableID uint32                    `binapi:"u32,name=outside_vrf_table_id" json:"outside_vrf_table_id,omitempty"`
+	ActiveMappings    uint32                    `binapi:"u32,name=active_mappings" json:"active_mappings,omitempty"`
+}
+
+func (m *OsvbngCgnatPoolDetails) Reset()               { *m = OsvbngCgnatPoolDetails{} }
+func (*OsvbngCgnatPoolDetails) GetMessageName() string { return "osvbng_cgnat_pool_details" }
+func (*OsvbngCgnatPoolDetails) GetCrcString() string   { return "bf778eb1" }
+func (*OsvbngCgnatPoolDetails) GetMessageType() api.MessageType {
+	return api.ReplyMessage
+}
+
+func (m *OsvbngCgnatPoolDetails) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.PoolID
+	size += 1 // m.Mode
+	size += 1 // m.AddressPooling
+	size += 1 // m.Filtering
+	size += 2 // m.BlockSize
+	size += 1 // m.MaxBlocksPerSub
+	size += 4 // m.MaxSessionsPerSub
+	size += 2 // m.PortRangeStart
+	size += 2 // m.PortRangeEnd
+	size += 2 // m.PortReuseTimeout
+	size += 1 // m.AlgBitmask
+	size += 4 // m.Timeouts.TCPEstablished
+	size += 4 // m.Timeouts.TCPTransitory
+	size += 4 // m.Timeouts.UDP
+	size += 4 // m.Timeouts.ICMP
+	size += 4 // m.OutsideVrfTableID
+	size += 4 // m.ActiveMappings
+	return size
+}
+func (m *OsvbngCgnatPoolDetails) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeUint32(m.PoolID)
+	buf.EncodeUint8(uint8(m.Mode))
+	buf.EncodeUint8(uint8(m.AddressPooling))
+	buf.EncodeUint8(uint8(m.Filtering))
+	buf.EncodeUint16(m.BlockSize)
+	buf.EncodeUint8(m.MaxBlocksPerSub)
+	buf.EncodeUint32(m.MaxSessionsPerSub)
+	buf.EncodeUint16(m.PortRangeStart)
+	buf.EncodeUint16(m.PortRangeEnd)
+	buf.EncodeUint16(m.PortReuseTimeout)
+	buf.EncodeUint8(m.AlgBitmask)
+	buf.EncodeUint32(m.Timeouts.TCPEstablished)
+	buf.EncodeUint32(m.Timeouts.TCPTransitory)
+	buf.EncodeUint32(m.Timeouts.UDP)
+	buf.EncodeUint32(m.Timeouts.ICMP)
+	buf.EncodeUint32(m.OutsideVrfTableID)
+	buf.EncodeUint32(m.ActiveMappings)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngCgnatPoolDetails) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.PoolID = buf.DecodeUint32()
+	m.Mode = OsvbngCgnatPoolMode(buf.DecodeUint8())
+	m.AddressPooling = OsvbngCgnatAddressPooling(buf.DecodeUint8())
+	m.Filtering = OsvbngCgnatFiltering(buf.DecodeUint8())
+	m.BlockSize = buf.DecodeUint16()
+	m.MaxBlocksPerSub = buf.DecodeUint8()
+	m.MaxSessionsPerSub = buf.DecodeUint32()
+	m.PortRangeStart = buf.DecodeUint16()
+	m.PortRangeEnd = buf.DecodeUint16()
+	m.PortReuseTimeout = buf.DecodeUint16()
+	m.AlgBitmask = buf.DecodeUint8()
+	m.Timeouts.TCPEstablished = buf.DecodeUint32()
+	m.Timeouts.TCPTransitory = buf.DecodeUint32()
+	m.Timeouts.UDP = buf.DecodeUint32()
+	m.Timeouts.ICMP = buf.DecodeUint32()
+	m.OutsideVrfTableID = buf.DecodeUint32()
+	m.ActiveMappings = buf.DecodeUint32()
+	return nil
+}
+
+// Dump pools (~0 for all)
+// OsvbngCgnatPoolDump defines message 'osvbng_cgnat_pool_dump'.
+type OsvbngCgnatPoolDump struct {
+	PoolID uint32 `binapi:"u32,name=pool_id" json:"pool_id,omitempty"`
+}
+
+func (m *OsvbngCgnatPoolDump) Reset()               { *m = OsvbngCgnatPoolDump{} }
+func (*OsvbngCgnatPoolDump) GetMessageName() string { return "osvbng_cgnat_pool_dump" }
+func (*OsvbngCgnatPoolDump) GetCrcString() string   { return "f797ec5c" }
+func (*OsvbngCgnatPoolDump) GetMessageType() api.MessageType {
+	return api.RequestMessage
+}
+
+func (m *OsvbngCgnatPoolDump) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.PoolID
+	return size
+}
+func (m *OsvbngCgnatPoolDump) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeUint32(m.PoolID)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngCgnatPoolDump) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.PoolID = buf.DecodeUint32()
+	return nil
+}
+
+// OsvbngCgnatPoolInsidePrefixDetails defines message 'osvbng_cgnat_pool_inside_prefix_details'.
+type OsvbngCgnatPoolInsidePrefixDetails struct {
+	PoolID uint32          `binapi:"u32,name=pool_id" json:"pool_id,omitempty"`
+	Prefix ip_types.Prefix `binapi:"prefix,name=prefix" json:"prefix,omitempty"`
+	VrfID  uint32          `binapi:"u32,name=vrf_id" json:"vrf_id,omitempty"`
+}
+
+func (m *OsvbngCgnatPoolInsidePrefixDetails) Reset() { *m = OsvbngCgnatPoolInsidePrefixDetails{} }
+func (*OsvbngCgnatPoolInsidePrefixDetails) GetMessageName() string {
+	return "osvbng_cgnat_pool_inside_prefix_details"
+}
+func (*OsvbngCgnatPoolInsidePrefixDetails) GetCrcString() string { return "5b82b5f2" }
+func (*OsvbngCgnatPoolInsidePrefixDetails) GetMessageType() api.MessageType {
+	return api.ReplyMessage
+}
+
+func (m *OsvbngCgnatPoolInsidePrefixDetails) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4      // m.PoolID
+	size += 1      // m.Prefix.Address.Af
+	size += 1 * 16 // m.Prefix.Address.Un
+	size += 1      // m.Prefix.Len
+	size += 4      // m.VrfID
+	return size
+}
+func (m *OsvbngCgnatPoolInsidePrefixDetails) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeUint32(m.PoolID)
+	buf.EncodeUint8(uint8(m.Prefix.Address.Af))
+	buf.EncodeBytes(m.Prefix.Address.Un.XXX_UnionData[:], 16)
+	buf.EncodeUint8(m.Prefix.Len)
+	buf.EncodeUint32(m.VrfID)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngCgnatPoolInsidePrefixDetails) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.PoolID = buf.DecodeUint32()
+	m.Prefix.Address.Af = ip_types.AddressFamily(buf.DecodeUint8())
+	copy(m.Prefix.Address.Un.XXX_UnionData[:], buf.DecodeBytes(16))
+	m.Prefix.Len = buf.DecodeUint8()
+	m.VrfID = buf.DecodeUint32()
+	return nil
+}
+
+// Dump inside prefixes for a pool (~0 for all pools)
+// OsvbngCgnatPoolInsidePrefixDump defines message 'osvbng_cgnat_pool_inside_prefix_dump'.
+type OsvbngCgnatPoolInsidePrefixDump struct {
+	PoolID uint32 `binapi:"u32,name=pool_id" json:"pool_id,omitempty"`
+}
+
+func (m *OsvbngCgnatPoolInsidePrefixDump) Reset() { *m = OsvbngCgnatPoolInsidePrefixDump{} }
+func (*OsvbngCgnatPoolInsidePrefixDump) GetMessageName() string {
+	return "osvbng_cgnat_pool_inside_prefix_dump"
+}
+func (*OsvbngCgnatPoolInsidePrefixDump) GetCrcString() string { return "f797ec5c" }
+func (*OsvbngCgnatPoolInsidePrefixDump) GetMessageType() api.MessageType {
+	return api.RequestMessage
+}
+
+func (m *OsvbngCgnatPoolInsidePrefixDump) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.PoolID
+	return size
+}
+func (m *OsvbngCgnatPoolInsidePrefixDump) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeUint32(m.PoolID)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngCgnatPoolInsidePrefixDump) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.PoolID = buf.DecodeUint32()
+	return nil
+}
+
+// OsvbngCgnatPoolOutsideAddressDetails defines message 'osvbng_cgnat_pool_outside_address_details'.
+type OsvbngCgnatPoolOutsideAddressDetails struct {
+	PoolID uint32          `binapi:"u32,name=pool_id" json:"pool_id,omitempty"`
+	Prefix ip_types.Prefix `binapi:"prefix,name=prefix" json:"prefix,omitempty"`
+}
+
+func (m *OsvbngCgnatPoolOutsideAddressDetails) Reset() { *m = OsvbngCgnatPoolOutsideAddressDetails{} }
+func (*OsvbngCgnatPoolOutsideAddressDetails) GetMessageName() string {
+	return "osvbng_cgnat_pool_outside_address_details"
+}
+func (*OsvbngCgnatPoolOutsideAddressDetails) GetCrcString() string { return "a3f82407" }
+func (*OsvbngCgnatPoolOutsideAddressDetails) GetMessageType() api.MessageType {
+	return api.ReplyMessage
+}
+
+func (m *OsvbngCgnatPoolOutsideAddressDetails) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4      // m.PoolID
+	size += 1      // m.Prefix.Address.Af
+	size += 1 * 16 // m.Prefix.Address.Un
+	size += 1      // m.Prefix.Len
+	return size
+}
+func (m *OsvbngCgnatPoolOutsideAddressDetails) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeUint32(m.PoolID)
+	buf.EncodeUint8(uint8(m.Prefix.Address.Af))
+	buf.EncodeBytes(m.Prefix.Address.Un.XXX_UnionData[:], 16)
+	buf.EncodeUint8(m.Prefix.Len)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngCgnatPoolOutsideAddressDetails) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.PoolID = buf.DecodeUint32()
+	m.Prefix.Address.Af = ip_types.AddressFamily(buf.DecodeUint8())
+	copy(m.Prefix.Address.Un.XXX_UnionData[:], buf.DecodeBytes(16))
+	m.Prefix.Len = buf.DecodeUint8()
+	return nil
+}
+
+// Dump outside addresses for a pool (~0 for all pools)
+// OsvbngCgnatPoolOutsideAddressDump defines message 'osvbng_cgnat_pool_outside_address_dump'.
+type OsvbngCgnatPoolOutsideAddressDump struct {
+	PoolID uint32 `binapi:"u32,name=pool_id" json:"pool_id,omitempty"`
+}
+
+func (m *OsvbngCgnatPoolOutsideAddressDump) Reset() { *m = OsvbngCgnatPoolOutsideAddressDump{} }
+func (*OsvbngCgnatPoolOutsideAddressDump) GetMessageName() string {
+	return "osvbng_cgnat_pool_outside_address_dump"
+}
+func (*OsvbngCgnatPoolOutsideAddressDump) GetCrcString() string { return "f797ec5c" }
+func (*OsvbngCgnatPoolOutsideAddressDump) GetMessageType() api.MessageType {
+	return api.RequestMessage
+}
+
+func (m *OsvbngCgnatPoolOutsideAddressDump) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.PoolID
+	return size
+}
+func (m *OsvbngCgnatPoolOutsideAddressDump) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeUint32(m.PoolID)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngCgnatPoolOutsideAddressDump) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.PoolID = buf.DecodeUint32()
+	return nil
+}
+
 // Update pool parameters at runtime
 //   - pool_id - pool to update
 //   - max_sessions_per_sub - new session limit
@@ -1151,6 +1445,12 @@ func file_osvbng_cgnat_binapi_init() {
 	api.RegisterMessage((*OsvbngCgnatPoolAddDelOutsideAddress)(nil), "osvbng_cgnat_pool_add_del_outside_address_9142422f")
 	api.RegisterMessage((*OsvbngCgnatPoolAddDelOutsideAddressReply)(nil), "osvbng_cgnat_pool_add_del_outside_address_reply_e8d4e804")
 	api.RegisterMessage((*OsvbngCgnatPoolAddDelReply)(nil), "osvbng_cgnat_pool_add_del_reply_e8d4e804")
+	api.RegisterMessage((*OsvbngCgnatPoolDetails)(nil), "osvbng_cgnat_pool_details_bf778eb1")
+	api.RegisterMessage((*OsvbngCgnatPoolDump)(nil), "osvbng_cgnat_pool_dump_f797ec5c")
+	api.RegisterMessage((*OsvbngCgnatPoolInsidePrefixDetails)(nil), "osvbng_cgnat_pool_inside_prefix_details_5b82b5f2")
+	api.RegisterMessage((*OsvbngCgnatPoolInsidePrefixDump)(nil), "osvbng_cgnat_pool_inside_prefix_dump_f797ec5c")
+	api.RegisterMessage((*OsvbngCgnatPoolOutsideAddressDetails)(nil), "osvbng_cgnat_pool_outside_address_details_a3f82407")
+	api.RegisterMessage((*OsvbngCgnatPoolOutsideAddressDump)(nil), "osvbng_cgnat_pool_outside_address_dump_f797ec5c")
 	api.RegisterMessage((*OsvbngCgnatPoolUpdate)(nil), "osvbng_cgnat_pool_update_311437fa")
 	api.RegisterMessage((*OsvbngCgnatPoolUpdateReply)(nil), "osvbng_cgnat_pool_update_reply_e8d4e804")
 	api.RegisterMessage((*OsvbngCgnatSetOutsideFib)(nil), "osvbng_cgnat_set_outside_fib_9cb97b7c")
@@ -1176,6 +1476,12 @@ func AllMessages() []api.Message {
 		(*OsvbngCgnatPoolAddDelOutsideAddress)(nil),
 		(*OsvbngCgnatPoolAddDelOutsideAddressReply)(nil),
 		(*OsvbngCgnatPoolAddDelReply)(nil),
+		(*OsvbngCgnatPoolDetails)(nil),
+		(*OsvbngCgnatPoolDump)(nil),
+		(*OsvbngCgnatPoolInsidePrefixDetails)(nil),
+		(*OsvbngCgnatPoolInsidePrefixDump)(nil),
+		(*OsvbngCgnatPoolOutsideAddressDetails)(nil),
+		(*OsvbngCgnatPoolOutsideAddressDump)(nil),
 		(*OsvbngCgnatPoolUpdate)(nil),
 		(*OsvbngCgnatPoolUpdateReply)(nil),
 		(*OsvbngCgnatSetOutsideFib)(nil),
