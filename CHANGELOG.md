@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.13.0](https://github.com/veesix-networks/osvbng/compare/v0.12.1...v0.13.0) (2026-05-28)
+
+
+### Features
+
+* **cgnat:** restart-idempotent reconciler with active-mapping preflight gate ([#341](https://github.com/veesix-networks/osvbng/issues/341)) ([d4ff1f6](https://github.com/veesix-networks/osvbng/commit/d4ff1f69f3aaf056fe08a36d692168c39effd2e7))
+* **dhcp:** per-pool DHCPv4 + DHCPv6 vendor options ([#347](https://github.com/veesix-networks/osvbng/issues/347)) ([db1a5fb](https://github.com/veesix-networks/osvbng/commit/db1a5fb6d46378a8534661b2de4d0547254bc5d3))
+* **routing:** expose authentication on bgp, ospfv2, ospfv3 ([#345](https://github.com/veesix-networks/osvbng/issues/345)) ([15b2641](https://github.com/veesix-networks/osvbng/commit/15b26411f09812a0aa3e523b8aa6dae2362d0fd0))
+* **upgrade:** add osvbngcli upgrade builtin (Tier A file-swap) ([#332](https://github.com/veesix-networks/osvbng/issues/332)) ([321e942](https://github.com/veesix-networks/osvbng/commit/321e9422b2af777de1b7a5df515dfcb9c29beb24))
+
+
+### Bug Fixes
+
+* **cgnat:** skip orphan child cleanup for pools dropped via cascade-delete ([#343](https://github.com/veesix-networks/osvbng/issues/343)) ([99ae909](https://github.com/veesix-networks/osvbng/commit/99ae9091873cc892b6309fd0e6b47f9b269fe607))
+* **component:** AllReady skips plugin components, matching WaitReady semantics ([#335](https://github.com/veesix-networks/osvbng/issues/335)) ([74cc66c](https://github.com/veesix-networks/osvbng/commit/74cc66ca61a8350efc3c80a3271cb0d9df1f576b))
+* **netbind:** open VRF-bound sockets in the LCP netns ([#346](https://github.com/veesix-networks/osvbng/issues/346)) ([ba6b1a3](https://github.com/veesix-networks/osvbng/commit/ba6b1a38949b0e59bf6e1ba4aa6314ec9e5268f2))
+* **opdb:** apply SQLite pragmas via DSN to all pool connections + retry on busy ([#330](https://github.com/veesix-networks/osvbng/issues/330)) ([0e00fd3](https://github.com/veesix-networks/osvbng/commit/0e00fd30535193aa934c8315c0bc29eb026e7381))
+* **southbound:** make bond create idempotent on osvbngd restart ([#333](https://github.com/veesix-networks/osvbng/issues/333)) ([4b7301e](https://github.com/veesix-networks/osvbng/commit/4b7301e811bb6d723a8f47efd831d37968662796))
+* **upgrade:** restart vpp.service when apply or rollback swaps a plugin ([#334](https://github.com/veesix-networks/osvbng/issues/334)) ([976343f](https://github.com/veesix-networks/osvbng/commit/976343f99cbcfaa9889c3c2df90eb3d2e4133932))
+* **upgrade:** stamp daemon version in state file + order shutdown so tracker can't clobber "stopping" ([#338](https://github.com/veesix-networks/osvbng/issues/338)) ([ad59986](https://github.com/veesix-networks/osvbng/commit/ad59986bb256e2742ee36ea07c6892af7638ce84))
+* **upgrade:** tolerate "stopping" state and reset stall window on daemon restart ([#336](https://github.com/veesix-networks/osvbng/issues/336)) ([f0fc452](https://github.com/veesix-networks/osvbng/commit/f0fc452afd0862cb3d0b0b1549041ee7155b8703))
+
 ## [0.12.1](https://github.com/veesix-networks/osvbng/compare/v0.12.0...v0.12.1) (2026-05-25)
 
 
