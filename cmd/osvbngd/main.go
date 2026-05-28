@@ -198,6 +198,7 @@ func main() {
 			mainLog.Warn("Failed to create netlink handle for VRF manager", "ns", config.LCPNetNs, "error", err)
 		} else {
 			vrfMgr.SetNetlinkHandle(nlHandle)
+			netbind.SetLCPNetNs(config.LCPNetNs)
 			mainLog.Info("VRF manager configured for LCP namespace", "ns", config.LCPNetNs)
 		}
 	}
