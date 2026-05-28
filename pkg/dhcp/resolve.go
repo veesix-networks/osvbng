@@ -88,6 +88,19 @@ func ResolveV4(ctx *allocator.Context, profile *ip.IPv4Profile) *ResolvedDHCPv4 
 		}
 	}
 
+	if pool != nil {
+		for _, opt := range pool.Options {
+			payload, err := opt.Decode()
+			if err != nil {
+				continue
+			}
+			resolved.Options = append(resolved.Options, EncodedOption{
+				Tag:     opt.Tag,
+				Payload: payload,
+			})
+		}
+	}
+
 	return resolved
 }
 
@@ -145,6 +158,16 @@ func ResolveV6(ctx *allocator.Context, profile *ip.IPv6Profile) *ResolvedDHCPv6 
 			}
 			if pool.ValidTime > 0 {
 				resolved.IANAValidTime = pool.ValidTime
+			}
+			for _, opt := range pool.Options {
+				payload, err := opt.Decode()
+				if err != nil {
+					continue
+				}
+				resolved.Options = append(resolved.Options, EncodedDHCPv6Option{
+					Code:    opt.Code,
+					Payload: payload,
+				})
 			}
 		}
 	}

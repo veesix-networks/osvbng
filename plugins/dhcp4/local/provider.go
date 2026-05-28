@@ -10,6 +10,7 @@ import (
 
 	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/config"
+	"github.com/veesix-networks/osvbng/pkg/config/ip"
 	"github.com/veesix-networks/osvbng/pkg/dhcp"
 	"github.com/veesix-networks/osvbng/pkg/dhcp4"
 	"github.com/veesix-networks/osvbng/pkg/provider"
@@ -33,6 +34,7 @@ type IPPool struct {
 	Gateway    net.IP
 	DNSServers []net.IP
 	LeaseTime  uint32
+	Options    []dhcp.EncodedOption
 }
 
 type Lease struct {
@@ -69,14 +71,14 @@ func New(cfg *config.Config) (dhcp4.DHCPProvider, error) {
 				lt = leaseTime
 			}
 
-			if err := p.addPool(poolCfg.Name, poolCfg.Network, gateway, dns, lt); err != nil {
+			if err := p.addPool(poolCfg.Name, poolCfg.Network, gateway, dns, lt, poolCfg.Options); err != nil {
 				return nil, fmt.Errorf("profile %s pool %s: %w", profileName, poolCfg.Name, err)
 			}
 		}
 	}
 
 	for _, poolCfg := range cfg.DHCP.Pools {
-		if err := p.addPool(poolCfg.Name, poolCfg.Network, poolCfg.Gateway, poolCfg.DNSServers, poolCfg.LeaseTime); err != nil {
+		if err := p.addPool(poolCfg.Name, poolCfg.Network, poolCfg.Gateway, poolCfg.DNSServers, poolCfg.LeaseTime, nil); err != nil {
 			return nil, fmt.Errorf("manual pool %s: %w", poolCfg.Name, err)
 		}
 	}
@@ -92,7 +94,7 @@ func (p *Provider) Info() provider.Info {
 	}
 }
 
-func (p *Provider) addPool(name, network, gateway string, dnsServers []string, leaseTime uint32) error {
+func (p *Provider) addPool(name, network, gateway string, dnsServers []string, leaseTime uint32, options []ip.DHCPOption) error {
 	_, ipnet, err := net.ParseCIDR(network)
 	if err != nil {
 		return fmt.Errorf("invalid network: %w", err)
@@ -108,6 +110,17 @@ func (p *Provider) addPool(name, network, gateway string, dnsServers []string, l
 
 	for _, dns := range dnsServers {
 		pool.DNSServers = append(pool.DNSServers, net.ParseIP(dns))
+	}
+
+	for _, opt := range options {
+		payload, decErr := opt.Decode()
+		if decErr != nil {
+			return fmt.Errorf("pool %s: option tag %d: %w", name, opt.Tag, decErr)
+		}
+		pool.Options = append(pool.Options, dhcp.EncodedOption{
+			Tag:     opt.Tag,
+			Payload: payload,
+		})
 	}
 
 	p.pools[name] = pool
@@ -308,6 +321,9 @@ func (p *Provider) buildResponse(req *dhcp4.Message, ip net.IP, pool *IPPool, ms
 			}
 			opts.addByte(dhcp4.OptDNS, dnsData)
 		}
+		for _, o := range pool.Options {
+			opts.addByte(o.Tag, o.Payload)
+		}
 	})
 
 	srcIP := pool.Gateway
@@ -341,6 +357,9 @@ func (p *Provider) buildResponseFromResolved(req *dhcp4.Message, resolved *dhcp.
 		if len(resolved.ClasslessRoutes) > 0 {
 			routeData := encodeClasslessRoutes(resolved.ClasslessRoutes)
 			opts.addByte(121, routeData)
+		}
+		for _, o := range resolved.Options {
+			opts.addByte(o.Tag, o.Payload)
 		}
 	})
 
