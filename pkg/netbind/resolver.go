@@ -21,7 +21,16 @@ func Resolver(b Binding) *net.Resolver {
 			if b.SourceIP.IsValid() {
 				d.LocalAddr = sourceLocalAddr(network, b.SourceIP)
 			}
-			return d.DialContext(ctx, network, address)
+			var c net.Conn
+			err := withNetNS(b, func() error {
+				dc, derr := d.DialContext(ctx, network, address)
+				if derr != nil {
+					return derr
+				}
+				c = dc
+				return nil
+			})
+			return c, err
 		},
 	}
 }

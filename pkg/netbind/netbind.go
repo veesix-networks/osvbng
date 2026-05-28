@@ -82,46 +82,71 @@ func ListenUDP(ctx context.Context, network string, port int, b Binding) (*net.U
 		return nil, fmt.Errorf("netbind: invalid port %d", port)
 	}
 
-	pc, err := b.listenConfig().ListenPacket(ctx, network, bindUDPAddr(b.SourceIP, port))
-	if err != nil {
-		return nil, fmt.Errorf("netbind: listen %s %s: %w", network, b, err)
-	}
-
-	uc, ok := pc.(*net.UDPConn)
-	if !ok {
-		_ = pc.Close()
-		return nil, fmt.Errorf("netbind: ListenPacket returned %T", pc)
-	}
-	return uc, nil
+	var uc *net.UDPConn
+	err := withNetNS(b, func() error {
+		pc, lerr := b.listenConfig().ListenPacket(ctx, network, bindUDPAddr(b.SourceIP, port))
+		if lerr != nil {
+			return fmt.Errorf("netbind: listen %s %s: %w", network, b, lerr)
+		}
+		u, ok := pc.(*net.UDPConn)
+		if !ok {
+			_ = pc.Close()
+			return fmt.Errorf("netbind: ListenPacket returned %T", pc)
+		}
+		uc = u
+		return nil
+	})
+	return uc, err
 }
 
 func ListenTCP(ctx context.Context, network, addr string, b Binding) (net.Listener, error) {
-	ln, err := b.listenConfig().Listen(ctx, network, resolveTCPListenAddr(addr, b.SourceIP))
-	if err != nil {
-		return nil, fmt.Errorf("netbind: listen %s %s: %w", network, b, err)
-	}
-	return ln, nil
+	var ln net.Listener
+	err := withNetNS(b, func() error {
+		l, lerr := b.listenConfig().Listen(ctx, network, resolveTCPListenAddr(addr, b.SourceIP))
+		if lerr != nil {
+			return fmt.Errorf("netbind: listen %s %s: %w", network, b, lerr)
+		}
+		ln = l
+		return nil
+	})
+	return ln, err
 }
 
 func DialUDP(ctx context.Context, network string, raddr *net.UDPAddr, b Binding) (*net.UDPConn, error) {
-	c, err := b.dialer(network, 0).DialContext(ctx, network, raddr.String())
-	if err != nil {
-		return nil, fmt.Errorf("netbind: dial %s %s: %w", network, b, err)
-	}
-	uc, ok := c.(*net.UDPConn)
-	if !ok {
-		_ = c.Close()
-		return nil, fmt.Errorf("netbind: DialContext returned %T", c)
-	}
-	return uc, nil
+	var uc *net.UDPConn
+	err := withNetNS(b, func() error {
+		c, derr := b.dialer(network, 0).DialContext(ctx, network, raddr.String())
+		if derr != nil {
+			return fmt.Errorf("netbind: dial %s %s: %w", network, b, derr)
+		}
+		u, ok := c.(*net.UDPConn)
+		if !ok {
+			_ = c.Close()
+			return fmt.Errorf("netbind: DialContext returned %T", c)
+		}
+		uc = u
+		return nil
+	})
+	return uc, err
 }
 
 func HTTPClient(b Binding, timeout time.Duration) *http.Client {
 	d := b.dialer("tcp", timeout)
 
 	transport := &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           d.DialContext,
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			var c net.Conn
+			err := withNetNS(b, func() error {
+				dc, derr := d.DialContext(ctx, network, addr)
+				if derr != nil {
+					return derr
+				}
+				c = dc
+				return nil
+			})
+			return c, err
+		},
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
@@ -145,7 +170,16 @@ func GRPCDialOpts(b Binding) []grpc.DialOption {
 	d := b.dialer("tcp", 0)
 	return []grpc.DialOption{
 		grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
-			return d.DialContext(ctx, "tcp", addr)
+			var c net.Conn
+			err := withNetNS(b, func() error {
+				dc, derr := d.DialContext(ctx, "tcp", addr)
+				if derr != nil {
+					return derr
+				}
+				c = dc
+				return nil
+			})
+			return c, err
 		}),
 	}
 }
