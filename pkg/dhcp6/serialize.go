@@ -18,6 +18,14 @@ type Response struct {
 	IAPD          *IAPDOption
 	DNS           []net.IP
 	StatusCode    *StatusCodeOption
+	Extras        []ExtraOption
+}
+
+// ExtraOption is an arbitrary additional DHCPv6 option appended to
+// the response after the known options.
+type ExtraOption struct {
+	Code uint16
+	Data []byte
 }
 
 func (r *Response) Serialize() []byte {
@@ -35,6 +43,9 @@ func (r *Response) Serialize() []byte {
 	}
 	if r.StatusCode != nil {
 		size += optionLen(OptStatusCode, 2+len(r.StatusCode.Message))
+	}
+	for _, e := range r.Extras {
+		size += optionLen(e.Code, len(e.Data))
 	}
 
 	buf := make([]byte, size)
@@ -68,6 +79,10 @@ func (r *Response) Serialize() []byte {
 		binary.BigEndian.PutUint16(statusPayload[0:2], r.StatusCode.Code)
 		copy(statusPayload[2:], r.StatusCode.Message)
 		offset = writeOption(buf, offset, OptStatusCode, statusPayload)
+	}
+
+	for _, e := range r.Extras {
+		offset = writeOption(buf, offset, e.Code, e.Data)
 	}
 
 	return buf[:offset]

@@ -82,8 +82,52 @@ Reserved for future IPCP-specific delivery options when provisioning PPPoE subsc
 | `lease-time` | int | Pool-level lease time override (seconds) | `7200` |
 | `priority` | int | Allocation priority; lower = tried first (default: 0) | `0` |
 | `exclude` | array | IPs or ranges to exclude from allocation | `[10.100.0.2, 10.100.0.10-10.100.0.20]` |
+| `dhcp-options` | array | Per-pool DHCPv4 options served on OFFER/ACK | see below |
 
 The gateway IP is always excluded from allocation automatically.
+
+### Per-Pool DHCP Options
+
+Each pool may carry a `dhcp-options` list. Entries are emitted on the
+DHCPOFFER and DHCPACK to clients allocated from that pool, after the
+standard options (server-id, lease-time, subnet-mask, router, DNS,
+classless routes).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tag` | uint8 | DHCPv4 option tag (1–254, RFC 2132) |
+| `encoding` | string | Value encoding — `ascii` (default) or `hex` |
+| `value` | string | Option value; length is derived from `len(value)` automatically |
+
+The tag range excludes `0` (pad) and `255` (end), plus options the
+pool already emits from its own fields (`1`, `3`, `6`, `51`, `53`,
+`54`, `82`, `121`). Hex accepts optional `:`, `-`, or whitespace
+separators.
+
+Example — TR-069 ACS URL via option 43:
+
+```yaml
+ipv4-profiles:
+  residential:
+    pools:
+      - name: residential
+        network: 100.64.0.0/11
+        gateway: 100.64.0.1
+        dhcp-options:
+          - tag: 43
+            value: "http://acs.example.net:7547"
+          - tag: 66
+            value: "tftp.example.net"
+```
+
+Vendor-binary payload via hex (e.g. RFC 3925-style sub-option TLV):
+
+```yaml
+        dhcp-options:
+          - tag: 43
+            encoding: hex
+            value: "01:0a:68:74:74:70:3a:2f:2f:78"
+```
 
 ## IP Allocation
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/config"
+	"github.com/veesix-networks/osvbng/pkg/dhcp"
 	"github.com/veesix-networks/osvbng/pkg/dhcp/relay"
 	dhcp6msg "github.com/veesix-networks/osvbng/pkg/dhcp6"
 	"github.com/veesix-networks/osvbng/pkg/provider"
@@ -302,7 +303,7 @@ func (p *Provider) handleSolicit(pkt *dhcp6msg.Packet, msg *dhcp6msg.Message) (*
 	if p.ianaLeases[duidKey] != nil || p.pdLeases[duidKey] != nil {
 		ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool := p.readExistingLeases(msg, duidKey)
 		p.mu.RUnlock()
-		response := p.buildAdvertise(msg, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, nil)
+		response := p.buildAdvertise(msg, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, nil, nil)
 		return &dhcp6msg.Packet{
 			SessionID: pkt.SessionID,
 			MAC:       pkt.MAC,
@@ -321,7 +322,7 @@ func (p *Provider) handleSolicit(pkt *dhcp6msg.Packet, msg *dhcp6msg.Message) (*
 	// Re-check under write lock in case another goroutine allocated.
 	if p.ianaLeases[duidKey] != nil || p.pdLeases[duidKey] != nil {
 		ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool := p.readExistingLeases(msg, duidKey)
-		response := p.buildAdvertise(msg, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, nil)
+		response := p.buildAdvertise(msg, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, nil, nil)
 		return &dhcp6msg.Packet{
 			SessionID: pkt.SessionID,
 			MAC:       pkt.MAC,
@@ -364,7 +365,7 @@ func (p *Provider) handleSolicit(pkt *dhcp6msg.Packet, msg *dhcp6msg.Message) (*
 		}
 	}
 
-	response := p.buildAdvertise(msg, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, nil)
+	response := p.buildAdvertise(msg, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, nil, nil)
 	return &dhcp6msg.Packet{
 		SessionID: pkt.SessionID,
 		MAC:       pkt.MAC,
@@ -422,7 +423,7 @@ func (p *Provider) handleRequest(pkt *dhcp6msg.Packet, msg *dhcp6msg.Message) (*
 		}
 	}
 
-	response := p.buildReply(msg, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, nil)
+	response := p.buildReply(msg, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, nil, nil)
 	return &dhcp6msg.Packet{
 		SessionID: pkt.SessionID,
 		MAC:       pkt.MAC,
@@ -609,15 +610,15 @@ func (p *Provider) allocatePDPrefix(pool *PDPool, duid []byte, iaid uint32, sess
 	}
 }
 
-func (p *Provider) buildAdvertise(req *dhcp6msg.Message, clientDUID []byte, ianaAddr net.IP, ianaIAID uint32, ianaPool *IANAPool, pdPrefix *net.IPNet, pdIAID uint32, pdPool *PDPool, dnsOverride []net.IP) []byte {
-	return p.buildResponse(req, dhcp6msg.MsgTypeAdvertise, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, dnsOverride)
+func (p *Provider) buildAdvertise(req *dhcp6msg.Message, clientDUID []byte, ianaAddr net.IP, ianaIAID uint32, ianaPool *IANAPool, pdPrefix *net.IPNet, pdIAID uint32, pdPool *PDPool, dnsOverride []net.IP, extras []dhcp.EncodedDHCPv6Option) []byte {
+	return p.buildResponse(req, dhcp6msg.MsgTypeAdvertise, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, dnsOverride, extras)
 }
 
-func (p *Provider) buildReply(req *dhcp6msg.Message, clientDUID []byte, ianaAddr net.IP, ianaIAID uint32, ianaPool *IANAPool, pdPrefix *net.IPNet, pdIAID uint32, pdPool *PDPool, dnsOverride []net.IP) []byte {
-	return p.buildResponse(req, dhcp6msg.MsgTypeReply, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, dnsOverride)
+func (p *Provider) buildReply(req *dhcp6msg.Message, clientDUID []byte, ianaAddr net.IP, ianaIAID uint32, ianaPool *IANAPool, pdPrefix *net.IPNet, pdIAID uint32, pdPool *PDPool, dnsOverride []net.IP, extras []dhcp.EncodedDHCPv6Option) []byte {
+	return p.buildResponse(req, dhcp6msg.MsgTypeReply, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, dnsOverride, extras)
 }
 
-func (p *Provider) buildResponse(req *dhcp6msg.Message, msgType dhcp6msg.MessageType, clientDUID []byte, ianaAddr net.IP, ianaIAID uint32, ianaPool *IANAPool, pdPrefix *net.IPNet, pdIAID uint32, pdPool *PDPool, dnsOverride []net.IP) []byte {
+func (p *Provider) buildResponse(req *dhcp6msg.Message, msgType dhcp6msg.MessageType, clientDUID []byte, ianaAddr net.IP, ianaIAID uint32, ianaPool *IANAPool, pdPrefix *net.IPNet, pdIAID uint32, pdPool *PDPool, dnsOverride []net.IP, extras []dhcp.EncodedDHCPv6Option) []byte {
 	resp := &dhcp6msg.Response{
 		MsgType:       msgType,
 		TransactionID: req.TransactionID,
@@ -664,6 +665,13 @@ func (p *Provider) buildResponse(req *dhcp6msg.Message, msgType dhcp6msg.Message
 		}
 	}
 
+	for _, opt := range extras {
+		resp.Extras = append(resp.Extras, dhcp6msg.ExtraOption{
+			Code: opt.Code,
+			Data: opt.Payload,
+		})
+	}
+
 	return resp.Serialize()
 }
 
@@ -692,7 +700,7 @@ func (p *Provider) buildSolicitResolvedResponse(pkt *dhcp6msg.Packet, msg *dhcp6
 		}
 	}
 
-	response := p.buildAdvertise(msg, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, pkt.Resolved.DNS)
+	response := p.buildAdvertise(msg, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, pkt.Resolved.DNS, pkt.Resolved.Options)
 	return &dhcp6msg.Packet{
 		SessionID: pkt.SessionID,
 		MAC:       pkt.MAC,
@@ -734,7 +742,7 @@ func (p *Provider) handleSolicitResolved(pkt *dhcp6msg.Packet, msg *dhcp6msg.Mes
 		}
 	}
 
-	response := p.buildAdvertise(msg, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, pkt.Resolved.DNS)
+	response := p.buildAdvertise(msg, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, pkt.Resolved.DNS, pkt.Resolved.Options)
 	return &dhcp6msg.Packet{
 		SessionID: pkt.SessionID,
 		MAC:       pkt.MAC,
@@ -776,7 +784,7 @@ func (p *Provider) handleRequestResolved(pkt *dhcp6msg.Packet, msg *dhcp6msg.Mes
 		}
 	}
 
-	response := p.buildReply(msg, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, pkt.Resolved.DNS)
+	response := p.buildReply(msg, clientDUID, ianaAddr, ianaIAID, ianaPool, pdPrefix, pdIAID, pdPool, pkt.Resolved.DNS, pkt.Resolved.Options)
 	return &dhcp6msg.Packet{
 		SessionID: pkt.SessionID,
 		MAC:       pkt.MAC,

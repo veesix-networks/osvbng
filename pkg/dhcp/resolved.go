@@ -15,11 +15,18 @@ type ResolvedDHCPv4 struct {
 	PoolName  string
 
 	ClasslessRoutes []ClasslessRoute
+	Options         []EncodedOption
 }
 
 type ClasslessRoute struct {
 	Destination *net.IPNet
 	NextHop     net.IP
+}
+
+// EncodedOption is one fully-decoded DHCPv4 option ready for emission.
+type EncodedOption struct {
+	Tag     uint8
+	Payload []byte
 }
 
 type ResolvedDHCPv6 struct {
@@ -32,4 +39,12 @@ type ResolvedDHCPv6 struct {
 	PDValidTime       uint32
 	PDPoolName        string
 	DNS               []net.IP
+	Options           []EncodedDHCPv6Option
+}
+
+// EncodedDHCPv6Option is one fully-decoded DHCPv6 option ready for
+// emission.
+type EncodedDHCPv6Option struct {
+	Code    uint16
+	Payload []byte
 }

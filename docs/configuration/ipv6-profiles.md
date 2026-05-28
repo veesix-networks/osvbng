@@ -72,6 +72,42 @@ Reserved for future IPv6CP-specific delivery options when provisioning PPPoE sub
 | `gateway` | string | Default gateway address | `2001:db8:100::1` |
 | `preferred_time` | int | Preferred lifetime in seconds | `3600` |
 | `valid_time` | int | Valid lifetime in seconds (must be >= preferred) | `7200` |
+| `dhcpv6-options` | array | Per-pool DHCPv6 options served on ADVERTISE/REPLY | see below |
+
+### Per-Pool DHCPv6 Options
+
+Each IANA pool may carry a `dhcpv6-options` list. Entries are emitted
+on the DHCPv6 ADVERTISE and REPLY to clients allocated from that
+pool, after the standard options (Client-ID, Server-ID, IA_NA, IA_PD,
+DNS).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `code` | uint16 | DHCPv6 option code (1–65534, RFC 8415) |
+| `encoding` | string | Value encoding — `ascii` (default) or `hex` |
+| `value` | string | Option value; length is derived from `len(value)` automatically |
+
+The code range excludes options the pool already emits from its own
+fields (`1`, `2`, `3`, `5`, `13`, `23`, `25`, `26`). Hex accepts
+optional `:`, `-`, or whitespace separators.
+
+Example — option 17 (Vendor-specific Information) with an
+enterprise-number + sub-option TLV payload:
+
+```yaml
+ipv6-profiles:
+  residential-v6:
+    iana-pools:
+      - name: residential-v6
+        network: 2001:db8:100::/48
+        range_start: "2001:db8:100::1"
+        range_end:   "2001:db8:100::ffff"
+        gateway: "2001:db8:100::1"
+        dhcpv6-options:
+          - code: 17
+            encoding: hex
+            value: "00:00:0d:e9:00:0b:00:14:68:74:74:70:3a:2f:2f:61:63:73:2e:65:78:61:6d:70:6c:65"
+```
 
 ## Prefix Delegation Pools
 

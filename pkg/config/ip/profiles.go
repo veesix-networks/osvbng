@@ -7,27 +7,29 @@ import (
 )
 
 type IPv4Pool struct {
-	Name       string   `json:"name,omitempty" yaml:"name,omitempty"`
-	Network    string   `json:"network,omitempty" yaml:"network,omitempty"`
-	RangeStart string   `json:"range_start,omitempty" yaml:"range-start,omitempty"`
-	RangeEnd   string   `json:"range_end,omitempty" yaml:"range-end,omitempty"`
-	Gateway    string   `json:"gateway,omitempty" yaml:"gateway,omitempty"`
-	VRF        string   `json:"vrf,omitempty" yaml:"vrf,omitempty"`
-	DNSServers []string `json:"dns_servers,omitempty" yaml:"dns,omitempty"`
-	LeaseTime  uint32   `json:"lease_time,omitempty" yaml:"lease-time,omitempty"`
-	Priority   int      `json:"priority,omitempty" yaml:"priority,omitempty"`
-	Exclude    []string `json:"exclude,omitempty" yaml:"exclude,omitempty"`
+	Name       string       `json:"name,omitempty" yaml:"name,omitempty"`
+	Network    string       `json:"network,omitempty" yaml:"network,omitempty"`
+	RangeStart string       `json:"range_start,omitempty" yaml:"range-start,omitempty"`
+	RangeEnd   string       `json:"range_end,omitempty" yaml:"range-end,omitempty"`
+	Gateway    string       `json:"gateway,omitempty" yaml:"gateway,omitempty"`
+	VRF        string       `json:"vrf,omitempty" yaml:"vrf,omitempty"`
+	DNSServers []string     `json:"dns_servers,omitempty" yaml:"dns,omitempty"`
+	LeaseTime  uint32       `json:"lease_time,omitempty" yaml:"lease-time,omitempty"`
+	Priority   int          `json:"priority,omitempty" yaml:"priority,omitempty"`
+	Exclude    []string     `json:"exclude,omitempty" yaml:"exclude,omitempty"`
+	Options    []DHCPOption `json:"dhcp_options,omitempty" yaml:"dhcp-options,omitempty"`
 }
 
 type IANAPool struct {
-	Name          string `json:"name,omitempty" yaml:"name,omitempty"`
-	Network       string `json:"network,omitempty" yaml:"network,omitempty"`
-	RangeStart    string `json:"range_start,omitempty" yaml:"range_start,omitempty"`
-	RangeEnd      string `json:"range_end,omitempty" yaml:"range_end,omitempty"`
-	Gateway       string `json:"gateway,omitempty" yaml:"gateway,omitempty"`
-	VRF           string `json:"vrf,omitempty" yaml:"vrf,omitempty"`
-	PreferredTime uint32 `json:"preferred_time,omitempty" yaml:"preferred_time,omitempty"`
-	ValidTime     uint32 `json:"valid_time,omitempty" yaml:"valid_time,omitempty"`
+	Name          string         `json:"name,omitempty" yaml:"name,omitempty"`
+	Network       string         `json:"network,omitempty" yaml:"network,omitempty"`
+	RangeStart    string         `json:"range_start,omitempty" yaml:"range_start,omitempty"`
+	RangeEnd      string         `json:"range_end,omitempty" yaml:"range_end,omitempty"`
+	Gateway       string         `json:"gateway,omitempty" yaml:"gateway,omitempty"`
+	VRF           string         `json:"vrf,omitempty" yaml:"vrf,omitempty"`
+	PreferredTime uint32         `json:"preferred_time,omitempty" yaml:"preferred_time,omitempty"`
+	ValidTime     uint32         `json:"valid_time,omitempty" yaml:"valid_time,omitempty"`
+	Options       []DHCPv6Option `json:"dhcpv6_options,omitempty" yaml:"dhcpv6-options,omitempty"`
 }
 
 type PDPool struct {

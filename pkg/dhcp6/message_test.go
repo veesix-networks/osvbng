@@ -5,6 +5,7 @@
 package dhcp6
 
 import (
+	"bytes"
 	"encoding/binary"
 	"net"
 	"testing"
@@ -300,5 +301,56 @@ func TestUnwrapRelayNotRelay(t *testing.T) {
 	msg, info := UnwrapRelay(data)
 	if msg != nil || info != nil {
 		t.Fatal("expected nil for non-relay message")
+	}
+}
+
+func TestSerializeExtras(t *testing.T) {
+	want := []byte{0x00, 0x00, 0x0d, 0xe9, 0x00, 0x0b, 0x00, 0x14}
+	resp := &Response{
+		MsgType:       MsgTypeReply,
+		TransactionID: [3]byte{0x01, 0x02, 0x03},
+		ClientID:      []byte{0xAA},
+		ServerID:      []byte{0xBB},
+		Extras: []ExtraOption{
+			{Code: 17, Data: want},
+		},
+	}
+
+	data := resp.Serialize()
+
+	// Walk options manually starting at byte 4.
+	idx := 4
+	var got []byte
+	for idx+4 <= len(data) {
+		code := binary.BigEndian.Uint16(data[idx : idx+2])
+		length := int(binary.BigEndian.Uint16(data[idx+2 : idx+4]))
+		payload := data[idx+4 : idx+4+length]
+		if code == 17 {
+			got = payload
+			break
+		}
+		idx += 4 + length
+	}
+
+	if got == nil {
+		t.Fatal("option 17 missing from serialized response")
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("option 17 = %x want %x", got, want)
+	}
+}
+
+func TestSerializeNoExtrasUnchanged(t *testing.T) {
+	mk := func(extras []ExtraOption) []byte {
+		return (&Response{
+			MsgType:       MsgTypeReply,
+			TransactionID: [3]byte{1, 2, 3},
+			ClientID:      []byte{0xAA},
+			ServerID:      []byte{0xBB},
+			Extras:        extras,
+		}).Serialize()
+	}
+	if !bytes.Equal(mk(nil), mk([]ExtraOption{})) {
+		t.Fatalf("response with nil Extras differs from empty slice")
 	}
 }
