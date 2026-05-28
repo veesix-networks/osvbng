@@ -13,6 +13,9 @@ router bgp {{ .Protocols.BGP.ASN }}
 {{ if $peerGroup.RemoteAS }}
  neighbor {{ $name }} remote-as {{ $peerGroup.RemoteAS }}
 {{ end }}
+{{ if $peerGroup.Password }}
+ neighbor {{ $name }} password {{ $peerGroup.Password }}
+{{ end }}
 {{ end }}
 !
 {{ range $addr, $neighbor := .Protocols.BGP.Neighbors }}
@@ -24,6 +27,9 @@ router bgp {{ .Protocols.BGP.ASN }}
 {{ end }}
 {{ if $neighbor.Peer }}
  neighbor {{ $addr }} update-source {{ $neighbor.Peer }}
+{{ end }}
+{{ if $neighbor.Password }}
+ neighbor {{ $addr }} password {{ $neighbor.Password }}
 {{ end }}
 {{ if $neighbor.BFD }}
  neighbor {{ $addr }} bfd
@@ -215,6 +221,9 @@ router bgp {{ $.Protocols.BGP.ASN }} vrf {{ $vrfName }}
 {{ end }}
 {{ if $neighbor.Peer }}
  neighbor {{ $addr }} update-source {{ $neighbor.Peer }}
+{{ end }}
+{{ if $neighbor.Password }}
+ neighbor {{ $addr }} password {{ $neighbor.Password }}
 {{ end }}
 {{ if $neighbor.BFD }}
  neighbor {{ $addr }} bfd
