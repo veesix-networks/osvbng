@@ -72,6 +72,19 @@ interface {{ $iface }}
 {{ if $ifConfig.Priority }}
  ip ospf priority {{ $ifConfig.Priority }}
 {{ end }}
+{{ if $ifConfig.Authentication }}
+{{ if eq $ifConfig.Authentication.Mode "null" }}
+ ip ospf authentication null
+{{ end }}
+{{ if eq $ifConfig.Authentication.Mode "simple" }}
+ ip ospf authentication
+ ip ospf authentication-key {{ $ifConfig.Authentication.Key }}
+{{ end }}
+{{ if eq $ifConfig.Authentication.Mode "message-digest" }}
+ ip ospf authentication message-digest
+ ip ospf message-digest-key {{ $ifConfig.Authentication.KeyID }} md5 {{ $ifConfig.Authentication.Key }}
+{{ end }}
+{{ end }}
 {{ end }}
 !
 {{ end }}

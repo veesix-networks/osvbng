@@ -21,12 +21,13 @@ type OSPFAuthMode string
 
 const (
 	OSPFAuthNone          OSPFAuthMode = ""
+	OSPFAuthSimple        OSPFAuthMode = "simple"
 	OSPFAuthMessageDigest OSPFAuthMode = "message-digest"
 )
 
 func (a OSPFAuthMode) Valid() bool {
 	switch a {
-	case OSPFAuthNone, OSPFAuthMessageDigest:
+	case OSPFAuthNone, OSPFAuthSimple, OSPFAuthMessageDigest:
 		return true
 	}
 	return false
@@ -51,14 +52,38 @@ type OSPFArea struct {
 }
 
 type OSPFInterfaceConfig struct {
-	Passive       bool   `json:"passive,omitempty" yaml:"passive,omitempty"`
-	Cost          uint32 `json:"cost,omitempty" yaml:"cost,omitempty"`
-	Network       OSPFNetworkType `json:"network,omitempty" yaml:"network,omitempty"`
-	BFD           bool            `json:"bfd,omitempty" yaml:"bfd,omitempty"`
-	HelloInterval uint32 `json:"hello-interval,omitempty" yaml:"hello-interval,omitempty"`
-	DeadInterval  uint32 `json:"dead-interval,omitempty" yaml:"dead-interval,omitempty"`
-	MTUIgnore     bool   `json:"mtu-ignore,omitempty" yaml:"mtu-ignore,omitempty"`
-	Priority      uint32 `json:"priority,omitempty" yaml:"priority,omitempty"`
+	Passive        bool                 `json:"passive,omitempty" yaml:"passive,omitempty"`
+	Cost           uint32               `json:"cost,omitempty" yaml:"cost,omitempty"`
+	Network        OSPFNetworkType      `json:"network,omitempty" yaml:"network,omitempty"`
+	BFD            bool                 `json:"bfd,omitempty" yaml:"bfd,omitempty"`
+	HelloInterval  uint32               `json:"hello-interval,omitempty" yaml:"hello-interval,omitempty"`
+	DeadInterval   uint32               `json:"dead-interval,omitempty" yaml:"dead-interval,omitempty"`
+	MTUIgnore      bool                 `json:"mtu-ignore,omitempty" yaml:"mtu-ignore,omitempty"`
+	Priority       uint32               `json:"priority,omitempty" yaml:"priority,omitempty"`
+	Authentication *OSPFInterfaceAuth   `json:"authentication,omitempty" yaml:"authentication,omitempty"`
+}
+
+type OSPFInterfaceAuthMode string
+
+const (
+	OSPFInterfaceAuthInherit       OSPFInterfaceAuthMode = ""
+	OSPFInterfaceAuthNull          OSPFInterfaceAuthMode = "null"
+	OSPFInterfaceAuthSimple        OSPFInterfaceAuthMode = "simple"
+	OSPFInterfaceAuthMessageDigest OSPFInterfaceAuthMode = "message-digest"
+)
+
+func (m OSPFInterfaceAuthMode) Valid() bool {
+	switch m {
+	case OSPFInterfaceAuthInherit, OSPFInterfaceAuthNull, OSPFInterfaceAuthSimple, OSPFInterfaceAuthMessageDigest:
+		return true
+	}
+	return false
+}
+
+type OSPFInterfaceAuth struct {
+	Mode  OSPFInterfaceAuthMode `json:"mode,omitempty" yaml:"mode,omitempty"`
+	Key   string                `json:"key,omitempty" yaml:"key,omitempty"`
+	KeyID uint8                 `json:"key-id,omitempty" yaml:"key-id,omitempty"`
 }
 
 type OSPFRedistribute struct {
