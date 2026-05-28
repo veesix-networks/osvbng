@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
 	"github.com/veesix-networks/osvbng/pkg/config/protocols"
 )
 
@@ -347,5 +348,207 @@ func TestRoutingRender_BGPNoPasswordBackwardCompat(t *testing.T) {
 
 	if strings.Contains(out, "password") {
 		t.Errorf("unexpected password line in config without Password field\n%s", out)
+	}
+}
+
+func TestRoutingRender_OSPFVRFInstance(t *testing.T) {
+	cfg := &Config{
+		Protocols: protocols.ProtocolConfig{
+			OSPF: &protocols.OSPFConfig{
+				Enabled:             true,
+				RouterID:            "10.0.0.1",
+				LogAdjacencyChanges: true,
+				Areas: map[string]*protocols.OSPFArea{
+					"0.0.0.0": {
+						Interfaces: map[string]*protocols.OSPFInterfaceConfig{
+							"eth0": {Network: protocols.OSPFNetworkPointToPoint},
+						},
+					},
+				},
+				VRF: map[string]*protocols.OSPFVRFConfig{
+					"MGMT-VRF": {
+						RouterID:            "10.99.0.1",
+						LogAdjacencyChanges: true,
+						MaximumPaths:        4,
+						Areas: map[string]*protocols.OSPFArea{
+							"0.0.0.0": {
+								Interfaces: map[string]*protocols.OSPFInterfaceConfig{
+									"eth1.99": {
+										Network: protocols.OSPFNetworkPointToPoint,
+										Authentication: &protocols.OSPFInterfaceAuth{
+											Mode:  protocols.OSPFInterfaceAuthMessageDigest,
+											KeyID: 1,
+											Key:   "vrf-secret",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	out, err := newRoutingConfForTest().GenerateConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateConfig: %v", err)
+	}
+
+	checks := []string{
+		"router ospf",
+		"router ospf vrf MGMT-VRF",
+		"ospf router-id 10.99.0.1",
+		"maximum-paths 4",
+		"interface eth1.99",
+		"ip ospf area 0.0.0.0",
+		"ip ospf network point-to-point",
+		"ip ospf authentication message-digest",
+		"ip ospf message-digest-key 1 md5 vrf-secret",
+	}
+	for _, want := range checks {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in output\n%s", want, out)
+		}
+	}
+}
+
+func TestRoutingRender_OSPFVRFOnlyNoGlobal(t *testing.T) {
+	cfg := &Config{
+		Protocols: protocols.ProtocolConfig{
+			OSPF: &protocols.OSPFConfig{
+				Enabled: false,
+				VRF: map[string]*protocols.OSPFVRFConfig{
+					"MGMT-VRF": {
+						RouterID: "10.99.0.1",
+						Areas: map[string]*protocols.OSPFArea{
+							"0.0.0.0": {
+								Interfaces: map[string]*protocols.OSPFInterfaceConfig{
+									"eth1.99": {Network: protocols.OSPFNetworkPointToPoint},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	out, err := newRoutingConfForTest().GenerateConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateConfig: %v", err)
+	}
+
+	if !strings.Contains(out, "router ospf vrf MGMT-VRF") {
+		t.Errorf("missing VRF block in output\n%s", out)
+	}
+	if strings.Contains(out, "\nrouter ospf\n") {
+		t.Errorf("global router ospf block present when Enabled=false\n%s", out)
+	}
+}
+
+func TestRoutingRender_OSPF6VRFInstance(t *testing.T) {
+	cfg := &Config{
+		Protocols: protocols.ProtocolConfig{
+			OSPF6: &protocols.OSPF6Config{
+				Enabled:  true,
+				RouterID: "10.0.0.1",
+				Areas: map[string]*protocols.OSPF6Area{
+					"0.0.0.0": {
+						Interfaces: map[string]*protocols.OSPF6InterfaceConfig{
+							"eth0": {Network: protocols.OSPF6NetworkPointToPoint},
+						},
+					},
+				},
+				VRF: map[string]*protocols.OSPF6VRFConfig{
+					"MGMT-VRF": {
+						RouterID: "10.99.0.1",
+						Areas: map[string]*protocols.OSPF6Area{
+							"0.0.0.0": {
+								Interfaces: map[string]*protocols.OSPF6InterfaceConfig{
+									"eth1.99": {Network: protocols.OSPF6NetworkPointToPoint},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	out, err := newRoutingConfForTest().GenerateConfig(cfg)
+	if err != nil {
+		t.Fatalf("GenerateConfig: %v", err)
+	}
+
+	checks := []string{
+		"router ospf6",
+		"router ospf6 vrf MGMT-VRF",
+		"ospf6 router-id 10.99.0.1",
+		"interface eth1.99",
+		"ipv6 ospf6 area 0.0.0.0",
+	}
+	for _, want := range checks {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in output\n%s", want, out)
+		}
+	}
+}
+
+
+func buildOSPFVRFTestConfig(declaredVRF, ospfVRF string) *Config {
+	return &Config{
+		Interfaces: map[string]*interfaces.InterfaceConfig{
+			"eth2": {
+				Name: "eth2",
+				VRF:  declaredVRF,
+			},
+		},
+		Protocols: protocols.ProtocolConfig{
+			OSPF: &protocols.OSPFConfig{
+				Enabled: true,
+				VRF: map[string]*protocols.OSPFVRFConfig{
+					ospfVRF: {
+						Areas: map[string]*protocols.OSPFArea{
+							"0.0.0.0": {
+								Interfaces: map[string]*protocols.OSPFInterfaceConfig{
+									"eth2": {},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestRoutingValidate_OSPFVRFInterfaceMismatchRejected(t *testing.T) {
+	cfg := buildOSPFVRFTestConfig("MGMT-VRF", "OTHER-VRF")
+	err := cfg.Validate()
+	if err == nil || !strings.Contains(err.Error(), "must match") {
+		t.Fatalf("expected VRF-mismatch error, got %v", err)
+	}
+}
+
+func TestRoutingValidate_OSPFVRFInterfaceInBothRejected(t *testing.T) {
+	cfg := buildOSPFVRFTestConfig("MGMT-VRF", "MGMT-VRF")
+	cfg.Protocols.OSPF.Areas = map[string]*protocols.OSPFArea{
+		"0.0.0.0": {
+			Interfaces: map[string]*protocols.OSPFInterfaceConfig{
+				"eth2": {},
+			},
+		},
+	}
+	err := cfg.Validate()
+	if err == nil || !strings.Contains(err.Error(), "also under global") {
+		t.Fatalf("expected dual-block error, got %v", err)
+	}
+}
+
+func TestRoutingValidate_OSPFVRFInterfaceMatchAccepted(t *testing.T) {
+	cfg := buildOSPFVRFTestConfig("MGMT-VRF", "MGMT-VRF")
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected validation success, got %v", err)
 	}
 }

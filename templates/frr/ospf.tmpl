@@ -90,6 +90,95 @@ interface {{ $iface }}
 {{ end }}
 {{ end }}
 {{ end }}
+{{ range $vrfName, $vrfConfig := .Protocols.OSPF.VRF }}
+router ospf vrf {{ $vrfName }}
+{{ if $vrfConfig.RouterID }}
+ ospf router-id {{ $vrfConfig.RouterID }}
+{{ end }}
+{{ if $vrfConfig.LogAdjacencyChanges }}
+ log-adjacency-changes
+{{ end }}
+{{ if $vrfConfig.AutoCostRefBandwidth }}
+ auto-cost reference-bandwidth {{ $vrfConfig.AutoCostRefBandwidth }}
+{{ end }}
+{{ if $vrfConfig.MaximumPaths }}
+ maximum-paths {{ $vrfConfig.MaximumPaths }}
+{{ end }}
+{{ if $vrfConfig.DefaultMetric }}
+ default-metric {{ $vrfConfig.DefaultMetric }}
+{{ end }}
+{{ if $vrfConfig.Distance }}
+ distance {{ $vrfConfig.Distance }}
+{{ end }}
+{{ range $area, $areaConfig := $vrfConfig.Areas }}
+{{ if $areaConfig.Authentication }}
+ area {{ $area }} authentication{{ if eq $areaConfig.Authentication "message-digest" }} message-digest{{ end }}
+{{ end }}
+{{ end }}
+{{ if $vrfConfig.Redistribute }}
+{{ if $vrfConfig.Redistribute.Connected }}
+ redistribute connected{{ if $vrfConfig.Redistribute.RoutePolicy }} route-map {{ $vrfConfig.Redistribute.RoutePolicy }}{{ end }}
+{{ end }}
+{{ if $vrfConfig.Redistribute.Static }}
+ redistribute static{{ if $vrfConfig.Redistribute.RoutePolicy }} route-map {{ $vrfConfig.Redistribute.RoutePolicy }}{{ end }}
+{{ end }}
+{{ if $vrfConfig.Redistribute.BGP }}
+ redistribute bgp{{ if $vrfConfig.Redistribute.RoutePolicy }} route-map {{ $vrfConfig.Redistribute.RoutePolicy }}{{ end }}
+{{ end }}
+{{ end }}
+{{ if $vrfConfig.DefaultInformation }}
+{{ if $vrfConfig.DefaultInformation.Originate }}
+ default-information originate{{ if $vrfConfig.DefaultInformation.Always }} always{{ end }}{{ if $vrfConfig.DefaultInformation.Metric }} metric {{ $vrfConfig.DefaultInformation.Metric }}{{ end }}{{ if $vrfConfig.DefaultInformation.MetricType }} metric-type {{ $vrfConfig.DefaultInformation.MetricType }}{{ end }}
+{{ end }}
+{{ end }}
+!
+{{ range $area, $areaConfig := $vrfConfig.Areas }}
+{{ range $iface, $ifConfig := $areaConfig.Interfaces }}
+interface {{ $iface }}
+ ip ospf area {{ $area }}
+{{ if $ifConfig }}
+{{ if $ifConfig.Passive }}
+ ip ospf passive
+{{ end }}
+{{ if $ifConfig.Cost }}
+ ip ospf cost {{ $ifConfig.Cost }}
+{{ end }}
+{{ if $ifConfig.Network }}
+ ip ospf network {{ $ifConfig.Network }}
+{{ end }}
+{{ if $ifConfig.BFD }}
+ ip ospf bfd
+{{ end }}
+{{ if $ifConfig.HelloInterval }}
+ ip ospf hello-interval {{ $ifConfig.HelloInterval }}
+{{ end }}
+{{ if $ifConfig.DeadInterval }}
+ ip ospf dead-interval {{ $ifConfig.DeadInterval }}
+{{ end }}
+{{ if $ifConfig.MTUIgnore }}
+ ip ospf mtu-ignore
+{{ end }}
+{{ if $ifConfig.Priority }}
+ ip ospf priority {{ $ifConfig.Priority }}
+{{ end }}
+{{ if $ifConfig.Authentication }}
+{{ if eq $ifConfig.Authentication.Mode "null" }}
+ ip ospf authentication null
+{{ end }}
+{{ if eq $ifConfig.Authentication.Mode "simple" }}
+ ip ospf authentication
+ ip ospf authentication-key {{ $ifConfig.Authentication.Key }}
+{{ end }}
+{{ if eq $ifConfig.Authentication.Mode "message-digest" }}
+ ip ospf authentication message-digest
+ ip ospf message-digest-key {{ $ifConfig.Authentication.KeyID }} md5 {{ $ifConfig.Authentication.Key }}
+{{ end }}
+{{ end }}
+{{ end }}
+!
+{{ end }}
+{{ end }}
+{{ end }}
 {{ end }}
 {{ end }}
 {{ end }}

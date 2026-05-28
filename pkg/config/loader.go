@@ -140,7 +140,16 @@ func (c *Config) Validate() error {
 		return err
 	}
 
+	// At some point, we should probably remove this specific
+	// validation steps and utilize the actual Validate() methods on
+	// the respective config handlers, or build a better SDK for validating
+	// not only in realtime but on startup instead of building a bespoke validation
+	// method every time we need to validate on the config startup etc..
 	if err := c.validateDHCPOptions(); err != nil {
+		return err
+	}
+
+	if err := c.validateOSPFVRFInterfaces(); err != nil {
 		return err
 	}
 

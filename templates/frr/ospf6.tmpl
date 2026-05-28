@@ -72,6 +72,77 @@ interface {{ $iface }}
 {{ end }}
 {{ end }}
 {{ end }}
+{{ range $vrfName, $vrfConfig := .Protocols.OSPF6.VRF }}
+router ospf6 vrf {{ $vrfName }}
+{{ if $vrfConfig.RouterID }}
+ ospf6 router-id {{ $vrfConfig.RouterID }}
+{{ end }}
+{{ if $vrfConfig.LogAdjacencyChanges }}
+ log-adjacency-changes
+{{ end }}
+{{ if $vrfConfig.AutoCostRefBandwidth }}
+ auto-cost reference-bandwidth {{ $vrfConfig.AutoCostRefBandwidth }}
+{{ end }}
+{{ if $vrfConfig.MaximumPaths }}
+ maximum-paths {{ $vrfConfig.MaximumPaths }}
+{{ end }}
+{{ if $vrfConfig.Distance }}
+ distance {{ $vrfConfig.Distance }}
+{{ end }}
+{{ if $vrfConfig.Redistribute }}
+{{ if $vrfConfig.Redistribute.Connected }}
+ redistribute connected
+{{ end }}
+{{ if $vrfConfig.Redistribute.Static }}
+ redistribute static
+{{ end }}
+{{ if $vrfConfig.Redistribute.BGP }}
+ redistribute bgp
+{{ end }}
+{{ end }}
+{{ if $vrfConfig.DefaultInformation }}
+{{ if $vrfConfig.DefaultInformation.Originate }}
+ default-information originate{{ if $vrfConfig.DefaultInformation.Always }} always{{ end }}{{ if $vrfConfig.DefaultInformation.Metric }} metric {{ $vrfConfig.DefaultInformation.Metric }}{{ end }}{{ if $vrfConfig.DefaultInformation.MetricType }} metric-type {{ $vrfConfig.DefaultInformation.MetricType }}{{ end }}
+{{ end }}
+{{ end }}
+!
+{{ range $area, $areaConfig := $vrfConfig.Areas }}
+{{ range $iface, $ifConfig := $areaConfig.Interfaces }}
+interface {{ $iface }}
+ ipv6 ospf6 area {{ $area }}
+{{ if $ifConfig }}
+{{ if $ifConfig.Passive }}
+ ipv6 ospf6 passive
+{{ end }}
+{{ if $ifConfig.Cost }}
+ ipv6 ospf6 cost {{ $ifConfig.Cost }}
+{{ end }}
+{{ if $ifConfig.Network }}
+ ipv6 ospf6 network {{ $ifConfig.Network }}
+{{ end }}
+{{ if $ifConfig.BFD }}
+ ipv6 ospf6 bfd
+{{ end }}
+{{ if $ifConfig.HelloInterval }}
+ ipv6 ospf6 hello-interval {{ $ifConfig.HelloInterval }}
+{{ end }}
+{{ if $ifConfig.DeadInterval }}
+ ipv6 ospf6 dead-interval {{ $ifConfig.DeadInterval }}
+{{ end }}
+{{ if $ifConfig.MTUIgnore }}
+ ipv6 ospf6 mtu-ignore
+{{ end }}
+{{ if $ifConfig.Priority }}
+ ipv6 ospf6 priority {{ $ifConfig.Priority }}
+{{ end }}
+{{ if $ifConfig.Authentication }}
+ ipv6 ospf6 authentication key-id {{ $ifConfig.Authentication.KeyID }} hash-algo {{ $ifConfig.Authentication.HashAlgo }} key {{ $ifConfig.Authentication.Key }}
+{{ end }}
+{{ end }}
+!
+{{ end }}
+{{ end }}
+{{ end }}
 {{ end }}
 {{ end }}
 {{ end }}

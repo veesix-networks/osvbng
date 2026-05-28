@@ -53,6 +53,7 @@ const (
 	OSPFAreaInterface        Path = "protocols.ospf.areas.<*>.interfaces.<*>"
 	OSPFRedistribute         Path = "protocols.ospf.redistribute"
 	OSPFDefaultInformation   Path = "protocols.ospf.default-information"
+	OSPFVRF                  Path = "protocols.ospf.vrf.<*>"
 
 	OSPF6Enabled              Path = "protocols.ospf6.enabled"
 	OSPF6RouterID             Path = "protocols.ospf6.router-id"
@@ -63,6 +64,7 @@ const (
 	OSPF6AreaInterface        Path = "protocols.ospf6.areas.<*>.interfaces.<*>"
 	OSPF6Redistribute         Path = "protocols.ospf6.redistribute"
 	OSPF6DefaultInformation   Path = "protocols.ospf6.default-information"
+	OSPF6VRF                  Path = "protocols.ospf6.vrf.<*>"
 
 	ISISEnabled             Path = "protocols.isis.enabled"
 	ISISNET                 Path = "protocols.isis.net"
