@@ -126,6 +126,7 @@ Most OSPF fields follow [FRR OSPFv2 conventions](https://docs.frrouting.org/en/l
 | `maximum-paths` | int | Maximum number of equal-cost paths for ECMP load balancing | `4` |
 | `default-metric` | int | Default metric applied to routes redistributed into OSPF | `10` |
 | `distance` | int | Administrative distance for OSPF routes (lower values preferred over other protocols) | `110` |
+| `vrf` | [OSPFVRF](#ospf-vrf) | Per-VRF OSPF instances keyed by VRF name. Each entry renders as `router ospf vrf <name>` in FRR. | |
 
 ### OSPF Area
 
@@ -198,6 +199,48 @@ protocols:
       always: true
 ```
 
+### OSPF VRF
+
+A per-VRF OSPFv2 instance, scoped to a VRF declared at the top-level `vrfs:` block. Mirrors the global OSPF fields but with no `enabled` flag — presence in the `vrf:` map implies the instance exists. Interfaces referenced under a VRF entry must have their `vrf:` field on `interfaces.<*>` (or `interfaces.<*>.subinterfaces.<*>`) matching the VRF name; an interface declared in both global and a VRF block is rejected at commit.
+
+| Field | Type | Description | Example |
+|-------|------|-------------|---------|
+| `router-id` | string | Per-VRF router ID. RFC 2328 requires uniqueness within one routing domain; cross-instance reuse is fine. | `10.255.0.2` |
+| `areas` | [OSPFArea](#ospf-area) | Areas for this VRF instance | |
+| `redistribute` | [OSPFRedistribute](#ospf-redistribute) | | |
+| `default-information` | [OSPFDefaultInfo](#ospf-default-information) | | |
+| `log-adjacency-changes` | bool | | `true` |
+| `auto-cost-reference-bandwidth` | int | | `10000` |
+| `maximum-paths` | int | | `4` |
+| `default-metric` | int | | `10` |
+| `distance` | int | | `110` |
+
+Example — global OSPF on WAN uplinks plus a management-VRF instance with MD5 authentication:
+
+```yaml
+protocols:
+  ospf:
+    enabled: true
+    router-id: 10.255.0.1
+    areas:
+      0.0.0.0:
+        interfaces:
+          eth1: { network: point-to-point }
+    vrf:
+      MGMT-VRF:
+        router-id: 10.255.0.2
+        log-adjacency-changes: true
+        areas:
+          0.0.0.0:
+            interfaces:
+              eth2:
+                network: point-to-point
+                authentication:
+                  mode: message-digest
+                  key-id: 1
+                  key: mgmt-secret
+```
+
 ---
 
 ## OSPFv3
@@ -215,6 +258,7 @@ Most OSPFv3 fields follow [FRR OSPFv3 conventions](https://docs.frrouting.org/en
 | `auto-cost-reference-bandwidth` | int | Reference bandwidth in Mbps used to calculate default interface cost | `10000` |
 | `maximum-paths` | int | Maximum number of equal-cost paths for ECMP load balancing | `4` |
 | `distance` | int | Administrative distance for OSPFv3 routes | `110` |
+| `vrf` | [OSPFv3VRF](#ospfv3-vrf) | Per-VRF OSPFv3 instances keyed by VRF name. Each entry renders as `router ospf6 vrf <name>` in FRR. | |
 
 ### OSPFv3 Area
 
@@ -275,6 +319,41 @@ protocols:
         interfaces:
           eth2:
             network: point-to-point
+```
+
+### OSPFv3 VRF
+
+A per-VRF OSPFv3 instance, scoped to a VRF declared at the top-level `vrfs:` block. Mirrors the global OSPFv3 fields but with no `enabled` flag — presence in the `vrf:` map implies the instance exists. Same interface ↔ VRF cross-validation as the OSPFv2 case.
+
+| Field | Type | Description | Example |
+|-------|------|-------------|---------|
+| `router-id` | string | Per-VRF router ID in A.B.C.D format | `10.255.0.2` |
+| `areas` | [OSPFv3Area](#ospfv3-area) | Areas for this VRF instance | |
+| `redistribute` | [OSPFv3Redistribute](#ospfv3-redistribute) | | |
+| `default-information` | [OSPFv3DefaultInfo](#ospfv3-default-information) | | |
+| `log-adjacency-changes` | bool | | `true` |
+| `auto-cost-reference-bandwidth` | int | | `10000` |
+| `maximum-paths` | int | | `4` |
+| `distance` | int | | `110` |
+
+Example:
+
+```yaml
+protocols:
+  ospf6:
+    enabled: true
+    router-id: 10.255.0.1
+    areas:
+      0.0.0.0:
+        interfaces:
+          eth1: { network: point-to-point }
+    vrf:
+      MGMT-VRF:
+        router-id: 10.255.0.2
+        areas:
+          0.0.0.0:
+            interfaces:
+              eth2: { network: point-to-point }
 ```
 
 ---

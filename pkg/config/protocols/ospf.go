@@ -34,7 +34,20 @@ func (a OSPFAuthMode) Valid() bool {
 }
 
 type OSPFConfig struct {
-	Enabled              bool                 `json:"enabled" yaml:"enabled"`
+	Enabled              bool                      `json:"enabled" yaml:"enabled"`
+	RouterID             string                    `json:"router-id,omitempty" yaml:"router-id,omitempty"`
+	Areas                map[string]*OSPFArea      `json:"areas,omitempty" yaml:"areas,omitempty"`
+	Redistribute         *OSPFRedistribute         `json:"redistribute,omitempty" yaml:"redistribute,omitempty"`
+	DefaultInformation   *OSPFDefaultInfo          `json:"default-information,omitempty" yaml:"default-information,omitempty"`
+	LogAdjacencyChanges  bool                      `json:"log-adjacency-changes,omitempty" yaml:"log-adjacency-changes,omitempty"`
+	AutoCostRefBandwidth uint32                    `json:"auto-cost-reference-bandwidth,omitempty" yaml:"auto-cost-reference-bandwidth,omitempty"`
+	MaximumPaths         uint32                    `json:"maximum-paths,omitempty" yaml:"maximum-paths,omitempty"`
+	DefaultMetric        uint32                    `json:"default-metric,omitempty" yaml:"default-metric,omitempty"`
+	Distance             uint32                    `json:"distance,omitempty" yaml:"distance,omitempty"`
+	VRF                  map[string]*OSPFVRFConfig `json:"vrf,omitempty" yaml:"vrf,omitempty"`
+}
+
+type OSPFVRFConfig struct {
 	RouterID             string               `json:"router-id,omitempty" yaml:"router-id,omitempty"`
 	Areas                map[string]*OSPFArea `json:"areas,omitempty" yaml:"areas,omitempty"`
 	Redistribute         *OSPFRedistribute    `json:"redistribute,omitempty" yaml:"redistribute,omitempty"`

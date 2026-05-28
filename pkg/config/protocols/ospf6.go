@@ -17,7 +17,19 @@ func (n OSPF6NetworkType) Valid() bool {
 }
 
 type OSPF6Config struct {
-	Enabled              bool                  `json:"enabled" yaml:"enabled"`
+	Enabled              bool                       `json:"enabled" yaml:"enabled"`
+	RouterID             string                     `json:"router-id,omitempty" yaml:"router-id,omitempty"`
+	Areas                map[string]*OSPF6Area      `json:"areas,omitempty" yaml:"areas,omitempty"`
+	Redistribute         *OSPF6Redistribute         `json:"redistribute,omitempty" yaml:"redistribute,omitempty"`
+	DefaultInformation   *OSPF6DefaultInfo          `json:"default-information,omitempty" yaml:"default-information,omitempty"`
+	LogAdjacencyChanges  bool                       `json:"log-adjacency-changes,omitempty" yaml:"log-adjacency-changes,omitempty"`
+	AutoCostRefBandwidth uint32                     `json:"auto-cost-reference-bandwidth,omitempty" yaml:"auto-cost-reference-bandwidth,omitempty"`
+	MaximumPaths         uint32                     `json:"maximum-paths,omitempty" yaml:"maximum-paths,omitempty"`
+	Distance             uint32                     `json:"distance,omitempty" yaml:"distance,omitempty"`
+	VRF                  map[string]*OSPF6VRFConfig `json:"vrf,omitempty" yaml:"vrf,omitempty"`
+}
+
+type OSPF6VRFConfig struct {
 	RouterID             string                `json:"router-id,omitempty" yaml:"router-id,omitempty"`
 	Areas                map[string]*OSPF6Area `json:"areas,omitempty" yaml:"areas,omitempty"`
 	Redistribute         *OSPF6Redistribute    `json:"redistribute,omitempty" yaml:"redistribute,omitempty"`
