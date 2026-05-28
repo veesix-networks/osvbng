@@ -33,14 +33,39 @@ type OSPF6Area struct {
 }
 
 type OSPF6InterfaceConfig struct {
-	Passive       bool   `json:"passive,omitempty" yaml:"passive,omitempty"`
-	Cost          uint32 `json:"cost,omitempty" yaml:"cost,omitempty"`
-	Network       OSPF6NetworkType `json:"network,omitempty" yaml:"network,omitempty"`
-	BFD           bool             `json:"bfd,omitempty" yaml:"bfd,omitempty"`
-	HelloInterval uint32 `json:"hello-interval,omitempty" yaml:"hello-interval,omitempty"`
-	DeadInterval  uint32 `json:"dead-interval,omitempty" yaml:"dead-interval,omitempty"`
-	MTUIgnore     bool   `json:"mtu-ignore,omitempty" yaml:"mtu-ignore,omitempty"`
-	Priority      uint32 `json:"priority,omitempty" yaml:"priority,omitempty"`
+	Passive        bool                 `json:"passive,omitempty" yaml:"passive,omitempty"`
+	Cost           uint32               `json:"cost,omitempty" yaml:"cost,omitempty"`
+	Network        OSPF6NetworkType     `json:"network,omitempty" yaml:"network,omitempty"`
+	BFD            bool                 `json:"bfd,omitempty" yaml:"bfd,omitempty"`
+	HelloInterval  uint32               `json:"hello-interval,omitempty" yaml:"hello-interval,omitempty"`
+	DeadInterval   uint32               `json:"dead-interval,omitempty" yaml:"dead-interval,omitempty"`
+	MTUIgnore      bool                 `json:"mtu-ignore,omitempty" yaml:"mtu-ignore,omitempty"`
+	Priority       uint32               `json:"priority,omitempty" yaml:"priority,omitempty"`
+	Authentication *OSPF6InterfaceAuth  `json:"authentication,omitempty" yaml:"authentication,omitempty"`
+}
+
+type OSPF6HashAlgo string
+
+const (
+	OSPF6HashMD5        OSPF6HashAlgo = "md5"
+	OSPF6HashHMACSHA1   OSPF6HashAlgo = "hmac-sha-1"
+	OSPF6HashHMACSHA256 OSPF6HashAlgo = "hmac-sha-256"
+	OSPF6HashHMACSHA384 OSPF6HashAlgo = "hmac-sha-384"
+	OSPF6HashHMACSHA512 OSPF6HashAlgo = "hmac-sha-512"
+)
+
+func (h OSPF6HashAlgo) Valid() bool {
+	switch h {
+	case OSPF6HashMD5, OSPF6HashHMACSHA1, OSPF6HashHMACSHA256, OSPF6HashHMACSHA384, OSPF6HashHMACSHA512:
+		return true
+	}
+	return false
+}
+
+type OSPF6InterfaceAuth struct {
+	KeyID    uint16        `json:"key-id,omitempty" yaml:"key-id,omitempty"`
+	HashAlgo OSPF6HashAlgo `json:"hash-algo,omitempty" yaml:"hash-algo,omitempty"`
+	Key      string        `json:"key,omitempty" yaml:"key,omitempty"`
 }
 
 type OSPF6Redistribute struct {

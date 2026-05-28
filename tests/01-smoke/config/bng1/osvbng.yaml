@@ -147,6 +147,7 @@ protocols:
             10.254.0.2:
                 remote-as: 65000
                 peer: loop0
+                password: smoke-md5
         ipv4-unicast:
             redistribute:
                 connected: true
@@ -171,6 +172,10 @@ protocols:
                 interfaces:
                     eth2:
                         network: point-to-point
+                        authentication:
+                            mode: message-digest
+                            key-id: 1
+                            key: ospf-md5
                     loop0:
                         passive: true
     ospf6:
@@ -182,6 +187,10 @@ protocols:
                 interfaces:
                     eth2:
                         network: point-to-point
+                        authentication:
+                            key-id: 10
+                            hash-algo: hmac-sha-256
+                            key: ospfv3-trailer
     mpls:
         enabled: true
     ldp:

@@ -21,6 +21,7 @@ Most BGP fields follow [FRR BGP conventions](https://docs.frrouting.org/en/lates
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
 | `remote-as` | int | AS number of peers in this group; if same as local ASN, creates iBGP peering | `65001` |
+| `password` | string | TCP MD5 signature (RFC 2385) applied to every session in the group; per-neighbor `password` overrides this | `s3cret` |
 | `ipv4-unicast` | [BGPNeighborAFI](#bgp-neighbor-afi-config) | IPv4 unicast AFI/SAFI policy for this group | |
 | `ipv6-unicast` | [BGPNeighborAFI](#bgp-neighbor-afi-config) | IPv6 unicast AFI/SAFI policy for this group | |
 
@@ -30,6 +31,7 @@ Most BGP fields follow [FRR BGP conventions](https://docs.frrouting.org/en/lates
 |-------|------|-------------|---------|
 | `remote-as` | int | AS number of this neighbor; determines eBGP vs iBGP behavior | `65001` |
 | `peer-group` | string | Inherit configuration from a named peer group | `upstream` |
+| `password` | string | TCP MD5 signature (RFC 2385) for this session; overrides any peer-group password | `s3cret` |
 | `bfd` | bool | Enable Bidirectional Forwarding Detection for fast failure detection | `true` |
 | `description` | string | Text description of this neighbor for operational reference | `Core Router` |
 | `ipv4-unicast` | [BGPNeighborAFI](#bgp-neighbor-afi-config) | IPv4 unicast AFI/SAFI policy overrides for this neighbor | |
@@ -130,7 +132,7 @@ Most OSPF fields follow [FRR OSPFv2 conventions](https://docs.frrouting.org/en/l
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
 | `interfaces` | [OSPFInterface](#ospf-interface) | Interfaces belonging to this area, keyed by interface name | |
-| `authentication` | string | Enable area-wide authentication; `message-digest` enables MD5 authentication on all area interfaces | `message-digest` |
+| `authentication` | string | Area-wide authentication default. `simple` enables Type 1 (simple-password) on all area interfaces, `message-digest` enables Type 2 (MD5 HMAC). Per-interface `authentication.mode` overrides this. Key material is always per-interface. | `message-digest` |
 
 ### OSPF Interface
 
@@ -144,6 +146,15 @@ Most OSPF fields follow [FRR OSPFv2 conventions](https://docs.frrouting.org/en/l
 | `dead-interval` | int | Time in seconds to wait without receiving Hellos before declaring a neighbor down | `40` |
 | `mtu-ignore` | bool | Disable MTU mismatch detection during database exchange; useful when interface MTUs differ between neighbors | `false` |
 | `priority` | int | Router priority for DR/BDR election on broadcast/NBMA networks; 0 means this router will not participate in election | `1` |
+| `authentication` | [OSPFInterfaceAuth](#ospf-interface-authentication) | Per-interface authentication. Overrides any area-wide `authentication` default. | |
+
+### OSPF Interface Authentication
+
+| Field | Type | Description | Example |
+|-------|------|-------------|---------|
+| `mode` | string | `null` (explicit no-auth, overrides area default), `simple` (RFC 2328 Type 1, cleartext, max 8 chars), `message-digest` (Type 2, MD5 HMAC) | `message-digest` |
+| `key` | string | Key material. Required for `simple` and `message-digest`. | `s3cret` |
+| `key-id` | int | Key identifier in [1, 255] for `message-digest` mode; must match the peer | `1` |
 
 ### OSPF Redistribute
 
@@ -223,6 +234,17 @@ Most OSPFv3 fields follow [FRR OSPFv3 conventions](https://docs.frrouting.org/en
 | `dead-interval` | int | Time in seconds to wait without receiving Hellos before declaring a neighbor down | `40` |
 | `mtu-ignore` | bool | Disable MTU mismatch detection during database exchange | `false` |
 | `priority` | int | Router priority for DR/BDR election; 0 means this router will not participate in election | `1` |
+| `authentication` | [OSPFv3InterfaceAuth](#ospfv3-interface-authentication) | RFC 7166 Authentication Trailer manual key | |
+
+### OSPFv3 Interface Authentication
+
+OSPFv3 uses the Authentication Trailer (RFC 7166) with a manual key per interface. All three fields are required together.
+
+| Field | Type | Description | Example |
+|-------|------|-------------|---------|
+| `key-id` | int | Key identifier in [1, 65535]; must match the peer | `10` |
+| `hash-algo` | string | `md5`, `hmac-sha-1`, `hmac-sha-256`, `hmac-sha-384`, or `hmac-sha-512`. SHA-1 and SHA-256+ require FRR built with openssl. | `hmac-sha-256` |
+| `key` | string | Key material | `s3cret` |
 
 ### OSPFv3 Redistribute
 

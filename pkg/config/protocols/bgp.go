@@ -24,6 +24,7 @@ type BGPConfig struct {
 
 type BGPPeerGroup struct {
 	RemoteAS    uint32                `json:"remote-as,omitempty" yaml:"remote-as,omitempty"`
+	Password    string                `json:"password,omitempty" yaml:"password,omitempty"`
 	IPv4Unicast *BGPNeighborAFIConfig `json:"ipv4-unicast,omitempty" yaml:"ipv4-unicast,omitempty"`
 	IPv6Unicast *BGPNeighborAFIConfig `json:"ipv6-unicast,omitempty" yaml:"ipv6-unicast,omitempty"`
 }
@@ -68,6 +69,7 @@ type BGPNeighbor struct {
 	Peer        string                `json:"peer,omitempty" yaml:"peer,omitempty"`
 	PeerGroup   string                `json:"peer-group,omitempty" yaml:"peer-group,omitempty"`
 	RemoteAS    uint32                `json:"remote-as,omitempty" yaml:"remote-as,omitempty"`
+	Password    string                `json:"password,omitempty" yaml:"password,omitempty"`
 	BFD         bool                  `json:"bfd,omitempty" yaml:"bfd,omitempty"`
 	Description string                `json:"description,omitempty" yaml:"description,omitempty"`
 	IPv4Unicast *BGPNeighborAFIConfig `json:"ipv4-unicast,omitempty" yaml:"ipv4-unicast,omitempty"`
