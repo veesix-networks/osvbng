@@ -88,6 +88,7 @@ func New(cfg *config.Config) (auth.AuthProvider, error) {
 	authConns := make([]*radiusConn, 0, len(pluginCfg.Servers))
 	acctConns := make([]*radiusConn, 0, len(pluginCfg.Servers))
 
+	log := logger.Get(Namespace)
 	for _, s := range pluginCfg.Servers {
 		secret := []byte(s.Secret)
 
@@ -95,36 +96,23 @@ func New(cfg *config.Config) (auth.AuthProvider, error) {
 		family := serverFamily(s.Host)
 		bind, err := effective.Resolve(family)
 		if err != nil {
-			for _, c := range authConns {
-				_ = c.close()
-			}
-			for _, c := range acctConns {
-				_ = c.close()
-			}
 			return nil, fmt.Errorf("server %s binding: %w", s.Host, err)
 		}
 
-		ac, err := newRadiusConn(s.Host, pluginCfg.AuthPort, secret, pluginCfg.Timeout, bind)
-		if err != nil {
-			for _, c := range authConns {
-				_ = c.close()
-			}
-			for _, c := range acctConns {
-				_ = c.close()
-			}
-			return nil, fmt.Errorf("auth conn to %s: %w", s.Host, err)
+		// Dialing is deferred and non-fatal: an unreachable RADIUS server or a
+		// not-yet-ready VRF route must not prevent the daemon from starting.
+		// The socket is established (and retried) on the first request.
+		ac := newRadiusConn(s.Host, pluginCfg.AuthPort, secret, pluginCfg.Timeout, bind)
+		if _, err := ac.ensureConn(); err != nil {
+			log.Warn("RADIUS auth server not reachable at startup; will retry on first request",
+				"server", s.Host, "error", err)
 		}
 		authConns = append(authConns, ac)
 
-		acc, err := newRadiusConn(s.Host, pluginCfg.AcctPort, secret, pluginCfg.Timeout, bind)
-		if err != nil {
-			for _, c := range authConns {
-				_ = c.close()
-			}
-			for _, c := range acctConns {
-				_ = c.close()
-			}
-			return nil, fmt.Errorf("acct conn to %s: %w", s.Host, err)
+		acc := newRadiusConn(s.Host, pluginCfg.AcctPort, secret, pluginCfg.Timeout, bind)
+		if _, err := acc.ensureConn(); err != nil {
+			log.Warn("RADIUS acct server not reachable at startup; will retry on first request",
+				"server", s.Host, "error", err)
 		}
 		acctConns = append(acctConns, acc)
 	}

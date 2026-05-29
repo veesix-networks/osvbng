@@ -33,10 +33,15 @@ type pendingRequest struct {
 }
 
 type radiusConn struct {
-	conn    *net.UDPConn
+	host    string
+	port    int
+	bind    netbind.Binding
 	addr    string
 	secret  []byte
 	timeout time.Duration
+
+	dialMu sync.Mutex
+	conn   atomic.Pointer[net.UDPConn]
 
 	mu      sync.Mutex
 	pending [256]*pendingRequest
@@ -48,31 +53,65 @@ type radiusConn struct {
 	deadSince atomic.Int64
 }
 
-func newRadiusConn(host string, port int, secret []byte, timeout time.Duration, b netbind.Binding) (*radiusConn, error) {
-	addr := net.JoinHostPort(host, strconv.Itoa(port))
-
-	raddr, err := resolveServerAddr(host, port, b, timeout)
-	if err != nil {
-		return nil, fmt.Errorf("resolve %s: %w", addr, err)
-	}
-
-	dialCtx, cancel := context.WithTimeout(context.Background(), dialTimeout(timeout))
-	defer cancel()
-
-	conn, err := netbind.DialUDP(dialCtx, "udp", raddr, b)
-	if err != nil {
-		return nil, fmt.Errorf("dial %s: %w", addr, err)
-	}
-
-	rc := &radiusConn{
-		conn:    conn,
-		addr:    addr,
+// newRadiusConn never dials: the UDP socket bind/connect performs a route
+// lookup in the (possibly VRF-bound) namespace, so an unreachable server or a
+// not-yet-ready source address would fail here. Dialing is deferred to the
+// first exchange so an unreachable RADIUS server cannot block daemon startup;
+// ensureConn redials on demand and after any I/O error.
+func newRadiusConn(host string, port int, secret []byte, timeout time.Duration, b netbind.Binding) *radiusConn {
+	return &radiusConn{
+		host:    host,
+		port:    port,
+		bind:    b,
+		addr:    net.JoinHostPort(host, strconv.Itoa(port)),
 		secret:  secret,
 		timeout: timeout,
 	}
+}
 
-	go rc.readLoop()
-	return rc, nil
+// ensureConn returns the live socket, dialing it if necessary. Concurrent
+// callers serialize on dialMu; only the first dials.
+func (rc *radiusConn) ensureConn() (*net.UDPConn, error) {
+	if c := rc.conn.Load(); c != nil {
+		return c, nil
+	}
+	if rc.closed.Load() {
+		return nil, fmt.Errorf("radius conn %s closed", rc.addr)
+	}
+
+	rc.dialMu.Lock()
+	defer rc.dialMu.Unlock()
+
+	if c := rc.conn.Load(); c != nil {
+		return c, nil
+	}
+
+	raddr, err := resolveServerAddr(rc.host, rc.port, rc.bind, rc.timeout)
+	if err != nil {
+		return nil, fmt.Errorf("resolve %s: %w", rc.addr, err)
+	}
+
+	dialCtx, cancel := context.WithTimeout(context.Background(), dialTimeout(rc.timeout))
+	defer cancel()
+
+	conn, err := netbind.DialUDP(dialCtx, "udp", raddr, rc.bind)
+	if err != nil {
+		return nil, fmt.Errorf("dial %s: %w", rc.addr, err)
+	}
+
+	rc.conn.Store(conn)
+	go rc.readLoop(conn)
+	return conn, nil
+}
+
+// dropConn tears down the socket after an I/O error so the next exchange
+// redials. A no-op if conn has already been replaced.
+func (rc *radiusConn) dropConn(c *net.UDPConn) {
+	rc.dialMu.Lock()
+	defer rc.dialMu.Unlock()
+	if rc.conn.CompareAndSwap(c, nil) {
+		_ = c.Close()
+	}
 }
 
 // resolveServerAddr returns a *net.UDPAddr for host:port, looking
@@ -130,7 +169,10 @@ func dialTimeout(t time.Duration) time.Duration {
 
 func (rc *radiusConn) close() error {
 	rc.closed.Store(true)
-	return rc.conn.Close()
+	if c := rc.conn.Swap(nil); c != nil {
+		return c.Close()
+	}
+	return nil
 }
 
 func (rc *radiusConn) allocID() byte {
@@ -138,6 +180,11 @@ func (rc *radiusConn) allocID() byte {
 }
 
 func (rc *radiusConn) exchange(packet *radius.Packet) (*radius.Packet, error) {
+	conn, err := rc.ensureConn()
+	if err != nil {
+		return nil, err
+	}
+
 	id := rc.allocID()
 	packet.Identifier = id
 	packet.Secret = rc.secret
@@ -166,7 +213,8 @@ func (rc *radiusConn) exchange(packet *radius.Packet) (*radius.Packet, error) {
 		rc.mu.Unlock()
 	}()
 
-	if _, err := rc.conn.Write(raw); err != nil {
+	if _, err := conn.Write(raw); err != nil {
+		rc.dropConn(conn)
 		return nil, fmt.Errorf("write: %w", err)
 	}
 
@@ -181,18 +229,19 @@ func (rc *radiusConn) exchange(packet *radius.Packet) (*radius.Packet, error) {
 	}
 }
 
-func (rc *radiusConn) readLoop() {
+func (rc *radiusConn) readLoop(conn *net.UDPConn) {
 	for {
 		bufPtr := respBufPool.Get().(*[]byte)
 		buf := *bufPtr
 
-		n, err := rc.conn.Read(buf)
+		n, err := conn.Read(buf)
 		if err != nil {
 			respBufPool.Put(bufPtr)
-			if rc.closed.Load() {
+			if rc.closed.Load() || rc.conn.Load() != conn {
 				return
 			}
-			continue
+			rc.dropConn(conn)
+			return
 		}
 
 		resp, err := radius.Parse(buf[:n], rc.secret)
