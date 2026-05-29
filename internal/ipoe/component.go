@@ -408,28 +408,23 @@ func (c *Component) resolveDHCPv6(ctx *allocator.Context) *dhcp.ResolvedDHCPv6 {
 	return dhcp.ResolveV6(ctx, profile)
 }
 
-func (c *Component) resolveSRGName(svlan uint16) string {
+func (c *Component) resolveSRGName(svlan, cvlan uint16) string {
 	if c.srgMgr == nil {
 		return ""
 	}
-	cfg, err := c.cfgMgr.GetRunning()
-	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+	match, ok := c.cfgMgr.LookupSubscriberGroup(svlan, cvlan)
+	if !ok {
 		return ""
 	}
-	groupName := cfg.SubscriberGroups.FindGroupNameBySVLAN(svlan)
-	if groupName == "" {
-		return ""
-	}
-	return c.srgMgr.GetSRGForGroup(groupName)
+	return c.srgMgr.GetSRGForGroup(match.Name)
 }
 
-func (c *Component) allowRelayForward(svlan uint16) bool {
-	cfg, err := c.cfgMgr.GetRunning()
-	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+func (c *Component) allowRelayForward(svlan, cvlan uint16) bool {
+	match, ok := c.cfgMgr.LookupSubscriberGroup(svlan, cvlan)
+	if !ok {
 		return true
 	}
-	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(svlan)
-	return group.GetAllowRelayForward()
+	return match.Group.GetAllowRelayForward()
 }
 
 type raPrefixInfo struct {
@@ -535,7 +530,7 @@ func (c *Component) processDHCPPacket(pkt *dataplane.ParsedPacket) error {
 	}
 
 	if c.srgMgr != nil {
-		srgName := c.resolveSRGName(pkt.OuterVLAN)
+		srgName := c.resolveSRGName(pkt.OuterVLAN, pkt.InnerVLAN)
 		if !c.srgMgr.IsActive(srgName) {
 			return nil
 		}
@@ -1893,7 +1888,7 @@ func (c *Component) processDHCPv6Packet(pkt *dataplane.ParsedPacket) error {
 	}
 
 	if c.srgMgr != nil {
-		srgName := c.resolveSRGName(pkt.OuterVLAN)
+		srgName := c.resolveSRGName(pkt.OuterVLAN, pkt.InnerVLAN)
 		if !c.srgMgr.IsActive(srgName) {
 			return nil
 		}
@@ -1911,7 +1906,7 @@ func (c *Component) processDHCPv6Packet(pkt *dataplane.ParsedPacket) error {
 		if inner == nil {
 			return fmt.Errorf("failed to unwrap relay message")
 		}
-		if !c.allowRelayForward(pkt.OuterVLAN) {
+		if !c.allowRelayForward(pkt.OuterVLAN, pkt.InnerVLAN) {
 			c.logger.WithGroup(logger.IPoEDHCP6).Info("Rejected DHCPv6 Relay-Forward: subscriber group opted out",
 				"svlan", pkt.OuterVLAN, "mac", pkt.MAC.String())
 			return nil
@@ -2841,7 +2836,7 @@ func (c *Component) processRSPacket(pkt *dataplane.ParsedPacket) error {
 	}
 
 	if c.srgMgr != nil {
-		srgName := c.resolveSRGName(pkt.OuterVLAN)
+		srgName := c.resolveSRGName(pkt.OuterVLAN, pkt.InnerVLAN)
 		if !c.srgMgr.IsActive(srgName) {
 			return nil
 		}
@@ -2934,7 +2929,7 @@ func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbo
 		}
 	}
 
-	srgName := c.resolveSRGName(pkt.OuterVLAN)
+	srgName := c.resolveSRGName(pkt.OuterVLAN, pkt.InnerVLAN)
 	srcMACBytes := c.getLocalMAC(srgName, parentSwIfIndex)
 	if srcMACBytes == nil {
 		return fmt.Errorf("no source MAC available")
@@ -3078,7 +3073,7 @@ func (c *Component) processNSPacket(pkt *dataplane.ParsedPacket) error {
 	}
 	target := net.IP(body[4:20])
 
-	srgName := c.resolveSRGName(pkt.OuterVLAN)
+	srgName := c.resolveSRGName(pkt.OuterVLAN, pkt.InnerVLAN)
 	if c.srgMgr != nil && !c.srgMgr.IsActive(srgName) {
 		return nil
 	}
@@ -3187,13 +3182,8 @@ func (c *Component) resolveUnnumberedLoopback(sess *SessionState) string {
 		return sess.ServiceGroup.Unnumbered
 	}
 
-	cfg, err := c.cfgMgr.GetRunning()
-	if err != nil || cfg.SubscriberGroups == nil {
-		return ""
-	}
-
-	if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(sess.OuterVLAN); group != nil {
-		return group.FindGatewayForSVLAN(sess.OuterVLAN)
+	if match, ok := c.cfgMgr.LookupSubscriberGroup(sess.OuterVLAN, sess.InnerVLAN); ok && match.VR != nil {
+		return match.VR.Interface
 	}
 
 	return ""
