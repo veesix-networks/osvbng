@@ -267,7 +267,7 @@ func (c *Component) resolveTerminateTarget(ev *events.SubscriberTerminateEvent) 
 	return nil
 }
 
-func (c *Component) resolveServiceGroup(svlan uint16, aaaAttrs map[string]interface{}) svcgroup.ServiceGroup {
+func (c *Component) resolveServiceGroup(svlan, cvlan uint16, aaaAttrs map[string]interface{}) svcgroup.ServiceGroup {
 	var sgName string
 	if v, ok := aaaAttrs[aaa.AttrServiceGroup]; ok {
 		if s, ok := v.(string); ok {
@@ -276,11 +276,8 @@ func (c *Component) resolveServiceGroup(svlan uint16, aaaAttrs map[string]interf
 	}
 
 	var defaultSG string
-	cfg, err := c.cfgMgr.GetRunning()
-	if err == nil && cfg != nil && cfg.SubscriberGroups != nil {
-		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(svlan); group != nil {
-			defaultSG = group.DefaultServiceGroup
-		}
+	if match, ok := c.cfgMgr.LookupSubscriberGroup(svlan, cvlan); ok {
+		defaultSG = match.Group.DefaultServiceGroup
 	}
 
 	return c.svcGroupResolver.Resolve(sgName, defaultSG, aaaAttrs)
@@ -288,12 +285,9 @@ func (c *Component) resolveServiceGroup(svlan uint16, aaaAttrs map[string]interf
 
 func (c *Component) buildAllocContext(sess *SessionState, aaaAttrs map[string]interface{}) *allocator.Context {
 	var profileName, ipv6ProfileName string
-	cfg, err := c.cfgMgr.GetRunning()
-	if err == nil && cfg != nil && cfg.SubscriberGroups != nil {
-		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(sess.OuterVLAN); group != nil {
-			profileName = group.IPv4Profile
-			ipv6ProfileName = group.IPv6Profile
-		}
+	if match, ok := c.cfgMgr.LookupSubscriberGroup(sess.OuterVLAN, sess.InnerVLAN); ok {
+		profileName = match.Group.IPv4Profile
+		ipv6ProfileName = match.Group.IPv6Profile
 	}
 
 	ctx := allocator.NewContext(sess.SessionID, sess.MAC, sess.OuterVLAN, sess.InnerVLAN, sess.VRF, sess.ServiceGroup.Name, profileName, ipv6ProfileName, aaaAttrs)
@@ -1114,7 +1108,7 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 	sess.mu.Unlock()
 	c.xidIndex.Delete(xid)
 
-	sessionMode := c.getSessionMode(pkt.OuterVLAN)
+	sessionMode := c.getSessionMode(pkt.OuterVLAN, pkt.InnerVLAN)
 	deleteSession := true
 	if sessionMode == subscriber.SessionModeUnified && ipv6Bound {
 		deleteSession = false
@@ -1468,18 +1462,10 @@ func (c *Component) handleAAAResponse(event events.Event) {
 	}
 
 	var subscriberGroup, ipv4Profile, ipv6Profile string
-	cfg, _ := c.cfgMgr.GetRunning()
-	if cfg != nil && cfg.SubscriberGroups != nil {
-		for name, group := range cfg.SubscriberGroups.Groups {
-			for i := range group.VLANs {
-				if group.VLANs[i].MatchesSVLAN(svlan) {
-					subscriberGroup = name
-					ipv4Profile = group.IPv4Profile
-					ipv6Profile = group.IPv6Profile
-					break
-				}
-			}
-		}
+	if match, ok := c.cfgMgr.LookupSubscriberGroup(svlan, cvlan); ok {
+		subscriberGroup = match.Name
+		ipv4Profile = match.Group.IPv4Profile
+		ipv6Profile = match.Group.IPv6Profile
 	}
 	c.logger.Debug("Session AAA approved",
 		"session_id", sessID,
@@ -1488,7 +1474,7 @@ func (c *Component) handleAAAResponse(event events.Event) {
 		"ipv6_profile", ipv6Profile,
 	)
 
-	resolved := c.resolveServiceGroup(svlan, data.Response.Attributes)
+	resolved := c.resolveServiceGroup(svlan, cvlan, data.Response.Attributes)
 
 	var srgName string
 	if c.srgMgr != nil && subscriberGroup != "" {
@@ -1598,13 +1584,11 @@ func (c *Component) checkSessionLimit(mac net.HardwareAddr, svlan, cvlan uint16)
 	}
 
 	var policyName string
-	if cfg.SubscriberGroups != nil {
-		if group, vlanCfg := cfg.SubscriberGroups.FindGroupBySVLAN(svlan); group != nil {
-			if vlanCfg != nil && vlanCfg.AAA != nil && vlanCfg.AAA.Policy != "" {
-				policyName = vlanCfg.AAA.Policy
-			} else {
-				policyName = group.AAAPolicy
-			}
+	if match, ok := c.cfgMgr.LookupSubscriberGroup(svlan, cvlan); ok {
+		if match.VR != nil && match.VR.AAA != nil && match.VR.AAA.Policy != "" {
+			policyName = match.VR.AAA.Policy
+		} else {
+			policyName = match.Group.AAAPolicy
 		}
 	}
 
@@ -1851,22 +1835,16 @@ func linkLocalFromMAC(mac net.HardwareAddr) net.IP {
 	return addr
 }
 
-func (c *Component) getSessionMode(svlan uint16) subscriber.SessionMode {
-	cfg, err := c.cfgMgr.GetRunning()
-	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+func (c *Component) getSessionMode(svlan, cvlan uint16) subscriber.SessionMode {
+	match, ok := c.cfgMgr.LookupSubscriberGroup(svlan, cvlan)
+	if !ok {
 		return subscriber.SessionModeUnified
 	}
-
-	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(svlan)
-	if group == nil {
-		return subscriber.SessionModeUnified
-	}
-
-	return group.GetSessionMode()
+	return match.Group.GetSessionMode()
 }
 
 func (c *Component) makeSessionKeyV4(mac net.HardwareAddr, svlan, cvlan uint16) string {
-	mode := c.getSessionMode(svlan)
+	mode := c.getSessionMode(svlan, cvlan)
 	if mode == subscriber.SessionModeUnified {
 		return fmt.Sprintf("ipoe:%s:%d:%d", mac.String(), svlan, cvlan)
 	}
@@ -1874,7 +1852,7 @@ func (c *Component) makeSessionKeyV4(mac net.HardwareAddr, svlan, cvlan uint16) 
 }
 
 func (c *Component) makeSessionKeyV6(mac net.HardwareAddr, svlan, cvlan uint16) string {
-	mode := c.getSessionMode(svlan)
+	mode := c.getSessionMode(svlan, cvlan)
 	if mode == subscriber.SessionModeUnified {
 		return fmt.Sprintf("ipoe:%s:%d:%d", mac.String(), svlan, cvlan)
 	}
@@ -2177,7 +2155,7 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket, msg *dhcp6.
 
 	sess.IPv6Bound = false
 
-	sessionMode := c.getSessionMode(pkt.OuterVLAN)
+	sessionMode := c.getSessionMode(pkt.OuterVLAN, pkt.InnerVLAN)
 	deleteSession := true
 	if sessionMode == subscriber.SessionModeUnified && ipv4Bound {
 		deleteSession = false
@@ -2727,7 +2705,7 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, msg *dhcp6.Message) er
 		prefixStr = pdPrefix.String()
 	}
 
-	sessionMode := c.getSessionMode(sess.OuterVLAN)
+	sessionMode := c.getSessionMode(sess.OuterVLAN, sess.InnerVLAN)
 	if sessionMode == subscriber.SessionModeUnified && !v4AlreadyBound {
 		return nil
 	}
