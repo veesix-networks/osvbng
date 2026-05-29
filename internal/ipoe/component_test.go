@@ -99,6 +99,14 @@ type fakeConfigManager struct {
 func (f *fakeConfigManager) GetRunning() (*config.Config, error) { return f.cfg, nil }
 func (f *fakeConfigManager) GetStartup() (*config.Config, error) { return f.cfg, nil }
 
+func (f *fakeConfigManager) LookupSubscriberGroup(svlan, cvlan uint16) (subscriber.GroupMatch, bool) {
+	var groups *subscriber.SubscriberGroupsConfig
+	if f.cfg != nil {
+		groups = f.cfg.SubscriberGroups
+	}
+	return subscriber.BuildMatchIndex(groups).Lookup(svlan, cvlan)
+}
+
 type captureBus struct {
 	mu     sync.Mutex
 	egress []events.EgressEvent
@@ -295,6 +303,54 @@ func TestProcessNSPacket(t *testing.T) {
 		err := c.processNSPacket(pkt)
 		if err == nil {
 			t.Fatalf("expected error for short NS body, got nil")
+		}
+	})
+}
+
+func TestProcessNSPacketCVLANGate(t *testing.T) {
+	t.Parallel()
+
+	vmac := net.HardwareAddr{0xaa, 0xc1, 0xab, 0x1f, 0xe2, 0xfa}
+	ourLinkLocal := linkLocalFromMAC(vmac)
+	host := net.ParseIP("fe80::baad:f00d")
+
+	cfg := &config.Config{
+		SubscriberGroups: &subscriber.SubscriberGroupsConfig{
+			Groups: map[string]*subscriber.SubscriberGroup{
+				"access1": {VLANs: []subscriber.VLANRange{{SVLAN: "100", CVLAN: "10"}}},
+			},
+		},
+	}
+
+	t.Run("matching_cvlan_answers", func(t *testing.T) {
+		c, bus := newNSPTestComponent(t, vmac, true)
+		c.cfgMgr = &fakeConfigManager{cfg: cfg}
+		pkt := nsPacket(t, ourLinkLocal, host)
+		pkt.InnerVLAN = 10
+
+		if err := c.processNSPacket(pkt); err != nil {
+			t.Fatalf("processNSPacket returned error: %v", err)
+		}
+		bus.mu.Lock()
+		defer bus.mu.Unlock()
+		if len(bus.egress) != 1 {
+			t.Fatalf("matching C-VLAN: expected 1 egress, got %d", len(bus.egress))
+		}
+	})
+
+	t.Run("non_matching_cvlan_dropped", func(t *testing.T) {
+		c, bus := newNSPTestComponent(t, vmac, true)
+		c.cfgMgr = &fakeConfigManager{cfg: cfg}
+		pkt := nsPacket(t, ourLinkLocal, host)
+		pkt.InnerVLAN = 20
+
+		if err := c.processNSPacket(pkt); err != nil {
+			t.Fatalf("processNSPacket returned error: %v", err)
+		}
+		bus.mu.Lock()
+		defer bus.mu.Unlock()
+		if len(bus.egress) != 0 {
+			t.Fatalf("non-matching C-VLAN: expected 0 egress (gated), got %d", len(bus.egress))
 		}
 	})
 }

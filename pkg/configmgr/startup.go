@@ -57,6 +57,7 @@ func (cd *ConfigManager) ApplyLoadedConfig() error {
 	cd.mu.Lock()
 	cd.runningConfig = config
 	cd.refreshMixedAccessSet()
+	cd.refreshSGSnapshot()
 	cd.mu.Unlock()
 
 	sessionID, err := cd.CreateCandidateSession()

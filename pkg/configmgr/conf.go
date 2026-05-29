@@ -25,10 +25,11 @@ type ConfigManager struct {
 	frrConfig *frr.Config
 	logger    *logger.Logger
 
-	runningConfig    *config.Config
-	startupConfig    *config.Config
-	dataplaneState   *DataplaneState
-	mixedAccessSet   atomic.Value
+	runningConfig  *config.Config
+	startupConfig  *config.Config
+	dataplaneState *DataplaneState
+	mixedAccessSet atomic.Value
+	sgIndex        atomic.Value
 	sessions       map[conf.SessionID]*session
 	versions       []ConfigVersion
 	nextSessionID  uint64
@@ -276,6 +277,9 @@ func (cd *ConfigManager) Commit(id conf.SessionID) error {
 	if err := sess.config.ValidateBindings(); err != nil {
 		return fmt.Errorf("pre-commit validation failed: %w", err)
 	}
+	if err := subscriber.ValidateMatchIndex(sess.config.SubscriberGroups); err != nil {
+		return fmt.Errorf("pre-commit validation failed: %w", err)
+	}
 
 	cd.logger.Info("Committing configuration", "session", id, "changes", len(sortedChanges))
 
@@ -319,6 +323,7 @@ func (cd *ConfigManager) Commit(id conf.SessionID) error {
 
 	cd.runningConfig = sess.config
 	cd.refreshMixedAccessSet()
+	cd.refreshSGSnapshot()
 
 	cd.startupConfig = cd.deepCopyConfig(cd.runningConfig)
 	if err := SaveYAML(cd.startupConfigPath, cd.scrubPersistedConfig(cd.startupConfig)); err != nil {
@@ -548,6 +553,7 @@ func (cd *ConfigManager) Rollback(toVersion int) error {
 
 	cd.runningConfig = cd.sessions[sessionID].config
 	cd.refreshMixedAccessSet()
+	cd.refreshSGSnapshot()
 
 	diff := FormatChanges(sess.changes)
 	changes := make([]Change, 0)
@@ -685,6 +691,26 @@ func (cd *ConfigManager) refreshMixedAccessSet() {
 	cd.mixedAccessSet.Store(m)
 }
 
+// refreshSGSnapshot rebuilds the match index from runningConfig and swaps it.
+// Caller holds cd.mu. The index points into runningConfig, so it is refreshed
+// wherever runningConfig is published to keep the two consistent for lock-free
+// readers.
+func (cd *ConfigManager) refreshSGSnapshot() {
+	var groups *subscriber.SubscriberGroupsConfig
+	if cd.runningConfig != nil {
+		groups = cd.runningConfig.SubscriberGroups
+	}
+	cd.sgIndex.Store(subscriber.BuildMatchIndex(groups))
+}
+
+func (cd *ConfigManager) LookupSubscriberGroup(svlan, cvlan uint16) (subscriber.GroupMatch, bool) {
+	v := cd.sgIndex.Load()
+	if v == nil {
+		return subscriber.GroupMatch{}, false
+	}
+	return v.(*subscriber.MatchIndex).Lookup(svlan, cvlan)
+}
+
 func (cd *ConfigManager) GetStartup() (*config.Config, error) {
 	cd.mu.RLock()
 	defer cd.mu.RUnlock()
@@ -698,6 +724,7 @@ func (cd *ConfigManager) ResetForRecovery() {
 
 	cd.runningConfig = &config.Config{}
 	cd.refreshMixedAccessSet()
+	cd.refreshSGSnapshot()
 	if cd.dataplaneState != nil {
 		cd.dataplaneState.Reset()
 	} else {

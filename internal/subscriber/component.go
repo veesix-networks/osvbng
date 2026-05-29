@@ -584,10 +584,8 @@ func (c *Component) resolveSessionLoopback(sess models.SubscriberSession) string
 		}
 	}
 
-	if cfg.SubscriberGroups != nil {
-		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(sess.GetOuterVLAN()); group != nil {
-			return group.FindGatewayForSVLAN(sess.GetOuterVLAN())
-		}
+	if match, ok := c.cfgMgr.LookupSubscriberGroup(sess.GetOuterVLAN(), sess.GetInnerVLAN()); ok && match.VR != nil {
+		return match.VR.Interface
 	}
 	return ""
 }

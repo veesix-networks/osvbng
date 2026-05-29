@@ -53,31 +53,23 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 	}, nil
 }
 
-func (c *Component) resolveSRGName(svlan uint16) string {
+func (c *Component) resolveSRGName(svlan, cvlan uint16) string {
 	if c.srgMgr == nil {
 		return ""
 	}
-	cfg, err := c.configMgr.GetRunning()
-	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+	match, ok := c.configMgr.LookupSubscriberGroup(svlan, cvlan)
+	if !ok {
 		return ""
 	}
-	groupName := cfg.SubscriberGroups.FindGroupNameBySVLAN(svlan)
-	if groupName == "" {
-		return ""
-	}
-	return c.srgMgr.GetSRGForGroup(groupName)
+	return c.srgMgr.GetSRGForGroup(match.Name)
 }
 
-func (c *Component) resolveOuterTPID(svlan uint16) uint16 {
-	cfg, err := c.configMgr.GetRunning()
-	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+func (c *Component) resolveOuterTPID(svlan, cvlan uint16) uint16 {
+	match, ok := c.configMgr.LookupSubscriberGroup(svlan, cvlan)
+	if !ok {
 		return 0x88A8
 	}
-	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(svlan)
-	if group == nil {
-		return 0x88A8
-	}
-	return group.GetOuterTPID()
+	return match.Group.GetOuterTPID()
 }
 
 func (c *Component) Start(ctx context.Context) error {
@@ -175,7 +167,7 @@ func (c *Component) handlePacket(pkt *dataplane.ParsedPacket) error {
 			srgName = sess.SRGName
 		}
 		if srgName == "" {
-			srgName = c.resolveSRGName(pkt.OuterVLAN)
+			srgName = c.resolveSRGName(pkt.OuterVLAN, pkt.InnerVLAN)
 		}
 		if srgName != "" {
 			if !c.srgMgr.IsActive(srgName) {
@@ -208,7 +200,7 @@ func (c *Component) handlePacket(pkt *dataplane.ParsedPacket) error {
 		SrcMAC:    gatewayMAC.String(),
 		OuterVLAN: pkt.OuterVLAN,
 		InnerVLAN: pkt.InnerVLAN,
-		OuterTPID: c.resolveOuterTPID(pkt.OuterVLAN),
+		OuterTPID: c.resolveOuterTPID(pkt.OuterVLAN, pkt.InnerVLAN),
 		SwIfIndex: parentSwIfIndex,
 		RawData:   arpReply,
 	}

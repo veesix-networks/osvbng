@@ -64,13 +64,17 @@ func ParseVLANRange(vlanStr string) ([]uint16, error) {
 func ParseCVLAN(cvlanStr string) (bool, uint16, error) {
 	cvlanStr = strings.TrimSpace(cvlanStr)
 
-	if strings.ToLower(cvlanStr) == "any" {
+	if cvlanStr == "" || strings.ToLower(cvlanStr) == "any" {
 		return true, 0, nil
 	}
 
 	cvlan, err := strconv.ParseUint(cvlanStr, 10, 16)
 	if err != nil {
 		return false, 0, fmt.Errorf("invalid C-VLAN: %w", err)
+	}
+
+	if cvlan == 0 {
+		return false, 0, fmt.Errorf("C-VLAN 0 not allowed (use cvlan: any to match all inner VLANs)")
 	}
 
 	if cvlan > 4094 {
