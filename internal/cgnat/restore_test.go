@@ -14,6 +14,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/config/cgnat"
+	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/opdb"
@@ -113,6 +114,14 @@ type fakeCfg struct{ cfg *config.Config }
 
 func (f *fakeCfg) GetRunning() (*config.Config, error) { return f.cfg, nil }
 func (f *fakeCfg) GetStartup() (*config.Config, error) { return f.cfg, nil }
+
+func (f *fakeCfg) LookupSubscriberGroup(svlan, cvlan uint16) (subscriber.GroupMatch, bool) {
+	var groups *subscriber.SubscriberGroupsConfig
+	if f.cfg != nil {
+		groups = f.cfg.SubscriberGroups
+	}
+	return subscriber.BuildMatchIndex(groups).Lookup(svlan, cvlan)
+}
 
 func newRestoreComponent(t *testing.T, dp *fakeDP, opdbStore *fakeOpDB, sp SessionProvider, cfg *config.Config) *Component {
 	t.Helper()

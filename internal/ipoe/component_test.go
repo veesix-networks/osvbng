@@ -99,6 +99,14 @@ type fakeConfigManager struct {
 func (f *fakeConfigManager) GetRunning() (*config.Config, error) { return f.cfg, nil }
 func (f *fakeConfigManager) GetStartup() (*config.Config, error) { return f.cfg, nil }
 
+func (f *fakeConfigManager) LookupSubscriberGroup(svlan, cvlan uint16) (subscriber.GroupMatch, bool) {
+	var groups *subscriber.SubscriberGroupsConfig
+	if f.cfg != nil {
+		groups = f.cfg.SubscriberGroups
+	}
+	return subscriber.BuildMatchIndex(groups).Lookup(svlan, cvlan)
+}
+
 type captureBus struct {
 	mu     sync.Mutex
 	egress []events.EgressEvent

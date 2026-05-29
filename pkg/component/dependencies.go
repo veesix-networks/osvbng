@@ -17,6 +17,7 @@ import (
 type ConfigManager interface {
 	GetRunning() (*config.Config, error)
 	GetStartup() (*config.Config, error)
+	LookupSubscriberGroup(svlan, cvlan uint16) (subscriber.GroupMatch, bool)
 }
 
 type Dependencies struct {
