@@ -793,9 +793,11 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 	var accessInterface string
 	if cfg != nil {
 		accessInterface, _ = cfg.GetAccessInterface()
-		if cfg.SubscriberGroups != nil {
-			if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(pkt.OuterVLAN); group != nil {
-				policyName = group.AAAPolicy
+		if match, ok := c.cfgMgr.LookupSubscriberGroup(pkt.OuterVLAN, pkt.InnerVLAN); ok {
+			if match.VR != nil && match.VR.AAA != nil && match.VR.AAA.Policy != "" {
+				policyName = match.VR.AAA.Policy
+			} else {
+				policyName = match.Group.AAAPolicy
 			}
 		}
 	}
@@ -1002,9 +1004,11 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 	var accessInterface string
 	if cfg != nil {
 		accessInterface, _ = cfg.GetAccessInterface()
-		if cfg.SubscriberGroups != nil {
-			if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(pkt.OuterVLAN); group != nil {
-				policyName = group.AAAPolicy
+		if match, ok := c.cfgMgr.LookupSubscriberGroup(pkt.OuterVLAN, pkt.InnerVLAN); ok {
+			if match.VR != nil && match.VR.AAA != nil && match.VR.AAA.Policy != "" {
+				policyName = match.VR.AAA.Policy
+			} else {
+				policyName = match.Group.AAAPolicy
 			}
 		}
 	}
@@ -2037,9 +2041,11 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 	var accessInterface string
 	if cfg != nil {
 		accessInterface, _ = cfg.GetAccessInterface()
-		if cfg.SubscriberGroups != nil {
-			if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(pkt.OuterVLAN); group != nil {
-				policyName = group.AAAPolicy
+		if match, ok := c.cfgMgr.LookupSubscriberGroup(pkt.OuterVLAN, pkt.InnerVLAN); ok {
+			if match.VR != nil && match.VR.AAA != nil && match.VR.AAA.Policy != "" {
+				policyName = match.VR.AAA.Policy
+			} else {
+				policyName = match.Group.AAAPolicy
 			}
 		}
 	}
@@ -2847,7 +2853,11 @@ func (c *Component) processRSPacket(pkt *dataplane.ParsedPacket) error {
 		return fmt.Errorf("no running config available")
 	}
 
-	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(pkt.OuterVLAN)
+	match, matched := c.cfgMgr.LookupSubscriberGroup(pkt.OuterVLAN, pkt.InnerVLAN)
+	if !matched {
+		return nil
+	}
+	group := match.Group
 
 	raConfig := southbound.IPv6RAConfig{
 		Managed:        true,
@@ -3065,6 +3075,10 @@ func (c *Component) processNSPacket(pkt *dataplane.ParsedPacket) error {
 	}
 	if pkt.OuterVLAN == 0 {
 		return fmt.Errorf("packet rejected: S-VLAN required")
+	}
+
+	if _, ok := c.cfgMgr.LookupSubscriberGroup(pkt.OuterVLAN, pkt.InnerVLAN); !ok {
+		return nil
 	}
 
 	body := pkt.ICMPv6.LayerPayload()
