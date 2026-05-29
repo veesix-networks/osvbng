@@ -197,15 +197,11 @@ func (c *Component) resolveCurrentEncapIfIndex(sess *SessionState) uint32 {
 	if c.vpp == nil || c.cfgMgr == nil {
 		return sess.EncapIfIndex
 	}
-	cfg, err := c.cfgMgr.GetRunning()
-	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+	match, ok := c.cfgMgr.LookupSubscriberGroup(sess.OuterVLAN, sess.InnerVLAN)
+	if !ok || match.VR == nil || match.VR.ParentInterface == "" {
 		return sess.EncapIfIndex
 	}
-	group, vlanRange := cfg.SubscriberGroups.FindGroupBySVLAN(sess.OuterVLAN)
-	if group == nil || vlanRange == nil || vlanRange.ParentInterface == "" {
-		return sess.EncapIfIndex
-	}
-	name := fmt.Sprintf("%s.%d", vlanRange.ParentInterface, sess.OuterVLAN)
+	name := fmt.Sprintf("%s.%d", match.VR.ParentInterface, sess.OuterVLAN)
 	idx, err := c.vpp.GetInterfaceIndex(name)
 	if err != nil || idx == 0 {
 		c.logger.Warn("Failed to resolve current encap sw_if_index, using checkpoint value",
