@@ -87,6 +87,13 @@ interfaces:
                 - 10.0.0.1/30
             ipv6:
                 - 2001:db8:c0:e::1/64
+    eth3:
+        description: Management Link (freeradius) in MGMT-VRF
+        enabled: true
+        vrf: MGMT-VRF
+        address:
+            ipv4:
+                - 10.99.0.2/24
     loop100:
         description: Subscriber Gateway Loopback
         enabled: true

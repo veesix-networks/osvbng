@@ -24,8 +24,6 @@ topology:
         OSVBNG_NUM_INTERFACES: "3"
       binds:
         - config/bng1/osvbng.yaml:/etc/osvbng/osvbng.yaml:ro
-        - config/bng1/entrypoint-vrf.sh:/usr/local/bin/entrypoint-vrf.sh:ro
-      entrypoint: /usr/local/bin/entrypoint-vrf.sh
 
     corerouter1:
       kind: linux
