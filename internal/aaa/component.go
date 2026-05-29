@@ -2,6 +2,7 @@ package aaa
 
 import (
 	"context"
+	"hash/fnv"
 	"sync"
 	"time"
 
@@ -314,11 +315,49 @@ func (c *Component) publishResponse(requestID, sessionID string, accessType mode
 	})
 }
 
-func calculateBucket(authTime time.Time, bucketSize time.Duration) int {
-	second := authTime.Second()
-	nanos := authTime.Nanosecond()
-	totalNanos := int64(second)*1e9 + int64(nanos)
-	return int(totalNanos / bucketSize.Nanoseconds())
+func numBuckets() int {
+	return int(time.Minute / defaultBucketSize)
+}
+
+// bucketForSession returns the deterministic accounting bucket for a session
+// ID. Stable across restarts and across multiple lifecycle / restore events
+// for the same session, so a session fires exactly one interim per minute
+// regardless of how often its lifecycle is republished.
+func bucketForSession(sessionID string) int {
+	h := fnv.New32a()
+	h.Write([]byte(sessionID))
+	return int(h.Sum32() % uint32(numBuckets()))
+}
+
+// placeSessionInBucket slots sessionID into its deterministic bucket and
+// sweeps stale copies out of any other bucket where it may exist. Returns
+// the assigned bucket and whether the session was already present there.
+// Takes bucketMu.
+func (c *Component) placeSessionInBucket(sessionID string) (bucketId int, alreadyPresent bool) {
+	target := bucketForSession(sessionID)
+
+	c.bucketMu.Lock()
+	defer c.bucketMu.Unlock()
+
+	for bid, sessions := range c.buckets {
+		if bid == target {
+			continue
+		}
+		for i, sid := range sessions {
+			if sid == sessionID {
+				c.buckets[bid] = append(sessions[:i], sessions[i+1:]...)
+				break
+			}
+		}
+	}
+
+	for _, sid := range c.buckets[target] {
+		if sid == sessionID {
+			return target, true
+		}
+	}
+	c.buckets[target] = append(c.buckets[target], sessionID)
+	return target, false
 }
 
 func (c *Component) handleSessionLifecycle(event events.Event) {
@@ -369,19 +408,10 @@ func (c *Component) handleSessionLifecycle(event events.Event) {
 		return
 	}
 
-	bucketId := calculateBucket(event.Timestamp, defaultBucketSize)
-
-	c.bucketMu.Lock()
-	if sessions, exists := c.buckets[bucketId]; exists {
-		for _, sid := range sessions {
-			if sid == sessionId {
-				c.bucketMu.Unlock()
-				return
-			}
-		}
+	bucketId, alreadyPresent := c.placeSessionInBucket(sessionId)
+	if alreadyPresent {
+		return
 	}
-	c.buckets[bucketId] = append(c.buckets[bucketId], sessionId)
-	c.bucketMu.Unlock()
 
 	c.logger.Debug("Added session to bucket for accounting", "sessionId", sessionId, "bucketId", bucketId)
 
@@ -430,24 +460,11 @@ func (c *Component) handleSessionRestored(event events.Event) {
 	}
 	sess := data.Session
 
-	// Re-add the session to the accounting bucket. Restored sessions
-	// follow the same interim cadence as fresh ones; the bucket assigns
-	// based on the session's original auth-time hash so survivors of
-	// restart slot back into a deterministic bucket.
-	bucketId := calculateBucket(event.Timestamp, defaultBucketSize)
-
-	c.bucketMu.Lock()
-	already := false
-	for _, sid := range c.buckets[bucketId] {
-		if sid == data.SessionID {
-			already = true
-			break
-		}
-	}
-	if !already {
-		c.buckets[bucketId] = append(c.buckets[bucketId], data.SessionID)
-	}
-	c.bucketMu.Unlock()
+	// Re-slot the restored session into its deterministic bucket. Hashing
+	// the session ID (not the event timestamp) keeps a session in exactly
+	// one bucket across restarts and across any subsequent lifecycle
+	// re-publishes — RFC 2866 wants one interim cadence per session.
+	c.placeSessionInBucket(data.SessionID)
 
 	swIfIndex := sess.GetIfIndex()
 	username := sess.GetUsername()
