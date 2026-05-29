@@ -262,19 +262,15 @@ func (c *Component) recordEchoSeqAdvance(pppoeSessionID uint16, lastEchoID uint8
 	sess.mu.Unlock()
 }
 
-func (c *Component) resolveSRGName(svlan uint16) string {
+func (c *Component) resolveSRGName(svlan, cvlan uint16) string {
 	if c.srgMgr == nil {
 		return ""
 	}
-	cfg, err := c.cfgMgr.GetRunning()
-	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+	match, ok := c.cfgMgr.LookupSubscriberGroup(svlan, cvlan)
+	if !ok {
 		return ""
 	}
-	groupName := cfg.SubscriberGroups.FindGroupNameBySVLAN(svlan)
-	if groupName == "" {
-		return ""
-	}
-	return c.srgMgr.GetSRGForGroup(groupName)
+	return c.srgMgr.GetSRGForGroup(match.Name)
 }
 
 func (c *Component) addToIndexes(sess *SessionState) {
@@ -465,7 +461,7 @@ func (c *Component) handlePacket(pkt *dataplane.ParsedPacket) error {
 
 func (c *Component) handleDiscovery(pkt *dataplane.ParsedPacket) error {
 	if c.srgMgr != nil && pkt.OuterVLAN != 0 {
-		srgName := c.resolveSRGName(pkt.OuterVLAN)
+		srgName := c.resolveSRGName(pkt.OuterVLAN, pkt.InnerVLAN)
 		if !c.srgMgr.IsActive(srgName) {
 			return nil
 		}
@@ -640,16 +636,12 @@ func (c *Component) handlePADT(pkt *dataplane.ParsedPacket) error {
 // the given S-VLAN, but only when the matching group has opted into baby
 // giants (mru > 1492). Returns 0 otherwise so the BNG omits the
 // PPP-Max-Payload tag from PADO/PADS per RFC 4638 §3.
-func (c *Component) resolveBabyGiantsMRU(svlan uint16) uint16 {
-	cfg, err := c.cfgMgr.GetRunning()
-	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+func (c *Component) resolveBabyGiantsMRU(svlan, cvlan uint16) uint16 {
+	match, ok := c.cfgMgr.LookupSubscriberGroup(svlan, cvlan)
+	if !ok || match.Group.PPPoE == nil || !match.Group.PPPoE.IsBabyGiants() {
 		return 0
 	}
-	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(svlan)
-	if group == nil || group.PPPoE == nil || !group.PPPoE.IsBabyGiants() {
-		return 0
-	}
-	return group.PPPoE.GetMRU()
+	return match.Group.PPPoE.GetMRU()
 }
 
 // resolveMSSClampPolicy returns the per-session PPP MTU and the MSS clamp
@@ -667,14 +659,11 @@ func (c *Component) resolveMSSClampPolicy(sess *SessionState) (uint16, southboun
 		pppMTU = subscriber.DefaultPPPMRU
 	}
 
-	cfg, err := c.cfgMgr.GetRunning()
-	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+	match, ok := c.cfgMgr.LookupSubscriberGroup(sess.OuterVLAN, sess.InnerVLAN)
+	if !ok {
 		return pppMTU, defaultMSSClampPolicyForMTU(pppMTU)
 	}
-	group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(sess.OuterVLAN)
-	if group == nil {
-		return pppMTU, defaultMSSClampPolicyForMTU(pppMTU)
-	}
+	group := match.Group
 	if !group.MSSClamp.IsEnabled() {
 		return pppMTU, southbound.MSSClampPolicy{Enabled: false}
 	}
@@ -778,11 +767,11 @@ func (c *Component) tearDownSessionAfterVPPFailure(sess *SessionState, snap sess
 // 0 if either side declines (RFC 4638 §3 forbids the BNG from including
 // the tag unless the client did first), otherwise min(client PADI, group
 // configured MRU).
-func (c *Component) negotiatePADOMaxPayload(clientPADIPayload uint16, svlan uint16) uint16 {
+func (c *Component) negotiatePADOMaxPayload(clientPADIPayload uint16, svlan, cvlan uint16) uint16 {
 	if clientPADIPayload == 0 {
 		return 0
 	}
-	server := c.resolveBabyGiantsMRU(svlan)
+	server := c.resolveBabyGiantsMRU(svlan, cvlan)
 	if server == 0 {
 		return 0
 	}
@@ -818,7 +807,7 @@ func (c *Component) sendPADO(pkt *dataplane.ParsedPacket, reqTags *pppoe.Tags, c
 		tagBuilder.AddRelaySessionID(reqTags.RelaySessionID)
 	}
 
-	if echo := c.negotiatePADOMaxPayload(reqTags.PPPMaxPayload, pkt.OuterVLAN); echo != 0 {
+	if echo := c.negotiatePADOMaxPayload(reqTags.PPPMaxPayload, pkt.OuterVLAN, pkt.InnerVLAN); echo != 0 {
 		tagBuilder.AddPPPMaxPayload(echo)
 		c.logger.Debug("PADO echoes PPP-Max-Payload",
 			"mac", pkt.MAC.String(),
@@ -843,7 +832,7 @@ func (c *Component) sendPADS(pkt *dataplane.ParsedPacket, reqTags *pppoe.Tags, s
 		tagBuilder.AddRelaySessionID(reqTags.RelaySessionID)
 	}
 
-	padoValue := c.negotiatePADOMaxPayload(reqTags.PPPMaxPayload, pkt.OuterVLAN)
+	padoValue := c.negotiatePADOMaxPayload(reqTags.PPPMaxPayload, pkt.OuterVLAN, pkt.InnerVLAN)
 	padsValue := negotiatePADSMaxPayload(padoValue, reqTags.PPPMaxPayload)
 
 	if padsValue != 0 {
@@ -898,7 +887,7 @@ func (c *Component) sendDiscoveryPacket(pkt *dataplane.ParsedPacket, code layers
 	var srcMAC string
 	var parentSwIfIndex uint32
 	if c.srgMgr != nil {
-		srgName := c.resolveSRGName(pkt.OuterVLAN)
+		srgName := c.resolveSRGName(pkt.OuterVLAN, pkt.InnerVLAN)
 		if vmac := c.srgMgr.GetVirtualMAC(srgName); vmac != nil {
 			srcMAC = vmac.String()
 		}
@@ -1413,16 +1402,13 @@ func (c *Component) restoreFromHASync(srgName string) {
 			restorePPPMTU = subscriber.DefaultPPPMRU
 		}
 		restorePolicy := southbound.MSSClampPolicy{Enabled: true}
-		if cfg, cfgErr := c.cfgMgr.GetRunning(); cfgErr == nil && cfg != nil && cfg.SubscriberGroups != nil {
-			if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(outerVLAN); group != nil {
-				if !group.MSSClamp.IsEnabled() {
-					restorePolicy.Enabled = false
-				} else {
-					restorePolicy.IPv4MSS = group.MSSClamp.IPv4MSSOrAuto(restorePPPMTU)
-					restorePolicy.IPv6MSS = group.MSSClamp.IPv6MSSOrAuto(restorePPPMTU)
-				}
+		if match, ok := c.cfgMgr.LookupSubscriberGroup(outerVLAN, innerVLAN); ok {
+			group := match.Group
+			if !group.MSSClamp.IsEnabled() {
+				restorePolicy.Enabled = false
 			} else {
-				restorePolicy = defaultMSSClampPolicyForMTU(restorePPPMTU)
+				restorePolicy.IPv4MSS = group.MSSClamp.IPv4MSSOrAuto(restorePPPMTU)
+				restorePolicy.IPv6MSS = group.MSSClamp.IPv6MSSOrAuto(restorePPPMTU)
 			}
 		} else {
 			restorePolicy = defaultMSSClampPolicyForMTU(restorePPPMTU)

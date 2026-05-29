@@ -193,12 +193,8 @@ func (s *SessionState) shouldTunnelToLAC() bool {
 	if s.component.lacTrigger == nil {
 		return false
 	}
-	cfg, err := s.component.cfgMgr.GetRunning()
-	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
-		return false
-	}
-	group, vlanRange := cfg.SubscriberGroups.FindGroupBySVLAN(s.OuterVLAN)
-	if group == nil || vlanRange == nil || !vlanRange.HasAccessType(subscriber.AccessTypeLAC) {
+	match, ok := s.component.cfgMgr.LookupSubscriberGroup(s.OuterVLAN, s.InnerVLAN)
+	if !ok || match.VR == nil || !match.VR.HasAccessType(subscriber.AccessTypeLAC) {
 		return false
 	}
 	// AAA must say "tunnel.type = L2TP" on at least one tagged entry.

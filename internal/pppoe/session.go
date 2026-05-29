@@ -166,8 +166,8 @@ func (s *SessionState) publishAAARequest(attrs map[string]string) {
 	username := s.Username
 	var policyName string
 	if cfg != nil && cfg.SubscriberGroups != nil {
-		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(s.OuterVLAN); group != nil {
-			policyName = group.AAAPolicy
+		if match, ok := s.component.cfgMgr.LookupSubscriberGroup(s.OuterVLAN, s.InnerVLAN); ok {
+			policyName = match.Group.AAAPolicy
 		}
 	}
 	if policyName != "" && cfg != nil {
@@ -314,7 +314,7 @@ func (s *SessionState) onAuthResult(allowed bool, attributes map[string]interfac
 		resolved := s.resolveServiceGroup(attributes)
 		s.VRF = resolved.VRF
 		s.ServiceGroup = resolved
-		s.SRGName = s.component.resolveSRGName(s.OuterVLAN)
+		s.SRGName = s.component.resolveSRGName(s.OuterVLAN, s.InnerVLAN)
 		s.AllocCtx = s.buildAllocContext(attributes)
 
 		if s.shouldTunnelToLAC() {
@@ -401,11 +401,8 @@ func (s *SessionState) resolveServiceGroup(aaaAttrs map[string]interface{}) svcg
 	}
 
 	var defaultSG string
-	cfg, _ := s.component.cfgMgr.GetRunning()
-	if cfg != nil && cfg.SubscriberGroups != nil {
-		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(s.OuterVLAN); group != nil {
-			defaultSG = group.DefaultServiceGroup
-		}
+	if match, ok := s.component.cfgMgr.LookupSubscriberGroup(s.OuterVLAN, s.InnerVLAN); ok {
+		defaultSG = match.Group.DefaultServiceGroup
 	}
 
 	return s.component.svcGroupResolver.Resolve(sgName, defaultSG, aaaAttrs)
@@ -413,12 +410,9 @@ func (s *SessionState) resolveServiceGroup(aaaAttrs map[string]interface{}) svcg
 
 func (s *SessionState) buildAllocContext(aaaAttrs map[string]interface{}) *allocator.Context {
 	var profileName, ipv6ProfileName string
-	cfg, err := s.component.cfgMgr.GetRunning()
-	if err == nil && cfg != nil && cfg.SubscriberGroups != nil {
-		if group, _ := cfg.SubscriberGroups.FindGroupBySVLAN(s.OuterVLAN); group != nil {
-			profileName = group.IPv4Profile
-			ipv6ProfileName = group.IPv6Profile
-		}
+	if match, ok := s.component.cfgMgr.LookupSubscriberGroup(s.OuterVLAN, s.InnerVLAN); ok {
+		profileName = match.Group.IPv4Profile
+		ipv6ProfileName = match.Group.IPv6Profile
 	}
 
 	ctx := allocator.NewContext(s.SessionID, s.MAC, s.OuterVLAN, s.InnerVLAN, s.VRF, s.ServiceGroup.Name, profileName, ipv6ProfileName, aaaAttrs)
@@ -898,7 +892,7 @@ func (s *SessionState) sendPPPPacket(proto uint16, code, id uint8, data []byte) 
 	if s.component.srgMgr != nil {
 		srgName := s.SRGName
 		if srgName == "" {
-			srgName = s.component.resolveSRGName(s.OuterVLAN)
+			srgName = s.component.resolveSRGName(s.OuterVLAN, s.InnerVLAN)
 		}
 		if vmac := s.component.srgMgr.GetVirtualMAC(srgName); vmac != nil {
 			srcMAC = vmac.String()
