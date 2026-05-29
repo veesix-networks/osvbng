@@ -8,6 +8,7 @@ import (
 	"net"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/gopacket/layers"
 
@@ -351,6 +352,68 @@ func TestProcessNSPacketCVLANGate(t *testing.T) {
 		defer bus.mu.Unlock()
 		if len(bus.egress) != 0 {
 			t.Fatalf("non-matching C-VLAN: expected 0 egress (gated), got %d", len(bus.egress))
+		}
+	})
+}
+
+func TestSessionPastLease(t *testing.T) {
+	c := &Component{}
+	now := time.Unix(1_000_000, 0)
+
+	v4 := func(boundAt time.Time, lease uint32) *SessionState {
+		return &SessionState{State: "bound", IPv4: net.IPv4(100, 64, 0, 5), LeaseTime: lease, BoundAt: boundAt}
+	}
+
+	t.Run("within_lease_not_reaped", func(t *testing.T) {
+		// 24h lease, bound 12h ago (well past the old 30-min idle reaper)
+		s := v4(now.Add(-12*time.Hour), 86400)
+		if c.sessionPastLease(s, now) {
+			t.Fatal("bound session mid-lease must not be reaped")
+		}
+	})
+
+	t.Run("past_lease_plus_grace_reaped", func(t *testing.T) {
+		s := v4(now.Add(-24*time.Hour-reclaimGrace-time.Second), 86400)
+		if !c.sessionPastLease(s, now) {
+			t.Fatal("bound session past lease+grace must be reaped")
+		}
+	})
+
+	t.Run("v4_lapsed_v6_valid_not_reaped", func(t *testing.T) {
+		s := v4(now.Add(-25*time.Hour), 86400)
+		s.IPv6Bound = true
+		s.IPv6Address = net.ParseIP("2001:db8::1")
+		s.IPv6LeaseTime = 86400
+		s.IPv6BoundAt = now.Add(-1 * time.Hour)
+		if c.sessionPastLease(s, now) {
+			t.Fatal("session with a still-valid v6 lease must not be reaped")
+		}
+	})
+
+	t.Run("both_families_lapsed_reaped", func(t *testing.T) {
+		s := v4(now.Add(-25*time.Hour), 86400)
+		s.IPv6Bound = true
+		s.IPv6LeaseTime = 86400
+		s.IPv6BoundAt = now.Add(-25 * time.Hour)
+		if !c.sessionPastLease(s, now) {
+			t.Fatal("session with both leases lapsed must be reaped")
+		}
+	})
+
+	t.Run("short_lease_grace_capped", func(t *testing.T) {
+		// 2-min lease: grace caps at lease/4 = 30s, not the full 5m.
+		if !c.sessionPastLease(v4(now.Add(-2*time.Minute-31*time.Second), 120), now) {
+			t.Fatal("2-min lease past lease+30s grace must be reaped (grace capped)")
+		}
+		if c.sessionPastLease(v4(now.Add(-2*time.Minute-20*time.Second), 120), now) {
+			t.Fatal("2-min lease within lease+30s grace must not be reaped")
+		}
+	})
+
+	t.Run("bound_no_lease_info_not_reaped", func(t *testing.T) {
+		s := &SessionState{State: "bound"}
+		if c.sessionPastLease(s, now) {
+			t.Fatal("bound session with no lease info must not be reaped on lease basis")
 		}
 	})
 }
