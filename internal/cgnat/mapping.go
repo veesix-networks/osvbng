@@ -12,8 +12,8 @@ import (
 )
 
 type reverseKey struct {
-	OutsideIP  [4]byte
-	PortStart  uint16
+	OutsideIP [4]byte
+	PortStart uint16
 }
 
 type ReverseIndex struct {

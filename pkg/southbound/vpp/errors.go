@@ -15,6 +15,12 @@ import "errors"
 // caller can delete-and-recreate to converge.
 const retvalEntryNeedsRefresh = -500
 
+// retvalValueExist matches VNET_API_ERROR_VALUE_EXIST (-116). Some plugin
+// add paths surface this on a redundant add (entry already present, no
+// mutable inputs differ). Callers treat it as success on isAdd=true so a
+// restart-time replay of the same mapping is a safe no-op.
+const retvalValueExist = -116
+
 // ErrEntryNeedsRefresh is the sentinel surfaced through callers that want to
 // observe the plugin's three-state idempotency contract directly. The
 // southbound's Add* helpers already perform the delete-and-recreate inline so

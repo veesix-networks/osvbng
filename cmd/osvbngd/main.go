@@ -440,7 +440,7 @@ func main() {
 
 	var cgnat *cgnatcomp.Component
 	if cfg.CGNAT != nil && len(cfg.CGNAT.Pools) > 0 {
-		cgnat, err = cgnatcomp.NewComponent(coreDeps, ifMgr, vrfMgr)
+		cgnat, err = cgnatcomp.NewComponent(coreDeps, ifMgr, vrfMgr, subscriberComp)
 		if err != nil {
 			log.Fatalf("Failed to create CGNAT component: %v", err)
 		}
@@ -497,6 +497,13 @@ func main() {
 						mainLog.Info("VPP recovery: recovering PPPoE sessions")
 						if err := pppoeComp.RecoverSessions(ctx); err != nil {
 							mainLog.Error("PPPoE session recovery failed", "error", err)
+						}
+
+						if cgnat != nil {
+							mainLog.Info("VPP recovery: reprogramming CGNAT dataplane")
+							if err := cgnat.RecoverDataplane(ctx); err != nil {
+								mainLog.Error("CGNAT dataplane recovery failed", "error", err)
+							}
 						}
 					}
 

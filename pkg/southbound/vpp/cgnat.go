@@ -262,6 +262,10 @@ func (v *VPP) CGNATAddDelSubscriberMapping(poolID uint32, swIfIndex uint32,
 		return nil
 	}
 
+	if isAdd && reply.Retval == retvalValueExist {
+		return nil
+	}
+
 	if reply.Retval != 0 {
 		return fmt.Errorf("subscriber mapping failed: retval=%d", reply.Retval)
 	}
@@ -338,6 +342,10 @@ func (v *VPP) CGNATAddDelSubscriberMappingAsync(poolID uint32, swIfIndex uint32,
 			})
 			return
 		}
+		if isAdd && rmp.Retval == retvalValueExist {
+			callback(nil)
+			return
+		}
 		if rmp.Retval != 0 {
 			callback(fmt.Errorf("subscriber mapping failed: retval=%d", rmp.Retval))
 			return
@@ -346,10 +354,16 @@ func (v *VPP) CGNATAddDelSubscriberMappingAsync(poolID uint32, swIfIndex uint32,
 	})
 }
 
-func (v *VPP) CGNATAddSubscriberMappingBulk(poolID uint32, mappings []southbound.CGNATMapping) error {
+func (v *VPP) CGNATAddSubscriberMappingBulk(poolID uint32, mappings []southbound.CGNATMapping) ([]error, error) {
+	if len(mappings) == 0 {
+		return nil, nil
+	}
+
+	results := make([]error, len(mappings))
+
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
-		return fmt.Errorf("create API channel: %w", err)
+		return results, fmt.Errorf("create API channel: %w", err)
 	}
 	defer ch.Close()
 
@@ -374,12 +388,22 @@ func (v *VPP) CGNATAddSubscriberMappingBulk(poolID uint32, mappings []southbound
 
 	reply := &osvbng_cgnat.OsvbngCgnatAddSubscriberMappingBulkReply{}
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
-		return fmt.Errorf("bulk mapping: %w", err)
+		return results, fmt.Errorf("bulk mapping: %w", err)
 	}
-	if reply.Retval != 0 {
-		return fmt.Errorf("bulk mapping failed: retval=%d", reply.Retval)
+
+	if reply.Retval == 0 {
+		return results, nil
 	}
-	return nil
+
+	v.logger.Warn("CGNAT bulk mapping returned non-zero; falling back to per-mapping for status",
+		"pool_id", poolID, "count", len(mappings), "retval", reply.Retval)
+
+	for i, m := range mappings {
+		results[i] = v.CGNATAddDelSubscriberMapping(poolID, m.SwIfIndex, m.InsideIP,
+			m.InsideVRFID, m.OutsideIP, m.PortBlockStart, m.PortBlockEnd,
+			m.EnableFeature, true)
+	}
+	return results, nil
 }
 
 func (v *VPP) CGNATEnableOnSession(poolID uint32, swIfIndex uint32, isEnable bool) error {

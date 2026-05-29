@@ -359,7 +359,21 @@ func (pm *PoolManager) FindPoolForIP(insideIP net.IP, insideVRF string) string {
 func (pm *PoolManager) RestoreMapping(mapping *models.CGNATMapping) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
+	return pm.restoreLocked(mapping, false)
+}
 
+// RestoreMappingIfAbsent is the idempotent variant: calling it twice for the
+// same (insideVRF, insideIP, outsideIP, portBlockStart) tuple does not
+// double-append the block, double-set the allocator bit, or duplicate the
+// subscriber entry. Used by the cold-restart restore loop and the watchdog
+// dataplane-recovery path, both of which must be safe to re-enter.
+func (pm *PoolManager) RestoreMappingIfAbsent(mapping *models.CGNATMapping) error {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	return pm.restoreLocked(mapping, true)
+}
+
+func (pm *PoolManager) restoreLocked(mapping *models.CGNATMapping, ifAbsent bool) error {
 	ps, ok := pm.pools[mapping.PoolName]
 	if !ok {
 		return fmt.Errorf("pool %s not found", mapping.PoolName)
@@ -367,6 +381,17 @@ func (pm *PoolManager) RestoreMapping(mapping *models.CGNATMapping) error {
 
 	blockSize := ps.Config.GetBlockSize()
 	portStart := ps.Config.GetPortRangeStart()
+
+	key := makeSubscriberKey(mapping.InsideVRFID, mapping.InsideIP)
+	if ifAbsent {
+		if sub, ok := ps.Subscribers[key]; ok {
+			for _, b := range sub.Blocks {
+				if b.PortBlockStart == mapping.PortBlockStart && b.OutsideIP.Equal(mapping.OutsideIP) {
+					return nil
+				}
+			}
+		}
+	}
 
 	for _, addr := range ps.OutsideAddresses {
 		if addr.IP.Equal(mapping.OutsideIP) {
@@ -380,7 +405,6 @@ func (pm *PoolManager) RestoreMapping(mapping *models.CGNATMapping) error {
 		}
 	}
 
-	key := makeSubscriberKey(mapping.InsideVRFID, mapping.InsideIP)
 	sub, ok := ps.Subscribers[key]
 	if !ok {
 		sub = &subscriberAllocation{
@@ -398,6 +422,119 @@ func (pm *PoolManager) RestoreMapping(mapping *models.CGNATMapping) error {
 	})
 
 	return nil
+}
+
+// GetOrAllocate atomically returns an existing block for the subscriber if one
+// is present, else allocates a fresh one. Removes the lookup-then-allocate
+// race that two concurrent activation events for the same session could
+// otherwise hit. Returns (mapping, isNew, error).
+func (pm *PoolManager) GetOrAllocate(poolName string, insideIP net.IP, insideVRF uint32, swIfIndex uint32) (*models.CGNATMapping, bool, error) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	ps, ok := pm.pools[poolName]
+	if !ok {
+		return nil, false, fmt.Errorf("pool %s not found", poolName)
+	}
+
+	key := makeSubscriberKey(insideVRF, insideIP)
+	if sub, ok := ps.Subscribers[key]; ok && len(sub.Blocks) > 0 {
+		b := sub.Blocks[0]
+		dup := make(net.IP, 4)
+		copy(dup, b.OutsideIP.To4())
+		return &models.CGNATMapping{
+			PoolName:       poolName,
+			PoolID:         ps.ID,
+			InsideIP:       insideIP.To4(),
+			InsideVRFID:    insideVRF,
+			OutsideIP:      dup,
+			PortBlockStart: b.PortBlockStart,
+			PortBlockEnd:   b.PortBlockEnd,
+			SwIfIndex:      sub.SwIfIndex,
+		}, false, nil
+	}
+
+	mapping, err := pm.allocateLocked(ps, insideIP, insideVRF, swIfIndex)
+	if err != nil {
+		return nil, false, err
+	}
+	return mapping, true, nil
+}
+
+func (pm *PoolManager) allocateLocked(ps *poolState, insideIP net.IP, insideVRF uint32, swIfIndex uint32) (*models.CGNATMapping, error) {
+	key := makeSubscriberKey(insideVRF, insideIP)
+	sub := ps.Subscribers[key]
+
+	maxBlocks := int(ps.Config.GetMaxBlocksPerSubscriber())
+	if sub != nil && len(sub.Blocks) >= maxBlocks {
+		return nil, fmt.Errorf("subscriber %s vrf %d: max blocks (%d) reached", insideIP, insideVRF, maxBlocks)
+	}
+
+	blockSize := ps.Config.GetBlockSize()
+	portStart := ps.Config.GetPortRangeStart()
+
+	var targetAddr *outsideAddressState
+	if sub != nil && len(sub.Blocks) > 0 && ps.Config.GetAddressPooling() == "paired" {
+		existingIP := sub.Blocks[0].OutsideIP
+		for _, addr := range ps.OutsideAddresses {
+			if addr.IP.Equal(existingIP) && !addr.Excluded {
+				targetAddr = addr
+				break
+			}
+		}
+	}
+
+	if targetAddr == nil {
+		for _, addr := range ps.OutsideAddresses {
+			if addr.Excluded {
+				continue
+			}
+			if hasFreeBlock(addr) {
+				targetAddr = addr
+				break
+			}
+		}
+	}
+
+	if targetAddr == nil {
+		return nil, fmt.Errorf("pool %s: no free blocks available", ps.Name)
+	}
+
+	blockIdx := allocateBlock(targetAddr)
+	if blockIdx < 0 {
+		return nil, fmt.Errorf("pool %s: block allocation failed on %s", ps.Name, targetAddr.IP)
+	}
+
+	portBlockStart := portStart + uint16(blockIdx)*blockSize
+	portBlockEnd := portBlockStart + blockSize - 1
+
+	block := blockAllocation{
+		OutsideIP:      make(net.IP, 4),
+		PortBlockStart: portBlockStart,
+		PortBlockEnd:   portBlockEnd,
+	}
+	copy(block.OutsideIP, targetAddr.IP.To4())
+
+	if sub == nil {
+		sub = &subscriberAllocation{
+			PoolName:  ps.Name,
+			PoolID:    ps.ID,
+			SwIfIndex: swIfIndex,
+		}
+		ps.Subscribers[key] = sub
+	}
+	sub.Blocks = append(sub.Blocks, block)
+
+	return &models.CGNATMapping{
+		PoolName:       ps.Name,
+		PoolID:         ps.ID,
+		InsideIP:       insideIP.To4(),
+		InsideVRFID:    insideVRF,
+		OutsideIP:      block.OutsideIP,
+		PortBlockStart: portBlockStart,
+		PortBlockEnd:   portBlockEnd,
+		SwIfIndex:      swIfIndex,
+	}, nil
 }
 
 func makeSubscriberKey(vrf uint32, ip net.IP) subscriberKey {

@@ -171,8 +171,8 @@ func (s *stubDP) CGNATAddDelSubscriberMapping(poolID, swIfIndex uint32, insideIP
 }
 func (s *stubDP) CGNATAddDelSubscriberMappingAsync(poolID, swIfIndex uint32, insideIP net.IP, insideVRFID uint32, outsideIP net.IP, portStart, portEnd uint16, enableFeature, isAdd bool, callback func(error)) {
 }
-func (s *stubDP) CGNATAddSubscriberMappingBulk(poolID uint32, mappings []southbound.CGNATMapping) error {
-	return nil
+func (s *stubDP) CGNATAddSubscriberMappingBulk(poolID uint32, mappings []southbound.CGNATMapping) ([]error, error) {
+	return make([]error, len(mappings)), nil
 }
 func (s *stubDP) CGNATEnableOnSession(poolID, swIfIndex uint32, isEnable bool) error { return nil }
 func (s *stubDP) CGNATAddDelBypass(prefix net.IPNet, vrfID uint32, isAdd bool) error { return nil }

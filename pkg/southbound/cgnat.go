@@ -69,7 +69,11 @@ type CGNATDataplane interface {
 		portStart uint16, portEnd uint16, enableFeature bool, isAdd bool,
 		callback func(error))
 
-	CGNATAddSubscriberMappingBulk(poolID uint32, mappings []CGNATMapping) error
+	// CGNATAddSubscriberMappingBulk programs N subscriber mappings under one
+	// poolID. Returns a per-mapping error slice (len == len(mappings); nil entry
+	// = success) and an overall error for unrecoverable framing failures only.
+	// Per-mapping -116 (entry already exists) is surfaced as success.
+	CGNATAddSubscriberMappingBulk(poolID uint32, mappings []CGNATMapping) ([]error, error)
 
 	CGNATEnableOnSession(poolID uint32, swIfIndex uint32, isEnable bool) error
 
