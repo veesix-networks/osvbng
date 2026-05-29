@@ -1696,6 +1696,44 @@ func (c *Component) sendDHCPResponse(sessID string, svlan, cvlan uint16, encapIf
 	return nil
 }
 
+const (
+	// reclaimGrace covers clock skew and in-flight renews past lease expiry.
+	reclaimGrace        = 5 * time.Minute
+	halfOpenIdleTimeout = 2 * time.Minute
+)
+
+// leaseGrace caps the reclaim grace at a quarter of the lease so short leases
+// are not held disproportionately long past expiry.
+func leaseGrace(leaseSeconds uint32) time.Duration {
+	if g := time.Duration(leaseSeconds) * time.Second / 4; g < reclaimGrace {
+		return g
+	}
+	return reclaimGrace
+}
+
+// sessionPastLease reports whether every bound address family is past its lease
+// plus grace. Caller holds sess.mu.
+func (c *Component) sessionPastLease(sess *SessionState, now time.Time) bool {
+	v4Active := sess.IPv4 != nil && sess.LeaseTime > 0 && !sess.BoundAt.IsZero()
+	v6Active := sess.IPv6Bound && sess.IPv6LeaseTime > 0 && !sess.IPv6BoundAt.IsZero()
+	if !v4Active && !v6Active {
+		return false
+	}
+	if v4Active {
+		expiry := sess.BoundAt.Add(time.Duration(sess.LeaseTime)*time.Second + leaseGrace(sess.LeaseTime))
+		if now.Before(expiry) {
+			return false
+		}
+	}
+	if v6Active {
+		expiry := sess.IPv6BoundAt.Add(time.Duration(sess.IPv6LeaseTime)*time.Second + leaseGrace(sess.IPv6LeaseTime))
+		if now.Before(expiry) {
+			return false
+		}
+	}
+	return true
+}
+
 func (c *Component) cleanupSessions() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
@@ -1714,9 +1752,14 @@ func (c *Component) cleanupSessions() {
 				key := k.(string)
 				session := v.(*SessionState)
 				session.mu.Lock()
-				lastSeen := session.LastSeen
+				var reap bool
+				if session.State == "bound" {
+					reap = c.sessionPastLease(session, now)
+				} else {
+					reap = now.Sub(session.LastSeen) > halfOpenIdleTimeout
+				}
 				session.mu.Unlock()
-				if now.Sub(lastSeen) > 30*time.Minute {
+				if reap {
 					toDelete = append(toDelete, struct {
 						key  string
 						sess *SessionState
