@@ -1650,7 +1650,24 @@ func (v *VPP) setInterfaceTable(name string, tableID uint32, ipv4, ipv6 bool) er
 	}
 	swIfIndex := interface_types.InterfaceIndex(idx)
 
-	if ipv4 {
+	// VPP's sw_interface_set_table returns -114 ("address found for interface")
+	// whenever the interface holds an IP address at table-change time, even when
+	// the requested table is the one it is already in. On a config re-apply
+	// against an interface that is already bound to the target VRF (and still
+	// addressed), issuing the call fails and can leave the interface
+	// half-migrated between FIB tables — which has been observed to corrupt VPP
+	// dataplane state. Skip the call when the interface is already in the
+	// requested table; only move it when the table actually differs.
+	alreadyInTable := func(isIPv6 bool) bool {
+		getReq := &vppinterfaces.SwInterfaceGetTable{SwIfIndex: swIfIndex, IsIPv6: isIPv6}
+		getReply := &vppinterfaces.SwInterfaceGetTableReply{}
+		if err := ch.SendRequest(getReq).ReceiveReply(getReply); err != nil || getReply.Retval != 0 {
+			return false
+		}
+		return getReply.VrfID == tableID
+	}
+
+	if ipv4 && !alreadyInTable(false) {
 		req4 := &vppinterfaces.SwInterfaceSetTable{
 			SwIfIndex: swIfIndex,
 			IsIPv6:    false,
@@ -1665,7 +1682,7 @@ func (v *VPP) setInterfaceTable(name string, tableID uint32, ipv4, ipv6 bool) er
 		}
 	}
 
-	if ipv6 {
+	if ipv6 && !alreadyInTable(true) {
 		req6 := &vppinterfaces.SwInterfaceSetTable{
 			SwIfIndex: swIfIndex,
 			IsIPv6:    true,

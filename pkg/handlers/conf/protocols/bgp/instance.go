@@ -39,12 +39,24 @@ func (h *BGPInstanceHandler) Validate(ctx context.Context, hctx *conf.HandlerCon
 }
 
 func (h *BGPInstanceHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error {
-	cfg := hctx.NewValue.(*protocols.BGPConfig)
+	cfg, ok := hctx.NewValue.(*protocols.BGPConfig)
+	if !ok {
+		return fmt.Errorf("expected *protocols.BGPConfig, got %T", hctx.NewValue)
+	}
 	return h.routing.ConfigureBGP(cfg.ASN, cfg.RouterID)
 }
 
 func (h *BGPInstanceHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) error {
-	cfg := hctx.OldValue.(*protocols.BGPConfig)
+	// Rolling back a freshly-added instance has no OldValue; undo it using the
+	// value that was applied. Without this guard the nil type assertion panics
+	// and crashes the daemon mid-rollback, masking the error that triggered it.
+	cfg, ok := hctx.OldValue.(*protocols.BGPConfig)
+	if !ok {
+		cfg, ok = hctx.NewValue.(*protocols.BGPConfig)
+	}
+	if !ok {
+		return nil
+	}
 	return h.routing.RemoveBGP(cfg.ASN)
 }
 
