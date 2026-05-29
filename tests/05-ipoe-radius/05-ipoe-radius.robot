@@ -4,8 +4,9 @@
 
 *** Comments ***
 IPoE session test suite with RADIUS authentication.
-Establishes IPoE sessions via BNG Blaster with RADIUS auth (DEFAULT accept)
-and verifies session state through the osvbng API and BNG Blaster report.
+FreeRADIUS authorize requires Cleartext-Password := "secret"; sessions only
+establish if the BNG sends User-Password matching the policy.password field.
+Verifies session state through the osvbng API and BNG Blaster report.
 
 *** Settings ***
 Library             OperatingSystem
@@ -57,12 +58,18 @@ Verify VPP Sub-Interfaces Created
     Verify VPP Sub-Interfaces Created    ${bng1}    eth1.100
 
 Verify RADIUS Server Stats
-    [Documentation]    Verify RADIUS server stats show auth accepts.
+    [Documentation]    Verify RADIUS server stats show auth accepts and zero rejects.
+    ...                Zero rejects proves the password attribute reached FreeRADIUS
+    ...                and matched the expected Cleartext-Password.
     ${output} =    Get osvbng API Response    ${bng1}    /api/show/aaa/radius/servers
     ${rc}    ${accepts} =    Run And Return Rc And Output
     ...    echo '${output}' | python3 -c "import sys,json; d=json.load(sys.stdin); s=d.get('data',[]); print(sum(x.get('auth_accepts',0) for x in s))"
     Should Be Equal As Integers    ${rc}    0
     Should Be True    ${accepts} >= ${session-count}    Expected at least ${session-count} auth accepts but got ${accepts}
+    ${rc}    ${rejects} =    Run And Return Rc And Output
+    ...    echo '${output}' | python3 -c "import sys,json; d=json.load(sys.stdin); s=d.get('data',[]); print(sum(x.get('auth_rejects',0) for x in s))"
+    Should Be Equal As Integers    ${rc}    0
+    Should Be Equal As Integers    ${rejects}    0    Expected zero auth rejects but got ${rejects}
 
 Verify BNG Blaster Report
     [Documentation]    Stop BNG Blaster and verify report shows all sessions established.

@@ -801,6 +801,7 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 			}
 		}
 	}
+	aaaAttrs := make(map[string]string)
 	if policyName != "" {
 		if policy := cfg.AAA.GetPolicyByType(policyName, aaacfg.PolicyTypeDHCP); policy != nil {
 			ctx := &aaacfg.PolicyContext{
@@ -812,6 +813,9 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 				Hostname:   hostname,
 			}
 			username = policy.ExpandFormat(ctx)
+			if policy.Password != "" {
+				aaaAttrs[aaa.AttrPassword] = policy.ExpandPassword(ctx)
+			}
 			c.logger.WithGroup(logger.IPoEDHCP4).Debug("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
 		}
 	}
@@ -821,7 +825,6 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 	c.logger.WithGroup(logger.IPoEDHCP4).Debug("Publishing AAA request for DISCOVER", "session_id", sess.SessionID, "username", username)
 	requestID := uuid.New().String()
 
-	aaaAttrs := make(map[string]string)
 	if len(circuitID) > 0 {
 		aaaAttrs[aaa.AttrCircuitID] = string(circuitID)
 	}
@@ -1012,6 +1015,7 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 			}
 		}
 	}
+	aaaAttrs := make(map[string]string)
 	if policyName != "" {
 		if policy := cfg.AAA.GetPolicyByType(policyName, aaacfg.PolicyTypeDHCP); policy != nil {
 			ctx := &aaacfg.PolicyContext{
@@ -1023,6 +1027,9 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 				Hostname:   hostname,
 			}
 			username = policy.ExpandFormat(ctx)
+			if policy.Password != "" {
+				aaaAttrs[aaa.AttrPassword] = policy.ExpandPassword(ctx)
+			}
 			c.logger.WithGroup(logger.IPoEDHCP4).Debug("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
 		}
 	}
@@ -1032,7 +1039,6 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 	c.logger.WithGroup(logger.IPoEDHCP4).Debug("Publishing AAA request", "session_id", sess.SessionID, "username", username)
 	requestID := uuid.New().String()
 
-	aaaAttrs := make(map[string]string)
 	if len(circuitID) > 0 {
 		aaaAttrs[aaa.AttrCircuitID] = string(circuitID)
 	}
@@ -2049,6 +2055,7 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 			}
 		}
 	}
+	aaaAttrs := make(map[string]string)
 	if policyName != "" {
 		if policy := cfg.AAA.GetPolicyByType(policyName, aaacfg.PolicyTypeDHCP); policy != nil {
 			ctx := &aaacfg.PolicyContext{
@@ -2059,6 +2066,9 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 				CircuitID:  string(circuitID),
 			}
 			username = policy.ExpandFormat(ctx)
+			if policy.Password != "" {
+				aaaAttrs[aaa.AttrPassword] = policy.ExpandPassword(ctx)
+			}
 			c.logger.WithGroup(logger.IPoEDHCP6).Debug("Built username from policy", "policy", policyName, "format", policy.Format, "username", username)
 		}
 	}
@@ -2067,7 +2077,6 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 
 	requestID := uuid.New().String()
 
-	aaaAttrs := make(map[string]string)
 	if len(circuitID) > 0 {
 		aaaAttrs[aaa.AttrCircuitID] = string(circuitID)
 	}
