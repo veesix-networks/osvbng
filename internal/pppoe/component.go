@@ -163,6 +163,7 @@ type SessionState struct {
 	VRF          string
 	ServiceGroup svcgroup.ServiceGroup
 	SRGName      string
+	GroupName    string
 
 	NegotiatedPPPMTU uint16
 	IPv4MSS          uint16
@@ -525,6 +526,12 @@ func (c *Component) handlePADI(pkt *dataplane.ParsedPacket) error {
 		"host_uniq_len", len(tags.HostUniq),
 		"client_ppp_max_payload", tags.PPPMaxPayload)
 
+	if _, ok := c.cfgMgr.LookupSubscriberGroup(pkt.OuterVLAN, pkt.InnerVLAN); !ok {
+		c.logger.Debug("PADI dropped: no subscriber-group match",
+			"mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
+		return nil
+	}
+
 	cookie := c.cookieMgr.Generate(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN)
 
 	return c.sendPADO(pkt, tags, cookie)
@@ -550,6 +557,13 @@ func (c *Component) handlePADR(pkt *dataplane.ParsedPacket) error {
 		return nil
 	}
 
+	match, matched := c.cfgMgr.LookupSubscriberGroup(pkt.OuterVLAN, pkt.InnerVLAN)
+	if !matched {
+		c.logger.Debug("PADR dropped: no subscriber-group match",
+			"mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
+		return nil
+	}
+
 	sessionID := c.allocateSessionID()
 
 	sessID := uuid.New().String()
@@ -563,6 +577,7 @@ func (c *Component) handlePADR(pkt *dataplane.ParsedPacket) error {
 		SwIfIndex:      pkt.SwIfIndex,
 		EncapIfIndex:   pkt.SwIfIndex,
 		Phase:          ppp.PhaseDead,
+		GroupName:      match.Name,
 		MixedAccess:    c.isMixedAccessSVLAN(pkt.OuterVLAN),
 		ServiceName:    tags.ServiceName,
 		HostUniq:       tags.HostUniq,
