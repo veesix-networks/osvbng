@@ -157,7 +157,8 @@ func newNSPTestComponent(t *testing.T, virtualMAC net.HardwareAddr, active bool)
 		SubscriberGroups: &subscriber.SubscriberGroupsConfig{
 			Groups: map[string]*subscriber.SubscriberGroup{
 				"access1": {
-					VLANs: []subscriber.VLANRange{{SVLAN: "100"}},
+					IPv6Profile: "default-v6",
+					VLANs:       []subscriber.VLANRange{{SVLAN: "100"}},
 				},
 			},
 		},
@@ -318,7 +319,7 @@ func TestProcessNSPacketCVLANGate(t *testing.T) {
 	cfg := &config.Config{
 		SubscriberGroups: &subscriber.SubscriberGroupsConfig{
 			Groups: map[string]*subscriber.SubscriberGroup{
-				"access1": {VLANs: []subscriber.VLANRange{{SVLAN: "100", CVLAN: "10"}}},
+				"access1": {IPv6Profile: "default-v6", VLANs: []subscriber.VLANRange{{SVLAN: "100", CVLAN: "10"}}},
 			},
 		},
 	}

@@ -312,6 +312,31 @@ func (c *Component) buildAllocContext(sess *SessionState, aaaAttrs map[string]in
 	return ctx
 }
 
+// sessionV4Enabled / sessionV6Enabled answer whether an established session
+// serves a family. Once AAA has resolved the session policy, the allocator
+// context is authoritative and read-once, so a later config reload does not
+// retroactively flip a live session. Before approval there is no resolved
+// policy, so the current subscriber-group binding is used.
+func (c *Component) sessionV4Enabled(sess *SessionState) bool {
+	if sess.AllocCtx != nil {
+		return sess.AllocCtx.ProfileName != ""
+	}
+	if m, ok := c.cfgMgr.LookupSubscriberGroup(sess.OuterVLAN, sess.InnerVLAN); ok {
+		return groupV4Enabled(m.Group)
+	}
+	return false
+}
+
+func (c *Component) sessionV6Enabled(sess *SessionState) bool {
+	if sess.AllocCtx != nil {
+		return sess.AllocCtx.IPv6ProfileName != ""
+	}
+	if m, ok := c.cfgMgr.LookupSubscriberGroup(sess.OuterVLAN, sess.InnerVLAN); ok {
+		return groupV6Enabled(m.Group)
+	}
+	return false
+}
+
 func (c *Component) getDHCP4Provider(profile *ip.IPv4Profile) dhcp4.DHCPProvider {
 	mode := "local"
 	if profile != nil {
@@ -662,6 +687,13 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 		sess = val.(*SessionState)
 	}
 
+	if sess != nil && !c.sessionV4Enabled(sess) {
+		ipoeDropFamilyV4.WithLabelValues(sess.GroupName).Inc()
+		c.logger.WithGroup(logger.IPoEDHCP4).Debug("DHCPDISCOVER dropped: session v4-disabled",
+			"session_id", sess.SessionID, "group", sess.GroupName)
+		return nil
+	}
+
 	if sess == nil {
 		if !c.IsReady() {
 			c.logger.WithGroup(logger.IPoEDHCP4).Debug("DHCPDISCOVER dropped: component not ready",
@@ -673,6 +705,12 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 		if !matched {
 			c.logger.WithGroup(logger.IPoEDHCP4).Debug("DHCPDISCOVER dropped: no subscriber-group match",
 				"mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
+			return nil
+		}
+		if !groupV4Enabled(match.Group) {
+			ipoeDropFamilyV4.WithLabelValues(match.Name).Inc()
+			c.logger.WithGroup(logger.IPoEDHCP4).Debug("DHCPDISCOVER dropped: group v4-disabled",
+				"mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN, "group", match.Name)
 			return nil
 		}
 		if err := c.checkSessionLimit(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN); err != nil {
@@ -866,11 +904,25 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 	if val, ok := c.sessions.Load(lookupKey); ok {
 		sess = val.(*SessionState)
 	}
+
+	if sess != nil && !c.sessionV4Enabled(sess) {
+		ipoeDropFamilyV4.WithLabelValues(sess.GroupName).Inc()
+		c.logger.WithGroup(logger.IPoEDHCP4).Debug("DHCPREQUEST dropped: session v4-disabled",
+			"session_id", sess.SessionID, "group", sess.GroupName)
+		return nil
+	}
+
 	if sess == nil {
 		match, matched := c.cfgMgr.LookupSubscriberGroup(pkt.OuterVLAN, pkt.InnerVLAN)
 		if !matched {
 			c.logger.WithGroup(logger.IPoEDHCP4).Debug("DHCPREQUEST dropped: no subscriber-group match",
 				"mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
+			return nil
+		}
+		if !groupV4Enabled(match.Group) {
+			ipoeDropFamilyV4.WithLabelValues(match.Name).Inc()
+			c.logger.WithGroup(logger.IPoEDHCP4).Debug("DHCPREQUEST dropped: group v4-disabled",
+				"mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN, "group", match.Name)
 			return nil
 		}
 		sessID := session.GenerateID()
@@ -1479,6 +1531,21 @@ func (c *Component) handleAAAResponse(event events.Event) {
 		"ipv6_profile", ipv6Profile,
 	)
 
+	if ipv4Profile == "" {
+		if n := countFamilyAttrs(data.Response.Attributes, v4FamilyAttrs); n > 0 {
+			aaaAttrDropFamily.WithLabelValues(subscriberGroup, "ipv4").Add(uint64(n))
+			c.logger.Warn("Ignoring off-family IPv4 AAA attributes: group has no ipv4-profile",
+				"session_id", sessID, "group", subscriberGroup, "count", n)
+		}
+	}
+	if ipv6Profile == "" {
+		if n := countFamilyAttrs(data.Response.Attributes, v6FamilyAttrs); n > 0 {
+			aaaAttrDropFamily.WithLabelValues(subscriberGroup, "ipv6").Add(uint64(n))
+			c.logger.Warn("Ignoring off-family IPv6 AAA attributes: group has no ipv6-profile",
+				"session_id", sessID, "group", subscriberGroup, "count", n)
+		}
+	}
+
 	resolved := c.resolveServiceGroup(svlan, cvlan, data.Response.Attributes)
 
 	var srgName string
@@ -2001,6 +2068,13 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 		sess = val.(*SessionState)
 	}
 
+	if sess != nil && !c.sessionV6Enabled(sess) {
+		ipoeDropFamilyV6.WithLabelValues(sess.GroupName).Inc()
+		c.logger.WithGroup(logger.IPoEDHCP6).Debug("DHCPv6 SOLICIT dropped: session v6-disabled",
+			"session_id", sess.SessionID, "group", sess.GroupName)
+		return nil
+	}
+
 	if sess == nil {
 		if !c.IsReady() {
 			c.logger.WithGroup(logger.IPoEDHCP6).Debug("DHCPv6 Solicit dropped: component not ready",
@@ -2012,6 +2086,12 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 		if !matched {
 			c.logger.WithGroup(logger.IPoEDHCP6).Debug("DHCPv6 Solicit dropped: no subscriber-group match",
 				"mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
+			return nil
+		}
+		if !groupV6Enabled(match.Group) {
+			ipoeDropFamilyV6.WithLabelValues(match.Name).Inc()
+			c.logger.WithGroup(logger.IPoEDHCP6).Debug("DHCPv6 SOLICIT dropped: group v6-disabled",
+				"mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN, "group", match.Name)
 			return nil
 		}
 		sessID := session.GenerateID()
@@ -2161,6 +2241,13 @@ func (c *Component) handleDHCPv6Request(pkt *dataplane.ParsedPacket, msg *dhcp6.
 		return fmt.Errorf("no session for DHCPv6 REQUEST")
 	}
 	sess := val.(*SessionState)
+
+	if !c.sessionV6Enabled(sess) {
+		ipoeDropFamilyV6.WithLabelValues(sess.GroupName).Inc()
+		c.logger.WithGroup(logger.IPoEDHCP6).Debug("DHCPv6 REQUEST dropped: session v6-disabled",
+			"session_id", sess.SessionID, "group", sess.GroupName)
+		return nil
+	}
 
 	sess.mu.Lock()
 	sess.DHCPv6XID = msg.TransactionID
@@ -2911,6 +2998,11 @@ func (c *Component) processRSPacket(pkt *dataplane.ParsedPacket) error {
 	}
 	group := match.Group
 
+	if !groupV6Enabled(group) {
+		ndDropFamily.WithLabelValues(match.Name, "rs").Inc()
+		return nil
+	}
+
 	raConfig := southbound.IPv6RAConfig{
 		Managed:        true,
 		Other:          true,
@@ -2948,20 +3040,8 @@ func (c *Component) processRSPacket(pkt *dataplane.ParsedPacket) error {
 
 	var prefixes []raPrefixInfo
 
-	if group != nil && group.IPv6Profile != "" {
-		if profile := cfg.IPv6Profiles[group.IPv6Profile]; profile != nil {
-			for _, pool := range profile.IANAPools {
-				prefixes = append(prefixes, raPrefixInfo{
-					network:       pool.Network,
-					validTime:     pool.ValidTime,
-					preferredTime: pool.PreferredTime,
-				})
-			}
-		}
-	}
-
-	if len(prefixes) == 0 {
-		for _, pool := range cfg.DHCPv6.IANAPools {
+	if profile := cfg.IPv6Profiles[group.IPv6Profile]; profile != nil {
+		for _, pool := range profile.IANAPools {
 			prefixes = append(prefixes, raPrefixInfo{
 				network:       pool.Network,
 				validTime:     pool.ValidTime,
@@ -3129,7 +3209,12 @@ func (c *Component) processNSPacket(pkt *dataplane.ParsedPacket) error {
 		return fmt.Errorf("packet rejected: S-VLAN required")
 	}
 
-	if _, ok := c.cfgMgr.LookupSubscriberGroup(pkt.OuterVLAN, pkt.InnerVLAN); !ok {
+	match, ok := c.cfgMgr.LookupSubscriberGroup(pkt.OuterVLAN, pkt.InnerVLAN)
+	if !ok {
+		return nil
+	}
+	if !groupV6Enabled(match.Group) {
+		ndDropFamily.WithLabelValues(match.Name, "ns").Inc()
 		return nil
 	}
 
