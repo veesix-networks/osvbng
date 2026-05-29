@@ -15,6 +15,7 @@ type AAAConfig struct {
 type AAAPolicy struct {
 	Name                  string `json:"name" yaml:"name"`
 	Format                string `json:"format,omitempty" yaml:"format,omitempty"`
+	Password              string `json:"password,omitempty" yaml:"password,omitempty"`
 	Type                  string `json:"type,omitempty" yaml:"type,omitempty"`
 	Authenticate          bool   `json:"authenticate,omitempty" yaml:"authenticate,omitempty"`
 	MaxConcurrentSessions int    `json:"max_concurrent_sessions,omitempty" yaml:"max_concurrent_sessions,omitempty"`

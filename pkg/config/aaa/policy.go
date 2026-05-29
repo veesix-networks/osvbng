@@ -19,7 +19,15 @@ type PolicyContext struct {
 }
 
 func (p *AAAPolicy) ExpandFormat(ctx *PolicyContext) string {
-	result := p.Format
+	return p.expand(p.Format, ctx)
+}
+
+func (p *AAAPolicy) ExpandPassword(ctx *PolicyContext) string {
+	return p.expand(p.Password, ctx)
+}
+
+func (p *AAAPolicy) expand(template string, ctx *PolicyContext) string {
+	result := template
 
 	remoteID := ctx.RemoteID
 	if ctx.AgentRemoteID != "" {

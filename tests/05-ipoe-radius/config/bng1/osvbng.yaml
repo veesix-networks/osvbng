@@ -197,6 +197,7 @@ aaa:
     policy:
         - name: default-policy
           format: $remote-id$
+          password: secret
           max_concurrent_sessions: 1
 
 plugins:
