@@ -6,9 +6,13 @@
 RADIUS-in-MGMT-VRF integration test.
 
 FreeRADIUS is reachable only via MGMT-VRF (10.99.0.10/24 on a dedicated link
-to bng1:eth3, enslaved to MGMT-VRF). The RADIUS plugin is configured with
-vrf: MGMT-VRF and source_ip: 10.99.0.2; default routing has no path to the
-RADIUS server. Successful IPoE auth proves the socket egressed via MGMT-VRF.
+to bng1:eth3). eth3 is declared in osvbng config with vrf: MGMT-VRF and
+address 10.99.0.2/24, so osvbng's vrfmgr creates the VRF master in the LCP
+(dataplane) netns and enslaves the eth3 LCP shadow there. netbind opens the
+RADIUS socket inside that netns, bound to MGMT-VRF. The RADIUS plugin is
+configured with vrf: MGMT-VRF and source_ip: 10.99.0.2; the default table has
+no path to the RADIUS server. Successful IPoE auth proves the socket egressed
+via MGMT-VRF.
 
 *** Settings ***
 Library             OperatingSystem
@@ -29,6 +33,7 @@ ${subscribers}      clab-${lab-name}-subscribers
 ${freeradius}       clab-${lab-name}-freeradius
 ${session-count}    1
 ${vrf-name}         MGMT-VRF
+${vrf-table}        100
 ${radius-server}    10.99.0.10
 ${radius-source}    10.99.0.2
 
@@ -40,38 +45,40 @@ Verify BNG Is Healthy
     Wait For osvbng Healthy    bng1    ${lab-name}
 
 Verify MGMT-VRF Master And eth3 Enslavement
-    [Documentation]    Pre-osvbng entrypoint must have created the VRF master
-    ...    and enslaved eth3. Asserts the kernel-level state vrfmgr expects.
+    [Documentation]    osvbng's vrfmgr creates the VRF master in the LCP
+    ...    (dataplane) netns and autoconfig enslaves the eth3 LCP shadow.
+    ...    Asserts that kernel-level state in the dataplane netns.
     ${rc}    ${output} =    Run And Return Rc And Output
-    ...    sudo docker exec ${bng1} ip -d link show ${vrf-name}
+    ...    sudo docker exec ${bng1} ip netns exec dataplane ip -d link show ${vrf-name}
     Should Be Equal As Integers    ${rc}    0
-    Should Contain    ${output}    vrf table 99
+    Should Contain    ${output}    vrf table ${vrf-table}
     ${rc}    ${eth3} =    Run And Return Rc And Output
-    ...    sudo docker exec ${bng1} ip link show eth3
+    ...    sudo docker exec ${bng1} ip netns exec dataplane ip link show eth3
     Should Be Equal As Integers    ${rc}    0
     Should Contain    ${eth3}    master ${vrf-name}
 
 Verify FreeRADIUS Route Lives In MGMT-VRF Table Only
     [Documentation]    The 10.99.0.0/24 connected route must be in MGMT-VRF's
-    ...    table (99) and absent from the main routing table. A main-table
-    ...    entry would defeat VRF isolation.
+    ...    table (${vrf-table}) and absent from the dataplane main table. A
+    ...    main-table entry would defeat VRF isolation.
     ${rc}    ${main} =    Run And Return Rc And Output
-    ...    sudo docker exec ${bng1} ip route show table main 10.99.0.0/24
+    ...    sudo docker exec ${bng1} ip netns exec dataplane ip route show table main 10.99.0.0/24
     Should Be Equal As Integers    ${rc}    0
     Should Be Empty    ${main}    Main table unexpectedly has 10.99.0.0/24 route: ${main}
     ${rc}    ${vrf} =    Run And Return Rc And Output
-    ...    sudo docker exec ${bng1} ip route show table 99 10.99.0.0/24
+    ...    sudo docker exec ${bng1} ip netns exec dataplane ip route show table ${vrf-table} 10.99.0.0/24
     Should Be Equal As Integers    ${rc}    0
     Should Contain    ${vrf}    dev eth3    MGMT-VRF table missing 10.99.0.0/24 via eth3: ${vrf}
 
 Verify RADIUS Sockets Bound To MGMT-VRF Source
     [Documentation]    The RADIUS auth and acct sockets must show
     ...    "10.99.0.2%MGMT-VRF" as the local address — ss prints the VRF
-    ...    suffix only when SO_BINDTODEVICE is set to the VRF master.
+    ...    suffix only when SO_BINDTODEVICE is set to the VRF master. netbind
+    ...    opens the socket inside the dataplane netns, so inspect there.
     ...    This is the strongest user-space proof that netbind.DialUDP
     ...    bound the socket to MGMT-VRF.
     ${rc}    ${output} =    Run And Return Rc And Output
-    ...    sudo docker exec ${bng1} ss -anup
+    ...    sudo docker exec ${bng1} ip netns exec dataplane ss -anup
     Log    ${output}
     Should Be Equal As Integers    ${rc}    0
     Should Contain    ${output}    ${radius-source}%${vrf-name}:    Socket source not annotated %${vrf-name} (no SO_BINDTODEVICE)
@@ -123,9 +130,8 @@ Verify BNG Blaster Report
 Setup RADIUS VRF Test
     [Documentation]    Deploy the topology then configure the freeradius
     ...    container's eth1 IP from the host (the freeradius image has no
-    ...    iproute2). This must happen before osvbng's RADIUS plugin tries
-    ...    to dial, otherwise the first auth attempt times out and the
-    ...    bng comes up unhealthy.
+    ...    iproute2). Done at setup so the RADIUS server is reachable by the
+    ...    time BNG Blaster drives the first auth.
     Deploy Topology    ${lab-file}
     Configure Freeradius VRF Address
 
