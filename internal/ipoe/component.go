@@ -128,6 +128,7 @@ type SessionState struct {
 	VRF          string
 	ServiceGroup svcgroup.ServiceGroup
 	SRGName      string
+	GroupName    string
 	AllocCtx     *allocator.Context
 	Closing      bool
 	AAAInFlight  bool
@@ -679,6 +680,12 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 				"state", c.ReadyState().String())
 			return nil
 		}
+		match, matched := c.cfgMgr.LookupSubscriberGroup(pkt.OuterVLAN, pkt.InnerVLAN)
+		if !matched {
+			c.logger.WithGroup(logger.IPoEDHCP4).Debug("DHCPDISCOVER dropped: no subscriber-group match",
+				"mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
+			return nil
+		}
 		if err := c.checkSessionLimit(pkt.MAC, pkt.OuterVLAN, pkt.InnerVLAN); err != nil {
 			c.logger.WithGroup(logger.IPoEDHCP4).Debug("DHCPDISCOVER rejected", "error", err)
 			return nil
@@ -693,6 +700,7 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 			InnerVLAN:     pkt.InnerVLAN,
 			EncapIfIndex:  pkt.SwIfIndex,
 			State:         "discovering",
+			GroupName:     match.Name,
 			MixedAccess:   c.isMixedAccessSVLAN(pkt.OuterVLAN),
 		}
 
@@ -865,6 +873,12 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 		sess = val.(*SessionState)
 	}
 	if sess == nil {
+		match, matched := c.cfgMgr.LookupSubscriberGroup(pkt.OuterVLAN, pkt.InnerVLAN)
+		if !matched {
+			c.logger.WithGroup(logger.IPoEDHCP4).Debug("DHCPREQUEST dropped: no subscriber-group match",
+				"mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
+			return nil
+		}
 		sessID := session.GenerateID()
 		newSess := &SessionState{
 			SessionID:     sessID,
@@ -874,6 +888,7 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 			InnerVLAN:     pkt.InnerVLAN,
 			EncapIfIndex:  pkt.SwIfIndex,
 			State:         "requesting",
+			GroupName:     match.Name,
 		}
 		c.sessionIndex.Store(sessID, newSess)
 		if actual, loaded := c.sessions.LoadOrStore(lookupKey, newSess); loaded {
@@ -1967,6 +1982,12 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 				"state", c.ReadyState().String())
 			return nil
 		}
+		match, matched := c.cfgMgr.LookupSubscriberGroup(pkt.OuterVLAN, pkt.InnerVLAN)
+		if !matched {
+			c.logger.WithGroup(logger.IPoEDHCP6).Debug("DHCPv6 Solicit dropped: no subscriber-group match",
+				"mac", pkt.MAC.String(), "svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN)
+			return nil
+		}
 		sessID := session.GenerateID()
 		newSess := &SessionState{
 			SessionID:     sessID,
@@ -1976,6 +1997,7 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 			InnerVLAN:     pkt.InnerVLAN,
 			EncapIfIndex:  pkt.SwIfIndex,
 			State:         "soliciting",
+			GroupName:     match.Name,
 		}
 
 		c.sessionIndex.Store(sessID, newSess)
