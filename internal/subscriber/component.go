@@ -137,46 +137,10 @@ func (c *Component) GetSessions(ctx context.Context, accessType, protocol string
 				continue
 			}
 
-			var sess models.SubscriberSession
-			switch meta.AccessType {
-			case string(models.AccessTypeL2TP):
-				var l2tpSess models.PPPoL2TPSession
-				if err := json.Unmarshal(data, &l2tpSess); err != nil {
-					c.logger.Debug("Failed to unmarshal L2TP session", "key", key, "error", err)
-					continue
-				}
-				sess = &l2tpSess
-			case string(models.AccessTypePPPoE):
-				var pppSess models.PPPSession
-				if err := json.Unmarshal(data, &pppSess); err != nil {
-					c.logger.Debug("Failed to unmarshal PPP session", "key", key, "error", err)
-					continue
-				}
-				sess = &pppSess
-			case string(models.AccessTypeIPoE):
-				switch meta.Protocol {
-				case string(models.ProtocolDHCPv6):
-					var dhcp6Sess models.IPoESession
-					if err := json.Unmarshal(data, &dhcp6Sess); err != nil {
-						c.logger.Debug("Failed to unmarshal DHCPv6 session", "key", key, "error", err)
-						continue
-					}
-					sess = &dhcp6Sess
-				default:
-					var dhcp4Sess models.IPoESession
-					if err := json.Unmarshal(data, &dhcp4Sess); err != nil {
-						c.logger.Debug("Failed to unmarshal DHCPv4 session", "key", key, "error", err)
-						continue
-					}
-					sess = &dhcp4Sess
-				}
-			default:
-				var dhcp4Sess models.IPoESession
-				if err := json.Unmarshal(data, &dhcp4Sess); err != nil {
-					c.logger.Debug("Failed to unmarshal DHCP session", "key", key, "error", err)
-					continue
-				}
-				sess = &dhcp4Sess
+			sess, ok := decodeTypedSession(meta.AccessType, data)
+			if !ok {
+				c.logger.Debug("Failed to unmarshal typed session", "key", key, "access_type", meta.AccessType)
+				continue
 			}
 
 			c.logger.Debug("Found session", "session_id", meta.SessionID, "access_type", meta.AccessType)
@@ -215,6 +179,48 @@ func (c *Component) GetSession(ctx context.Context, sessionID string) (*models.I
 	}
 
 	return &sess, nil
+}
+
+// SessionSnapshot returns the typed subscriber session for sessionID, picking
+// the right model from the cached entry's AccessType / Protocol. Use this
+// instead of GetSession when the caller cannot assume IPoE — PPPoE and L2TP
+// entries are otherwise silently mis-decoded as *models.IPoESession.
+func (c *Component) SessionSnapshot(ctx context.Context, sessionID string) (models.SubscriberSession, bool) {
+	key := fmt.Sprintf("osvbng:sessions:%s", sessionID)
+	data, err := c.cache.Get(ctx, key)
+	if err != nil || len(data) == 0 {
+		return nil, false
+	}
+	var meta struct {
+		AccessType string `json:"AccessType"`
+	}
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return nil, false
+	}
+	return decodeTypedSession(meta.AccessType, data)
+}
+
+func decodeTypedSession(accessType string, data []byte) (models.SubscriberSession, bool) {
+	switch accessType {
+	case string(models.AccessTypeL2TP):
+		var s models.PPPoL2TPSession
+		if err := json.Unmarshal(data, &s); err != nil {
+			return nil, false
+		}
+		return &s, true
+	case string(models.AccessTypePPPoE):
+		var s models.PPPSession
+		if err := json.Unmarshal(data, &s); err != nil {
+			return nil, false
+		}
+		return &s, true
+	default:
+		var s models.IPoESession
+		if err := json.Unmarshal(data, &s); err != nil {
+			return nil, false
+		}
+		return &s, true
+	}
 }
 
 type SessionStats struct {
