@@ -24,6 +24,8 @@ type RPCService interface {
 	OsvbngCgnatPoolInsidePrefixDump(ctx context.Context, in *OsvbngCgnatPoolInsidePrefixDump) (RPCService_OsvbngCgnatPoolInsidePrefixDumpClient, error)
 	OsvbngCgnatPoolOutsideAddressDump(ctx context.Context, in *OsvbngCgnatPoolOutsideAddressDump) (RPCService_OsvbngCgnatPoolOutsideAddressDumpClient, error)
 	OsvbngCgnatPoolUpdate(ctx context.Context, in *OsvbngCgnatPoolUpdate) (*OsvbngCgnatPoolUpdateReply, error)
+	OsvbngCgnatSessionCount(ctx context.Context, in *OsvbngCgnatSessionCount) (*OsvbngCgnatSessionCountReply, error)
+	OsvbngCgnatSessionDump(ctx context.Context, in *OsvbngCgnatSessionDump) (RPCService_OsvbngCgnatSessionDumpClient, error)
 	OsvbngCgnatSetOutsideFib(ctx context.Context, in *OsvbngCgnatSetOutsideFib) (*OsvbngCgnatSetOutsideFibReply, error)
 	OsvbngCgnatSubscriberMappingDump(ctx context.Context, in *OsvbngCgnatSubscriberMappingDump) (RPCService_OsvbngCgnatSubscriberMappingDumpClient, error)
 }
@@ -235,6 +237,58 @@ func (c *serviceClient) OsvbngCgnatPoolUpdate(ctx context.Context, in *OsvbngCgn
 		return nil, err
 	}
 	return out, api.RetvalToVPPApiError(out.Retval)
+}
+
+func (c *serviceClient) OsvbngCgnatSessionCount(ctx context.Context, in *OsvbngCgnatSessionCount) (*OsvbngCgnatSessionCountReply, error) {
+	out := new(OsvbngCgnatSessionCountReply)
+	err := c.conn.Invoke(ctx, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, api.RetvalToVPPApiError(out.Retval)
+}
+
+func (c *serviceClient) OsvbngCgnatSessionDump(ctx context.Context, in *OsvbngCgnatSessionDump) (RPCService_OsvbngCgnatSessionDumpClient, error) {
+	stream, err := c.conn.NewStream(ctx)
+	if err != nil {
+		return nil, err
+	}
+	x := &serviceClient_OsvbngCgnatSessionDumpClient{stream}
+	if err := x.Stream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err = x.Stream.SendMsg(&memclnt.ControlPing{}); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type RPCService_OsvbngCgnatSessionDumpClient interface {
+	Recv() (*OsvbngCgnatSessionDetails, error)
+	api.Stream
+}
+
+type serviceClient_OsvbngCgnatSessionDumpClient struct {
+	api.Stream
+}
+
+func (c *serviceClient_OsvbngCgnatSessionDumpClient) Recv() (*OsvbngCgnatSessionDetails, error) {
+	msg, err := c.Stream.RecvMsg()
+	if err != nil {
+		return nil, err
+	}
+	switch m := msg.(type) {
+	case *OsvbngCgnatSessionDetails:
+		return m, nil
+	case *memclnt.ControlPingReply:
+		err = c.Stream.Close()
+		if err != nil {
+			return nil, err
+		}
+		return nil, io.EOF
+	default:
+		return nil, fmt.Errorf("unexpected message: %T %v", m, m)
+	}
 }
 
 func (c *serviceClient) OsvbngCgnatSetOutsideFib(ctx context.Context, in *OsvbngCgnatSetOutsideFib) (*OsvbngCgnatSetOutsideFibReply, error) {
