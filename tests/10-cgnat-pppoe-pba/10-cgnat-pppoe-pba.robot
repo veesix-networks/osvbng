@@ -63,7 +63,7 @@ Verify CGNAT Pool Has Allocations
     Should Contain    ${output}    residential
 
 Verify CGNAT Mappings Exist
-    ${output} =    Get osvbng API Response    ${bng1}    /api/show/cgnat/sessions
+    ${output} =    Get osvbng API Response    ${bng1}    /api/show/cgnat/mappings
     Should Contain    ${output}    203.0.113.
 
 Verify NAT Traffic Flowing

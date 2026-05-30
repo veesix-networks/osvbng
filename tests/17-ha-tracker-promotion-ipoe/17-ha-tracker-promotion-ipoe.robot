@@ -186,7 +186,7 @@ Check Sync Sequence Nonzero
 
 Check CGNAT Mapping Count
     [Arguments]    ${container}    ${expected}
-    ${output} =    Get osvbng API Response    ${container}    /api/show/cgnat/sessions
+    ${output} =    Get osvbng API Response    ${container}    /api/show/cgnat/mappings
     ${rc}    ${count} =    Run And Return Rc And Output
     ...    echo '${output}' | python3 -c "import sys,json; d=json.load(sys.stdin); entries=d.get('data',[]); print(len(entries))"
     Should Be Equal As Integers    ${rc}    0
