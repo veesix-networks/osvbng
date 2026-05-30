@@ -48,6 +48,45 @@ type CGNATOutsideAddressState struct {
 	Prefix net.IPNet
 }
 
+// CGNATSessionFilter narrows a session dump. Zero-valued fields are sentinels
+// meaning "do not filter on this field" (0.0.0.0 for IPs, 0 for ports/proto/
+// pool). StartIndex is the resume cursor (a session pool index); Limit caps the
+// page (0 = plugin default). The plugin filters and windows the walk, so only
+// matching, in-window sessions cross the API boundary.
+type CGNATSessionFilter struct {
+	InsideIP    net.IP
+	OutsideIP   net.IP
+	RemoteIP    net.IP
+	InsidePort  uint16
+	OutsidePort uint16
+	RemotePort  uint16
+	Proto       uint8
+	PoolID      uint32
+	StartIndex  uint32
+	Limit       uint32
+}
+
+// CGNATSession is one active translation. Ports are host-order. Age is seconds
+// since the session was last active (computed plugin-side at dump time).
+type CGNATSession struct {
+	SessionIndex   uint32
+	PoolID         uint32
+	InsideIP       net.IP
+	OutsideIP      net.IP
+	RemoteIP       net.IP
+	InsidePort     uint16
+	OutsidePort    uint16
+	RemotePort     uint16
+	Proto          uint8
+	ALGFlags       uint8
+	InsideFIBIndex uint32
+	MappingIndex   uint32
+	Age            float64
+	Timeout        uint32
+	TotalPackets   uint64
+	TotalBytes     uint64
+}
+
 type CGNATDataplane interface {
 	CGNATPoolAddDel(poolID uint32, mode uint8, addressPooling uint8,
 		filtering uint8, blockSize uint16, maxBlocksPerSub uint8,
@@ -83,4 +122,7 @@ type CGNATDataplane interface {
 	CGNATPoolDump() ([]CGNATPoolState, error)
 	CGNATPoolInsidePrefixDump(poolID uint32) ([]CGNATInsidePrefixState, error)
 	CGNATPoolOutsideAddressDump(poolID uint32) ([]CGNATOutsideAddressState, error)
+
+	CGNATDumpSessions(f CGNATSessionFilter) ([]CGNATSession, error)
+	CGNATSessionCount() (uint64, error)
 }
