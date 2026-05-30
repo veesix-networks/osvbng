@@ -109,11 +109,18 @@ func (f *fakeConfigManager) LookupSubscriberGroup(svlan, cvlan uint16) (subscrib
 }
 
 type captureBus struct {
-	mu     sync.Mutex
-	egress []events.EgressEvent
+	mu      sync.Mutex
+	egress  []events.EgressEvent
+	aaaReqs int
 }
 
 func (b *captureBus) Publish(topic string, ev events.Event) {
+	if topic == events.TopicAAARequest {
+		b.mu.Lock()
+		b.aaaReqs++
+		b.mu.Unlock()
+		return
+	}
 	if topic != events.TopicEgress {
 		return
 	}

@@ -828,10 +828,12 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 	cfg, _ := c.cfgMgr.GetRunning()
 	username := pkt.MAC.String()
 	var policyName string
+	var groupName string
 	var accessInterface string
 	if cfg != nil {
 		accessInterface, _ = cfg.GetAccessInterface()
 		if match, ok := c.cfgMgr.LookupSubscriberGroup(pkt.OuterVLAN, pkt.InnerVLAN); ok {
+			groupName = match.Name
 			if match.VR != nil && match.VR.AAA != nil && match.VR.AAA.Policy != "" {
 				policyName = match.VR.AAA.Policy
 			} else {
@@ -850,7 +852,21 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 				CircuitID:  string(circuitID),
 				Hostname:   hostname,
 			}
-			username = policy.ExpandFormat(ctx)
+			expanded, ok := policy.ExpandFormatChecked(ctx)
+			if !ok && policy.Format != "" {
+				c.logger.WithGroup(logger.IPoEDHCP4).Warn("AAA username empty after policy expansion; dropping DISCOVER",
+					"policy", policyName, "group", groupName, "mac", pkt.MAC.String(),
+					"svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN, "format", policy.Format,
+					"remote_id", string(remoteID), "circuit_id", string(circuitID), "hostname", hostname)
+				aaa.UsernameEmptyDrops.WithLabelValues(policyName, groupName, "ipoe-dhcpv4").Inc()
+				sess.mu.Lock()
+				sess.AAAInFlight = false
+				sess.mu.Unlock()
+				return nil
+			}
+			if ok {
+				username = expanded
+			}
 			if policy.Password != "" {
 				aaaAttrs[aaa.AttrPassword] = policy.ExpandPassword(ctx)
 			}
@@ -1056,10 +1072,12 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 	cfg, _ := c.cfgMgr.GetRunning()
 	username := pkt.MAC.String()
 	var policyName string
+	var groupName string
 	var accessInterface string
 	if cfg != nil {
 		accessInterface, _ = cfg.GetAccessInterface()
 		if match, ok := c.cfgMgr.LookupSubscriberGroup(pkt.OuterVLAN, pkt.InnerVLAN); ok {
+			groupName = match.Name
 			if match.VR != nil && match.VR.AAA != nil && match.VR.AAA.Policy != "" {
 				policyName = match.VR.AAA.Policy
 			} else {
@@ -1078,7 +1096,21 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 				CircuitID:  string(circuitID),
 				Hostname:   hostname,
 			}
-			username = policy.ExpandFormat(ctx)
+			expanded, ok := policy.ExpandFormatChecked(ctx)
+			if !ok && policy.Format != "" {
+				c.logger.WithGroup(logger.IPoEDHCP4).Warn("AAA username empty after policy expansion; dropping REQUEST",
+					"policy", policyName, "group", groupName, "mac", pkt.MAC.String(),
+					"svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN, "format", policy.Format,
+					"remote_id", string(remoteID), "circuit_id", string(circuitID), "hostname", hostname)
+				aaa.UsernameEmptyDrops.WithLabelValues(policyName, groupName, "ipoe-dhcpv4").Inc()
+				sess.mu.Lock()
+				sess.AAAInFlight = false
+				sess.mu.Unlock()
+				return nil
+			}
+			if ok {
+				username = expanded
+			}
 			if policy.Password != "" {
 				aaaAttrs[aaa.AttrPassword] = policy.ExpandPassword(ctx)
 			}
@@ -2167,10 +2199,12 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 	cfg, _ := c.cfgMgr.GetRunning()
 	username := pkt.MAC.String()
 	var policyName string
+	var groupName string
 	var accessInterface string
 	if cfg != nil {
 		accessInterface, _ = cfg.GetAccessInterface()
 		if match, ok := c.cfgMgr.LookupSubscriberGroup(pkt.OuterVLAN, pkt.InnerVLAN); ok {
+			groupName = match.Name
 			if match.VR != nil && match.VR.AAA != nil && match.VR.AAA.Policy != "" {
 				policyName = match.VR.AAA.Policy
 			} else {
@@ -2188,7 +2222,21 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 				RemoteID:   string(remoteID),
 				CircuitID:  string(circuitID),
 			}
-			username = policy.ExpandFormat(ctx)
+			expanded, ok := policy.ExpandFormatChecked(ctx)
+			if !ok && policy.Format != "" {
+				c.logger.WithGroup(logger.IPoEDHCP6).Warn("AAA username empty after policy expansion; dropping SOLICIT",
+					"policy", policyName, "group", groupName, "mac", pkt.MAC.String(),
+					"svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN, "format", policy.Format,
+					"remote_id", string(remoteID), "circuit_id", string(circuitID))
+				aaa.UsernameEmptyDrops.WithLabelValues(policyName, groupName, "ipoe-dhcpv6").Inc()
+				sess.mu.Lock()
+				sess.AAAInFlight = false
+				sess.mu.Unlock()
+				return nil
+			}
+			if ok {
+				username = expanded
+			}
 			if policy.Password != "" {
 				aaaAttrs[aaa.AttrPassword] = policy.ExpandPassword(ctx)
 			}

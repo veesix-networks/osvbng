@@ -26,6 +26,15 @@ func (p *AAAPolicy) ExpandPassword(ctx *PolicyContext) string {
 	return p.expand(p.Password, ctx)
 }
 
+// ExpandFormatChecked expands the policy Format and reports whether the
+// result is usable as a User-Name. ok is false when Format is unset (no
+// policy username to apply) or when expansion collapses to "" because a
+// referenced identity token (e.g. $remote-id$) was absent at request time.
+func (p *AAAPolicy) ExpandFormatChecked(ctx *PolicyContext) (string, bool) {
+	expanded := p.expand(p.Format, ctx)
+	return expanded, p.Format != "" && expanded != ""
+}
+
 func (p *AAAPolicy) expand(template string, ctx *PolicyContext) string {
 	result := template
 
