@@ -1,0 +1,30 @@
+{
+  "interfaces": {
+    "access": [
+      {
+        "interface": "eth1",
+        "type": "ipoe",
+        "vlan-mode": "1:1",
+        "outer-vlan-min": 100,
+        "outer-vlan-max": 110,
+        "inner-vlan-min": 2,
+        "inner-vlan-max": 8
+      }
+    ]
+  },
+  "dhcp": {
+    "enable": true,
+    "retry": 10
+  },
+  "dhcpv6": {
+    "enable": true,
+    "ia-na": true,
+    "ia-pd": true,
+    "rapid-commit": false,
+    "ldra": true,
+    "access-line": false
+  },
+  "ipoe": {
+    "ipv6": true
+  }
+}

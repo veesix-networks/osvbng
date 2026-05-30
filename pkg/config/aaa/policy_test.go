@@ -92,3 +92,51 @@ func TestExpandFormatStillWorks(t *testing.T) {
 		t.Fatalf("ExpandFormat regression: want %q, got %q", want, got)
 	}
 }
+
+func TestExpandFormatChecked(t *testing.T) {
+	mac := mustMAC(t, "aa:bb:cc:dd:ee:ff")
+
+	t.Run("unset_format_reports_not_ok", func(t *testing.T) {
+		p := &AAAPolicy{}
+		got, ok := p.ExpandFormatChecked(&PolicyContext{MACAddress: mac})
+		if ok {
+			t.Fatalf("unset Format must report ok=false")
+		}
+		if got != "" {
+			t.Fatalf("unset Format must expand to %q, got %q", "", got)
+		}
+	})
+
+	t.Run("remote_id_token_with_no_remote_id_reports_not_ok", func(t *testing.T) {
+		p := &AAAPolicy{Format: "$remote-id$"}
+		got, ok := p.ExpandFormatChecked(&PolicyContext{MACAddress: mac})
+		if ok {
+			t.Fatalf("empty expansion must report ok=false")
+		}
+		if got != "" {
+			t.Fatalf("empty expansion must yield %q, got %q", "", got)
+		}
+	})
+
+	t.Run("remote_id_token_with_agent_remote_id_reports_ok", func(t *testing.T) {
+		p := &AAAPolicy{Format: "$remote-id$"}
+		got, ok := p.ExpandFormatChecked(&PolicyContext{MACAddress: mac, AgentRemoteID: "ONE7829589"})
+		if !ok {
+			t.Fatalf("non-empty expansion must report ok=true")
+		}
+		if got != "ONE7829589" {
+			t.Fatalf("want %q, got %q", "ONE7829589", got)
+		}
+	})
+
+	t.Run("always_resolvable_token_reports_ok", func(t *testing.T) {
+		p := &AAAPolicy{Format: "$mac-address$"}
+		got, ok := p.ExpandFormatChecked(&PolicyContext{MACAddress: mac})
+		if !ok {
+			t.Fatalf("$mac-address$ must always report ok=true")
+		}
+		if got != "aa:bb:cc:dd:ee:ff" {
+			t.Fatalf("want %q, got %q", "aa:bb:cc:dd:ee:ff", got)
+		}
+	})
+}

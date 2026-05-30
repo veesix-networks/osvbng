@@ -165,8 +165,10 @@ func (s *SessionState) publishAAARequest(attrs map[string]string) {
 
 	username := s.Username
 	var policyName string
+	var groupName string
 	if cfg != nil && cfg.SubscriberGroups != nil {
 		if match, ok := s.component.cfgMgr.LookupSubscriberGroup(s.OuterVLAN, s.InnerVLAN); ok {
+			groupName = match.Name
 			policyName = match.Group.AAAPolicy
 		}
 	}
@@ -179,7 +181,28 @@ func (s *SessionState) publishAAARequest(attrs map[string]string) {
 				AgentCircuitID: s.AgentCircuitID,
 				AgentRemoteID:  s.AgentRemoteID,
 			}
-			username = policy.ExpandFormat(ctx)
+			expanded, ok := policy.ExpandFormatChecked(ctx)
+			if !ok && policy.Format != "" {
+				s.component.logger.Warn("AAA username empty after policy expansion; failing PPPoE auth",
+					"session_id", s.SessionID, "policy", policyName, "group", groupName,
+					"mac", s.MAC.String(), "svlan", s.OuterVLAN, "cvlan", s.InnerVLAN,
+					"format", policy.Format, "agent_circuit_id", s.AgentCircuitID,
+					"agent_remote_id", s.AgentRemoteID, "auth_type", s.pendingAuthType)
+				aaa.UsernameEmptyDrops.WithLabelValues(policyName, groupName, "pppoe").Inc()
+				switch s.pendingAuthType {
+				case "pap":
+					s.sendPAPNak(s.pendingPAPID)
+				case "chap":
+					s.sendCHAPFailure(s.pendingCHAPID)
+				}
+				s.lcp.FSM().Close()
+				s.pendingAuthType = ""
+				s.pendingAuthRequestID = ""
+				return
+			}
+			if ok {
+				username = expanded
+			}
 			s.component.logger.Debug("Built username from policy",
 				"policy", policyName,
 				"format", policy.Format,
