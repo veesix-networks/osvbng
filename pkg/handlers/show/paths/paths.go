@@ -191,6 +191,7 @@ const (
 	L2TPTunnel  Path = "l2tp.tunnels.<*>"
 
 	CGNATSessions   Path = "cgnat.sessions"
+	CGNATMappings   Path = "cgnat.mappings"
 	CGNATPools      Path = "cgnat.pools"
 	CGNATStatistics Path = "cgnat.statistics"
 	CGNATLookup     Path = "cgnat.lookup"
