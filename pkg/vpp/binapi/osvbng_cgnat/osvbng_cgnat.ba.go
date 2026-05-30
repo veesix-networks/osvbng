@@ -9,7 +9,7 @@
 // Contents:
 // -  3 enums
 // -  3 structs
-// - 26 messages
+// - 30 messages
 package osvbng_cgnat
 
 import (
@@ -30,7 +30,7 @@ const _ = api.GoVppAPIPackageIsVersion2
 const (
 	APIFile    = "osvbng_cgnat"
 	APIVersion = "1.0.0"
-	VersionCrc = 0xf53ef34
+	VersionCrc = 0x145695a2
 )
 
 // OsvbngCgnatAddressPooling defines enum 'osvbng_cgnat_address_pooling'.
@@ -1252,6 +1252,262 @@ func (m *OsvbngCgnatPoolUpdateReply) Unmarshal(b []byte) error {
 	return nil
 }
 
+// Count active CGNAT sessions (global, O(1) — no table walk).
+// OsvbngCgnatSessionCount defines message 'osvbng_cgnat_session_count'.
+type OsvbngCgnatSessionCount struct{}
+
+func (m *OsvbngCgnatSessionCount) Reset()               { *m = OsvbngCgnatSessionCount{} }
+func (*OsvbngCgnatSessionCount) GetMessageName() string { return "osvbng_cgnat_session_count" }
+func (*OsvbngCgnatSessionCount) GetCrcString() string   { return "51077d14" }
+func (*OsvbngCgnatSessionCount) GetMessageType() api.MessageType {
+	return api.RequestMessage
+}
+
+func (m *OsvbngCgnatSessionCount) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	return size
+}
+func (m *OsvbngCgnatSessionCount) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngCgnatSessionCount) Unmarshal(b []byte) error {
+	return nil
+}
+
+// OsvbngCgnatSessionCountReply defines message 'osvbng_cgnat_session_count_reply'.
+type OsvbngCgnatSessionCountReply struct {
+	Retval int32  `binapi:"i32,name=retval" json:"retval,omitempty"`
+	Total  uint64 `binapi:"u64,name=total" json:"total,omitempty"`
+}
+
+func (m *OsvbngCgnatSessionCountReply) Reset() { *m = OsvbngCgnatSessionCountReply{} }
+func (*OsvbngCgnatSessionCountReply) GetMessageName() string {
+	return "osvbng_cgnat_session_count_reply"
+}
+func (*OsvbngCgnatSessionCountReply) GetCrcString() string { return "f88ba2bd" }
+func (*OsvbngCgnatSessionCountReply) GetMessageType() api.MessageType {
+	return api.ReplyMessage
+}
+
+func (m *OsvbngCgnatSessionCountReply) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.Retval
+	size += 8 // m.Total
+	return size
+}
+func (m *OsvbngCgnatSessionCountReply) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeInt32(m.Retval)
+	buf.EncodeUint64(m.Total)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngCgnatSessionCountReply) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.Retval = buf.DecodeInt32()
+	m.Total = buf.DecodeUint64()
+	return nil
+}
+
+// One active CGNAT session. Ports host-order; age is seconds since the
+//
+//	session was last active (computed at dump time).
+//
+// OsvbngCgnatSessionDetails defines message 'osvbng_cgnat_session_details'.
+type OsvbngCgnatSessionDetails struct {
+	SessionIndex   uint32              `binapi:"u32,name=session_index" json:"session_index,omitempty"`
+	PoolID         uint32              `binapi:"u32,name=pool_id" json:"pool_id,omitempty"`
+	InsideIP       ip_types.IP4Address `binapi:"ip4_address,name=inside_ip" json:"inside_ip,omitempty"`
+	OutsideIP      ip_types.IP4Address `binapi:"ip4_address,name=outside_ip" json:"outside_ip,omitempty"`
+	RemoteIP       ip_types.IP4Address `binapi:"ip4_address,name=remote_ip" json:"remote_ip,omitempty"`
+	InsidePort     uint16              `binapi:"u16,name=inside_port" json:"inside_port,omitempty"`
+	OutsidePort    uint16              `binapi:"u16,name=outside_port" json:"outside_port,omitempty"`
+	RemotePort     uint16              `binapi:"u16,name=remote_port" json:"remote_port,omitempty"`
+	Proto          uint8               `binapi:"u8,name=proto" json:"proto,omitempty"`
+	AlgFlags       uint8               `binapi:"u8,name=alg_flags" json:"alg_flags,omitempty"`
+	InsideFibIndex uint32              `binapi:"u32,name=inside_fib_index" json:"inside_fib_index,omitempty"`
+	MappingIndex   uint32              `binapi:"u32,name=mapping_index" json:"mapping_index,omitempty"`
+	Age            float64             `binapi:"f64,name=age" json:"age,omitempty"`
+	Timeout        uint32              `binapi:"u32,name=timeout" json:"timeout,omitempty"`
+	TotalPkts      uint64              `binapi:"u64,name=total_pkts" json:"total_pkts,omitempty"`
+	TotalBytes     uint64              `binapi:"u64,name=total_bytes" json:"total_bytes,omitempty"`
+}
+
+func (m *OsvbngCgnatSessionDetails) Reset()               { *m = OsvbngCgnatSessionDetails{} }
+func (*OsvbngCgnatSessionDetails) GetMessageName() string { return "osvbng_cgnat_session_details" }
+func (*OsvbngCgnatSessionDetails) GetCrcString() string   { return "20cd8049" }
+func (*OsvbngCgnatSessionDetails) GetMessageType() api.MessageType {
+	return api.ReplyMessage
+}
+
+func (m *OsvbngCgnatSessionDetails) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4     // m.SessionIndex
+	size += 4     // m.PoolID
+	size += 1 * 4 // m.InsideIP
+	size += 1 * 4 // m.OutsideIP
+	size += 1 * 4 // m.RemoteIP
+	size += 2     // m.InsidePort
+	size += 2     // m.OutsidePort
+	size += 2     // m.RemotePort
+	size += 1     // m.Proto
+	size += 1     // m.AlgFlags
+	size += 4     // m.InsideFibIndex
+	size += 4     // m.MappingIndex
+	size += 8     // m.Age
+	size += 4     // m.Timeout
+	size += 8     // m.TotalPkts
+	size += 8     // m.TotalBytes
+	return size
+}
+func (m *OsvbngCgnatSessionDetails) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeUint32(m.SessionIndex)
+	buf.EncodeUint32(m.PoolID)
+	buf.EncodeBytes(m.InsideIP[:], 4)
+	buf.EncodeBytes(m.OutsideIP[:], 4)
+	buf.EncodeBytes(m.RemoteIP[:], 4)
+	buf.EncodeUint16(m.InsidePort)
+	buf.EncodeUint16(m.OutsidePort)
+	buf.EncodeUint16(m.RemotePort)
+	buf.EncodeUint8(m.Proto)
+	buf.EncodeUint8(m.AlgFlags)
+	buf.EncodeUint32(m.InsideFibIndex)
+	buf.EncodeUint32(m.MappingIndex)
+	buf.EncodeFloat64(m.Age)
+	buf.EncodeUint32(m.Timeout)
+	buf.EncodeUint64(m.TotalPkts)
+	buf.EncodeUint64(m.TotalBytes)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngCgnatSessionDetails) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.SessionIndex = buf.DecodeUint32()
+	m.PoolID = buf.DecodeUint32()
+	copy(m.InsideIP[:], buf.DecodeBytes(4))
+	copy(m.OutsideIP[:], buf.DecodeBytes(4))
+	copy(m.RemoteIP[:], buf.DecodeBytes(4))
+	m.InsidePort = buf.DecodeUint16()
+	m.OutsidePort = buf.DecodeUint16()
+	m.RemotePort = buf.DecodeUint16()
+	m.Proto = buf.DecodeUint8()
+	m.AlgFlags = buf.DecodeUint8()
+	m.InsideFibIndex = buf.DecodeUint32()
+	m.MappingIndex = buf.DecodeUint32()
+	m.Age = buf.DecodeFloat64()
+	m.Timeout = buf.DecodeUint32()
+	m.TotalPkts = buf.DecodeUint64()
+	m.TotalBytes = buf.DecodeUint64()
+	return nil
+}
+
+// Dump active CGNAT sessions (translations), filtered and windowed.
+//
+//	All filter fields are optional: a zero/empty value means "do not filter on
+//	this field". Sentinels: 0.0.0.0 for IPs, 0 for ports/proto/pool_id (port 0
+//	is reserved and pool_id 0 is not used by deployments).
+//	Ports are presented host-order on the wire (the session struct stores them
+//	network-order; the handler converts). For ICMP, inside_port/outside_port
+//	carry the ICMP identifier and remote_port is 0.
+//	The plugin both filters and windows: the walk resumes from start_index (a
+//	session pool index) and emits at most `limit` matches, each carrying its own
+//	session_index so the caller can resume the next page. limit 0 means the
+//	plugin default (CGNAT_SESSION_DUMP_DEFAULT_LIMIT).
+//	- inside_ip - filter on subscriber address (0.0.0.0 = any)
+//	- outside_ip - filter on translated address (0.0.0.0 = any)
+//	- remote_ip - filter on remote peer address (0.0.0.0 = any)
+//	- inside_port - filter on subscriber port (0 = any; host-order)
+//	- outside_port - filter on translated port (0 = any; host-order)
+//	- remote_port - filter on remote port (0 = any; host-order)
+//	- proto - filter on IP protocol, IP_PROTOCOL_* (0 = any)
+//	- pool_id - filter on pool (0 = any)
+//	- start_index - resume cursor; session pool index to start from (0 = begin)
+//	- limit - max sessions to emit this page (0 = plugin default)
+//
+// OsvbngCgnatSessionDump defines message 'osvbng_cgnat_session_dump'.
+type OsvbngCgnatSessionDump struct {
+	InsideIP    ip_types.IP4Address `binapi:"ip4_address,name=inside_ip" json:"inside_ip,omitempty"`
+	OutsideIP   ip_types.IP4Address `binapi:"ip4_address,name=outside_ip" json:"outside_ip,omitempty"`
+	RemoteIP    ip_types.IP4Address `binapi:"ip4_address,name=remote_ip" json:"remote_ip,omitempty"`
+	InsidePort  uint16              `binapi:"u16,name=inside_port" json:"inside_port,omitempty"`
+	OutsidePort uint16              `binapi:"u16,name=outside_port" json:"outside_port,omitempty"`
+	RemotePort  uint16              `binapi:"u16,name=remote_port" json:"remote_port,omitempty"`
+	Proto       uint8               `binapi:"u8,name=proto" json:"proto,omitempty"`
+	PoolID      uint32              `binapi:"u32,name=pool_id" json:"pool_id,omitempty"`
+	StartIndex  uint32              `binapi:"u32,name=start_index" json:"start_index,omitempty"`
+	Limit       uint32              `binapi:"u32,name=limit" json:"limit,omitempty"`
+}
+
+func (m *OsvbngCgnatSessionDump) Reset()               { *m = OsvbngCgnatSessionDump{} }
+func (*OsvbngCgnatSessionDump) GetMessageName() string { return "osvbng_cgnat_session_dump" }
+func (*OsvbngCgnatSessionDump) GetCrcString() string   { return "ca7397ff" }
+func (*OsvbngCgnatSessionDump) GetMessageType() api.MessageType {
+	return api.RequestMessage
+}
+
+func (m *OsvbngCgnatSessionDump) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 1 * 4 // m.InsideIP
+	size += 1 * 4 // m.OutsideIP
+	size += 1 * 4 // m.RemoteIP
+	size += 2     // m.InsidePort
+	size += 2     // m.OutsidePort
+	size += 2     // m.RemotePort
+	size += 1     // m.Proto
+	size += 4     // m.PoolID
+	size += 4     // m.StartIndex
+	size += 4     // m.Limit
+	return size
+}
+func (m *OsvbngCgnatSessionDump) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeBytes(m.InsideIP[:], 4)
+	buf.EncodeBytes(m.OutsideIP[:], 4)
+	buf.EncodeBytes(m.RemoteIP[:], 4)
+	buf.EncodeUint16(m.InsidePort)
+	buf.EncodeUint16(m.OutsidePort)
+	buf.EncodeUint16(m.RemotePort)
+	buf.EncodeUint8(m.Proto)
+	buf.EncodeUint32(m.PoolID)
+	buf.EncodeUint32(m.StartIndex)
+	buf.EncodeUint32(m.Limit)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngCgnatSessionDump) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	copy(m.InsideIP[:], buf.DecodeBytes(4))
+	copy(m.OutsideIP[:], buf.DecodeBytes(4))
+	copy(m.RemoteIP[:], buf.DecodeBytes(4))
+	m.InsidePort = buf.DecodeUint16()
+	m.OutsidePort = buf.DecodeUint16()
+	m.RemotePort = buf.DecodeUint16()
+	m.Proto = buf.DecodeUint8()
+	m.PoolID = buf.DecodeUint32()
+	m.StartIndex = buf.DecodeUint32()
+	m.Limit = buf.DecodeUint32()
+	return nil
+}
+
 // Set the outside VRF for a pool
 //   - pool_id - pool identifier
 //   - vrf_id - VRF table ID for outside routing (0 = default)
@@ -1453,6 +1709,10 @@ func file_osvbng_cgnat_binapi_init() {
 	api.RegisterMessage((*OsvbngCgnatPoolOutsideAddressDump)(nil), "osvbng_cgnat_pool_outside_address_dump_f797ec5c")
 	api.RegisterMessage((*OsvbngCgnatPoolUpdate)(nil), "osvbng_cgnat_pool_update_311437fa")
 	api.RegisterMessage((*OsvbngCgnatPoolUpdateReply)(nil), "osvbng_cgnat_pool_update_reply_e8d4e804")
+	api.RegisterMessage((*OsvbngCgnatSessionCount)(nil), "osvbng_cgnat_session_count_51077d14")
+	api.RegisterMessage((*OsvbngCgnatSessionCountReply)(nil), "osvbng_cgnat_session_count_reply_f88ba2bd")
+	api.RegisterMessage((*OsvbngCgnatSessionDetails)(nil), "osvbng_cgnat_session_details_20cd8049")
+	api.RegisterMessage((*OsvbngCgnatSessionDump)(nil), "osvbng_cgnat_session_dump_ca7397ff")
 	api.RegisterMessage((*OsvbngCgnatSetOutsideFib)(nil), "osvbng_cgnat_set_outside_fib_9cb97b7c")
 	api.RegisterMessage((*OsvbngCgnatSetOutsideFibReply)(nil), "osvbng_cgnat_set_outside_fib_reply_e8d4e804")
 	api.RegisterMessage((*OsvbngCgnatSubscriberMappingDetails)(nil), "osvbng_cgnat_subscriber_mapping_details_a8a5e91c")
@@ -1484,6 +1744,10 @@ func AllMessages() []api.Message {
 		(*OsvbngCgnatPoolOutsideAddressDump)(nil),
 		(*OsvbngCgnatPoolUpdate)(nil),
 		(*OsvbngCgnatPoolUpdateReply)(nil),
+		(*OsvbngCgnatSessionCount)(nil),
+		(*OsvbngCgnatSessionCountReply)(nil),
+		(*OsvbngCgnatSessionDetails)(nil),
+		(*OsvbngCgnatSessionDump)(nil),
 		(*OsvbngCgnatSetOutsideFib)(nil),
 		(*OsvbngCgnatSetOutsideFibReply)(nil),
 		(*OsvbngCgnatSubscriberMappingDetails)(nil),

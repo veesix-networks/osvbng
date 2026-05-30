@@ -63,12 +63,21 @@ Verify CGNAT Pool Has Allocations
     Should Contain    ${output}    residential
 
 Verify CGNAT Mappings Exist
-    ${output} =    Get osvbng API Response    ${bng1}    /api/show/cgnat/sessions
+    ${output} =    Get osvbng API Response    ${bng1}    /api/show/cgnat/mappings
     Should Contain    ${output}    203.0.113.
 
 Verify NAT Traffic Flowing
     Wait Until Keyword Succeeds    6 x    10s
     ...    Verify Stream Traffic Flowing    ${subscribers}    expected_flows=${session-count}
+
+Verify CGNAT Session Dump Lists Active Translations
+    Wait Until Keyword Succeeds    6 x    10s
+    ...    Session Dump Has Active Flows    ${bng1}
+
+Verify CGNAT Session Filter Narrows By Inside IP
+    ${output} =    Get osvbng API Response    ${bng1}    /api/show/cgnat/sessions?inside-ip=100.64.200.200
+    Should Contain    ${output}    "sessions"
+    Should Not Contain    ${output}    203.0.113.
 
 Verify BNG Blaster Sessions Established
     Wait Until Keyword Succeeds    6 x    10s
@@ -79,6 +88,14 @@ Verify Outside Addresses Advertised Via BGP
     Should Contain    ${output}    203.0.113.
 
 *** Keywords ***
+Session Dump Has Active Flows
+    [Arguments]    ${bng}
+    ${output} =    Get osvbng API Response    ${bng}    /api/show/cgnat/sessions
+    Should Contain    ${output}    "sessions"
+    Should Contain    ${output}    "total"
+    Should Contain    ${output}    100.64.
+    Should Contain    ${output}    203.0.113.
+
 Deploy CGNAT Topology
     Deploy Topology    ${lab-file}
 

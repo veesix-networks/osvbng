@@ -38,6 +38,54 @@ type CGNATSessionInfo struct {
 	Mode      string `json:"mode"`
 }
 
+// CGNATSession is one active NAT translation (a 5-tuple flow). Ports are
+// host-order; for ICMP, inside_port/outside_port carry the ICMP identifier and
+// remote_port is 0.
+type CGNATSession struct {
+	PoolName       string  `json:"pool_name"`
+	PoolID         uint32  `json:"pool_id"`
+	InsideIP       net.IP  `json:"inside_ip"`
+	InsidePort     uint16  `json:"inside_port" description:"Subscriber port; for ICMP this is the ICMP identifier."`
+	OutsideIP      net.IP  `json:"outside_ip"`
+	OutsidePort    uint16  `json:"outside_port" description:"Translated port; for ICMP this is the translated ICMP identifier."`
+	RemoteIP       net.IP  `json:"remote_ip"`
+	RemotePort     uint16  `json:"remote_port" description:"Remote peer port; 0 for ICMP."`
+	Proto          string  `json:"proto"`
+	ALGFlags       uint8   `json:"alg_flags"`
+	Packets        uint64  `json:"packets"`
+	Bytes          uint64  `json:"bytes"`
+	AgeSeconds     float64 `json:"age_seconds"`
+	TimeoutSeconds uint32  `json:"timeout_seconds"`
+}
+
+// CGNATSessionPage is the result of a session dump. It is returned as a struct
+// (not a bare slice) so the northbound passes it through without re-paginating:
+// the plugin already filtered and windowed the result. Total is the global live
+// session count (O(1), not filter-scoped); NextCursor/HasMore drive paging.
+type CGNATSessionPage struct {
+	Sessions   []CGNATSession `json:"sessions"`
+	Total      uint64         `json:"total"`
+	Returned   int            `json:"returned"`
+	NextCursor uint32         `json:"next_cursor"`
+	HasMore    bool           `json:"has_more"`
+}
+
+// CGNATSessionFilter is the validated, typed filter the show handler hands to
+// the component (which translates it to a southbound filter). Zero values mean
+// "no filter"; Cursor/Limit drive backend windowing.
+type CGNATSessionFilter struct {
+	InsideIP    net.IP
+	OutsideIP   net.IP
+	RemoteIP    net.IP
+	InsidePort  uint16
+	OutsidePort uint16
+	RemotePort  uint16
+	Proto       uint8
+	PoolID      uint32
+	Cursor      uint32
+	Limit       uint32
+}
+
 type CGNATBypassEntry struct {
 	Prefix      string `json:"prefix"`
 	InsideVRFID uint32 `json:"inside_vrf_id"`

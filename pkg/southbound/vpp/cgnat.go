@@ -569,6 +569,77 @@ func (v *VPP) CGNATPoolOutsideAddressDump(poolID uint32) ([]southbound.CGNATOuts
 	return results, nil
 }
 
+func (v *VPP) CGNATDumpSessions(f southbound.CGNATSessionFilter) ([]southbound.CGNATSession, error) {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return nil, fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	req := &osvbng_cgnat.OsvbngCgnatSessionDump{
+		InsideIP:    ip4Addr(f.InsideIP),
+		OutsideIP:   ip4Addr(f.OutsideIP),
+		RemoteIP:    ip4Addr(f.RemoteIP),
+		InsidePort:  f.InsidePort,
+		OutsidePort: f.OutsidePort,
+		RemotePort:  f.RemotePort,
+		Proto:       f.Proto,
+		PoolID:      f.PoolID,
+		StartIndex:  f.StartIndex,
+		Limit:       f.Limit,
+	}
+
+	var results []southbound.CGNATSession
+	multi := ch.SendMultiRequest(req)
+	for {
+		d := &osvbng_cgnat.OsvbngCgnatSessionDetails{}
+		stop, err := multi.ReceiveReply(d)
+		if stop {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("receive session details: %w", err)
+		}
+		results = append(results, southbound.CGNATSession{
+			SessionIndex:   d.SessionIndex,
+			PoolID:         d.PoolID,
+			InsideIP:       ip4FromAddr(d.InsideIP),
+			OutsideIP:      ip4FromAddr(d.OutsideIP),
+			RemoteIP:       ip4FromAddr(d.RemoteIP),
+			InsidePort:     d.InsidePort,
+			OutsidePort:    d.OutsidePort,
+			RemotePort:     d.RemotePort,
+			Proto:          d.Proto,
+			ALGFlags:       d.AlgFlags,
+			InsideFIBIndex: d.InsideFibIndex,
+			MappingIndex:   d.MappingIndex,
+			Age:            d.Age,
+			Timeout:        d.Timeout,
+			TotalPackets:   d.TotalPkts,
+			TotalBytes:     d.TotalBytes,
+		})
+	}
+	return results, nil
+}
+
+func (v *VPP) CGNATSessionCount() (uint64, error) {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return 0, fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	req := &osvbng_cgnat.OsvbngCgnatSessionCount{}
+	reply := &osvbng_cgnat.OsvbngCgnatSessionCountReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return 0, fmt.Errorf("session count: %w", err)
+	}
+	if reply.Retval != 0 {
+		return 0, fmt.Errorf("session count failed: retval=%d", reply.Retval)
+	}
+	return reply.Total, nil
+}
+
 func (v *VPP) CGNATDumpSubscriberMappings(poolID uint32) ([]southbound.CGNATMapping, error) {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {

@@ -235,9 +235,15 @@ For more flexible routing policies (e.g. selective advertisement, communities, r
 | Path | Description |
 |------|-------------|
 | `cgnat.pools` | Pool configuration and allocation statistics |
-| `cgnat.sessions` | Active subscriber mappings |
+| `cgnat.sessions` | Active NAT translations (5-tuple flows), filterable by inside/outside/remote IP + port + protocol |
+| `cgnat.mappings` | Subscriber-to-pool port-block mappings |
 | `cgnat.statistics` | Per-pool counters |
 | `cgnat.lookup` | Reverse lookup: find a subscriber by outside IP and port |
+
+The `cgnat.sessions` dump is filtered and windowed by the dataplane. Page with
+`cursor`/`limit` and follow `next_cursor` until `has_more` is false; `total` is
+the global live session count. Example:
+`?inside-ip=100.64.0.2&proto=tcp&limit=100`.
 
 ## Operational commands
 
@@ -249,7 +255,8 @@ All commands are available via the [northbound API](plugins/northbound-api.md):
 
 ```bash
 curl http://localhost:8080/api/show/cgnat/pools
-curl http://localhost:8080/api/show/cgnat/sessions
+curl "http://localhost:8080/api/show/cgnat/sessions?inside-ip=100.64.0.2"
+curl http://localhost:8080/api/show/cgnat/mappings
 curl http://localhost:8080/api/show/cgnat/statistics
 curl "http://localhost:8080/api/show/cgnat/lookup?ip=203.0.113.1&port=2048"
 curl -X POST http://localhost:8080/api/oper/cgnat/test-mapping -d '{"inside_ip": "100.64.0.2"}'

@@ -39,6 +39,10 @@ type stubDP struct {
 
 	hardDriftReturnsRefresh bool
 	verifyDumpOverride      *[]southbound.CGNATPoolState
+
+	sessions          []southbound.CGNATSession
+	sessionCount      uint64
+	lastSessionFilter southbound.CGNATSessionFilter
 }
 
 type addDelCall struct {
@@ -188,6 +192,11 @@ func (s *stubDP) CGNATPoolInsidePrefixDump(poolID uint32) ([]southbound.CGNATIns
 func (s *stubDP) CGNATPoolOutsideAddressDump(poolID uint32) ([]southbound.CGNATOutsideAddressState, error) {
 	return append([]southbound.CGNATOutsideAddressState(nil), s.outside...), nil
 }
+func (s *stubDP) CGNATDumpSessions(f southbound.CGNATSessionFilter) ([]southbound.CGNATSession, error) {
+	s.lastSessionFilter = f
+	return s.sessions, nil
+}
+func (s *stubDP) CGNATSessionCount() (uint64, error) { return s.sessionCount, nil }
 
 func mustCIDR(s string) net.IPNet {
 	_, n, err := net.ParseCIDR(s)
