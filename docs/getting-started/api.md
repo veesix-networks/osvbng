@@ -35,7 +35,7 @@ handler returns:
   return `{ "path": "...", "data": <object> }`. `data` is the handler's full
   return value. **No pagination.**
 - **List-returning handlers** (e.g. `show.subscriber.sessions`,
-  `show.cgnat.sessions`, `show.system.opdb.sessions`, `show.interfaces`)
+  `show.cgnat.mappings`, `show.system.opdb.sessions`, `show.interfaces`)
   are **paginated by default** and return
   `{ "path": "...", "data": [<items>], "pagination": <Pagination> }`. `data`
   is always an array; `pagination` is the metadata block described below.
