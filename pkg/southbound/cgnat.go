@@ -116,6 +116,13 @@ type CGNATDataplane interface {
 
 	CGNATEnableOnSession(poolID uint32, swIfIndex uint32, isEnable bool) error
 
+	// CGNATPoolOutsideInterfaceAddDel refcnt-enables ip4-sv-reassembly on an
+	// outside interface so cgnat-out2in can read L4 ports from the buffer
+	// metadata. Must be called once per (pool, outside_sw_if_index) on pool
+	// add and symmetrically on delete. Refcount is global per sw_if so two
+	// pools sharing the same outside interface compose correctly.
+	CGNATPoolOutsideInterfaceAddDel(poolID uint32, swIfIndex uint32, isAdd bool) error
+
 	CGNATAddDelBypass(prefix net.IPNet, vrfID uint32, isAdd bool) error
 
 	CGNATDumpSubscriberMappings(poolID uint32) ([]CGNATMapping, error)

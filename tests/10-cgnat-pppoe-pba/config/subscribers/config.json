@@ -48,6 +48,15 @@
       "direction": "both",
       "pps": 1,
       "nat": true
+    },
+    {
+      "name": "CGNAT-TCP",
+      "stream-group-id": 1,
+      "type": "ipv4",
+      "direction": "both",
+      "pps": 1,
+      "nat": true,
+      "raw-tcp": true
     }
   ],
   "access-line": {

@@ -18,6 +18,8 @@ topology:
       env:
         OSVBNG_WAIT_FOR_INTERFACES: "true"
         OSVBNG_NUM_INTERFACES: "3"
+        OSVBNG_DP_WORKER_CORES: "1-2"
+        OSVBNG_CP_CORES: "3"
       binds:
         - config/bng1/osvbng.yaml:/etc/osvbng/osvbng.yaml:ro
 

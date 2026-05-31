@@ -139,3 +139,17 @@ Dump VPP Trace
     ...    sudo docker exec ${container} vppctl -s ${VPPCTL_SOCK} show trace
     Log    VPP Trace:\n${output}    console=yes
     RETURN    ${output}
+
+Verify VPP Node Calls Non-Zero
+    [Documentation]    Asserts that ${node} shows at least one non-zero
+    ...                numeric field across all threads in `show runtime`.
+    ...                Use to prove a node has processed packets — first
+    ...                positive integer after the node name is the Calls
+    ...                column for active/polling nodes (state column may
+    ...                be one word "active" or two words "any wait").
+    [Arguments]    ${container}    ${node}
+    ${rc}    ${output} =    Run And Return Rc And Output
+    ...    sudo docker exec ${container} vppctl -s ${VPPCTL_SOCK} show runtime | awk -v n=${node} '$0 ~ "^"n { for (i=2; i<=NF; i++) { if ($i ~ /^[0-9]+$/ && $i+0 > 0) { print "FIRED"; exit } } }'
+    Should Be Equal As Integers    ${rc}    0
+    Should Contain    ${output}    FIRED
+    ...    ${node} shows no non-zero Calls/Vectors on any thread — node is registered but not processing packets

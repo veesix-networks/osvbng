@@ -26,6 +26,7 @@ ${bng1}             clab-${lab-name}-bng1
 ${corerouter1}      clab-${lab-name}-corerouter1
 ${subscribers}      clab-${lab-name}-subscribers
 ${session-count}    5
+${stream-count}     2
 ${trace-input}      af-packet-input
 
 *** Test Cases ***
@@ -67,8 +68,12 @@ Verify CGNAT Mappings Exist
     Should Contain    ${output}    203.0.113.
 
 Verify NAT Traffic Flowing
+    [Documentation]    Both UDP and a raw-TCP CGNAT stream must verify
+    ...                bidirectionally. Expected flows = session-count ×
+    ...                stream-count; the keyword doubles for both directions.
+    ${expected} =    Evaluate    ${session-count} * ${stream-count}
     Wait Until Keyword Succeeds    6 x    10s
-    ...    Verify Stream Traffic Flowing    ${subscribers}    expected_flows=${session-count}
+    ...    Verify Stream Traffic Flowing    ${subscribers}    expected_flows=${expected}
 
 Verify CGNAT Session Dump Lists Active Translations
     Wait Until Keyword Succeeds    6 x    10s
@@ -86,6 +91,25 @@ Verify BNG Blaster Sessions Established
 Verify Outside Addresses Advertised Via BGP
     ${output} =    Execute Vtysh On Router    ${corerouter1}    show ip bgp
     Should Contain    ${output}    203.0.113.
+
+Verify No CGNAT Wrong-Worker Drops
+    [Documentation]    cgnat-wrong-worker increments only when the handoff
+    ...                hash routes a packet to a worker that doesn't own
+    ...                the session — a correctness bug in the multi-worker
+    ...                amendment. Must stay at zero under any worker count.
+    ${rc}    ${non_zero} =    Run And Return Rc And Output
+    ...    sudo docker exec ${bng1} vppctl -s ${VPPCTL_SOCK} show errors | awk '/Session owned by a different/ { if ($1+0 > 0) print "NON_ZERO:" $0 }'
+    Should Be Equal As Integers    ${rc}    0
+    Should Not Contain    ${non_zero}    NON_ZERO
+    ...    cgnat-wrong-worker counter is non-zero — handoff routed packets to a worker that doesn't own the session
+
+Verify CGNAT Handoff Nodes Are Firing
+    [Documentation]    Proves the in2out and out2in worker-handoff nodes
+    ...                are actually receiving traffic. Zero Calls means the
+    ...                DPO / feature wiring bypasses the handoff path
+    ...                entirely — the amendment is dormant.
+    Verify VPP Node Calls Non-Zero    ${bng1}    cgnat-in2out-worker-handoff
+    Verify VPP Node Calls Non-Zero    ${bng1}    cgnat-out2in-worker-handoff
 
 *** Keywords ***
 Session Dump Has Active Flows
