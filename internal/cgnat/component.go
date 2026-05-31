@@ -211,6 +211,17 @@ func (c *Component) setupOutsideInterfaces(cfg *config.Config) error {
 		if err := c.dataplane.CGNATSetOutsideVRF(poolID, vrfTableID); err != nil {
 			return fmt.Errorf("cgnat: pool %q: set outside VRF: %w", poolName, err)
 		}
+
+		for _, name := range pool.OutsideInterfaces {
+			swIfIndex, ok := c.ifMgr.GetSwIfIndex(name)
+			if !ok {
+				return fmt.Errorf("cgnat: pool %q: outside interface %q not found in dataplane (sv-reass refcnt)", poolName, name)
+			}
+			if err := c.dataplane.CGNATPoolOutsideInterfaceAddDel(poolID, swIfIndex, true); err != nil {
+				return fmt.Errorf("cgnat: pool %q: refcnt-enable sv-reass on %q (sw_if %d): %w", poolName, name, swIfIndex, err)
+			}
+		}
+
 		c.logger.Info("Outside VRF configured",
 			"pool", poolName,
 			"interfaces", pool.OutsideInterfaces,

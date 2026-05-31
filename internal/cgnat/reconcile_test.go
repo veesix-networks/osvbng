@@ -36,6 +36,7 @@ type stubDP struct {
 	addInsideCalls    []insideCall
 	addOutsideCalls   []outsideCall
 	setOutsideVRFCalls []setVRFCall
+	outsideIfaceCalls []outsideIfaceCall
 
 	hardDriftReturnsRefresh bool
 	verifyDumpOverride      *[]southbound.CGNATPoolState
@@ -43,6 +44,12 @@ type stubDP struct {
 	sessions          []southbound.CGNATSession
 	sessionCount      uint64
 	lastSessionFilter southbound.CGNATSessionFilter
+}
+
+type outsideIfaceCall struct {
+	poolID    uint32
+	swIfIndex uint32
+	isAdd     bool
 }
 
 type addDelCall struct {
@@ -179,6 +186,10 @@ func (s *stubDP) CGNATAddSubscriberMappingBulk(poolID uint32, mappings []southbo
 	return make([]error, len(mappings)), nil
 }
 func (s *stubDP) CGNATEnableOnSession(poolID, swIfIndex uint32, isEnable bool) error { return nil }
+func (s *stubDP) CGNATPoolOutsideInterfaceAddDel(poolID, swIfIndex uint32, isAdd bool) error {
+	s.outsideIfaceCalls = append(s.outsideIfaceCalls, outsideIfaceCall{poolID: poolID, swIfIndex: swIfIndex, isAdd: isAdd})
+	return nil
+}
 func (s *stubDP) CGNATAddDelBypass(prefix net.IPNet, vrfID uint32, isAdd bool) error { return nil }
 func (s *stubDP) CGNATDumpSubscriberMappings(poolID uint32) ([]southbound.CGNATMapping, error) {
 	return nil, nil
