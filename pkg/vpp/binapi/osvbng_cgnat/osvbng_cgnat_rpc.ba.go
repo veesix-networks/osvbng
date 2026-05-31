@@ -23,6 +23,7 @@ type RPCService interface {
 	OsvbngCgnatPoolDump(ctx context.Context, in *OsvbngCgnatPoolDump) (RPCService_OsvbngCgnatPoolDumpClient, error)
 	OsvbngCgnatPoolInsidePrefixDump(ctx context.Context, in *OsvbngCgnatPoolInsidePrefixDump) (RPCService_OsvbngCgnatPoolInsidePrefixDumpClient, error)
 	OsvbngCgnatPoolOutsideAddressDump(ctx context.Context, in *OsvbngCgnatPoolOutsideAddressDump) (RPCService_OsvbngCgnatPoolOutsideAddressDumpClient, error)
+	OsvbngCgnatPoolOutsideInterfaceAddDel(ctx context.Context, in *OsvbngCgnatPoolOutsideInterfaceAddDel) (*OsvbngCgnatPoolOutsideInterfaceAddDelReply, error)
 	OsvbngCgnatPoolUpdate(ctx context.Context, in *OsvbngCgnatPoolUpdate) (*OsvbngCgnatPoolUpdateReply, error)
 	OsvbngCgnatSessionCount(ctx context.Context, in *OsvbngCgnatSessionCount) (*OsvbngCgnatSessionCountReply, error)
 	OsvbngCgnatSessionDump(ctx context.Context, in *OsvbngCgnatSessionDump) (RPCService_OsvbngCgnatSessionDumpClient, error)
@@ -228,6 +229,15 @@ func (c *serviceClient_OsvbngCgnatPoolOutsideAddressDumpClient) Recv() (*OsvbngC
 	default:
 		return nil, fmt.Errorf("unexpected message: %T %v", m, m)
 	}
+}
+
+func (c *serviceClient) OsvbngCgnatPoolOutsideInterfaceAddDel(ctx context.Context, in *OsvbngCgnatPoolOutsideInterfaceAddDel) (*OsvbngCgnatPoolOutsideInterfaceAddDelReply, error) {
+	out := new(OsvbngCgnatPoolOutsideInterfaceAddDelReply)
+	err := c.conn.Invoke(ctx, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, api.RetvalToVPPApiError(out.Retval)
 }
 
 func (c *serviceClient) OsvbngCgnatPoolUpdate(ctx context.Context, in *OsvbngCgnatPoolUpdate) (*OsvbngCgnatPoolUpdateReply, error) {

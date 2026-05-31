@@ -9,7 +9,7 @@
 // Contents:
 // -  3 enums
 // -  3 structs
-// - 30 messages
+// - 32 messages
 package osvbng_cgnat
 
 import (
@@ -30,7 +30,7 @@ const _ = api.GoVppAPIPackageIsVersion2
 const (
 	APIFile    = "osvbng_cgnat"
 	APIVersion = "1.0.0"
-	VersionCrc = 0x145695a2
+	VersionCrc = 0xf7c93636
 )
 
 // OsvbngCgnatAddressPooling defines enum 'osvbng_cgnat_address_pooling'.
@@ -1159,6 +1159,97 @@ func (m *OsvbngCgnatPoolOutsideAddressDump) Unmarshal(b []byte) error {
 	return nil
 }
 
+// Refcnt-enable/disable ip4-sv-reassembly on an outside interface
+//
+//	Required because the cgnat-in2out fast path reads L4 ports out of
+//	vnet_buffer(b)->ip.reass.* (populated by ip4-sv-reassembly upstream).
+//	Each outside interface must be refcnt-enabled once per pool that
+//	references it; the refcount is global per sw_if so multiple pools
+//	sharing an outside interface compose correctly.
+//	- pool_id - pool that owns this outside interface entry
+//	- sw_if_index - outside interface
+//	- is_add - add (refcnt up) if true, delete (refcnt down) if false
+//
+// OsvbngCgnatPoolOutsideInterfaceAddDel defines message 'osvbng_cgnat_pool_outside_interface_add_del'.
+type OsvbngCgnatPoolOutsideInterfaceAddDel struct {
+	PoolID    uint32                         `binapi:"u32,name=pool_id" json:"pool_id,omitempty"`
+	SwIfIndex interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
+	IsAdd     bool                           `binapi:"bool,name=is_add" json:"is_add,omitempty"`
+}
+
+func (m *OsvbngCgnatPoolOutsideInterfaceAddDel) Reset() { *m = OsvbngCgnatPoolOutsideInterfaceAddDel{} }
+func (*OsvbngCgnatPoolOutsideInterfaceAddDel) GetMessageName() string {
+	return "osvbng_cgnat_pool_outside_interface_add_del"
+}
+func (*OsvbngCgnatPoolOutsideInterfaceAddDel) GetCrcString() string { return "00ef9780" }
+func (*OsvbngCgnatPoolOutsideInterfaceAddDel) GetMessageType() api.MessageType {
+	return api.RequestMessage
+}
+
+func (m *OsvbngCgnatPoolOutsideInterfaceAddDel) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.PoolID
+	size += 4 // m.SwIfIndex
+	size += 1 // m.IsAdd
+	return size
+}
+func (m *OsvbngCgnatPoolOutsideInterfaceAddDel) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeUint32(m.PoolID)
+	buf.EncodeUint32(uint32(m.SwIfIndex))
+	buf.EncodeBool(m.IsAdd)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngCgnatPoolOutsideInterfaceAddDel) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.PoolID = buf.DecodeUint32()
+	m.SwIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
+	m.IsAdd = buf.DecodeBool()
+	return nil
+}
+
+// OsvbngCgnatPoolOutsideInterfaceAddDelReply defines message 'osvbng_cgnat_pool_outside_interface_add_del_reply'.
+type OsvbngCgnatPoolOutsideInterfaceAddDelReply struct {
+	Retval int32 `binapi:"i32,name=retval" json:"retval,omitempty"`
+}
+
+func (m *OsvbngCgnatPoolOutsideInterfaceAddDelReply) Reset() {
+	*m = OsvbngCgnatPoolOutsideInterfaceAddDelReply{}
+}
+func (*OsvbngCgnatPoolOutsideInterfaceAddDelReply) GetMessageName() string {
+	return "osvbng_cgnat_pool_outside_interface_add_del_reply"
+}
+func (*OsvbngCgnatPoolOutsideInterfaceAddDelReply) GetCrcString() string { return "e8d4e804" }
+func (*OsvbngCgnatPoolOutsideInterfaceAddDelReply) GetMessageType() api.MessageType {
+	return api.ReplyMessage
+}
+
+func (m *OsvbngCgnatPoolOutsideInterfaceAddDelReply) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.Retval
+	return size
+}
+func (m *OsvbngCgnatPoolOutsideInterfaceAddDelReply) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeInt32(m.Retval)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngCgnatPoolOutsideInterfaceAddDelReply) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.Retval = buf.DecodeInt32()
+	return nil
+}
+
 // Update pool parameters at runtime
 //   - pool_id - pool to update
 //   - max_sessions_per_sub - new session limit
@@ -1707,6 +1798,8 @@ func file_osvbng_cgnat_binapi_init() {
 	api.RegisterMessage((*OsvbngCgnatPoolInsidePrefixDump)(nil), "osvbng_cgnat_pool_inside_prefix_dump_f797ec5c")
 	api.RegisterMessage((*OsvbngCgnatPoolOutsideAddressDetails)(nil), "osvbng_cgnat_pool_outside_address_details_a3f82407")
 	api.RegisterMessage((*OsvbngCgnatPoolOutsideAddressDump)(nil), "osvbng_cgnat_pool_outside_address_dump_f797ec5c")
+	api.RegisterMessage((*OsvbngCgnatPoolOutsideInterfaceAddDel)(nil), "osvbng_cgnat_pool_outside_interface_add_del_00ef9780")
+	api.RegisterMessage((*OsvbngCgnatPoolOutsideInterfaceAddDelReply)(nil), "osvbng_cgnat_pool_outside_interface_add_del_reply_e8d4e804")
 	api.RegisterMessage((*OsvbngCgnatPoolUpdate)(nil), "osvbng_cgnat_pool_update_311437fa")
 	api.RegisterMessage((*OsvbngCgnatPoolUpdateReply)(nil), "osvbng_cgnat_pool_update_reply_e8d4e804")
 	api.RegisterMessage((*OsvbngCgnatSessionCount)(nil), "osvbng_cgnat_session_count_51077d14")
@@ -1742,6 +1835,8 @@ func AllMessages() []api.Message {
 		(*OsvbngCgnatPoolInsidePrefixDump)(nil),
 		(*OsvbngCgnatPoolOutsideAddressDetails)(nil),
 		(*OsvbngCgnatPoolOutsideAddressDump)(nil),
+		(*OsvbngCgnatPoolOutsideInterfaceAddDel)(nil),
+		(*OsvbngCgnatPoolOutsideInterfaceAddDelReply)(nil),
 		(*OsvbngCgnatPoolUpdate)(nil),
 		(*OsvbngCgnatPoolUpdateReply)(nil),
 		(*OsvbngCgnatSessionCount)(nil),
