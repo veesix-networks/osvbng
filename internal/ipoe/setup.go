@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/config/qos"
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/models"
@@ -346,6 +347,41 @@ func (c *Component) installInMemoryState(sess *SessionState) {
 	c.sessions.Store(lookupKey, sess)
 	c.sessionIndex.Store(sess.SessionID, sess)
 	c.addSessionToIndexes(sess)
+
+	// Re-stake the session's addresses in the global allocator. Without this,
+	// the allocator boots with no knowledge of restored leases and a fresh
+	// DHCPDISCOVER (after StateReady flips) can be handed an IP that is
+	// already in use by a restored session. PPPoE does the equivalent in
+	// SessionState.startNCP — IPoE was previously missing the call.
+	// Conflicts are logged but not fatal: the opdb side is the source of
+	// truth for the restored session, and the operator should investigate
+	// any collision before allowing the daemon to flip to Ready.
+	if registry := allocator.GetGlobalRegistry(); registry != nil {
+		if sess.IPv4 != nil {
+			if err := registry.ReserveIP(sess.IPv4, sess.SessionID); err != nil {
+				c.logger.Warn("IPv4 reservation conflict during restore",
+					"session_id", sess.SessionID,
+					"address", sess.IPv4.String(),
+					"error", err)
+			}
+		}
+		if sess.IPv6Address != nil {
+			if err := registry.ReserveIANA(sess.IPv6Address, sess.SessionID); err != nil {
+				c.logger.Warn("IPv6 IANA reservation conflict during restore",
+					"session_id", sess.SessionID,
+					"address", sess.IPv6Address.String(),
+					"error", err)
+			}
+		}
+		if sess.IPv6Prefix != nil {
+			if err := registry.ReservePD(sess.IPv6Prefix, sess.SessionID); err != nil {
+				c.logger.Warn("PD reservation conflict during restore",
+					"session_id", sess.SessionID,
+					"prefix", sess.IPv6Prefix.String(),
+					"error", err)
+			}
+		}
+	}
 }
 
 // ErrSetupRestoreNotImplemented is the legacy sentinel for callers that
