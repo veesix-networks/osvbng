@@ -20,11 +20,13 @@ type RPCService interface {
 	OsvbngCgnatPoolAddDel(ctx context.Context, in *OsvbngCgnatPoolAddDel) (*OsvbngCgnatPoolAddDelReply, error)
 	OsvbngCgnatPoolAddDelInsidePrefix(ctx context.Context, in *OsvbngCgnatPoolAddDelInsidePrefix) (*OsvbngCgnatPoolAddDelInsidePrefixReply, error)
 	OsvbngCgnatPoolAddDelOutsideAddress(ctx context.Context, in *OsvbngCgnatPoolAddDelOutsideAddress) (*OsvbngCgnatPoolAddDelOutsideAddressReply, error)
+	OsvbngCgnatPoolAddDelV2(ctx context.Context, in *OsvbngCgnatPoolAddDelV2) (*OsvbngCgnatPoolAddDelV2Reply, error)
 	OsvbngCgnatPoolDump(ctx context.Context, in *OsvbngCgnatPoolDump) (RPCService_OsvbngCgnatPoolDumpClient, error)
 	OsvbngCgnatPoolInsidePrefixDump(ctx context.Context, in *OsvbngCgnatPoolInsidePrefixDump) (RPCService_OsvbngCgnatPoolInsidePrefixDumpClient, error)
 	OsvbngCgnatPoolOutsideAddressDump(ctx context.Context, in *OsvbngCgnatPoolOutsideAddressDump) (RPCService_OsvbngCgnatPoolOutsideAddressDumpClient, error)
 	OsvbngCgnatPoolOutsideInterfaceAddDel(ctx context.Context, in *OsvbngCgnatPoolOutsideInterfaceAddDel) (*OsvbngCgnatPoolOutsideInterfaceAddDelReply, error)
 	OsvbngCgnatPoolUpdate(ctx context.Context, in *OsvbngCgnatPoolUpdate) (*OsvbngCgnatPoolUpdateReply, error)
+	OsvbngCgnatPoolUpdateV2(ctx context.Context, in *OsvbngCgnatPoolUpdateV2) (*OsvbngCgnatPoolUpdateV2Reply, error)
 	OsvbngCgnatSessionCount(ctx context.Context, in *OsvbngCgnatSessionCount) (*OsvbngCgnatSessionCountReply, error)
 	OsvbngCgnatSessionDump(ctx context.Context, in *OsvbngCgnatSessionDump) (RPCService_OsvbngCgnatSessionDumpClient, error)
 	OsvbngCgnatSetOutsideFib(ctx context.Context, in *OsvbngCgnatSetOutsideFib) (*OsvbngCgnatSetOutsideFibReply, error)
@@ -95,6 +97,15 @@ func (c *serviceClient) OsvbngCgnatPoolAddDelInsidePrefix(ctx context.Context, i
 
 func (c *serviceClient) OsvbngCgnatPoolAddDelOutsideAddress(ctx context.Context, in *OsvbngCgnatPoolAddDelOutsideAddress) (*OsvbngCgnatPoolAddDelOutsideAddressReply, error) {
 	out := new(OsvbngCgnatPoolAddDelOutsideAddressReply)
+	err := c.conn.Invoke(ctx, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, api.RetvalToVPPApiError(out.Retval)
+}
+
+func (c *serviceClient) OsvbngCgnatPoolAddDelV2(ctx context.Context, in *OsvbngCgnatPoolAddDelV2) (*OsvbngCgnatPoolAddDelV2Reply, error) {
+	out := new(OsvbngCgnatPoolAddDelV2Reply)
 	err := c.conn.Invoke(ctx, in, out)
 	if err != nil {
 		return nil, err
@@ -242,6 +253,15 @@ func (c *serviceClient) OsvbngCgnatPoolOutsideInterfaceAddDel(ctx context.Contex
 
 func (c *serviceClient) OsvbngCgnatPoolUpdate(ctx context.Context, in *OsvbngCgnatPoolUpdate) (*OsvbngCgnatPoolUpdateReply, error) {
 	out := new(OsvbngCgnatPoolUpdateReply)
+	err := c.conn.Invoke(ctx, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, api.RetvalToVPPApiError(out.Retval)
+}
+
+func (c *serviceClient) OsvbngCgnatPoolUpdateV2(ctx context.Context, in *OsvbngCgnatPoolUpdateV2) (*OsvbngCgnatPoolUpdateV2Reply, error) {
+	out := new(OsvbngCgnatPoolUpdateV2Reply)
 	err := c.conn.Invoke(ctx, in, out)
 	if err != nil {
 		return nil, err
