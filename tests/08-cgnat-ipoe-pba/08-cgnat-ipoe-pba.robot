@@ -26,6 +26,7 @@ ${bng1}             clab-${lab-name}-bng1
 ${corerouter1}      clab-${lab-name}-corerouter1
 ${subscribers}      clab-${lab-name}-subscribers
 ${session-count}    5
+${stream-count}     2
 ${trace-input}      af-packet-input
 
 *** Test Cases ***
@@ -67,8 +68,12 @@ Verify CGNAT Mappings Exist
     Should Contain    ${output}    203.0.113.
 
 Verify NAT Traffic Flowing
+    [Documentation]    Both UDP and a raw-TCP CGNAT stream must verify
+    ...                bidirectionally. Expected flows = session-count ×
+    ...                stream-count; the keyword doubles for both directions.
+    ${expected} =    Evaluate    ${session-count} * ${stream-count}
     Wait Until Keyword Succeeds    6 x    10s
-    ...    Verify Stream Traffic Flowing    ${subscribers}    expected_flows=${session-count}
+    ...    Verify Stream Traffic Flowing    ${subscribers}    expected_flows=${expected}
 
 Verify CGNAT Session Dump Lists Active Translations
     Wait Until Keyword Succeeds    6 x    10s
