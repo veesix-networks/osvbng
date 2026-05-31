@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.14.0](https://github.com/veesix-networks/osvbng/compare/v0.13.0...v0.14.0) (2026-05-31)
+
+
+### Features
+
+* **aaa:** hard-fail when policy-expanded RADIUS User-Name is empty ([#360](https://github.com/veesix-networks/osvbng/issues/360)) ([1db1230](https://github.com/veesix-networks/osvbng/commit/1db12303029c9003d9d2d721c15656224d2626fe))
+* **aaa:** per-policy placeholder password for DHCP/IPoE RADIUS Access-Request ([#353](https://github.com/veesix-networks/osvbng/issues/353)) ([96484da](https://github.com/veesix-networks/osvbng/commit/96484daf7aa44653c2c1aaf38b692cf716645c89))
+* **cgnat:** multi-worker datapath ([#362](https://github.com/veesix-networks/osvbng/issues/362)) ([05ed620](https://github.com/veesix-networks/osvbng/commit/05ed620799ff7f943bb301ee6fc8d83510423112))
+* **cgnat:** session dump API with inside/outside/remote ip+port+proto filters ([#361](https://github.com/veesix-networks/osvbng/issues/361)) ([fabc43c](https://github.com/veesix-networks/osvbng/commit/fabc43c5418c4b03c9edb2461d3525c8f49a7956))
+* **ipoe:** C-VLAN gating when non-any is used for QinQ configurations ([#351](https://github.com/veesix-networks/osvbng/issues/351)) ([bd0fdfb](https://github.com/veesix-networks/osvbng/commit/bd0fdfb9d06b0b48529b4ef8e354a4bb299059ec))
+* **ipoe:** gate v4/v6 ingress on subscriber-group profile presence ([#355](https://github.com/veesix-networks/osvbng/issues/355)) ([3fb4692](https://github.com/veesix-networks/osvbng/commit/3fb469214c976f97a10d0a0911002bb2a1c0184b))
+* **pppoe:** subscriber-group C-VLAN matching (parity with IPoE) ([#352](https://github.com/veesix-networks/osvbng/issues/352)) ([d6fe72c](https://github.com/veesix-networks/osvbng/commit/d6fe72cc389047de5db2d1bee265e3bcb6fc6a2b))
+* **routing:** per-VRF OSPFv2 + OSPFv3 instances ([#348](https://github.com/veesix-networks/osvbng/issues/348)) ([6975cf4](https://github.com/veesix-networks/osvbng/commit/6975cf44ca7174a2f694d833229ed4f819779e43))
+
+
+### Bug Fixes
+
+* **aaa:** hash session-id to deterministic accounting bucket ([#358](https://github.com/veesix-networks/osvbng/issues/358)) ([34da0d4](https://github.com/veesix-networks/osvbng/commit/34da0d478c6ff40fd0323ec72e390d774b307a30))
+* **bgp:** guard nil values in instance Apply/Rollback to prevent commit-rollback panic ([215ae5a](https://github.com/veesix-networks/osvbng/commit/215ae5a0f1a9c6da9656edea92e17596e34b7235))
+* **cgnat:** prevent gateway destination mapping via in2out vpp node ([#359](https://github.com/veesix-networks/osvbng/issues/359)) ([a0b8a5d](https://github.com/veesix-networks/osvbng/commit/a0b8a5d22cec131c204a851944a1011bc71fdb09))
+* **dataplane:** skip sw_interface_set_table when interface already in target VRF table ([b2f6f0f](https://github.com/veesix-networks/osvbng/commit/b2f6f0fd51c9f9419614a0c1773e812b0d9f61ad))
+* **ipoe:** make runtime session expiry lease-aware ([#354](https://github.com/veesix-networks/osvbng/issues/354)) ([7b2fea2](https://github.com/veesix-networks/osvbng/commit/7b2fea28c00b672744eea2ab01ef6872298fa61f))
+* **ipoe:** reserve restored session addresses in allocator on opdb restore ([#363](https://github.com/veesix-networks/osvbng/issues/363)) ([16cb21e](https://github.com/veesix-networks/osvbng/commit/16cb21ed31b54d3f6912271f69ded03ea2244dad))
+* **ipoe:** subscriber-group matching ignores inner C-VLAN; gate via precomputed S/C-VLAN index ([#350](https://github.com/veesix-networks/osvbng/issues/350)) ([0e85a04](https://github.com/veesix-networks/osvbng/commit/0e85a0414a074a9927078aef408ddcfca993209d))
+* **osvbng:** startup and config re-apply resilience (radius dial, bgp rollback, vrf table) ([#357](https://github.com/veesix-networks/osvbng/issues/357)) ([424e2d0](https://github.com/veesix-networks/osvbng/commit/424e2d09ad80243a09917763b3b403fadb1c2670))
+* **radius:** defer server dial so an unreachable RADIUS cannot block startup ([2259ce6](https://github.com/veesix-networks/osvbng/commit/2259ce64eb9a56ed5ed39c49601c53c877f4f820))
+
 ## [0.13.0](https://github.com/veesix-networks/osvbng/compare/v0.12.1...v0.13.0) (2026-05-28)
 
 
