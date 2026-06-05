@@ -238,6 +238,8 @@ func main() {
 
 	exclusivityRegistry := session.NewRegistry()
 
+	showRegistry := show.NewRegistry()
+
 	coreDeps := component.Dependencies{
 		EventBus:         eventBus,
 		Cache:            cache,
@@ -245,6 +247,7 @@ func main() {
 		VRFManager:       vrfMgr,
 		SvcGroupResolver: svcGroupResolver,
 		ConfigManager:    configd,
+		ShowSource:       showRegistry,
 		OpDB:             opdbStore,
 		CPPM:             cppmManager,
 		Exclusivity:      exclusivityRegistry,
@@ -518,7 +521,6 @@ func main() {
 		}
 	}
 
-	showRegistry := show.NewRegistry()
 	operRegistry := oper.NewRegistry()
 
 	gatewayAddr := "0.0.0.0:50050"

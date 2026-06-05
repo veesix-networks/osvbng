@@ -1,6 +1,8 @@
 package component
 
 import (
+	"context"
+
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
@@ -13,6 +15,13 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/svcgroup"
 	"github.com/veesix-networks/osvbng/pkg/vrfmgr"
 )
+
+// ShowSource is the narrow read-side contract a component needs to fetch a
+// cached snapshot from the show registry without importing it (which would
+// cycle through pkg/deps → internal/*).
+type ShowSource interface {
+	Snapshot(ctx context.Context, path string) (any, error)
+}
 
 type ConfigManager interface {
 	GetRunning() (*config.Config, error)
@@ -31,6 +40,7 @@ type Dependencies struct {
 	CPPM             *cppm.Manager
 	Exclusivity      session.ExclusivityRegistry
 	AccessResolver   subscriber.AccessResolver
+	ShowSource       ShowSource
 
 	DHCPChan   <-chan *dataplane.ParsedPacket
 	DHCPv6Chan <-chan *dataplane.ParsedPacket
