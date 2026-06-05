@@ -2,7 +2,7 @@
 # Licensed under the GNU General Public License v3.0 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-.PHONY: all build generate generate-proto clean run test cli build-cli docker-local docker-kea-local lint fmt robot-test clean-branches dev-vm dev-vm-sync
+.PHONY: all build generate generate-proto clean run test cli build-cli docker-local docker-kea-local lint fmt robot-test clean-branches dev-vm dev-vm-sync validate-artifacts tarball-smoke
 
 all: generate build
 
@@ -87,5 +87,22 @@ dev-vm-sync:
 
 dev-vm-provision:
 	@scripts/dev/reprovision-vm.sh
+
+# Structural validation of release/artifacts.yaml: every declared
+# source must exist on disk, every install_path must be unique,
+# every requires_restart value must be in the closed enum. Runs as a
+# PR-time CI gate; safe to run locally with no side effects.
+validate-artifacts:
+	@go run ./scripts/release/validate-artifacts.go release/artifacts.yaml
+
+# Build a throwaway signed tarball against the current tree, then
+# read it back with the runner's parser to assert manifest v2
+# decodes cleanly. Catches schema drift before a release is cut.
+tarball-smoke:
+	@./scripts/release/build-test-tarball.sh \
+		-k /etc/osvbng/dev-cosign.key \
+		-v 0.0.0-smoke \
+		-o /tmp/osvbng-tarball-smoke
+	@go run ./scripts/release/validate-artifacts.go release/artifacts.yaml
 
 .DEFAULT_GOAL := all

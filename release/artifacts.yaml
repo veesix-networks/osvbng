@@ -1,0 +1,175 @@
+# Copyright 2026 The osvbng Authors
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Canonical artifact source-of-truth for Tier A v2 upgrade tarballs and
+# packer first-boot installs. The builder reads this file at release
+# time to produce the on-the-wire manifest; packer reads the same set
+# (via the same builder, see scripts/qemu/packer/) at image-build time.
+#
+# Adding a new artifact: append an entry here, run `make tarball-smoke`
+# locally to confirm the builder picks it up, open a PR. Globbing
+# source directories is intentionally NOT supported — a stray .so under
+# test-infra/vpp-plugins/ must not silently ship.
+schema_version: 1
+artifacts:
+  - source: bin/osvbngd
+    install_path: /usr/local/bin/osvbngd
+    mode: "0755"
+    uid: 0
+    gid: 0
+    requires_restart: osvbngd
+
+  - source: bin/osvbngcli
+    install_path: /usr/local/bin/osvbngcli
+    mode: "0755"
+    uid: 0
+    gid: 0
+    requires_restart: none
+
+  - source: test-infra/vpp-plugins/osvbng_cgnat_plugin.so
+    install_path: /usr/lib/x86_64-linux-gnu/vpp_plugins/osvbng_cgnat_plugin.so
+    mode: "0644"
+    uid: 0
+    gid: 0
+    requires_restart: vpp
+
+  - source: test-infra/vpp-plugins/osvbng_fib_control_plugin.so
+    install_path: /usr/lib/x86_64-linux-gnu/vpp_plugins/osvbng_fib_control_plugin.so
+    mode: "0644"
+    uid: 0
+    gid: 0
+    requires_restart: vpp
+
+  - source: test-infra/vpp-plugins/osvbng_ipoe_plugin.so
+    install_path: /usr/lib/x86_64-linux-gnu/vpp_plugins/osvbng_ipoe_plugin.so
+    mode: "0644"
+    uid: 0
+    gid: 0
+    requires_restart: vpp
+
+  - source: test-infra/vpp-plugins/osvbng_pppoe_plugin.so
+    install_path: /usr/lib/x86_64-linux-gnu/vpp_plugins/osvbng_pppoe_plugin.so
+    mode: "0644"
+    uid: 0
+    gid: 0
+    requires_restart: vpp
+
+  - source: test-infra/vpp-plugins/osvbng_punt_plugin.so
+    install_path: /usr/lib/x86_64-linux-gnu/vpp_plugins/osvbng_punt_plugin.so
+    mode: "0644"
+    uid: 0
+    gid: 0
+    requires_restart: vpp
+
+  - source: test-infra/vpp-plugins/osvbng_qos_sched_plugin.so
+    install_path: /usr/lib/x86_64-linux-gnu/vpp_plugins/osvbng_qos_sched_plugin.so
+    mode: "0644"
+    uid: 0
+    gid: 0
+    requires_restart: vpp
+
+  - source: test-infra/vpp-plugins/osvbng_srg_plugin.so
+    install_path: /usr/lib/x86_64-linux-gnu/vpp_plugins/osvbng_srg_plugin.so
+    mode: "0644"
+    uid: 0
+    gid: 0
+    requires_restart: vpp
+
+  - source: test-infra/vpp-plugins/osvbng_accounting_plugin.so
+    install_path: /usr/lib/x86_64-linux-gnu/vpp_plugins/osvbng_accounting_plugin.so
+    mode: "0644"
+    uid: 0
+    gid: 0
+    requires_restart: vpp
+
+  - source: test-infra/vpp-plugins/l2tpv2_plugin.so
+    install_path: /usr/lib/x86_64-linux-gnu/vpp_plugins/l2tpv2_plugin.so
+    mode: "0644"
+    uid: 0
+    gid: 0
+    requires_restart: vpp
+
+  - source: templates/dataplane.conf.tmpl
+    install_path: /usr/share/osvbng/templates/dataplane.conf.tmpl
+    mode: "0644"
+    uid: 0
+    gid: 0
+    requires_restart: vpp
+
+  - source: templates/frr.conf.tmpl
+    install_path: /usr/share/osvbng/templates/frr.conf.tmpl
+    mode: "0644"
+    uid: 0
+    gid: 0
+    requires_restart: none
+
+  - source: templates/routing-daemons.tmpl
+    install_path: /usr/share/osvbng/templates/routing-daemons.tmpl
+    mode: "0644"
+    uid: 0
+    gid: 0
+    requires_restart: none
+
+  - source: templates/frr/bgp.tmpl
+    install_path: /usr/share/osvbng/templates/frr/bgp.tmpl
+    mode: "0644"
+    uid: 0
+    gid: 0
+    requires_restart: none
+
+  - source: templates/frr/isis.tmpl
+    install_path: /usr/share/osvbng/templates/frr/isis.tmpl
+    mode: "0644"
+    uid: 0
+    gid: 0
+    requires_restart: none
+
+  - source: templates/frr/ldp.tmpl
+    install_path: /usr/share/osvbng/templates/frr/ldp.tmpl
+    mode: "0644"
+    uid: 0
+    gid: 0
+    requires_restart: none
+
+  - source: templates/frr/mpls.tmpl
+    install_path: /usr/share/osvbng/templates/frr/mpls.tmpl
+    mode: "0644"
+    uid: 0
+    gid: 0
+    requires_restart: none
+
+  - source: templates/frr/ospf.tmpl
+    install_path: /usr/share/osvbng/templates/frr/ospf.tmpl
+    mode: "0644"
+    uid: 0
+    gid: 0
+    requires_restart: none
+
+  - source: templates/frr/ospf6.tmpl
+    install_path: /usr/share/osvbng/templates/frr/ospf6.tmpl
+    mode: "0644"
+    uid: 0
+    gid: 0
+    requires_restart: none
+
+  - source: templates/frr/routing_policy.tmpl
+    install_path: /usr/share/osvbng/templates/frr/routing_policy.tmpl
+    mode: "0644"
+    uid: 0
+    gid: 0
+    requires_restart: none
+
+  - source: templates/frr/static.tmpl
+    install_path: /usr/share/osvbng/templates/frr/static.tmpl
+    mode: "0644"
+    uid: 0
+    gid: 0
+    requires_restart: none
+
+  - source: templates/frr/vrf.tmpl
+    install_path: /usr/share/osvbng/templates/frr/vrf.tmpl
+    mode: "0644"
+    uid: 0
+    gid: 0
+    requires_restart: none
