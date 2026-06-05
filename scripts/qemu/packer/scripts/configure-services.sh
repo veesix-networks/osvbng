@@ -40,6 +40,17 @@ ExecStart=
 ExecStart=/usr/bin/vpp -c /etc/osvbng/dataplane.conf
 EOF
 
+mkdir -p /etc/systemd/system/frr.service.d
+
+cat > /etc/systemd/system/frr.service.d/dataplane-netns.conf <<'EOF'
+[Unit]
+After=vpp.service
+Requires=vpp.service
+
+[Service]
+NetworkNamespacePath=/var/run/netns/dataplane
+EOF
+
 cat > /etc/systemd/system/osvbng.service <<'EOF'
 [Unit]
 Description=OSVBNG Daemon
