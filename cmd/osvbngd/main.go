@@ -614,6 +614,7 @@ func main() {
 		HAManager:        haMgr,
 		PluginComponents: pluginComponentsMap,
 		CGNAT:            cgnat,
+		ConfigReloader:   configd,
 	})
 
 	if apiComp, ok := pluginComponentsMap["northbound.api"]; ok {

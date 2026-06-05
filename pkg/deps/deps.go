@@ -51,6 +51,15 @@ type ShowDeps struct {
 	Orchestrator     *component.Orchestrator
 }
 
+// OperConfigReloader is the narrow read-side contract the oper layer
+// needs from configmgr to re-render templates and push the result into
+// FRR. Defined here rather than importing *configmgr.ConfigManager
+// directly so OperDeps stays free of the configmgr → deps cycle.
+// *configmgr.ConfigManager satisfies this implicitly.
+type OperConfigReloader interface {
+	ReloadFRR() error
+}
+
 type OperDeps struct {
 	Subscriber       *subscriber.Component
 	Southbound       southbound.Southbound
@@ -58,6 +67,7 @@ type OperDeps struct {
 	HAManager        *ha.Manager
 	PluginComponents map[string]component.Component
 	CGNAT            *cgnatcomp.Component
+	ConfigReloader   OperConfigReloader
 }
 
 type ConfDeps struct {
