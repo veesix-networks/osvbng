@@ -1,8 +1,16 @@
 {
   "interfaces": {
+    "network": [
+      {
+        "interface": "eth2",
+        "address": "10.100.0.2/24",
+        "gateway": "10.100.0.1"
+      }
+    ],
     "access": [
       {
         "interface": "eth1",
+        "network-interface": "eth2",
         "type": "ipoe",
         "vlan-mode": "1:1",
         "outer-vlan-min": 100,
@@ -26,6 +34,9 @@
   },
   "ipoe": {
     "ipv6": true
+  },
+  "session-traffic": {
+    "ipv4-pps": 10
   },
   "access-line": {
     "agent-circuit-id": "eth 0/1/{session-global}:{outer-vlan}.{inner-vlan}",

@@ -10,9 +10,11 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/events"
+	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/opdb"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
 
 const (
@@ -20,6 +22,11 @@ const (
 )
 
 type AccountingSession struct {
+	// mu guards the counter fields (baseline / prior-delta / last-reported)
+	// against concurrent writes from the bucket processor, session-restore
+	// handler, and release handler.
+	mu sync.Mutex
+
 	sessionID         string
 	acctSessionID     string
 	accessType        models.AccessType
@@ -70,6 +77,7 @@ type Component struct {
 	eventBus     events.Bus
 	cache        cache.Cache
 	opdb         opdb.Store
+	showSource   component.ShowSource
 
 	aaaReqSub    events.Subscription
 	lifecycleSub events.Subscription
@@ -92,6 +100,7 @@ func New(deps component.Dependencies, authProvider auth.AuthProvider) (*Componen
 		eventBus:     deps.EventBus,
 		cache:        deps.Cache,
 		opdb:         deps.OpDB,
+		showSource:   deps.ShowSource,
 		buckets:      make(map[int][]string),
 		acctCache:    make(map[string]*AccountingSession),
 	}
@@ -205,6 +214,8 @@ func (c *Component) ProcessAccountingBucket(bucketId int) {
 	sessionIds := c.buckets[bucketId]
 	c.bucketMu.RUnlock()
 
+	statsByIdx := c.fetchInterfaceStats()
+
 	c.acctCacheMu.Lock()
 	defer c.acctCacheMu.Unlock()
 
@@ -214,23 +225,70 @@ func (c *Component) ProcessAccountingBucket(bucketId int) {
 			continue
 		}
 
-		go c.sendAccountingUpdate(session)
+		go c.sendAccountingUpdate(session, statsByIdx)
 	}
 }
 
-func (c *Component) sendAccountingUpdate(acctSession *AccountingSession) {
+// fetchInterfaceStats reads the cached SystemDataplaneInterfaces snapshot
+// once per bucket tick and indexes by sw_if_index for per-session lookup.
+// A nil map (no registry wired, snapshot error, unexpected shape) causes
+// sendAccountingUpdate to fall back to the last-reported cumulative.
+func (c *Component) fetchInterfaceStats() map[uint32]*southbound.InterfaceStats {
+	if c.showSource == nil {
+		return nil
+	}
+	snap, err := c.showSource.Snapshot(c.Ctx, paths.SystemDataplaneInterfaces.String())
+	if err != nil {
+		c.logger.Debug("Interface stats snapshot unavailable",
+			"path", paths.SystemDataplaneInterfaces.String(), "error", err)
+		return nil
+	}
+	stats, ok := snap.([]southbound.InterfaceStats)
+	if !ok {
+		c.logger.Debug("Interface stats snapshot unexpected shape",
+			"path", paths.SystemDataplaneInterfaces.String())
+		return nil
+	}
+	by := make(map[uint32]*southbound.InterfaceStats, len(stats))
+	for i := range stats {
+		by[stats[i].Index] = &stats[i]
+	}
+	return by
+}
+
+func (c *Component) sendAccountingUpdate(acctSession *AccountingSession, statsByIdx map[uint32]*southbound.InterfaceStats) {
+	acctSession.mu.Lock()
+	rxBytes, txBytes, rxPackets, txPackets := acctSession.lastReportedInOctets,
+		acctSession.lastReportedOutOctets,
+		acctSession.lastReportedInPackets,
+		acctSession.lastReportedOutPackets
+	if stats, ok := statsByIdx[acctSession.swIfIndex]; ok {
+		rxBytes, txBytes, rxPackets, txPackets = acctSession.applyVPPCounters(stats)
+	}
+	acctSession.mu.Unlock()
+
 	session := &auth.Session{
 		SessionID:       acctSession.sessionID,
 		AcctSessionID:   acctSession.acctSessionID,
 		Username:        acctSession.username,
 		MAC:             acctSession.mac,
+		RxBytes:         rxBytes,
+		TxBytes:         txBytes,
+		RxPackets:       rxPackets,
+		TxPackets:       txPackets,
 		SessionDuration: uint32(time.Since(acctSession.authDate).Seconds()),
 		Attributes:      acctSession.attributes,
 	}
 
 	if err := c.authProvider.UpdateAccounting(c.Ctx, session); err != nil {
 		c.logger.Debug("Accounting update failed", "session_id", acctSession.sessionID, "error", err)
+		return
 	}
+
+	acctSession.mu.Lock()
+	acctSession.advanceLastReported(rxBytes, txBytes, rxPackets, txPackets)
+	acctSession.mu.Unlock()
+	c.checkpointAcctSession(acctSession)
 }
 
 func (c *Component) handleAAARequest(event events.Event) {
@@ -542,8 +600,20 @@ func (c *Component) handleSessionRelease(sessionId, username, mac, acctSessionID
 	c.bucketMu.Unlock()
 
 	var sessionDuration uint32
+	var rxBytes, txBytes, rxPackets, txPackets uint64
 	if exists && acctSession != nil {
 		sessionDuration = uint32(time.Since(acctSession.authDate).Seconds())
+
+		statsByIdx := c.fetchInterfaceStats()
+		acctSession.mu.Lock()
+		rxBytes, txBytes, rxPackets, txPackets = acctSession.lastReportedInOctets,
+			acctSession.lastReportedOutOctets,
+			acctSession.lastReportedInPackets,
+			acctSession.lastReportedOutPackets
+		if stats, ok := statsByIdx[acctSession.swIfIndex]; ok {
+			rxBytes, txBytes, rxPackets, txPackets = acctSession.applyVPPCounters(stats)
+		}
+		acctSession.mu.Unlock()
 	}
 
 	session := &auth.Session{
@@ -551,6 +621,10 @@ func (c *Component) handleSessionRelease(sessionId, username, mac, acctSessionID
 		AcctSessionID:   acctSessionID,
 		Username:        username,
 		MAC:             mac,
+		RxBytes:         rxBytes,
+		TxBytes:         txBytes,
+		RxPackets:       rxPackets,
+		TxPackets:       txPackets,
 		SessionDuration: sessionDuration,
 		Attributes:      attributes,
 	}
