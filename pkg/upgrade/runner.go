@@ -208,6 +208,14 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 		}
 	}
 
+	// Stepwise enforcement: if the manifest declares previous_version,
+	// the staged tarball MUST also carry a signed prev/manifest.yaml
+	// whose hash matches previous_manifest_sha256, and the on-disk
+	// current version MUST equal previous_version.
+	if err := r.verifyPrevManifest(staging, manifest, from); err != nil {
+		return nil, err
+	}
+
 	// Refuse to clobber a partial-apply journal: writing a fresh
 	// "started" record would erase the only viable rollback to N-1.
 	if err := r.checkPartialApply(opts); err != nil {
@@ -535,6 +543,48 @@ func (r *Runner) verifySignature(tarballPath string) error {
 
 func (r *Runner) discoverCurrentVersion(ctx context.Context) (string, error) {
 	return CurrentInstalledVersion(ctx, r.StateRoot, r.BinaryPath, r.Cmd)
+}
+
+// verifyPrevManifest enforces the v2 stepwise contract: the manifest's
+// previous_version + previous_manifest_sha256 must match a signed
+// prev/manifest.yaml inside the staged tarball AND the on-disk current
+// version. Skipped when the manifest declares no previous_version
+// (genesis tarball / first-boot path).
+func (r *Runner) verifyPrevManifest(staging *Staging, manifest *Manifest, currentVersion string) error {
+	if manifest.PreviousVersion == "" {
+		return nil
+	}
+
+	prevManifestPath := filepath.Join(staging.Dir, "prev", "manifest.yaml")
+	prevSigPath := prevManifestPath + ".sig"
+
+	if _, err := os.Stat(prevManifestPath); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("stepwise upgrade: manifest declares previous_version=%s but tarball has no prev/manifest.yaml", manifest.PreviousVersion)
+		}
+		return fmt.Errorf("stat prev/manifest.yaml: %w", err)
+	}
+
+	gotHash, err := sha256File(prevManifestPath)
+	if err != nil {
+		return fmt.Errorf("hash prev/manifest.yaml: %w", err)
+	}
+	if gotHash != manifest.PreviousManifestSHA256 {
+		return fmt.Errorf("stepwise upgrade: prev/manifest.yaml sha256 mismatch (manifest=%s, on-disk=%s); prev-manifest has been tampered between sign and apply",
+			manifest.PreviousManifestSHA256, gotHash)
+	}
+
+	if err := VerifyBlobSignature(prevManifestPath, prevSigPath, r.PubKey); err != nil {
+		return fmt.Errorf("stepwise upgrade: prev/manifest.yaml signature invalid: %w", err)
+	}
+
+	if currentVersion != manifest.PreviousVersion {
+		return fmt.Errorf("stepwise upgrade required: install v%s first (current is v%s, target tarball is v%s which requires v%s as the immediate predecessor)",
+			manifest.PreviousVersion, currentVersion, manifest.OsvbngVersion, manifest.PreviousVersion)
+	}
+
+	r.Reporter.Progress(fmt.Sprintf("prev-manifest verify OK (current=%s, prev=%s)", currentVersion, manifest.PreviousVersion))
+	return nil
 }
 
 // checkPartialApply refuses to proceed when the previous apply ended

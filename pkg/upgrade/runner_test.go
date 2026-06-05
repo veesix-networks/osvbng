@@ -690,3 +690,174 @@ func TestRunnerApplyAcceptsCompletedJournal(t *testing.T) {
 		t.Fatalf("JournalEndPhase = %q, want completed", res.JournalEndPhase)
 	}
 }
+
+// buildSignedTarballWithPrev builds a v2 tarball whose manifest
+// declares previous_version + previous_manifest_sha256 and embeds the
+// signed prev/manifest.yaml. Used by Phase F stepwise tests.
+func (h *testHarness) buildSignedTarballWithPrev(t *testing.T, prevVersion, fromVersion, toVersion string) string {
+	t.Helper()
+
+	prevManifestYAML := fmt.Sprintf(`schema_version: 2
+osvbng_version: %s
+min_compatible_version: %s
+type: A
+build_commit: prevabc
+artifacts:
+  - path: %s
+    source: osvbngd
+    sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    mode: "0755"
+    uid: -1
+    gid: -1
+    requires_restart: osvbngd
+`, prevVersion, fromVersion, h.binaryPath)
+	prevSHA := sha256Hex([]byte(prevManifestYAML))
+
+	prevSigDigest := sha256.Sum256([]byte(prevManifestYAML))
+	prevSigDER, err := ecdsa.SignASN1(rand.Reader, h.privKey, prevSigDigest[:])
+	if err != nil {
+		t.Fatalf("sign prev manifest: %v", err)
+	}
+	prevSig := []byte(base64.StdEncoding.EncodeToString(prevSigDER) + "\n")
+
+	newOsvbngd := []byte("NEW-osvbngd-binary-" + toVersion)
+	newOsvbngcli := []byte("NEW-osvbngcli-binary-" + toVersion)
+
+	manifestYAML := fmt.Sprintf(`schema_version: 2
+osvbng_version: %s
+min_compatible_version: %s
+previous_version: %s
+previous_manifest_sha256: %s
+type: A
+build_commit: testabc
+artifacts:
+  - path: %s
+    source: osvbngd
+    sha256: %s
+    mode: "0755"
+    uid: -1
+    gid: -1
+    requires_restart: osvbngd
+  - path: %s
+    source: osvbngcli
+    sha256: %s
+    mode: "0755"
+    uid: -1
+    gid: -1
+    requires_restart: none
+`,
+		toVersion, fromVersion, prevVersion, prevSHA,
+		h.binaryPath, sha256Hex(newOsvbngd),
+		h.cliPath, sha256Hex(newOsvbngcli))
+
+	tarballDir := t.TempDir()
+	tarballPath := filepath.Join(tarballDir, fmt.Sprintf("osvbng-v%s.tar.gz", toVersion))
+	writeTarball(t, tarballDir, filepath.Base(tarballPath), []tarEntry{
+		{name: "manifest.yaml", body: []byte(manifestYAML)},
+		{name: "prev/manifest.yaml", body: []byte(prevManifestYAML)},
+		{name: "prev/manifest.yaml.sig", body: prevSig},
+		{name: "osvbngd", body: newOsvbngd, mode: 0o755},
+		{name: "osvbngcli", body: newOsvbngcli, mode: 0o755},
+	})
+
+	tarballBytes, _ := os.ReadFile(tarballPath)
+	digest := sha256.Sum256(tarballBytes)
+	sigDER, err := ecdsa.SignASN1(rand.Reader, h.privKey, digest[:])
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	if err := os.WriteFile(tarballPath+".sig",
+		[]byte(base64.StdEncoding.EncodeToString(sigDER)+"\n"), 0o644); err != nil {
+		t.Fatalf("write sig: %v", err)
+	}
+	return tarballPath
+}
+
+func TestRunnerApplyAcceptsValidPrevManifest(t *testing.T) {
+	h := newHarness(t)
+	h.plantFromVersion("0.13.0")
+	tarball := h.buildSignedTarballWithPrev(t, "0.13.0", "0.13.0", "0.14.0")
+	h.configureSystemctlReady()
+	h.writeStateFile("ready", 5, "0.14.0")
+
+	res, err := h.runner.Apply(context.Background(), tarball)
+	if err != nil {
+		t.Fatalf("Apply with valid prev-manifest: %v", err)
+	}
+	if res.JournalEndPhase != "completed" {
+		t.Fatalf("JournalEndPhase = %q, want completed", res.JournalEndPhase)
+	}
+}
+
+func TestRunnerApplyRefusesPrevVersionMismatch(t *testing.T) {
+	h := newHarness(t)
+	// Box is at 0.13.0, but the tarball insists on jumping from 0.13.1.
+	h.plantFromVersion("0.13.0")
+	tarball := h.buildSignedTarballWithPrev(t, "0.13.1", "0.13.0", "0.14.0")
+	h.configureSystemctlReady()
+	h.writeStateFile("ready", 5, "0.14.0")
+
+	_, err := h.runner.Apply(context.Background(), tarball)
+	if err == nil {
+		t.Fatal("Apply accepted stepwise mismatch")
+	}
+	if !strings.Contains(err.Error(), "stepwise upgrade required") {
+		t.Fatalf("error did not flag stepwise mismatch: %v", err)
+	}
+}
+
+func TestRunnerApplyRefusesTamperedPrevManifest(t *testing.T) {
+	h := newHarness(t)
+	h.plantFromVersion("0.13.0")
+	tarball := h.buildSignedTarballWithPrev(t, "0.13.0", "0.13.0", "0.14.0")
+	h.configureSystemctlReady()
+	h.writeStateFile("ready", 5, "0.14.0")
+
+	// Tamper with prev/manifest.yaml after the outer signature was made.
+	// The outer signature won't catch this on the v1-raw scheme (it
+	// signs the original tarball bytes), but the prev-manifest sha256
+	// in the outer manifest must — otherwise an attacker could swap
+	// prev/manifest to lie about the install lineage.
+	staging, err := ExtractTarball(tarball)
+	if err != nil {
+		t.Fatalf("stage: %v", err)
+	}
+	prevPath := filepath.Join(staging.Dir, "prev", "manifest.yaml")
+	tampered, _ := os.ReadFile(prevPath)
+	tampered = append(tampered, []byte("\n# trailing tamper\n")...)
+	if err := os.WriteFile(prevPath, tampered, 0o644); err != nil {
+		t.Fatalf("write tampered prev: %v", err)
+	}
+	// Pack the tampered staging into a new tarball, sign it, point Apply at it.
+	tampDir := t.TempDir()
+	tampTarball := filepath.Join(tampDir, "tampered.tar.gz")
+	writeTarball(t, tampDir, filepath.Base(tampTarball), []tarEntry{
+		{name: "manifest.yaml", body: mustRead(t, filepath.Join(staging.Dir, "manifest.yaml"))},
+		{name: "prev/manifest.yaml", body: tampered},
+		{name: "prev/manifest.yaml.sig", body: mustRead(t, filepath.Join(staging.Dir, "prev", "manifest.yaml.sig"))},
+		{name: "osvbngd", body: mustRead(t, filepath.Join(staging.Dir, "osvbngd")), mode: 0o755},
+		{name: "osvbngcli", body: mustRead(t, filepath.Join(staging.Dir, "osvbngcli")), mode: 0o755},
+	})
+	tampBytes, _ := os.ReadFile(tampTarball)
+	tampDigest := sha256.Sum256(tampBytes)
+	tampSigDER, _ := ecdsa.SignASN1(rand.Reader, h.privKey, tampDigest[:])
+	_ = os.WriteFile(tampTarball+".sig",
+		[]byte(base64.StdEncoding.EncodeToString(tampSigDER)+"\n"), 0o644)
+
+	_, err = h.runner.Apply(context.Background(), tampTarball)
+	if err == nil {
+		t.Fatal("Apply accepted tampered prev-manifest")
+	}
+	if !strings.Contains(err.Error(), "sha256 mismatch") && !strings.Contains(err.Error(), "signature invalid") {
+		t.Fatalf("error did not flag tamper: %v", err)
+	}
+}
+
+func mustRead(t *testing.T, p string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatalf("read %s: %v", p, err)
+	}
+	return b
+}
