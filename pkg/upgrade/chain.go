@@ -41,6 +41,13 @@ type ApplyOptions struct {
 	// KeepN is the snapshot retention count when PrunePolicy is
 	// PruneKeepN. Zero defaults to 1 (keep N-1).
 	KeepN int
+
+	// ForceRetry overrides the partial-apply entry guard. The guard
+	// refuses to overwrite a non-completed journal because doing so
+	// would destroy the only viable rollback to N-1. ForceRetry is an
+	// operator-explicit escape hatch documented as recovery-only after
+	// manual investigation of /var/opt/osvbng/upgrade-state.json.
+	ForceRetry bool
 }
 
 // ApplyResult is what a successful ApplyOne returns. Carries explicit

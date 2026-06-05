@@ -208,6 +208,12 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 		}
 	}
 
+	// Refuse to clobber a partial-apply journal: writing a fresh
+	// "started" record would erase the only viable rollback to N-1.
+	if err := r.checkPartialApply(opts); err != nil {
+		return nil, err
+	}
+
 	// Begin recording the journal as we cross irreversible boundaries.
 	journal := NewJournal(filepath.Join(r.StateRoot, "upgrade-state.json"))
 	if err := journal.Write(&JournalState{
@@ -231,7 +237,7 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 	r.Reporter.Progress(snapDir)
 
 	r.Reporter.Stage(6, totalStages, "Pre-apply hook")
-	if err := r.runHook(ctx, staging.Dir, manifest.Hooks.Pre.Path, from, manifest.OsvbngVersion); err != nil {
+	if err := r.runHook(ctx, staging.Dir, manifest.Hooks.Pre, from, manifest.OsvbngVersion); err != nil {
 		return nil, fmt.Errorf("pre-apply hook: %w", err)
 	}
 	if err := journal.SetPhase("pre_hook_done"); err != nil {
@@ -327,7 +333,7 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 	}
 
 	r.Reporter.Stage(14, totalStages, "Post-apply hook")
-	if err := r.runHook(ctx, staging.Dir, manifest.Hooks.Post.Path, from, manifest.OsvbngVersion); err != nil {
+	if err := r.runHook(ctx, staging.Dir, manifest.Hooks.Post, from, manifest.OsvbngVersion); err != nil {
 		r.Reporter.Warn(fmt.Sprintf("post-apply hook returned non-zero (apply itself succeeded): %v", err))
 	}
 
@@ -531,6 +537,32 @@ func (r *Runner) discoverCurrentVersion(ctx context.Context) (string, error) {
 	return CurrentInstalledVersion(ctx, r.StateRoot, r.BinaryPath, r.Cmd)
 }
 
+// checkPartialApply refuses to proceed when the previous apply ended
+// at a non-completed phase. A fresh apply on top of a partial would
+// overwrite the journal's `from` field and take a snapshot of the
+// partially-swapped (corrupt) state — destroying the only rollback
+// path back to N-1. ForceRetry is the operator escape hatch.
+func (r *Runner) checkPartialApply(opts ApplyOptions) error {
+	journal := NewJournal(filepath.Join(r.StateRoot, "upgrade-state.json"))
+	state, err := journal.Read()
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read existing journal: %w", err)
+	}
+	switch state.Phase {
+	case "completed", "rolled_back", "first_boot_completed":
+		return nil
+	}
+	if opts.ForceRetry {
+		r.Reporter.Warn(fmt.Sprintf("force-retry: prior apply ended at phase %q; proceeding anyway", state.Phase))
+		return nil
+	}
+	return fmt.Errorf("previous upgrade is in non-completed state (phase=%q, from=%s, to=%s); run `osvbngcli upgrade rollback` to restore N-1, OR investigate %s before retrying with --force-retry",
+		state.Phase, state.From, state.To, filepath.Join(r.StateRoot, "upgrade-state.json"))
+}
+
 func (r *Runner) restartConfigService(ctx context.Context) error {
 	out, err := r.Cmd.Run(ctx, "systemctl", "restart", "osvbng-config.service")
 	if err != nil {
@@ -646,16 +678,27 @@ func (r *Runner) restoreFromSnapshot(snapDir string, meta *SnapshotMetadata) ([]
 	return restored, nil
 }
 
-func (r *Runner) runHook(ctx context.Context, stagingDir, hookRel string, fromVersion, toVersion string) error {
-	if hookRel == "" {
+func (r *Runner) runHook(ctx context.Context, stagingDir string, hook HookEntry, fromVersion, toVersion string) error {
+	if hook.Path == "" {
 		return nil
 	}
-	hookPath := filepath.Join(stagingDir, hookRel)
+	if hook.SHA256 == "" {
+		return fmt.Errorf("hook %s declared without sha256; v2 manifests must hash every hook script", hook.Path)
+	}
+	hookPath := filepath.Join(stagingDir, hook.Path)
 	if _, err := os.Stat(hookPath); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("hook %s declared but not present in tarball", hookRel)
+			return fmt.Errorf("hook %s declared but not present in tarball", hook.Path)
 		}
 		return err
+	}
+	onDisk, err := sha256File(hookPath)
+	if err != nil {
+		return fmt.Errorf("sha256 hook %s: %w", hook.Path, err)
+	}
+	if onDisk != hook.SHA256 {
+		return fmt.Errorf("hook %s sha256 mismatch (manifest=%s, on-disk=%s); apply refused so the script cannot be tampered between extraction and exec",
+			hook.Path, hook.SHA256, onDisk)
 	}
 
 	cmd := exec.CommandContext(ctx, hookPath)
@@ -671,7 +714,8 @@ func (r *Runner) runHook(ctx context.Context, stagingDir, hookRel string, fromVe
 		r.Reporter.Detail(string(out))
 	}
 	if err != nil {
-		return fmt.Errorf("hook %s exited non-zero: %w", hookRel, err)
+		return fmt.Errorf("hook %s exited non-zero: %w", hook.Path, err)
 	}
 	return nil
 }
+

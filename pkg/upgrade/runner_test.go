@@ -600,3 +600,93 @@ func TestRunnerEnsureStateDirsCreatesMissingPaths(t *testing.T) {
 		}
 	}
 }
+
+func TestRunnerApplyRefusesPartialApplyJournal(t *testing.T) {
+	h := newHarness(t)
+	h.plantFromVersion("0.13.0")
+	tarball := h.buildSignedTarball(t, "0.13.0", "0.13.1")
+	h.configureSystemctlReady()
+	h.writeStateFile("ready", 5, "0.13.1")
+
+	journalPath := filepath.Join(h.stateRoot, "upgrade-state.json")
+	if err := os.MkdirAll(h.stateRoot, 0o755); err != nil {
+		t.Fatalf("mkdir state root: %v", err)
+	}
+	j := NewJournal(journalPath)
+	if err := j.Write(&JournalState{
+		From:      "0.13.0",
+		To:        "0.13.1",
+		Tarball:   tarball,
+		StartedAt: time.Now().UTC(),
+		Phase:     "aborted_mid_swap",
+	}); err != nil {
+		t.Fatalf("plant partial journal: %v", err)
+	}
+
+	_, err := h.runner.Apply(context.Background(), tarball)
+	if err == nil {
+		t.Fatal("Apply accepted partial-apply journal without --force-retry")
+	}
+	if !strings.Contains(err.Error(), "non-completed state") || !strings.Contains(err.Error(), "force-retry") {
+		t.Fatalf("error did not mention partial-apply guard: %v", err)
+	}
+}
+
+func TestRunnerApplyForceRetryOverridesPartialApply(t *testing.T) {
+	h := newHarness(t)
+	h.plantFromVersion("0.13.0")
+	tarball := h.buildSignedTarball(t, "0.13.0", "0.13.1")
+	h.configureSystemctlReady()
+	h.writeStateFile("ready", 5, "0.13.1")
+
+	j := NewJournal(filepath.Join(h.stateRoot, "upgrade-state.json"))
+	if err := os.MkdirAll(h.stateRoot, 0o755); err != nil {
+		t.Fatalf("mkdir state root: %v", err)
+	}
+	if err := j.Write(&JournalState{
+		From:      "0.13.0",
+		To:        "0.13.1",
+		Tarball:   tarball,
+		StartedAt: time.Now().UTC(),
+		Phase:     "aborted_mid_swap",
+	}); err != nil {
+		t.Fatalf("plant partial journal: %v", err)
+	}
+
+	res, err := h.runner.ApplyOne(context.Background(), tarball, ApplyOptions{ForceRetry: true})
+	if err != nil {
+		t.Fatalf("ApplyOne with ForceRetry: %v", err)
+	}
+	if res.JournalEndPhase != "completed" {
+		t.Fatalf("JournalEndPhase = %q, want completed", res.JournalEndPhase)
+	}
+}
+
+func TestRunnerApplyAcceptsCompletedJournal(t *testing.T) {
+	h := newHarness(t)
+	h.plantFromVersion("0.13.0")
+	tarball := h.buildSignedTarball(t, "0.13.0", "0.13.1")
+	h.configureSystemctlReady()
+	h.writeStateFile("ready", 5, "0.13.1")
+
+	j := NewJournal(filepath.Join(h.stateRoot, "upgrade-state.json"))
+	if err := os.MkdirAll(h.stateRoot, 0o755); err != nil {
+		t.Fatalf("mkdir state root: %v", err)
+	}
+	if err := j.Write(&JournalState{
+		From:      "0.12.0",
+		To:        "0.13.0",
+		StartedAt: time.Now().UTC(),
+		Phase:     "completed",
+	}); err != nil {
+		t.Fatalf("plant completed journal: %v", err)
+	}
+
+	res, err := h.runner.Apply(context.Background(), tarball)
+	if err != nil {
+		t.Fatalf("Apply on completed prior journal: %v", err)
+	}
+	if res.JournalEndPhase != "completed" {
+		t.Fatalf("JournalEndPhase = %q, want completed", res.JournalEndPhase)
+	}
+}
