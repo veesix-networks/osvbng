@@ -532,50 +532,6 @@ func TestRunnerNullReporterIsDefault(t *testing.T) {
 	}
 }
 
-func TestRunnerSwapTouchesPluginsDetectsPluginPaths(t *testing.T) {
-	r := &Runner{PluginDir: "/usr/lib/x86_64-linux-gnu/vpp_plugins"}
-
-	cases := map[string]struct {
-		paths []string
-		want  bool
-	}{
-		"no plugins": {
-			paths: []string{"/usr/local/bin/osvbngd", "/usr/local/bin/osvbngcli"},
-			want:  false,
-		},
-		"single plugin": {
-			paths: []string{"/usr/lib/x86_64-linux-gnu/vpp_plugins/osvbng_ipoe_plugin.so"},
-			want:  true,
-		},
-		"mixed": {
-			paths: []string{
-				"/usr/local/bin/osvbngd",
-				"/usr/lib/x86_64-linux-gnu/vpp_plugins/osvbng_pppoe_plugin.so",
-			},
-			want: true,
-		},
-		"empty": {
-			paths: nil,
-			want:  false,
-		},
-	}
-
-	for name, c := range cases {
-		t.Run(name, func(t *testing.T) {
-			if got := r.swapTouchesPlugins(c.paths); got != c.want {
-				t.Fatalf("got %v, want %v", got, c.want)
-			}
-		})
-	}
-}
-
-func TestRunnerSwapTouchesPluginsTrailingSlashSafe(t *testing.T) {
-	r := &Runner{PluginDir: "/usr/lib/x86_64-linux-gnu/vpp_plugins/"}
-	if !r.swapTouchesPlugins([]string{"/usr/lib/x86_64-linux-gnu/vpp_plugins/x.so"}) {
-		t.Fatal("trailing-slash PluginDir failed to match")
-	}
-}
-
 func TestRunnerApplyRestartsVPPWhenPluginSwapped(t *testing.T) {
 	h := newHarness(t)
 	h.plantFromVersion("0.13.0")

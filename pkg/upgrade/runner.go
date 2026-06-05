@@ -273,9 +273,17 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 
 	// VPP keeps plugins loaded in memory; a fresh .so on disk only
 	// takes effect after a VPP restart. osvbng.service is already
-	// stopped so there's no cascade to worry about.
-	if r.swapTouchesPlugins(swapped) {
-		r.Reporter.Progress("plugin changed, restarting VPP")
+	// stopped so there's no cascade to worry about. osvbng-config.service
+	// is rerun first so /etc/osvbng/dataplane.conf reflects any new
+	// templates before vpp re-reads it.
+	plan := planFromManifest(manifest)
+	_ = swapped // path list retained for journal logging; restart decision is from the manifest plan
+	if plan.NeedsVPP {
+		r.Reporter.Progress("plugin or dataplane template changed, rerunning osvbng-config.service and restarting VPP")
+		if err := r.restartConfigService(ctx); err != nil {
+			_ = journal.SetPhase("aborted_post_swap")
+			return r.rollbackAfterFailedApply(ctx, supervisor, journal, fmt.Sprintf("osvbng-config restart failed: %v", err))
+		}
 		if err := r.restartVPP(ctx); err != nil {
 			_ = journal.SetPhase("aborted_post_swap")
 			return r.rollbackAfterFailedApply(ctx, supervisor, journal, fmt.Sprintf("vpp restart failed: %v", err))
@@ -387,8 +395,13 @@ func (r *Runner) Rollback(ctx context.Context) (*RollbackResult, error) {
 		return nil, err
 	}
 
-	if r.swapTouchesPlugins(restored) {
-		r.Reporter.Progress("plugin restored, restarting VPP")
+	_ = restored // path list retained for journal logging; restart decision is from the snapshot's recorded NeedsVPP
+	if meta.NeedsVPP {
+		r.Reporter.Progress("plugin or dataplane template restored, rerunning osvbng-config.service and restarting VPP")
+		if err := r.restartConfigService(ctx); err != nil {
+			_ = journal.SetPhase("rollback_failed")
+			return nil, fmt.Errorf("osvbng-config restart during rollback: %w", err)
+		}
 		if err := r.restartVPP(ctx); err != nil {
 			_ = journal.SetPhase("rollback_failed")
 			return nil, fmt.Errorf("vpp restart during rollback: %w", err)
@@ -518,17 +531,12 @@ func (r *Runner) discoverCurrentVersion(ctx context.Context) (string, error) {
 	return CurrentInstalledVersion(ctx, r.StateRoot, r.BinaryPath, r.Cmd)
 }
 
-func (r *Runner) swapTouchesPlugins(paths []string) bool {
-	if r.PluginDir == "" {
-		return false
+func (r *Runner) restartConfigService(ctx context.Context) error {
+	out, err := r.Cmd.Run(ctx, "systemctl", "restart", "osvbng-config.service")
+	if err != nil {
+		return fmt.Errorf("systemctl restart osvbng-config.service: %w (%s)", err, strings.TrimSpace(string(out)))
 	}
-	prefix := strings.TrimRight(r.PluginDir, "/") + "/"
-	for _, p := range paths {
-		if strings.HasPrefix(p, prefix) {
-			return true
-		}
-	}
-	return false
+	return nil
 }
 
 func (r *Runner) restartVPP(ctx context.Context) error {

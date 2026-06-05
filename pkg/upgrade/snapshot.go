@@ -56,6 +56,7 @@ type SnapshotMetadata struct {
 	CreatedAt     time.Time       `yaml:"created_at"`
 	FromVersion   string          `yaml:"from_version"`
 	ToVersion     string          `yaml:"to_version"`
+	NeedsVPP      bool            `yaml:"needs_vpp"`
 	Entries       []SnapshotEntry `yaml:"entries"`
 }
 
@@ -91,11 +92,13 @@ func Snapshot(rollbackRoot, fromVersion, toVersion string, manifest *Manifest) (
 		return "", nil, fmt.Errorf("mkdir snapshot dir %s: %w", snapDir, err)
 	}
 
+	plan := planFromManifest(manifest)
 	meta := &SnapshotMetadata{
 		SchemaVersion: SnapshotSchemaVersion,
 		CreatedAt:     time.Now().UTC(),
 		FromVersion:   fromVersion,
 		ToVersion:     toVersion,
+		NeedsVPP:      plan.NeedsVPP,
 	}
 
 	for _, art := range manifest.Artifacts {
