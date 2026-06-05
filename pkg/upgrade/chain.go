@@ -48,6 +48,13 @@ type ApplyOptions struct {
 	// operator-explicit escape hatch documented as recovery-only after
 	// manual investigation of /var/opt/osvbng/upgrade-state.json.
 	ForceRetry bool
+
+	// FirstBoot drives the packer first-boot apply: skip prev-manifest
+	// verification, skip CurrentInstalledVersion discovery (the binary
+	// does not exist yet on a clean image), skip ExpectedFrom, skip
+	// snapshot, write a first-boot-shaped journal that flips no rollback
+	// snapshot into existence. Set ONLY by osvbng-firstboot.service.
+	FirstBoot bool
 }
 
 // ApplyResult is what a successful ApplyOne returns. Carries explicit

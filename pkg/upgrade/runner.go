@@ -193,9 +193,17 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 		return nil, fmt.Errorf("verified signature but artifact digest mismatch: %v", mismatches)
 	}
 
-	from, _ := r.discoverCurrentVersion(ctx)
-	if opts.ExpectedFrom != "" && from != opts.ExpectedFrom {
-		return nil, fmt.Errorf("apply: chain coordinator expected from=%q but on-disk version is %q", opts.ExpectedFrom, from)
+	var from string
+	if opts.FirstBoot {
+		from = "first-boot"
+		if manifest.PreviousVersion != "" {
+			r.Reporter.Progress(fmt.Sprintf("first-boot: tarball declares stepwise prev=%s; overridden by --first-boot", manifest.PreviousVersion))
+		}
+	} else {
+		from, _ = r.discoverCurrentVersion(ctx)
+		if opts.ExpectedFrom != "" && from != opts.ExpectedFrom {
+			return nil, fmt.Errorf("apply: chain coordinator expected from=%q but on-disk version is %q", opts.ExpectedFrom, from)
+		}
 	}
 	r.Reporter.Progress(fmt.Sprintf("from %s → %s (Tier %s)", from, manifest.OsvbngVersion, manifest.Type))
 
@@ -211,9 +219,12 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 	// Stepwise enforcement: if the manifest declares previous_version,
 	// the staged tarball MUST also carry a signed prev/manifest.yaml
 	// whose hash matches previous_manifest_sha256, and the on-disk
-	// current version MUST equal previous_version.
-	if err := r.verifyPrevManifest(staging, manifest, from); err != nil {
-		return nil, err
+	// current version MUST equal previous_version. Skipped for
+	// first-boot apply (no prior install to anchor against).
+	if !opts.FirstBoot {
+		if err := r.verifyPrevManifest(staging, manifest, from); err != nil {
+			return nil, err
+		}
 	}
 
 	// Refuse to clobber a partial-apply journal: writing a fresh
@@ -223,26 +234,38 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 	}
 
 	// Begin recording the journal as we cross irreversible boundaries.
+	// First-boot uses a separate phase namespace so the partial-apply
+	// guard distinguishes "I am mid-first-boot" from "I am mid-upgrade".
+	startPhase := "started"
+	if opts.FirstBoot {
+		startPhase = "first_boot_started"
+	}
 	journal := NewJournal(filepath.Join(r.StateRoot, "upgrade-state.json"))
 	if err := journal.Write(&JournalState{
 		From:      from,
 		To:        manifest.OsvbngVersion,
 		Tarball:   tarballPath,
 		StartedAt: time.Now().UTC(),
-		Phase:     "started",
+		Phase:     startPhase,
 	}); err != nil {
 		return nil, fmt.Errorf("write initial journal: %w", err)
 	}
 
-	r.Reporter.Stage(5, totalStages, "Snapshotting current version")
-	snapDir, _, err := Snapshot(r.RollbackRoot, from, manifest.OsvbngVersion, manifest)
-	if err != nil {
-		return nil, err
+	var snapDir string
+	if opts.FirstBoot {
+		r.Reporter.Stage(5, totalStages, "Snapshot (skipped on first-boot)")
+		r.Reporter.Progress("no prior install; nothing to snapshot")
+	} else {
+		r.Reporter.Stage(5, totalStages, "Snapshotting current version")
+		snapDir, _, err = Snapshot(r.RollbackRoot, from, manifest.OsvbngVersion, manifest)
+		if err != nil {
+			return nil, err
+		}
+		if err := journal.SetPhase("snapshot_done"); err != nil {
+			return nil, err
+		}
+		r.Reporter.Progress(snapDir)
 	}
-	if err := journal.SetPhase("snapshot_done"); err != nil {
-		return nil, err
-	}
-	r.Reporter.Progress(snapDir)
 
 	r.Reporter.Stage(6, totalStages, "Pre-apply hook")
 	if err := r.runHook(ctx, staging.Dir, manifest.Hooks.Pre, from, manifest.OsvbngVersion); err != nil {
@@ -274,13 +297,17 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 		return nil, err
 	}
 
+	if opts.FirstBoot {
+		_ = journal.SetPhase("first_boot_swapping")
+	}
 	r.Reporter.Stage(9, totalStages, "Swapping artifacts")
 	swapped, err := r.swapArtifacts(ctx, staging, manifest, journal)
 	if err != nil {
-		// Best-effort rollback of whatever swapped before the failure;
-		// attempt to restart the daemon either way so the operator is
-		// not left with a stopped service.
 		r.Reporter.Warn(fmt.Sprintf("swap loop failed after %d artifact(s): %v", len(swapped), err))
+		if opts.FirstBoot {
+			_ = journal.SetPhase("first_boot_aborted_mid_swap")
+			return nil, fmt.Errorf("first-boot apply failed mid-swap; image must be re-imaged (no rollback snapshot exists): %w", err)
+		}
 		_ = journal.SetPhase("aborted_mid_swap")
 		return r.rollbackAfterFailedApply(ctx, supervisor, journal, "swap loop failure")
 	}
@@ -306,10 +333,18 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 
 	r.Reporter.Stage(10, totalStages, "Starting daemon")
 	if err := supervisor.Start(ctx); err != nil {
+		if opts.FirstBoot {
+			_ = journal.SetPhase("first_boot_aborted_post_swap")
+			return nil, fmt.Errorf("first-boot daemon start failed: %w", err)
+		}
 		_ = journal.SetPhase("aborted_post_swap")
 		return r.rollbackAfterFailedApply(ctx, supervisor, journal, "systemctl start failed")
 	}
-	if err := journal.SetPhase("daemon_started"); err != nil {
+	postStartPhase := "daemon_started"
+	if opts.FirstBoot {
+		postStartPhase = "first_boot_daemon_started"
+	}
+	if err := journal.SetPhase(postStartPhase); err != nil {
 		return nil, err
 	}
 
@@ -317,6 +352,10 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 	healthOutcome, healthMsg := r.waitHealthy(ctx, supervisor, manifest.OsvbngVersion)
 	if healthOutcome != HealthOK {
 		r.Reporter.Warn(fmt.Sprintf("health failed: %s — %s", healthOutcome, healthMsg))
+		if opts.FirstBoot {
+			_ = journal.SetPhase("first_boot_health_failed")
+			return nil, fmt.Errorf("first-boot health check failed (%s): %s", healthOutcome, healthMsg)
+		}
 		_ = journal.SetPhase("health_failed")
 		return r.rollbackAfterFailedApply(ctx, supervisor, journal, fmt.Sprintf("health %s: %s", healthOutcome, healthMsg))
 	}
@@ -325,18 +364,24 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 	if err := WriteCurrentManifest(r.StateRoot, manifest); err != nil {
 		return nil, fmt.Errorf("write current-manifest: %w", err)
 	}
-	if err := journal.SetPhase("completed"); err != nil {
+	completedPhase := "completed"
+	if opts.FirstBoot {
+		completedPhase = "first_boot_completed"
+	}
+	if err := journal.SetPhase(completedPhase); err != nil {
 		return nil, err
 	}
 
-	r.Reporter.Stage(13, totalStages, "Pruning old snapshots")
-	if opts.PrunePolicy == PruneKeepN {
-		keep := opts.KeepN
-		if keep == 0 {
-			keep = 1
-		}
-		if err := PruneSnapshots(r.RollbackRoot, keep); err != nil {
-			r.Reporter.Warn(fmt.Sprintf("prune snapshots: %v", err))
+	if !opts.FirstBoot {
+		r.Reporter.Stage(13, totalStages, "Pruning old snapshots")
+		if opts.PrunePolicy == PruneKeepN {
+			keep := opts.KeepN
+			if keep == 0 {
+				keep = 1
+			}
+			if err := PruneSnapshots(r.RollbackRoot, keep); err != nil {
+				r.Reporter.Warn(fmt.Sprintf("prune snapshots: %v", err))
+			}
 		}
 	}
 
@@ -351,7 +396,7 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 		SnapshotDir:     snapDir,
 		ArtifactsSwap:   swapped,
 		HealthOutcome:   healthOutcome.String(),
-		JournalEndPhase: "completed",
+		JournalEndPhase: completedPhase,
 	}, nil
 }
 

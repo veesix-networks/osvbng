@@ -861,3 +861,185 @@ func mustRead(t *testing.T, p string) []byte {
 	}
 	return b
 }
+
+// buildSignedFirstBootTarball builds a v2 tarball ready to be applied
+// via --first-boot. Manifest declares no previous_version (this is the
+// genesis tarball) and the runner sets From="first-boot".
+func (h *testHarness) buildSignedFirstBootTarball(t *testing.T, toVersion string) string {
+	t.Helper()
+	tarballDir := t.TempDir()
+	tarballPath := filepath.Join(tarballDir, fmt.Sprintf("osvbng-v%s.tar.gz", toVersion))
+
+	newOsvbngd := []byte("NEW-osvbngd-binary-" + toVersion)
+	newOsvbngcli := []byte("NEW-osvbngcli-binary-" + toVersion)
+
+	manifestYAML := fmt.Sprintf(`schema_version: 2
+osvbng_version: %s
+min_compatible_version: 0.0.0
+type: A
+build_commit: firstboot
+artifacts:
+  - path: %s
+    source: osvbngd
+    sha256: %s
+    mode: "0755"
+    uid: -1
+    gid: -1
+    requires_restart: osvbngd
+  - path: %s
+    source: osvbngcli
+    sha256: %s
+    mode: "0755"
+    uid: -1
+    gid: -1
+    requires_restart: none
+`,
+		toVersion,
+		h.binaryPath, sha256Hex(newOsvbngd),
+		h.cliPath, sha256Hex(newOsvbngcli))
+
+	writeTarball(t, tarballDir, filepath.Base(tarballPath), []tarEntry{
+		{name: "manifest.yaml", body: []byte(manifestYAML)},
+		{name: "osvbngd", body: newOsvbngd, mode: 0o755},
+		{name: "osvbngcli", body: newOsvbngcli, mode: 0o755},
+	})
+
+	tarballBytes, _ := os.ReadFile(tarballPath)
+	digest := sha256.Sum256(tarballBytes)
+	sigDER, err := ecdsa.SignASN1(rand.Reader, h.privKey, digest[:])
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	if err := os.WriteFile(tarballPath+".sig",
+		[]byte(base64.StdEncoding.EncodeToString(sigDER)+"\n"), 0o644); err != nil {
+		t.Fatalf("write sig: %v", err)
+	}
+	return tarballPath
+}
+
+func TestRunnerApplyOneFirstBootHappyPath(t *testing.T) {
+	h := newHarness(t)
+	// Note: NO plantFromVersion call — first-boot images have no prior
+	// install. The on-disk osvbngd binary doesn't exist (the test
+	// harness writes it during the swap), and there is no
+	// current-manifest.yaml.
+	tarball := h.buildSignedFirstBootTarball(t, "0.14.0")
+	h.configureSystemctlReady()
+	h.writeStateFile("ready", 1, "0.14.0")
+
+	res, err := h.runner.ApplyOne(context.Background(), tarball, ApplyOptions{FirstBoot: true})
+	if err != nil {
+		t.Fatalf("ApplyOne first-boot: %v", err)
+	}
+	if res.From != "first-boot" {
+		t.Fatalf("From = %q, want first-boot", res.From)
+	}
+	if res.To != "0.14.0" {
+		t.Fatalf("To = %q, want 0.14.0", res.To)
+	}
+	if res.JournalEndPhase != "first_boot_completed" {
+		t.Fatalf("JournalEndPhase = %q, want first_boot_completed", res.JournalEndPhase)
+	}
+	if res.SnapshotDir != "" {
+		t.Fatalf("SnapshotDir = %q, must be empty on first-boot", res.SnapshotDir)
+	}
+
+	got, _ := os.ReadFile(h.binaryPath)
+	if !strings.Contains(string(got), "NEW-osvbngd") {
+		t.Fatalf("on-disk osvbngd does not contain NEW content: %q", string(got))
+	}
+
+	cur, err := CurrentInstalledVersion(context.Background(), h.stateRoot, h.binaryPath, h.cmd)
+	if err != nil {
+		t.Fatalf("CurrentInstalledVersion post-first-boot: %v", err)
+	}
+	if cur != "0.14.0" {
+		t.Fatalf("current version = %q, want 0.14.0", cur)
+	}
+}
+
+func TestRunnerApplyOneFirstBootSkipsPrevManifestVerify(t *testing.T) {
+	h := newHarness(t)
+	// Build a tarball that DECLARES a previous_version. A normal apply
+	// would refuse this because the prev-manifest is absent; --first-boot
+	// must override and proceed anyway.
+	tarballDir := t.TempDir()
+	tarballPath := filepath.Join(tarballDir, "osvbng-v0.14.0.tar.gz")
+	newOsvbngd := []byte("NEW-osvbngd-binary-firstboot")
+	newOsvbngcli := []byte("NEW-osvbngcli-binary-firstboot")
+	manifestYAML := fmt.Sprintf(`schema_version: 2
+osvbng_version: 0.14.0
+min_compatible_version: 0.13.0
+previous_version: 0.13.0
+previous_manifest_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+type: A
+build_commit: firstboot
+artifacts:
+  - path: %s
+    source: osvbngd
+    sha256: %s
+    mode: "0755"
+    uid: -1
+    gid: -1
+    requires_restart: osvbngd
+  - path: %s
+    source: osvbngcli
+    sha256: %s
+    mode: "0755"
+    uid: -1
+    gid: -1
+    requires_restart: none
+`, h.binaryPath, sha256Hex(newOsvbngd), h.cliPath, sha256Hex(newOsvbngcli))
+	writeTarball(t, tarballDir, filepath.Base(tarballPath), []tarEntry{
+		{name: "manifest.yaml", body: []byte(manifestYAML)},
+		{name: "osvbngd", body: newOsvbngd, mode: 0o755},
+		{name: "osvbngcli", body: newOsvbngcli, mode: 0o755},
+	})
+	tarballBytes, _ := os.ReadFile(tarballPath)
+	digest := sha256.Sum256(tarballBytes)
+	sigDER, _ := ecdsa.SignASN1(rand.Reader, h.privKey, digest[:])
+	_ = os.WriteFile(tarballPath+".sig",
+		[]byte(base64.StdEncoding.EncodeToString(sigDER)+"\n"), 0o644)
+
+	h.configureSystemctlReady()
+	h.writeStateFile("ready", 1, "0.14.0")
+
+	res, err := h.runner.ApplyOne(context.Background(), tarballPath, ApplyOptions{FirstBoot: true})
+	if err != nil {
+		t.Fatalf("ApplyOne first-boot with declared prev-version: %v", err)
+	}
+	if res.JournalEndPhase != "first_boot_completed" {
+		t.Fatalf("JournalEndPhase = %q, want first_boot_completed", res.JournalEndPhase)
+	}
+}
+
+func TestRunnerApplyOneFirstBootRefusesNonFirstBootRetryAfterPartial(t *testing.T) {
+	h := newHarness(t)
+	tarball := h.buildSignedFirstBootTarball(t, "0.14.0")
+	h.configureSystemctlReady()
+	h.writeStateFile("ready", 1, "0.14.0")
+
+	// Plant a partial first-boot journal.
+	j := NewJournal(filepath.Join(h.stateRoot, "upgrade-state.json"))
+	if err := os.MkdirAll(h.stateRoot, 0o755); err != nil {
+		t.Fatalf("mkdir state root: %v", err)
+	}
+	if err := j.Write(&JournalState{
+		From:      "first-boot",
+		To:        "0.14.0",
+		Tarball:   tarball,
+		StartedAt: time.Now().UTC(),
+		Phase:     "first_boot_swapping",
+	}); err != nil {
+		t.Fatalf("plant partial first-boot journal: %v", err)
+	}
+
+	// A non-firstboot retry must be refused by the partial-apply guard.
+	_, err := h.runner.Apply(context.Background(), tarball)
+	if err == nil {
+		t.Fatal("Apply (non-first-boot) accepted a partial first-boot journal")
+	}
+	if !strings.Contains(err.Error(), "non-completed state") {
+		t.Fatalf("error did not flag partial-apply guard: %v", err)
+	}
+}
