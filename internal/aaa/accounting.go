@@ -11,6 +11,7 @@ import (
 
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/opdb"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
 
 // AccountingCheckpoint is the AAA-owned persisted representation of a
@@ -210,4 +211,58 @@ func (c *Component) pruneOrphanedAcctEntries(now time.Time) int {
 			"acct_session_id", s.acctSessionID)
 	}
 	return pruned
+}
+
+// applyVPPCounters folds the latest snapshot for the session's
+// dataplane interface into the persisted baseline / prior-delta scheme
+// and returns the cumulative-from-session-start values for the four
+// RADIUS accounting octet / packet attributes.
+//
+// On a counter regress (current < CurrentBaseline) the underlying VPP
+// interface has been recreated or renumbered. Pre-regress traffic is
+// folded into PriorDelta from LastReported, the new live counter
+// becomes CurrentBaseline, and the next cumulative continues from
+// LastReported without a billing dip.
+//
+// Caller must hold s.mu.
+func (s *AccountingSession) applyVPPCounters(stats *southbound.InterfaceStats) (rxBytes, txBytes, rxPackets, txPackets uint64) {
+	regressed := stats.RxBytes < s.currentBaselineInBytes ||
+		stats.TxBytes < s.currentBaselineOutBytes ||
+		stats.Rx < s.currentBaselineInPackets ||
+		stats.Tx < s.currentBaselineOutPackets
+
+	if regressed {
+		s.priorDeltaInBytes = s.lastReportedInOctets
+		s.priorDeltaOutBytes = s.lastReportedOutOctets
+		s.priorDeltaInPackets = s.lastReportedInPackets
+		s.priorDeltaOutPackets = s.lastReportedOutPackets
+
+		// VPP restart zeros the per-interface counter; the live value the
+		// stats segment is reporting was accumulated from a fresh start.
+		// Anchoring the new baseline at zero lets the next interim continue
+		// from LastReported + current rather than stalling at LastReported
+		// until the dataplane re-crosses the pre-regress level.
+		s.currentBaselineInBytes = 0
+		s.currentBaselineOutBytes = 0
+		s.currentBaselineInPackets = 0
+		s.currentBaselineOutPackets = 0
+	}
+
+	rxBytes = (stats.RxBytes - s.currentBaselineInBytes) + s.priorDeltaInBytes
+	txBytes = (stats.TxBytes - s.currentBaselineOutBytes) + s.priorDeltaOutBytes
+	rxPackets = (stats.Rx - s.currentBaselineInPackets) + s.priorDeltaInPackets
+	txPackets = (stats.Tx - s.currentBaselineOutPackets) + s.priorDeltaOutPackets
+	return
+}
+
+// advanceLastReported records that the billing server has acknowledged
+// these cumulative values, so subsequent rebaseline branches preserve
+// them.
+//
+// Caller must hold s.mu.
+func (s *AccountingSession) advanceLastReported(rxBytes, txBytes, rxPackets, txPackets uint64) {
+	s.lastReportedInOctets = rxBytes
+	s.lastReportedOutOctets = txBytes
+	s.lastReportedInPackets = rxPackets
+	s.lastReportedOutPackets = txPackets
 }

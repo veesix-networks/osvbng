@@ -2,17 +2,22 @@ package aaa
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/auth"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/events"
+	"github.com/veesix-networks/osvbng/pkg/handlers/show/paths"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/provider"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
 
 type noopAuthProvider struct{}
@@ -229,5 +234,392 @@ func TestHandleSessionLifecycleNoDuplicateOnRepublish(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("expected session in exactly 1 bucket across 5 republishes, got %d entries; buckets=%+v", count, c.buckets)
+	}
+}
+
+type stubShowSource struct {
+	mu     sync.Mutex
+	calls  int32
+	result []southbound.InterfaceStats
+	err    error
+}
+
+func (s *stubShowSource) Snapshot(_ context.Context, path string) (any, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	atomic.AddInt32(&s.calls, 1)
+	if path != paths.SystemDataplaneInterfaces.String() {
+		return nil, errors.New("unexpected path")
+	}
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.result, nil
+}
+
+type recordingAuthProvider struct {
+	mu          sync.Mutex
+	lastSession auth.Session
+	lastKind    string
+	updateErr   error
+}
+
+func (*recordingAuthProvider) Info() provider.Info { return provider.Info{} }
+func (*recordingAuthProvider) Authenticate(context.Context, *auth.AuthRequest) (*auth.AuthResponse, error) {
+	return &auth.AuthResponse{}, nil
+}
+func (p *recordingAuthProvider) StartAccounting(_ context.Context, s *auth.Session) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.lastSession = *s
+	p.lastKind = "start"
+	return nil
+}
+func (p *recordingAuthProvider) UpdateAccounting(_ context.Context, s *auth.Session) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.lastSession = *s
+	p.lastKind = "update"
+	return p.updateErr
+}
+func (p *recordingAuthProvider) StopAccounting(_ context.Context, s *auth.Session) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.lastSession = *s
+	p.lastKind = "stop"
+	return nil
+}
+
+func (p *recordingAuthProvider) waitFor(t *testing.T, kind string) {
+	t.Helper()
+	for i := 0; i < 200; i++ {
+		p.mu.Lock()
+		got := p.lastKind
+		p.mu.Unlock()
+		if got == kind {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("auth provider never saw %q", kind)
+}
+
+func TestApplyVPPCountersFreshSession(t *testing.T) {
+	s := &AccountingSession{}
+	stats := &southbound.InterfaceStats{RxBytes: 1_000_000, TxBytes: 500_000, Rx: 800, Tx: 400}
+	rxB, txB, rxP, txP := s.applyVPPCounters(stats)
+
+	if rxB != 1_000_000 || txB != 500_000 || rxP != 800 || txP != 400 {
+		t.Fatalf("fresh session cumulative wrong: got (%d, %d, %d, %d)", rxB, txB, rxP, txP)
+	}
+}
+
+func TestApplyVPPCountersSteadyAdvance(t *testing.T) {
+	s := &AccountingSession{
+		lastReportedInOctets:  1_000_000,
+		lastReportedOutOctets: 500_000,
+	}
+	stats := &southbound.InterfaceStats{RxBytes: 2_500_000, TxBytes: 1_300_000, Rx: 2_000, Tx: 1_000}
+	rxB, txB, _, _ := s.applyVPPCounters(stats)
+
+	if rxB != 2_500_000 || txB != 1_300_000 {
+		t.Fatalf("steady advance wrong: got (%d, %d)", rxB, txB)
+	}
+}
+
+func TestApplyVPPCountersRebaselineOnRegress(t *testing.T) {
+	s := &AccountingSession{
+		currentBaselineInBytes:    10_000_000,
+		currentBaselineOutBytes:   5_000_000,
+		currentBaselineInPackets:  10_000,
+		currentBaselineOutPackets: 5_000,
+
+		lastReportedInOctets:   11_000_000,
+		lastReportedOutOctets:  5_500_000,
+		lastReportedInPackets:  10_500,
+		lastReportedOutPackets: 5_200,
+	}
+	stats := &southbound.InterfaceStats{RxBytes: 200, TxBytes: 100, Rx: 5, Tx: 3}
+	rxB, txB, rxP, txP := s.applyVPPCounters(stats)
+
+	if rxB != 11_000_200 {
+		t.Fatalf("rebaseline RxBytes wrong: got %d, want 11_000_200", rxB)
+	}
+	if txB != 5_500_100 {
+		t.Fatalf("rebaseline TxBytes wrong: got %d, want 5_500_100", txB)
+	}
+	if rxP != 10_505 {
+		t.Fatalf("rebaseline RxPackets wrong: got %d, want 10_505", rxP)
+	}
+	if txP != 5_203 {
+		t.Fatalf("rebaseline TxPackets wrong: got %d, want 5_203", txP)
+	}
+	if s.priorDeltaInBytes != 11_000_000 {
+		t.Fatalf("priorDelta after rebaseline wrong: got %d, want 11_000_000", s.priorDeltaInBytes)
+	}
+	if s.currentBaselineInBytes != 0 {
+		t.Fatalf("baseline after rebaseline wrong: got %d, want 0", s.currentBaselineInBytes)
+	}
+}
+
+func TestApplyVPPCountersFreshAfterRebaseline(t *testing.T) {
+	s := &AccountingSession{
+		priorDeltaInBytes:    11_000_000,
+		priorDeltaOutBytes:   5_500_000,
+		priorDeltaInPackets:  10_500,
+		priorDeltaOutPackets: 5_200,
+		lastReportedInOctets: 11_000_200,
+	}
+	stats := &southbound.InterfaceStats{RxBytes: 500_000, TxBytes: 250_000, Rx: 400, Tx: 200}
+	rxB, txB, rxP, txP := s.applyVPPCounters(stats)
+
+	if rxB != 11_500_000 {
+		t.Fatalf("post-rebaseline RxBytes wrong: got %d, want 11_500_000", rxB)
+	}
+	if txB != 5_750_000 {
+		t.Fatalf("post-rebaseline TxBytes wrong: got %d, want 5_750_000", txB)
+	}
+	if rxP != 10_900 {
+		t.Fatalf("post-rebaseline RxPackets wrong: got %d, want 10_900", rxP)
+	}
+	if txP != 5_400 {
+		t.Fatalf("post-rebaseline TxPackets wrong: got %d, want 5_400", txP)
+	}
+}
+
+func TestApplyVPPCountersGigawordsBoundary(t *testing.T) {
+	const gigawordBoundary = uint64(1) << 32
+	s := &AccountingSession{}
+	stats := &southbound.InterfaceStats{RxBytes: gigawordBoundary + 12_345}
+	rxB, _, _, _ := s.applyVPPCounters(stats)
+
+	if rxB != gigawordBoundary+12_345 {
+		t.Fatalf("gigawords boundary RxBytes wrong: got %d, want %d", rxB, gigawordBoundary+12_345)
+	}
+	if rxB>>32 != 1 {
+		t.Fatalf("expected cumulative to cross 2^32, got %d (high32=%d)", rxB, rxB>>32)
+	}
+}
+
+func TestAdvanceLastReported(t *testing.T) {
+	s := &AccountingSession{}
+	s.advanceLastReported(1_234_567, 8_910_111, 2_222, 3_333)
+
+	if s.lastReportedInOctets != 1_234_567 || s.lastReportedOutOctets != 8_910_111 {
+		t.Fatalf("advanceLastReported did not record octets: %+v", s)
+	}
+	if s.lastReportedInPackets != 2_222 || s.lastReportedOutPackets != 3_333 {
+		t.Fatalf("advanceLastReported did not record packets: %+v", s)
+	}
+}
+
+func newCounterTestComponent(t *testing.T, ap auth.AuthProvider, ss component.ShowSource) *Component {
+	t.Helper()
+	base := component.NewBase("aaa-test")
+	base.StartContext(context.Background())
+	t.Cleanup(base.StopContext)
+	return &Component{
+		Base:         base,
+		logger:       logger.NewTest(),
+		authProvider: ap,
+		showSource:   ss,
+		buckets:      make(map[int][]string),
+		acctCache:    make(map[string]*AccountingSession),
+	}
+}
+
+func TestSendAccountingUpdatePopulatesCumulative(t *testing.T) {
+	ap := &recordingAuthProvider{}
+	ss := &stubShowSource{result: []southbound.InterfaceStats{
+		{Index: 42, Name: "ipoe_session0", RxBytes: 1_500_000, TxBytes: 700_000, Rx: 1_200, Tx: 600},
+	}}
+	c := newCounterTestComponent(t, ap, ss)
+
+	acctSess := &AccountingSession{
+		sessionID:     "abc",
+		acctSessionID: "acct-abc",
+		username:      "alice",
+		mac:           "02:00:00:00:00:01",
+		authDate:      time.Now().Add(-30 * time.Second),
+		swIfIndex:     42,
+		attributes:    map[string]string{},
+	}
+	c.acctCache[acctSess.sessionID] = acctSess
+	c.placeSessionInBucket(acctSess.sessionID)
+
+	bucketId := bucketForSession(acctSess.sessionID)
+	c.ProcessAccountingBucket(bucketId)
+
+	ap.waitFor(t, "update")
+
+	ap.mu.Lock()
+	defer ap.mu.Unlock()
+	if ap.lastKind != "update" {
+		t.Fatalf("UpdateAccounting was not called: lastKind=%q", ap.lastKind)
+	}
+	if ap.lastSession.RxBytes != 1_500_000 || ap.lastSession.TxBytes != 700_000 {
+		t.Fatalf("auth.Session bytes wrong: got Rx=%d Tx=%d", ap.lastSession.RxBytes, ap.lastSession.TxBytes)
+	}
+	if ap.lastSession.RxPackets != 1_200 || ap.lastSession.TxPackets != 600 {
+		t.Fatalf("auth.Session packets wrong: got Rx=%d Tx=%d", ap.lastSession.RxPackets, ap.lastSession.TxPackets)
+	}
+}
+
+func TestSendAccountingUpdateSnapshotErrorEmitsLastReported(t *testing.T) {
+	ap := &recordingAuthProvider{}
+	ss := &stubShowSource{err: errors.New("stats segment unavailable")}
+	c := newCounterTestComponent(t, ap, ss)
+
+	acctSess := &AccountingSession{
+		sessionID:              "abc",
+		swIfIndex:              42,
+		authDate:               time.Now(),
+		lastReportedInOctets:   7_000_000,
+		lastReportedOutOctets:  3_500_000,
+		lastReportedInPackets:  5_000,
+		lastReportedOutPackets: 2_500,
+	}
+	c.acctCache[acctSess.sessionID] = acctSess
+	c.placeSessionInBucket(acctSess.sessionID)
+
+	c.ProcessAccountingBucket(bucketForSession(acctSess.sessionID))
+	ap.waitFor(t, "update")
+
+	ap.mu.Lock()
+	defer ap.mu.Unlock()
+	if ap.lastSession.RxBytes != 7_000_000 || ap.lastSession.TxBytes != 3_500_000 {
+		t.Fatalf("snapshot-error fallback wrong: got Rx=%d Tx=%d", ap.lastSession.RxBytes, ap.lastSession.TxBytes)
+	}
+	if ap.lastSession.RxPackets != 5_000 || ap.lastSession.TxPackets != 2_500 {
+		t.Fatalf("snapshot-error packets fallback wrong: got Rx=%d Tx=%d", ap.lastSession.RxPackets, ap.lastSession.TxPackets)
+	}
+}
+
+func TestSendAccountingUpdateMissingIfIndexEmitsLastReported(t *testing.T) {
+	ap := &recordingAuthProvider{}
+	ss := &stubShowSource{result: []southbound.InterfaceStats{
+		{Index: 7, Name: "unrelated"},
+	}}
+	c := newCounterTestComponent(t, ap, ss)
+
+	acctSess := &AccountingSession{
+		sessionID:             "abc",
+		swIfIndex:             42,
+		authDate:              time.Now(),
+		lastReportedInOctets:  7_000_000,
+		lastReportedOutOctets: 3_500_000,
+	}
+	c.acctCache[acctSess.sessionID] = acctSess
+	c.placeSessionInBucket(acctSess.sessionID)
+
+	c.ProcessAccountingBucket(bucketForSession(acctSess.sessionID))
+	ap.waitFor(t, "update")
+
+	ap.mu.Lock()
+	defer ap.mu.Unlock()
+	if ap.lastSession.RxBytes != 7_000_000 || ap.lastSession.TxBytes != 3_500_000 {
+		t.Fatalf("missing-ifIndex fallback wrong: got Rx=%d Tx=%d", ap.lastSession.RxBytes, ap.lastSession.TxBytes)
+	}
+}
+
+func TestSendAccountingUpdateAdvancesLastReportedOnSuccess(t *testing.T) {
+	ap := &recordingAuthProvider{}
+	ss := &stubShowSource{result: []southbound.InterfaceStats{
+		{Index: 42, RxBytes: 2_000_000, TxBytes: 1_000_000, Rx: 1_500, Tx: 800},
+	}}
+	c := newCounterTestComponent(t, ap, ss)
+
+	acctSess := &AccountingSession{sessionID: "abc", swIfIndex: 42, authDate: time.Now()}
+	c.acctCache[acctSess.sessionID] = acctSess
+	c.placeSessionInBucket(acctSess.sessionID)
+
+	c.ProcessAccountingBucket(bucketForSession(acctSess.sessionID))
+	ap.waitFor(t, "update")
+
+	acctSess.mu.Lock()
+	defer acctSess.mu.Unlock()
+	if acctSess.lastReportedInOctets != 2_000_000 || acctSess.lastReportedOutOctets != 1_000_000 {
+		t.Fatalf("LastReported did not advance: %+v", acctSess)
+	}
+}
+
+func TestSendAccountingUpdateDoesNotAdvanceOnError(t *testing.T) {
+	ap := &recordingAuthProvider{updateErr: errors.New("transport timeout")}
+	ss := &stubShowSource{result: []southbound.InterfaceStats{
+		{Index: 42, RxBytes: 2_000_000, TxBytes: 1_000_000},
+	}}
+	c := newCounterTestComponent(t, ap, ss)
+
+	acctSess := &AccountingSession{sessionID: "abc", swIfIndex: 42, authDate: time.Now()}
+	c.acctCache[acctSess.sessionID] = acctSess
+	c.placeSessionInBucket(acctSess.sessionID)
+
+	c.ProcessAccountingBucket(bucketForSession(acctSess.sessionID))
+	ap.waitFor(t, "update")
+
+	acctSess.mu.Lock()
+	defer acctSess.mu.Unlock()
+	if acctSess.lastReportedInOctets != 0 {
+		t.Fatalf("LastReported advanced despite error: %d", acctSess.lastReportedInOctets)
+	}
+}
+
+func TestHandleSessionReleaseEmitsFinalCumulative(t *testing.T) {
+	ap := &recordingAuthProvider{}
+	ss := &stubShowSource{result: []southbound.InterfaceStats{
+		{Index: 42, RxBytes: 9_000_000, TxBytes: 4_000_000, Rx: 6_000, Tx: 3_000},
+	}}
+	c := newCounterTestComponent(t, ap, ss)
+
+	acctSess := &AccountingSession{
+		sessionID: "abc", swIfIndex: 42,
+		authDate: time.Now().Add(-1 * time.Minute),
+	}
+	c.acctCache[acctSess.sessionID] = acctSess
+	c.placeSessionInBucket(acctSess.sessionID)
+
+	if err := c.handleSessionRelease("abc", "alice", "02:00:00:00:00:01", "acct-abc", nil); err != nil {
+		t.Fatalf("handleSessionRelease: %v", err)
+	}
+	ap.waitFor(t, "stop")
+
+	ap.mu.Lock()
+	defer ap.mu.Unlock()
+	if ap.lastKind != "stop" {
+		t.Fatalf("StopAccounting was not called: lastKind=%q", ap.lastKind)
+	}
+	if ap.lastSession.RxBytes != 9_000_000 || ap.lastSession.TxBytes != 4_000_000 {
+		t.Fatalf("Acct-Stop bytes wrong: got Rx=%d Tx=%d", ap.lastSession.RxBytes, ap.lastSession.TxBytes)
+	}
+	if ap.lastSession.RxPackets != 6_000 || ap.lastSession.TxPackets != 3_000 {
+		t.Fatalf("Acct-Stop packets wrong: got Rx=%d Tx=%d", ap.lastSession.RxPackets, ap.lastSession.TxPackets)
+	}
+}
+
+func TestHandleSessionLifecycleAcctStartCarriesZeros(t *testing.T) {
+	ap := &recordingAuthProvider{}
+	c := newCounterTestComponent(t, ap, nil)
+
+	ts := createTestSession("abc", time.Now(), "02:00:00:00:00:01", "10.1.0.2")
+	c.handleSessionLifecycle(events.Event{
+		Timestamp: ts.authTime,
+		Data: &events.SessionLifecycleEvent{
+			AccessType: models.AccessTypeIPoE,
+			Protocol:   models.ProtocolDHCPv4,
+			SessionID:  ts.sessionID,
+			State:      ts.session.State,
+			Session:    ts.session,
+		},
+	})
+	ap.waitFor(t, "start")
+
+	ap.mu.Lock()
+	defer ap.mu.Unlock()
+	if ap.lastKind != "start" {
+		t.Fatalf("StartAccounting was not called: lastKind=%q", ap.lastKind)
+	}
+	if ap.lastSession.RxBytes != 0 || ap.lastSession.TxBytes != 0 ||
+		ap.lastSession.RxPackets != 0 || ap.lastSession.TxPackets != 0 {
+		t.Fatalf("Acct-Start must carry zero counters, got %+v", ap.lastSession)
 	}
 }
