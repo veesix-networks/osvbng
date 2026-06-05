@@ -198,3 +198,108 @@ can then take over.
   and `/var/opt/osvbng/rollback/<version>/`
 - Runtime state file: `/run/osvbng/state` (daemon writes; upgrade
   health-poll reads).
+
+## Manifest schema v2
+
+Releases from v0.14.0 onwards ship manifest schema v2. Each artifact
+declares its own restart class, so the runner derives the per-apply
+restart plan from the manifest instead of guessing from path prefixes.
+
+```yaml
+schema_version: 2
+osvbng_version: 0.14.0
+min_compatible_version: 0.13.0
+previous_version: 0.13.1
+previous_manifest_sha256: <hex>
+type: A
+artifacts:
+  - path: /usr/local/bin/osvbngd
+    source: bin/osvbngd
+    sha256: <hex>
+    mode: "0755"
+    uid: 0
+    gid: 0
+    requires_restart: osvbngd
+  - path: /usr/lib/x86_64-linux-gnu/vpp_plugins/osvbng_cgnat_plugin.so
+    source: test-infra/vpp-plugins/osvbng_cgnat_plugin.so
+    sha256: <hex>
+    mode: "0644"
+    uid: 0
+    gid: 0
+    requires_restart: vpp
+hooks:
+  pre:
+    path: pre.sh
+    sha256: <hex>
+```
+
+`requires_restart` is one of `osvbngd`, `vpp`, `both`, or `none`. Every
+v2 apply restarts `osvbngd` regardless (the always-stop invariant the
+journal and rollback contracts depend on); the field is informational
+in that case. A `vpp` or `both` value triggers an
+`osvbng-config.service` rerun followed by `vpp.service` restart, in
+that order, so the dataplane re-reads any new templates before VPP
+re-attaches its plugins.
+
+## Stepwise enforcement
+
+A v2 tarball that declares `previous_version` ships its predecessor's
+manifest bundled at `prev/manifest.yaml` plus the matching detached
+signature at `prev/manifest.yaml.sig`. Apply refuses unless:
+
+1. `prev/manifest.yaml` is present, signed by the same trust anchor as
+   the outer tarball.
+2. The on-disk SHA256 of `prev/manifest.yaml` matches the outer
+   manifest's `previous_manifest_sha256`.
+3. The currently installed version equals the outer manifest's
+   `previous_version`.
+
+The first failed condition aborts the apply with a clear "stepwise
+upgrade required: install vX first" message. A multi-step jump is the
+operator's responsibility: apply intermediate tarballs in sequence.
+
+## New flags on `upgrade apply`
+
+```
+osvbngcli> upgrade apply [--first-boot] [--force-retry] <tarball>
+```
+
+- `--first-boot` is set ONLY by `osvbng-firstboot.service` on a freshly
+  imaged box. It skips prev-manifest verification, skips the
+  current-version discovery (the binary does not exist yet at first
+  boot), skips snapshot creation, and writes a separate
+  `first_boot_*` journal phase chain. Operators do not run this flag
+  manually outside lab work.
+- `--force-retry` overrides the partial-apply guard. The guard normally
+  refuses to start a new apply when the previous one ended at a
+  non-completed phase, because doing so would erase the only viable
+  rollback to N-1. Use `--force-retry` only after investigating
+  `/var/opt/osvbng/upgrade-state.json` and deciding the partial state
+  is safe to discard — for example, when the prior failure happened
+  during the post-swap health window and `upgrade rollback` already
+  ran successfully but the journal terminal phase was not written.
+
+## `oper system reload`
+
+A new operator-driven subcommand re-renders templates from
+`/usr/share/osvbng/templates/` and pushes the result into FRR via
+`frr-reload`. Use it after a sanctioned template edit in a lab — the
+upgrade flow does NOT call this; `upgrade apply` swaps templates and
+restarts the daemon, which renders templates naturally during start.
+
+```
+osvbngcli> oper system reload
+```
+
+Blast radius is equivalent to a `commit` of running config: FRR sees a
+new config and applies it. Dataplane templates are explicitly NOT
+handled by this subcommand — `dataplane.conf.tmpl` changes need a VPP
+restart, which the upgrade flow provides when an artifact declares
+`requires_restart: vpp`.
+
+## v1-line operability
+
+There is no v1-line operability path; deployments before v0.14.0 were
+internal lab installs. Boxes installed against an early Tier A build
+should be re-imaged from the v2 packer image rather than upgraded in
+place.
