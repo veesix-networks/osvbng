@@ -15,37 +15,39 @@ import (
 )
 
 // TierA is the only tier handled by this implementation. Tarballs declaring
-// any other tier value are refused early in the apply flow. The constant is
-// exported so callers and tests can reference the canonical value.
+// any other tier value are refused early in the apply flow.
 const TierA = "A"
 
-// ManifestVersion is the schema version this build understands. Manifests
-// claiming a higher version are refused: a forward-incompatible change must
-// bump this constant in the build that supports it.
-const ManifestVersion = 1
+// ManifestSchemaVersion is the manifest grammar this build understands.
+// A manifest declaring a higher value is refused; a manifest declaring a
+// lower value is refused.
+const ManifestSchemaVersion = 2
 
 // Manifest describes the contents of a signed osvbng release tarball.
-// Only the Tier-A subset of fields is decoded here. Tier-B fields
-// (deb_packages, dpkg_baseline) are listed in tierBForbiddenKeys and cause
-// strict decoding to fail with a clear error directing the operator to the
-// Tier-B handler (separate spec).
+// Tier-B fields (deb_packages, dpkg_baseline) are listed in
+// tierBForbiddenKeys and cause strict decoding to fail with a clear
+// error directing the operator to the Tier-B handler (separate spec).
 type Manifest struct {
-	OsvbngVersion        string             `yaml:"osvbng_version"`
-	MinCompatibleVersion string             `yaml:"min_compatible_version"`
-	Type                 string             `yaml:"type"`
-	BuildDate            time.Time          `yaml:"build_date"`
-	BuildCommit          string             `yaml:"build_commit"`
-	Artifacts            []ManifestArtifact `yaml:"artifacts"`
-	Hooks                ManifestHooks      `yaml:"hooks,omitempty"`
-	EstimatedOutageSec   int                `yaml:"estimated_outage_seconds,omitempty"`
-	RequiresReboot       bool               `yaml:"requires_reboot,omitempty"`
+	SchemaVersion          int                `yaml:"schema_version"`
+	OsvbngVersion          string             `yaml:"osvbng_version"`
+	MinCompatibleVersion   string             `yaml:"min_compatible_version"`
+	PreviousVersion        string             `yaml:"previous_version,omitempty"`
+	PreviousManifestSHA256 string             `yaml:"previous_manifest_sha256,omitempty"`
+	Type                   string             `yaml:"type"`
+	BuildDate              time.Time          `yaml:"build_date"`
+	BuildCommit            string             `yaml:"build_commit"`
+	Artifacts              []ManifestArtifact `yaml:"artifacts"`
+	Hooks                  ManifestHooks      `yaml:"hooks,omitempty"`
+	EstimatedOutageSec     int                `yaml:"estimated_outage_seconds,omitempty"`
 }
 
 // ManifestArtifact describes a single file the tarball will install.
-// expected_current_sha256 is optional: when set, drift detection warns
-// if the on-disk file no longer matches the expected pre-upgrade hash
-// (the apply continues anyway — the rollback snapshot preserves the
-// drifted bytes for forensics).
+// RequiresRestart is mandatory and drives the aggregate restart plan
+// (see RestartPlan / planFromManifest). expected_current_sha256 is
+// optional drift-detection: when set, the runner warns if the on-disk
+// file no longer matches the expected pre-upgrade hash (the apply
+// continues anyway — the rollback snapshot preserves the drifted bytes
+// for forensics).
 type ManifestArtifact struct {
 	Path                  string `yaml:"path"`
 	Source                string `yaml:"source"`
@@ -54,14 +56,33 @@ type ManifestArtifact struct {
 	Mode                  string `yaml:"mode,omitempty"`
 	UID                   int    `yaml:"uid,omitempty"`
 	GID                   int    `yaml:"gid,omitempty"`
+	RequiresRestart       string `yaml:"requires_restart"`
 }
 
-// ManifestHooks names optional pre/post scripts inside the tarball
-// (relative paths under the staged extraction directory). Empty values
-// disable the hook stage.
+// ManifestHooks names optional pre/post scripts inside the tarball.
+// Empty path disables that hook.
 type ManifestHooks struct {
-	Pre  string `yaml:"pre,omitempty"`
-	Post string `yaml:"post,omitempty"`
+	Pre  HookEntry `yaml:"pre,omitempty"`
+	Post HookEntry `yaml:"post,omitempty"`
+}
+
+// HookEntry is a hook script reference: relative path + expected sha256.
+// The runner cross-checks the on-disk hash against SHA256 immediately
+// before exec; mismatch is a hard error.
+type HookEntry struct {
+	Path   string `yaml:"path,omitempty"`
+	SHA256 string `yaml:"sha256,omitempty"`
+}
+
+// validRestartClasses is the closed enum permitted for
+// artifacts[].requires_restart. KnownFields(true) at decode time catches
+// unknown YAML KEYS, not bad enum VALUES — Validate is the load-bearing
+// guard against a typo silently under-restarting the system.
+var validRestartClasses = map[string]bool{
+	"osvbngd": true,
+	"vpp":     true,
+	"both":    true,
+	"none":    true,
 }
 
 // tierBForbiddenKeys are top-level manifest keys reserved for the Tier-B
@@ -84,7 +105,6 @@ func ParseManifestFile(path string) (*Manifest, error) {
 
 // ParseManifest decodes manifest YAML with strict field handling and the
 // Tier-B forbidden-fields guard, then runs structural validation.
-// Returns a fully validated Manifest ready for use by the apply flow.
 //
 // Strict decoding (KnownFields(true)) means unknown top-level or
 // artifact-level fields are hard errors: a typo'd field name fails fast
@@ -119,8 +139,8 @@ func (m *Manifest) Validate() error {
 		return fmt.Errorf("manifest: this build handles tier %q only; tarball declares tier %q (apt-bundle path is handled by a separate, later release)", TierA, m.Type)
 	}
 
-	if m.RequiresReboot {
-		return fmt.Errorf("manifest: requires_reboot=true is a Tier-B signal; Tier A is for non-reboot upgrades only")
+	if m.SchemaVersion != ManifestSchemaVersion {
+		return fmt.Errorf("manifest: schema_version=%d is not supported (this build accepts schema_version=%d only)", m.SchemaVersion, ManifestSchemaVersion)
 	}
 
 	if m.OsvbngVersion == "" {
@@ -151,6 +171,12 @@ func (m *Manifest) Validate() error {
 			return fmt.Errorf("manifest: artifact[%d] (%s) is a duplicate path", i, art.Path)
 		}
 		seen[art.Path] = true
+		if art.RequiresRestart == "" {
+			return fmt.Errorf("manifest: artifact[%d] (%s) requires_restart is empty (must be one of: osvbngd, vpp, both, none)", i, art.Path)
+		}
+		if !validRestartClasses[art.RequiresRestart] {
+			return fmt.Errorf("manifest: artifact[%d] (%s) requires_restart=%q is not a valid value (must be one of: osvbngd, vpp, both, none)", i, art.Path, art.RequiresRestart)
+		}
 	}
 
 	return nil

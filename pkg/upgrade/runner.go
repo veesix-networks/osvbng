@@ -76,7 +76,6 @@ type PlanResult struct {
 	Tier               string
 	Artifacts          []ManifestArtifact
 	EstimatedOutageSec int
-	RequiresReboot     bool
 	DriftFindings      []DriftFinding
 	RollbackAvailable  bool
 }
@@ -145,7 +144,6 @@ func (r *Runner) Plan(ctx context.Context, tarballPath string) (*PlanResult, err
 		Tier:               staging.Manifest.Type,
 		Artifacts:          staging.Manifest.Artifacts,
 		EstimatedOutageSec: staging.Manifest.EstimatedOutageSec,
-		RequiresReboot:     staging.Manifest.RequiresReboot,
 		DriftFindings:      drift,
 		RollbackAvailable:  rbAvail,
 	}, nil
@@ -233,7 +231,7 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 	r.Reporter.Progress(snapDir)
 
 	r.Reporter.Stage(6, totalStages, "Pre-apply hook")
-	if err := r.runHook(ctx, staging.Dir, manifest.Hooks.Pre, from, manifest.OsvbngVersion); err != nil {
+	if err := r.runHook(ctx, staging.Dir, manifest.Hooks.Pre.Path, from, manifest.OsvbngVersion); err != nil {
 		return nil, fmt.Errorf("pre-apply hook: %w", err)
 	}
 	if err := journal.SetPhase("pre_hook_done"); err != nil {
@@ -321,7 +319,7 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 	}
 
 	r.Reporter.Stage(14, totalStages, "Post-apply hook")
-	if err := r.runHook(ctx, staging.Dir, manifest.Hooks.Post, from, manifest.OsvbngVersion); err != nil {
+	if err := r.runHook(ctx, staging.Dir, manifest.Hooks.Post.Path, from, manifest.OsvbngVersion); err != nil {
 		r.Reporter.Warn(fmt.Sprintf("post-apply hook returned non-zero (apply itself succeeded): %v", err))
 	}
 

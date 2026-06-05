@@ -125,7 +125,8 @@ func newHarness(t *testing.T) *testHarness {
 // discovery doesn't depend on a real osvbngd binary being executable.
 func (h *testHarness) plantFromVersion(version string) {
 	h.t.Helper()
-	manifestYAML := fmt.Sprintf(`osvbng_version: %s
+	manifestYAML := fmt.Sprintf(`schema_version: 2
+osvbng_version: %s
 min_compatible_version: 0.0.0
 type: A
 build_commit: planted
@@ -134,6 +135,7 @@ artifacts:
     source: osvbngd
     sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
     mode: "0755"
+    requires_restart: osvbngd
 `, version, h.binaryPath)
 	if err := os.MkdirAll(h.stateRoot, 0o755); err != nil {
 		h.t.Fatalf("mkdir state root: %v", err)
@@ -170,7 +172,8 @@ func (h *testHarness) buildSignedTarball(t *testing.T, fromVersion, toVersion st
 	// uid/gid set to -1 so tests run as a non-root user; production
 	// manifests use 0/0 (root) but the swap layer skips the chown
 	// when uid == -1.
-	manifestYAML := fmt.Sprintf(`osvbng_version: %s
+	manifestYAML := fmt.Sprintf(`schema_version: 2
+osvbng_version: %s
 min_compatible_version: %s
 type: A
 build_commit: testabc
@@ -181,12 +184,14 @@ artifacts:
     mode: "0755"
     uid: -1
     gid: -1
+    requires_restart: osvbngd
   - path: %s
     source: osvbngcli
     sha256: %s
     mode: "0755"
     uid: -1
     gid: -1
+    requires_restart: none
 `,
 		toVersion,
 		fromVersion,
@@ -224,7 +229,8 @@ func (h *testHarness) buildSignedTarballWithPlugin(t *testing.T, fromVersion, to
 	newOsvbngcli := []byte("NEW-osvbngcli-" + toVersion)
 	newPlugin := []byte("NEW-plugin-" + toVersion)
 
-	manifestYAML := fmt.Sprintf(`osvbng_version: %s
+	manifestYAML := fmt.Sprintf(`schema_version: 2
+osvbng_version: %s
 min_compatible_version: %s
 type: A
 build_commit: testabc
@@ -235,18 +241,21 @@ artifacts:
     mode: "0755"
     uid: -1
     gid: -1
+    requires_restart: osvbngd
   - path: %s
     source: osvbngcli
     sha256: %s
     mode: "0755"
     uid: -1
     gid: -1
+    requires_restart: none
   - path: %s
     source: plugins/osvbng_ipoe_plugin.so
     sha256: %s
     mode: "0644"
     uid: -1
     gid: -1
+    requires_restart: vpp
 `,
 		toVersion, fromVersion,
 		h.binaryPath, sha256Hex(newOsvbngd),
@@ -491,7 +500,8 @@ func TestRunnerApplyRefusesWhenChainExpectedFromMismatch(t *testing.T) {
 
 	// Plant a current-manifest declaring 0.99.0 — ApplyOne's
 	// ExpectedFrom=0.13.0 will not match.
-	planted := fmt.Sprintf(`osvbng_version: 0.99.0
+	planted := fmt.Sprintf(`schema_version: 2
+osvbng_version: 0.99.0
 min_compatible_version: 0.0.1
 type: A
 build_commit: x
@@ -500,6 +510,7 @@ artifacts:
     source: osvbngd
     sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
     mode: "0755"
+    requires_restart: osvbngd
 `, h.binaryPath)
 	if err := os.WriteFile(filepath.Join(h.stateRoot, "current-manifest.yaml"), []byte(planted), 0o644); err != nil {
 		t.Fatalf("plant current-manifest: %v", err)

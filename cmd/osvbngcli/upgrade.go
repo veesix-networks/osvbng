@@ -168,7 +168,6 @@ func renderPlan(p *upgrade.PlanResult) {
 	fmt.Printf("From version:          %s\n", versionOrUnknown(p.From))
 	fmt.Printf("To version:            %s\n", p.To)
 	fmt.Printf("Estimated outage:      %ds\n", p.EstimatedOutageSec)
-	fmt.Printf("Requires reboot:       %v\n", p.RequiresReboot)
 	fmt.Printf("Rollback available:    %v\n", p.RollbackAvailable)
 	fmt.Println()
 	fmt.Printf("Artifacts changing (%d):\n", len(p.Artifacts))
