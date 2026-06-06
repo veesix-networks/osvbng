@@ -63,6 +63,7 @@ User=root
 Group=osvbng
 RuntimeDirectory=osvbng
 RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
 ExecStart=/usr/local/bin/osvbngd -config /etc/osvbng/osvbng.yaml
 Restart=on-failure
 RestartSec=5

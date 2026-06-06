@@ -131,7 +131,7 @@ func (s *Supervisor) SuspendAutoRestart(ctx context.Context) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}
-	conf := []byte("[Service]\nRestart=no\n")
+	conf := []byte("[Service]\nRestart=no\nRuntimeDirectoryPreserve=yes\n")
 	if err := os.WriteFile(filepath.Join(dir, "upgrade.conf"), conf, 0o644); err != nil {
 		return fmt.Errorf("write drop-in: %w", err)
 	}
