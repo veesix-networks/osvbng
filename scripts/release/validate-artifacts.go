@@ -4,17 +4,6 @@
 
 //go:build ignore
 
-// Structural validation of release/artifacts.yaml. Invoked as a PR-time
-// CI gate via `make validate-artifacts`. Refuses on:
-//
-//   - missing source on disk
-//   - duplicate install_path
-//   - invalid requires_restart enum value
-//   - bad mode string (must be a quoted octal like "0755")
-//   - dataplane.conf.tmpl wired with requires_restart != "vpp"
-//
-// Exit code 1 on any failure, with a per-finding message; exit 0 on
-// success.
 package main
 
 import (

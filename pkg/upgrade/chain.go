@@ -42,18 +42,10 @@ type ApplyOptions struct {
 	// PruneKeepN. Zero defaults to 1 (keep N-1).
 	KeepN int
 
-	// ForceRetry overrides the partial-apply entry guard. The guard
-	// refuses to overwrite a non-completed journal because doing so
-	// would destroy the only viable rollback to N-1. ForceRetry is an
-	// operator-explicit escape hatch documented as recovery-only after
-	// manual investigation of /var/opt/osvbng/upgrade-state.json.
+	// ForceRetry overrides the partial-apply guard.
 	ForceRetry bool
 
-	// FirstBoot drives the packer first-boot apply: skip prev-manifest
-	// verification, skip CurrentInstalledVersion discovery (the binary
-	// does not exist yet on a clean image), skip ExpectedFrom, skip
-	// snapshot, write a first-boot-shaped journal that flips no rollback
-	// snapshot into existence. Set ONLY by osvbng-firstboot.service.
+	// FirstBoot is set by osvbng-firstboot.service only.
 	FirstBoot bool
 }
 

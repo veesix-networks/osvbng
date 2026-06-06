@@ -216,26 +216,16 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 		}
 	}
 
-	// Stepwise enforcement: if the manifest declares previous_version,
-	// the staged tarball MUST also carry a signed prev/manifest.yaml
-	// whose hash matches previous_manifest_sha256, and the on-disk
-	// current version MUST equal previous_version. Skipped for
-	// first-boot apply (no prior install to anchor against).
 	if !opts.FirstBoot {
 		if err := r.verifyPrevManifest(staging, manifest, from); err != nil {
 			return nil, err
 		}
 	}
 
-	// Refuse to clobber a partial-apply journal: writing a fresh
-	// "started" record would erase the only viable rollback to N-1.
 	if err := r.checkPartialApply(opts); err != nil {
 		return nil, err
 	}
 
-	// Begin recording the journal as we cross irreversible boundaries.
-	// First-boot uses a separate phase namespace so the partial-apply
-	// guard distinguishes "I am mid-first-boot" from "I am mid-upgrade".
 	startPhase := "started"
 	if opts.FirstBoot {
 		startPhase = "first_boot_started"
@@ -312,13 +302,10 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 		return r.rollbackAfterFailedApply(ctx, supervisor, journal, "swap loop failure")
 	}
 
-	// VPP keeps plugins loaded in memory; a fresh .so on disk only
-	// takes effect after a VPP restart. osvbng.service is already
-	// stopped so there's no cascade to worry about. osvbng-config.service
-	// is rerun first so /etc/osvbng/dataplane.conf reflects any new
+	// osvbng-config.service runs first so dataplane.conf reflects any new
 	// templates before vpp re-reads it.
 	plan := planFromManifest(manifest)
-	_ = swapped // path list retained for journal logging; restart decision is from the manifest plan
+	_ = swapped
 	if plan.NeedsVPP {
 		r.Reporter.Progress("plugin or dataplane template changed, rerunning osvbng-config.service and restarting VPP")
 		if err := r.restartConfigService(ctx); err != nil {
@@ -454,7 +441,7 @@ func (r *Runner) Rollback(ctx context.Context) (*RollbackResult, error) {
 		return nil, err
 	}
 
-	_ = restored // path list retained for journal logging; restart decision is from the snapshot's recorded NeedsVPP
+	_ = restored
 	if meta.NeedsVPP {
 		r.Reporter.Progress("plugin or dataplane template restored, rerunning osvbng-config.service and restarting VPP")
 		if err := r.restartConfigService(ctx); err != nil {
@@ -590,11 +577,6 @@ func (r *Runner) discoverCurrentVersion(ctx context.Context) (string, error) {
 	return CurrentInstalledVersion(ctx, r.StateRoot, r.BinaryPath, r.Cmd)
 }
 
-// verifyPrevManifest enforces the v2 stepwise contract: the manifest's
-// previous_version + previous_manifest_sha256 must match a signed
-// prev/manifest.yaml inside the staged tarball AND the on-disk current
-// version. Skipped when the manifest declares no previous_version
-// (genesis tarball / first-boot path).
 func (r *Runner) verifyPrevManifest(staging *Staging, manifest *Manifest, currentVersion string) error {
 	if manifest.PreviousVersion == "" {
 		return nil
@@ -632,11 +614,8 @@ func (r *Runner) verifyPrevManifest(staging *Staging, manifest *Manifest, curren
 	return nil
 }
 
-// checkPartialApply refuses to proceed when the previous apply ended
-// at a non-completed phase. A fresh apply on top of a partial would
-// overwrite the journal's `from` field and take a snapshot of the
-// partially-swapped (corrupt) state — destroying the only rollback
-// path back to N-1. ForceRetry is the operator escape hatch.
+// checkPartialApply prevents a fresh apply from clobbering the journal
+// of a partial apply, which would lose the only rollback to N-1.
 func (r *Runner) checkPartialApply(opts ApplyOptions) error {
 	journal := NewJournal(filepath.Join(r.StateRoot, "upgrade-state.json"))
 	state, err := journal.Read()

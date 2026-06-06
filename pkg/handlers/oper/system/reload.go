@@ -46,12 +46,6 @@ func (h *SystemReloadHandler) Execute(ctx context.Context, req *oper.Request) (i
 	} else {
 		resp.ComponentsTouched = append(resp.ComponentsTouched, "frr")
 	}
-
-	// dataplane.conf changes do NOT come back through this handler —
-	// vpp.service + osvbng-config.service rerun is what activates a new
-	// dataplane.conf, and the upgrade flow already drives that when
-	// requires_restart=vpp. Surface "not-handled" so a manual caller
-	// doesn't expect us to bounce VPP.
 	resp.ComponentsTouched = append(resp.ComponentsTouched, "dataplane:not-handled")
 
 	resp.DurationMS = time.Since(start).Milliseconds()
@@ -61,19 +55,11 @@ func (h *SystemReloadHandler) Execute(ctx context.Context, req *oper.Request) (i
 	return resp, nil
 }
 
-func (h *SystemReloadHandler) PathPattern() paths.Path {
-	return paths.SystemReload
-}
-
-func (h *SystemReloadHandler) Dependencies() []paths.Path { return nil }
-
-func (h *SystemReloadHandler) InputType() interface{}  { return &SystemReloadRequest{} }
-func (h *SystemReloadHandler) OutputType() interface{} { return &SystemReloadResponse{} }
-
-func (h *SystemReloadHandler) Summary() string {
-	return "Re-render config from current templates and reload"
-}
-
+func (h *SystemReloadHandler) PathPattern() paths.Path           { return paths.SystemReload }
+func (h *SystemReloadHandler) Dependencies() []paths.Path        { return nil }
+func (h *SystemReloadHandler) InputType() interface{}            { return &SystemReloadRequest{} }
+func (h *SystemReloadHandler) OutputType() interface{}           { return &SystemReloadResponse{} }
+func (h *SystemReloadHandler) Summary() string                   { return "Re-render config from current templates and reload" }
 func (h *SystemReloadHandler) Description() string {
-	return "Re-reads templates from /usr/share/osvbng/templates/, re-renders FRR configuration, and applies it via frr-reload. Use after a sanctioned template change (e.g. an upgrade apply that swapped templates) or after manual template edits in a lab. Touches running config; treat as equivalent in blast radius to a `commit`."
+	return "Re-reads templates from /usr/share/osvbng/templates/, re-renders FRR configuration, and applies it via frr-reload."
 }

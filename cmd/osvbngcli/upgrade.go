@@ -227,16 +227,6 @@ func versionOrUnknown(s string) string {
 	return s
 }
 
-// parseApplyArgs extracts the tarball path and apply options from the
-// REPL token list. Recognised flags:
-//
-//   --first-boot   skip prev-manifest verify, skip current-version
-//                  discovery, skip snapshot. Intended for the
-//                  osvbng-firstboot.service oneshot.
-//   --force-retry  override the partial-apply guard. Recovery-only;
-//                  use after investigating /var/opt/osvbng/upgrade-state.json.
-//
-// Exactly one positional argument (the tarball path) is required.
 func parseApplyArgs(args []string) (string, upgrade.ApplyOptions, error) {
 	var opts upgrade.ApplyOptions
 	var positional []string

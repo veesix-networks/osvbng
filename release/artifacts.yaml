@@ -2,15 +2,6 @@
 # Licensed under the GNU General Public License v3.0 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# Canonical artifact source-of-truth for Tier A v2 upgrade tarballs and
-# packer first-boot installs. The builder reads this file at release
-# time to produce the on-the-wire manifest; packer reads the same set
-# (via the same builder, see scripts/qemu/packer/) at image-build time.
-#
-# Adding a new artifact: append an entry here, run `make tarball-smoke`
-# locally to confirm the builder picks it up, open a PR. Globbing
-# source directories is intentionally NOT supported — a stray .so under
-# test-infra/vpp-plugins/ must not silently ship.
 schema_version: 1
 artifacts:
   - source: bin/osvbngd

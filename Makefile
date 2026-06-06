@@ -88,16 +88,9 @@ dev-vm-sync:
 dev-vm-provision:
 	@scripts/dev/reprovision-vm.sh
 
-# Structural validation of release/artifacts.yaml: every declared
-# source must exist on disk, every install_path must be unique,
-# every requires_restart value must be in the closed enum. Runs as a
-# PR-time CI gate; safe to run locally with no side effects.
 validate-artifacts:
 	@go run ./scripts/release/validate-artifacts.go release/artifacts.yaml
 
-# Build a throwaway signed tarball against the current tree, then
-# read it back with the runner's parser to assert manifest v2
-# decodes cleanly. Catches schema drift before a release is cut.
 tarball-smoke:
 	@./scripts/release/build-test-tarball.sh \
 		-k /etc/osvbng/dev-cosign.key \

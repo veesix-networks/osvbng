@@ -14,19 +14,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TierA is the only tier handled by this implementation. Tarballs declaring
-// any other tier value are refused early in the apply flow.
-const TierA = "A"
+const (
+	TierA                 = "A"
+	ManifestSchemaVersion = 2
+)
 
-// ManifestSchemaVersion is the manifest grammar this build understands.
-// A manifest declaring a higher value is refused; a manifest declaring a
-// lower value is refused.
-const ManifestSchemaVersion = 2
-
-// Manifest describes the contents of a signed osvbng release tarball.
-// Tier-B fields (deb_packages, dpkg_baseline) are listed in
-// tierBForbiddenKeys and cause strict decoding to fail with a clear
-// error directing the operator to the Tier-B handler (separate spec).
 type Manifest struct {
 	SchemaVersion          int                `yaml:"schema_version"`
 	OsvbngVersion          string             `yaml:"osvbng_version"`
@@ -41,13 +33,6 @@ type Manifest struct {
 	EstimatedOutageSec     int                `yaml:"estimated_outage_seconds,omitempty"`
 }
 
-// ManifestArtifact describes a single file the tarball will install.
-// RequiresRestart is mandatory and drives the aggregate restart plan
-// (see RestartPlan / planFromManifest). expected_current_sha256 is
-// optional drift-detection: when set, the runner warns if the on-disk
-// file no longer matches the expected pre-upgrade hash (the apply
-// continues anyway — the rollback snapshot preserves the drifted bytes
-// for forensics).
 type ManifestArtifact struct {
 	Path                  string `yaml:"path"`
 	Source                string `yaml:"source"`
@@ -59,25 +44,19 @@ type ManifestArtifact struct {
 	RequiresRestart       string `yaml:"requires_restart"`
 }
 
-// ManifestHooks names optional pre/post scripts inside the tarball.
-// Empty path disables that hook.
 type ManifestHooks struct {
 	Pre  HookEntry `yaml:"pre,omitempty"`
 	Post HookEntry `yaml:"post,omitempty"`
 }
 
-// HookEntry is a hook script reference: relative path + expected sha256.
-// The runner cross-checks the on-disk hash against SHA256 immediately
-// before exec; mismatch is a hard error.
 type HookEntry struct {
 	Path   string `yaml:"path,omitempty"`
 	SHA256 string `yaml:"sha256,omitempty"`
 }
 
-// validRestartClasses is the closed enum permitted for
-// artifacts[].requires_restart. KnownFields(true) at decode time catches
-// unknown YAML KEYS, not bad enum VALUES — Validate is the load-bearing
-// guard against a typo silently under-restarting the system.
+// validRestartClasses is the load-bearing enum guard. KnownFields(true)
+// catches unknown keys but not bad values; a typo here would silently
+// under-restart.
 var validRestartClasses = map[string]bool{
 	"osvbngd": true,
 	"vpp":     true,
@@ -85,16 +64,11 @@ var validRestartClasses = map[string]bool{
 	"none":    true,
 }
 
-// tierBForbiddenKeys are top-level manifest keys reserved for the Tier-B
-// (apt-bundle) spec. Tier A refuses any manifest containing them, even
-// if `type: A` is declared, so a build-pipeline misconfiguration can't
-// silently produce a Tier-A tarball that ships Tier-B intent.
 var tierBForbiddenKeys = []string{
 	"deb_packages",
 	"dpkg_baseline",
 }
 
-// ParseManifestFile reads and decodes a manifest from disk.
 func ParseManifestFile(path string) (*Manifest, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -103,12 +77,6 @@ func ParseManifestFile(path string) (*Manifest, error) {
 	return ParseManifest(data)
 }
 
-// ParseManifest decodes manifest YAML with strict field handling and the
-// Tier-B forbidden-fields guard, then runs structural validation.
-//
-// Strict decoding (KnownFields(true)) means unknown top-level or
-// artifact-level fields are hard errors: a typo'd field name fails fast
-// rather than silently being ignored.
 func ParseManifest(data []byte) (*Manifest, error) {
 	if err := checkForbiddenKeys(data); err != nil {
 		return nil, err
@@ -128,15 +96,12 @@ func ParseManifest(data []byte) (*Manifest, error) {
 	return &m, nil
 }
 
-// Validate performs structural and tier-policy checks on a decoded
-// manifest. Called automatically by ParseManifest; exposed so tests can
-// exercise it directly.
 func (m *Manifest) Validate() error {
 	if m.Type == "" {
 		return fmt.Errorf("manifest: type field is required")
 	}
 	if m.Type != TierA {
-		return fmt.Errorf("manifest: this build handles tier %q only; tarball declares tier %q (apt-bundle path is handled by a separate, later release)", TierA, m.Type)
+		return fmt.Errorf("manifest: this build handles tier %q only; tarball declares tier %q", TierA, m.Type)
 	}
 
 	if m.SchemaVersion != ManifestSchemaVersion {
@@ -182,12 +147,8 @@ func (m *Manifest) Validate() error {
 	return nil
 }
 
-// checkForbiddenKeys scans the raw YAML for reserved Tier-B field names
-// before strict decoding kicks in. Without this, strict decoding's
-// "unknown field" error would surface for a Tier-B manifest fed to a
-// Tier-A build, but the message would be generic. The dedicated check
-// produces a clear "this is a Tier-B field" message that points the
-// operator at the right follow-up.
+// checkForbiddenKeys runs before strict decode so a Tier-B manifest hits
+// a tier-specific error message instead of generic "unknown field".
 func checkForbiddenKeys(data []byte) error {
 	var raw map[string]any
 	if err := yaml.Unmarshal(data, &raw); err != nil {

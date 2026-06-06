@@ -3,11 +3,6 @@
 # Licensed under the GNU General Public License v3.0 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# Build a signed Tier A upgrade tarball from the current working tree.
-# Reads release/artifacts.yaml as the artifact source-of-truth and emits
-# a v2-schema manifest. Honours SOURCE_DATE_EPOCH so two builds of the
-# same commit produce byte-identical tarballs.
-
 set -euo pipefail
 
 usage() {
@@ -93,9 +88,6 @@ VERSION="$VERSION" make build >/dev/null
 STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 
-# Walk release/artifacts.yaml, copy each source into the stage under
-# its source-relative path (so the manifest's `source:` field is
-# usable directly as the tar entry name).
 n=$(yq '.artifacts | length' "$ARTIFACTS_YAML")
 for i in $(seq 0 $((n - 1))); do
     src=$(yq -r ".artifacts[$i].source" "$ARTIFACTS_YAML")
@@ -164,7 +156,6 @@ EOF
 TARBALL="$OUTDIR/osvbng-v$VERSION.tar.gz"
 echo "==> Packing $TARBALL"
 
-# Reproducibility: fix mtime, strip uid/gid/uname/gname, sort entries.
 MTIME=${SOURCE_DATE_EPOCH:-$(stat -c %Y "$STAGE/manifest.yaml")}
 (
     cd "$STAGE"
