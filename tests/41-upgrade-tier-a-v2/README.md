@@ -117,8 +117,8 @@ repo as the canonical place to add scenarios once the unblockers land.
 
 ## CI integration
 
-This suite currently runs locally only. It needs a runner with KVM
-access; the existing self-hosted runners (`ci/self-hosted-runner`)
-host docker containers and don't expose `/dev/kvm`. A follow-up issue
-should provision a KVM-capable runner (or wire libvirt into an
-existing one) and add a workflow that gates merge on these scenarios.
+Local-only by design. The existing self-hosted runners host docker
+containers and don't expose `/dev/kvm`, so wiring this into CI would
+need a KVM-capable runner pool — out of scope for now. Run scenarios
+on a dev box before tagging a release; add scenarios as new upgrade
+behaviour lands.
