@@ -33,6 +33,20 @@ func SwapArtifact(srcPath, targetPath string, uid, gid int, modeStr string) erro
 	base := filepath.Base(targetPath)
 	stagingName := filepath.Join(dir, "."+base+".new")
 
+	// Defensively ensure the parent directory exists before staging the
+	// swap. The image install already pre-creates every dir under the
+	// known artifact roots, but a release tarball could introduce a
+	// brand-new subdirectory (e.g. templates/some-new-subdir/) that
+	// the running image hasn't seen — so the runner has to create it
+	// or the apply fails midway. Inherit the mode from the nearest
+	// existing ancestor instead of hardcoding 0755: that way we never
+	// widen permissions when extending into /etc/osvbng/ (0750) or
+	// /var/opt/osvbng/ (0750). Falls back to 0755 only if no ancestor
+	// exists, which shouldn't happen on a real image.
+	if err := mkdirInheritMode(dir); err != nil {
+		return fmt.Errorf("ensure parent dir %s: %w", dir, err)
+	}
+
 	if err := writeStagingFile(srcPath, stagingName); err != nil {
 		_ = os.Remove(stagingName)
 		return err
@@ -70,6 +84,32 @@ func SwapArtifact(srcPath, targetPath string, uid, gid int, modeStr string) erro
 		return fmt.Errorf("rename %s -> %s: %w", stagingName, targetPath, err)
 	}
 	return nil
+}
+
+// mkdirInheritMode mkdirs `dir` (and missing ancestors) using the
+// permissions of the nearest existing ancestor. Avoids hardcoding 0755
+// because that would widen permissions if a future manifest's
+// install_path drops into a 0750 root like /etc/osvbng/ or
+// /var/opt/osvbng/. Falls back to 0755 only when no ancestor exists,
+// which shouldn't happen on a real image and matches the standard
+// /usr/-hierarchy default if it ever does.
+func mkdirInheritMode(dir string) error {
+	if _, err := os.Stat(dir); err == nil {
+		return nil
+	}
+	ancestor := dir
+	for {
+		parent := filepath.Dir(ancestor)
+		if parent == ancestor {
+			break
+		}
+		ancestor = parent
+		st, err := os.Stat(ancestor)
+		if err == nil {
+			return os.MkdirAll(dir, st.Mode().Perm())
+		}
+	}
+	return os.MkdirAll(dir, 0o755)
 }
 
 // writeStagingFile copies src bytes to dst with fsync. Returns nil on
