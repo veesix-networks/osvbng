@@ -121,15 +121,13 @@ done
 PREV_BLOCK=""
 if [ -n "$PREV_PATH" ]; then
     PREV_STAGE=$(mktemp -d)
-    tar -xzf "$PREV_PATH" -C "$PREV_STAGE" manifest.yaml
-    if [ ! -f "${PREV_PATH}.sig" ]; then
-        echo "prev tarball has no .sig: ${PREV_PATH}.sig" >&2
-        rm -rf "$PREV_STAGE"
-        exit 1
-    fi
+    # find emits "./manifest.yaml" so entries in the tarball carry the
+    # leading "./". Without strip-components GNU tar wouldn't match the
+    # bare "manifest.yaml" name and would error out.
+    tar --strip-components=1 -xzf "$PREV_PATH" -C "$PREV_STAGE" ./manifest.yaml ./manifest.yaml.sig
     mkdir -p "$STAGE/prev"
-    cp "$PREV_STAGE/manifest.yaml" "$STAGE/prev/manifest.yaml"
-    cp "${PREV_PATH}.sig" "$STAGE/prev/manifest.yaml.sig"
+    cp "$PREV_STAGE/manifest.yaml"     "$STAGE/prev/manifest.yaml"
+    cp "$PREV_STAGE/manifest.yaml.sig" "$STAGE/prev/manifest.yaml.sig"
     PREV_VERSION_FOUND=$(yq -r '.osvbng_version' "$PREV_STAGE/manifest.yaml")
     PREV_SHA=$(sha256sum "$STAGE/prev/manifest.yaml" | cut -d' ' -f1)
     PREV_BLOCK="previous_version: $PREV_VERSION_FOUND
@@ -152,6 +150,14 @@ artifacts:
 $ARTIFACTS_RENDERED
 estimated_outage_seconds: 30
 EOF
+
+# Sign the manifest separately and bundle the sig INSIDE the tarball.
+# This is what future stepwise builds consume: they extract
+# manifest.yaml + manifest.yaml.sig from the prev tarball into
+# prev/, and the runner verifies the sig at apply time to prove
+# chain-of-custody on the embedded predecessor manifest.
+echo "==> Signing manifest (bundled inside tarball as manifest.yaml.sig)"
+cosign sign-blob --key "$KEY" --yes "$STAGE/manifest.yaml" --output-signature "$STAGE/manifest.yaml.sig"
 
 TARBALL="$OUTDIR/osvbng-v$VERSION.tar.gz"
 echo "==> Packing $TARBALL"
