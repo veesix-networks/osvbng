@@ -109,11 +109,26 @@ wait_for_ssh() {
     while [[ $(date +%s) -lt $deadline ]]; do
         if ssh $(ssh_opts) "${SSH_USER}@127.0.0.1" -- true 2>/dev/null; then
             ok "ssh up"
+            break
+        fi
+        sleep 3
+    done
+    ssh $(ssh_opts) "${SSH_USER}@127.0.0.1" -- true 2>/dev/null || fail "sshd never reached (see $TEST_DIR/serial.log)"
+
+    # cloud-init restarts sshd mid-boot to regenerate host keys, which
+    # kills any long-lived ssh session opened in the gap. Wait for
+    # cloud-init to declare done before proceeding so subsequent ssh
+    # sessions don't lose connections to a sshd that's about to bounce.
+    log "Waiting for cloud-init to finish (up to 90s)"
+    local ci_deadline=$(( $(date +%s) + 90 ))
+    while [[ $(date +%s) -lt $ci_deadline ]]; do
+        if ssh $(ssh_opts) "${SSH_USER}@127.0.0.1" -- 'cloud-init status --wait >/dev/null 2>&1 || test -f /var/lib/cloud/instance/boot-finished' 2>/dev/null; then
+            ok "cloud-init done"
             return
         fi
         sleep 3
     done
-    fail "sshd never reached (see $TEST_DIR/serial.log)"
+    fail "cloud-init never finished within 90s"
 }
 
 vm_ssh()    { ssh $(ssh_opts) "${SSH_USER}@127.0.0.1" -- "$@"; }
@@ -145,32 +160,75 @@ trap_cleanup() {
     fi
 }
 
+# Print a one-line per-service health summary plus /run/osvbng/state.
+# Used at every gate so failures show what every dependency was doing,
+# not just the one that tripped the assertion.
+dump_service_status() {
+    local label="$1"
+    log "=== service status: $label ==="
+    vm_ssh '
+        for u in vpp.service osvbng-config.service osvbng.service frr.service; do
+            active=$(systemctl is-active "$u" 2>/dev/null)
+            sub=$(systemctl show -p SubState --value "$u" 2>/dev/null)
+            result=$(systemctl show -p Result --value "$u" 2>/dev/null)
+            printf "  %-25s active=%-10s sub=%-12s result=%s\n" "$u" "$active" "$sub" "$result"
+        done
+        echo "  vpp api socket: $(test -S /run/osvbng/dataplane_api.sock && echo present || echo MISSING)"
+        echo "  /run/osvbng/state: $(cat /run/osvbng/state 2>/dev/null || echo MISSING)"
+    ' 2>&1 | sed "s/^/  /" >&2 || true
+}
+
+# Wait for /run/osvbng/state == ready, polling for up to $1 seconds.
+# Tolerates ssh failures (treats them as "not ready yet"). On timeout,
+# dumps a service summary and the osvbng.service journal before
+# returning non-zero so the caller decides whether to fail.
+wait_for_osvbng_ready() {
+    local timeout="${1:-120}"
+    local deadline=$(( $(date +%s) + timeout ))
+    while [[ $(date +%s) -lt $deadline ]]; do
+        if vm_ssh "test -f /run/osvbng/state && grep -q '\"state\":\"ready\"' /run/osvbng/state" 2>/dev/null; then
+            return 0
+        fi
+        sleep 2
+    done
+    return 1
+}
+
 bootstrap_v2() {
+    # vpp.service is WantedBy=multi-user.target and starts at boot, but
+    # plugin loading + linux-cp pair setup take 40-90s in this
+    # environment before the api socket appears. Poll from the host so
+    # we survive cloud-init's mid-boot sshd restart (which would kill a
+    # single long ssh session with "Connection reset by peer"). A
+    # failed ssh attempt is treated as "not ready yet", not a fatal
+    # error. Production unit ships RuntimeDirectoryPreserve=yes
+    # (osvbng-context #164) so we no longer need a transient drop-in
+    # or daemon-reload here.
+    # vpp.service is After=cloud-init.target and has an ExecStartPost
+    # that blocks unit activation until /run/osvbng/dataplane_api.sock
+    # is bound (configure-services.sh during packer build). So an
+    # is-active check here actually means "vpp is ready to accept API
+    # connections" — no kick or socket-presence belt-and-braces needed.
+    log "Waiting for vpp.service to become active (up to 180s)"
+    local vpp_deadline=$(( $(date +%s) + 180 ))
+    while [[ $(date +%s) -lt $vpp_deadline ]]; do
+        if vm_ssh "systemctl is-active --quiet vpp.service" 2>/dev/null; then
+            ok "vpp ready"
+            break
+        fi
+        sleep 3
+    done
+    vm_ssh "systemctl is-active --quiet vpp.service" 2>/dev/null || {
+        dump_service_status "vpp wait timed out"
+        vm_ssh 'journalctl -u vpp.service --no-pager -b -n 30' >&2 || true
+        fail "vpp.service never became active"
+    }
+
+    dump_service_status "boot complete, before config swap"
+
     log "Installing minimal osvbng.yaml fixture"
     vm_scp_to "$REPO_ROOT/tests/41-upgrade-tier-a-v2/fixtures/minimal-osvbng.yaml" /tmp/osvbng.yaml
     vm_ssh "mv /tmp/osvbng.yaml /etc/osvbng/osvbng.yaml"
-
-    # systemctl stop nukes RuntimeDirectory=osvbng, taking vpp's
-    # dataplane_api.sock with it. Workaround until osvbng-context#164 lands.
-    log "Installing RuntimeDirectoryPreserve=yes drop-in"
-    vm_ssh_in <<'PRESERVE'
-set -e
-mkdir -p /etc/systemd/system/osvbng.service.d
-cat > /etc/systemd/system/osvbng.service.d/runtime-preserve.conf <<'EOF'
-[Service]
-RuntimeDirectoryPreserve=yes
-EOF
-systemctl daemon-reload
-PRESERVE
-
-    log "Restarting vpp.service to recreate the api socket"
-    vm_ssh "systemctl restart vpp.service" || fail "vpp restart failed"
-    local vpp_deadline=$(( $(date +%s) + 90 ))
-    while [[ $(date +%s) -lt $vpp_deadline ]]; do
-        vm_ssh "systemctl is-active --quiet vpp.service && test -S /run/osvbng/dataplane_api.sock" 2>/dev/null && { ok "vpp ready"; break; }
-        sleep 2
-    done
-    vm_ssh "test -S /run/osvbng/dataplane_api.sock" 2>/dev/null || fail "vpp api socket never came back"
 
     log "Building v2 binaries"
     (cd "$REPO_ROOT" && VERSION=0.14.0-test make build >/dev/null)
@@ -191,16 +249,16 @@ rm -f /var/opt/osvbng/current-manifest.yaml /var/opt/osvbng/upgrade-state.json
 systemctl start osvbng.service
 BOOTSTRAP
 
-    log "Waiting for osvbng state=ready"
-    local deadline=$(( $(date +%s) + 60 ))
-    while [[ $(date +%s) -lt $deadline ]]; do
-        vm_ssh "test -f /run/osvbng/state && grep -q '\"state\":\"ready\"' /run/osvbng/state" 2>/dev/null && { ok "osvbng ready"; return; }
-        sleep 2
-    done
-    vm_ssh "systemctl status osvbng.service --no-pager -l || true" || true
-    vm_ssh "journalctl -u osvbng.service --no-pager -n 80 || true" || true
-    vm_ssh "cat /run/osvbng/state 2>/dev/null || echo '<state file absent>'" || true
-    fail "osvbng never reached state=ready"
+    log "Waiting for osvbng state=ready (up to 120s)"
+    if wait_for_osvbng_ready 120; then
+        ok "osvbng ready"
+    else
+        dump_service_status "osvbng-ready timeout in bootstrap"
+        vm_ssh "journalctl -u osvbng.service --no-pager -n 80 || true" >&2 || true
+        fail "osvbng never reached state=ready"
+    fi
+
+    dump_service_status "bootstrap complete"
 }
 
 build_and_push_tarball() {
