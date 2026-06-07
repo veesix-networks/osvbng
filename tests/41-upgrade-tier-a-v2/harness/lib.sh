@@ -264,16 +264,27 @@ BOOTSTRAP
 build_and_push_tarball() {
     local version="$1"
     local out_var="$2"
+    local prev_tarball="${3:-}"   # optional host-side path to a v2 tarball
+                                  # to embed as prev/manifest.yaml (stepwise)
     local outdir="$TEST_DIR/tarballs"
     mkdir -p "$outdir"
 
-    log "Building signed v2 tarball v$version"
+    local prev_args=()
+    if [[ -n "$prev_tarball" ]]; then
+        [[ -f "$prev_tarball" ]] || fail "prev tarball not found: $prev_tarball"
+        prev_args=(--prev "$prev_tarball")
+        log "Building signed v2 tarball v$version (stepwise, prev=$prev_tarball)"
+    else
+        log "Building signed v2 tarball v$version"
+    fi
+
     (
         cd "$REPO_ROOT"
         COSIGN_PASSWORD="" ./scripts/release/build-test-tarball.sh \
             -k "$TEST_DIR/test-cosign.key" \
             -v "$version" \
             -o "$outdir" \
+            "${prev_args[@]}" \
             > "$TEST_DIR/build-tarball-$version.log" 2>&1
     )
 
