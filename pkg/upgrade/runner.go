@@ -30,6 +30,7 @@ type Runner struct {
 	RollbackRoot  string // /var/opt/osvbng/rollback/
 	QuarantineDir string // /var/opt/osvbng/quarantine/
 	StateFile     string // /run/osvbng/state
+	VPPSocketPath string // /run/osvbng/dataplane_api.sock — checked after vpp restart
 	SystemdUnit   string // osvbng.service
 	DropInRoot    string // /run/systemd/system — parent of <unit>.d for the transient Restart= override
 	PubKey        string // /etc/osvbng/release-keys/cosign.pub
@@ -39,6 +40,12 @@ type Runner struct {
 	StallLimit     time.Duration
 	PollInterval   time.Duration
 	StateFileGrace time.Duration
+
+	// VPP restart timing. Zero values pick spec defaults. Tests
+	// override to keep test runtime fast.
+	VPPStopWait       time.Duration // max wait for vpp to leave running after stop --no-block
+	VPPActiveWait     time.Duration // max wait for vpp to reach active after start --no-block
+	VPPPollInterval   time.Duration // unitState poll interval inside the stop/start waits
 
 	// Injectables.
 	Cmd      Commander
@@ -56,6 +63,7 @@ func NewRunner(reporter ProgressReporter) *Runner {
 		RollbackRoot:  "/var/opt/osvbng/rollback",
 		QuarantineDir: "/var/opt/osvbng/quarantine",
 		StateFile:     "/run/osvbng/state",
+		VPPSocketPath: "/run/osvbng/dataplane_api.sock",
 		SystemdUnit:   "osvbng.service",
 		DropInRoot:    "/run/systemd/system",
 		PubKey:        "/etc/osvbng/release-keys/cosign.pub",
@@ -520,6 +528,15 @@ func (r *Runner) defaults() {
 	if r.StateFileGrace == 0 {
 		r.StateFileGrace = 5 * time.Second
 	}
+	if r.VPPStopWait == 0 {
+		r.VPPStopWait = 30 * time.Second
+	}
+	if r.VPPActiveWait == 0 {
+		r.VPPActiveWait = 120 * time.Second
+	}
+	if r.VPPPollInterval == 0 {
+		r.VPPPollInterval = 500 * time.Millisecond
+	}
 	if r.Cmd == nil {
 		r.Cmd = execCommander{}
 	}
@@ -637,20 +654,111 @@ func (r *Runner) checkPartialApply(opts ApplyOptions) error {
 		state.Phase, state.From, state.To, filepath.Join(r.StateRoot, "upgrade-state.json"))
 }
 
+// restartConfigService regenerates external configs by calling osvbngd
+// directly rather than `systemctl restart osvbng-config.service`. The
+// systemctl path deadlocked the system: a daemon-reload at stage 7 plus
+// a synchronous restart of a Requires= dependency caused systemd's job
+// queue to wedge ({vpp,frr,network.target} jobs stuck in start waiting
+// forever, observed in the qemu integration harness). osvbng-config is
+// a Type=oneshot that just runs `osvbngd ... generate-external`, so we
+// invoke that directly and never touch systemd here.
 func (r *Runner) restartConfigService(ctx context.Context) error {
-	out, err := r.Cmd.Run(ctx, "systemctl", "restart", "osvbng-config.service")
+	regenCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	out, err := r.Cmd.Run(regenCtx, "/usr/local/bin/osvbngd", "-config", "/etc/osvbng/osvbng.yaml", "generate-external")
 	if err != nil {
-		return fmt.Errorf("systemctl restart osvbng-config.service: %w (%s)", err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("osvbngd generate-external: %w (%s)", err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
 
+// restartVPP uses `--no-block` for both stop and start so the apply
+// flow never blocks indefinitely on systemd's job queue, then polls
+// `is-active` directly. Synchronous `systemctl restart` was observed
+// wedging in the qemu integration harness when issued after a
+// daemon-reload (the job sat in "start waiting" state for 20+ minutes
+// until externally cancelled). Splitting into stop + start with
+// --no-block sidesteps the transaction merge that triggered the wedge.
 func (r *Runner) restartVPP(ctx context.Context) error {
-	out, err := r.Cmd.Run(ctx, "systemctl", "restart", "vpp.service")
-	if err != nil {
-		return fmt.Errorf("systemctl restart vpp.service: %w (%s)", err, strings.TrimSpace(string(out)))
+	stopCtx, stopCancel := context.WithTimeout(ctx, 20*time.Second)
+	defer stopCancel()
+	if out, err := r.Cmd.Run(stopCtx, "systemctl", "stop", "--no-block", "vpp.service"); err != nil {
+		return fmt.Errorf("systemctl stop --no-block vpp.service: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+
+	// Wait for vpp.service to leave running before issuing start. systemd
+	// will accept stop+start interleaved otherwise it just collapses them
+	// to a restart transaction and we lose the split.
+	if err := r.waitVPPState(ctx, r.VPPStopWait, func(s string) bool {
+		return s == "inactive" || s == "failed"
+	}); err != nil {
+		// Time-out here isn't fatal: the start --no-block call below will
+		// either ride on top of the in-progress stop or get rejected with
+		// a clear error. Log and proceed.
+		r.Reporter.Warn(fmt.Sprintf("vpp.service did not reach inactive within %s; proceeding to start anyway", r.VPPStopWait))
+	}
+
+	startCtx, startCancel := context.WithTimeout(ctx, 20*time.Second)
+	defer startCancel()
+	if out, err := r.Cmd.Run(startCtx, "systemctl", "start", "--no-block", "vpp.service"); err != nil {
+		return fmt.Errorf("systemctl start --no-block vpp.service: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+
+	// Poll until vpp.service is active or the deadline expires. The
+	// production vpp.service drop-in installs an ExecStartPost that
+	// blocks unit activation until /run/osvbng/dataplane_api.sock is
+	// bound, so "active" here actually means "API listener is ready" —
+	// the runner no longer needs a separate socket-presence wait.
+	if err := r.waitVPPState(ctx, r.VPPActiveWait, func(s string) bool {
+		return s == "active"
+	}); err != nil {
+		return fmt.Errorf("vpp.service did not become active within %s after start --no-block", r.VPPActiveWait)
 	}
 	return nil
+}
+
+// waitVPPState polls unitState until pred returns true or the deadline
+// expires. ctx cancellation aborts the wait immediately.
+func (r *Runner) waitVPPState(ctx context.Context, max time.Duration, pred func(string) bool) error {
+	deadline := time.Now().Add(max)
+	for time.Now().Before(deadline) {
+		state, err := r.unitState(ctx, "vpp.service")
+		if err == nil && pred(state) {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(r.VPPPollInterval):
+		}
+	}
+	return fmt.Errorf("state predicate not satisfied within %s", max)
+}
+
+// unitState returns the systemd ActiveState for the given unit, e.g.
+// "active", "activating", "inactive", "failed". Uses a short bounded
+// context so it can't itself hang the apply flow. Accepts both bare
+// `--value` output ("active") and key=value formatted output
+// ("ActiveState=active") so the test fake's catch-all systemctl
+// response continues to parse.
+func (r *Runner) unitState(ctx context.Context, unit string) (string, error) {
+	showCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	out, err := r.Cmd.Run(showCtx, "systemctl", "show", "-p", "ActiveState", "--value", unit)
+	if err != nil {
+		return "", err
+	}
+	s := strings.TrimSpace(string(out))
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if v, ok := strings.CutPrefix(line, "ActiveState="); ok {
+			return strings.TrimSpace(v), nil
+		}
+	}
+	if idx := strings.IndexByte(s, '\n'); idx >= 0 {
+		s = s[:idx]
+	}
+	return s, nil
 }
 
 func (r *Runner) waitHealthy(ctx context.Context, sv *Supervisor, expectedVersion string) (HealthResult, string) {

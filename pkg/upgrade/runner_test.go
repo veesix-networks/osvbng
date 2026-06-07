@@ -71,6 +71,13 @@ func newHarness(t *testing.T) *testHarness {
 		t.Fatalf("plant osvbngcli: %v", err)
 	}
 
+	// Pre-create the VPP api socket file so restartVPP's
+	// waitVPPSocket finds it immediately in tests. Production uses a
+	// real unix socket; tests just need the os.Stat path to succeed.
+	if err := os.WriteFile(filepath.Join(runDir, "dataplane_api.sock"), nil, 0o644); err != nil {
+		t.Fatalf("plant vpp socket placeholder: %v", err)
+	}
+
 	// Generate signing keypair.
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -93,14 +100,18 @@ func newHarness(t *testing.T) *testHarness {
 		RollbackRoot:  filepath.Join(stateRoot, "rollback"),
 		QuarantineDir: filepath.Join(stateRoot, "quarantine"),
 		StateFile:     filepath.Join(runDir, "state"),
+		VPPSocketPath: filepath.Join(runDir, "dataplane_api.sock"),
 		SystemdUnit:   "osvbng.service",
 		DropInRoot:    systemdDir,
 		PubKey:        filepath.Join(keyDir, "cosign.pub"),
-		HealthTimeout: 5 * time.Second,
-		PollInterval:  10 * time.Millisecond,
-		StallLimit:    5 * time.Second,
-		Cmd:           cmd,
-		Reporter:      reporter,
+		HealthTimeout:   5 * time.Second,
+		PollInterval:    10 * time.Millisecond,
+		StallLimit:      5 * time.Second,
+		VPPStopWait:     50 * time.Millisecond,
+		VPPActiveWait:   50 * time.Millisecond,
+		VPPPollInterval: 1 * time.Millisecond,
+		Cmd:             cmd,
+		Reporter:        reporter,
 	}
 
 	return &testHarness{
@@ -549,17 +560,22 @@ func TestRunnerApplyRestartsVPPWhenPluginSwapped(t *testing.T) {
 		t.Fatalf("Apply: %v", err)
 	}
 
+	// vpp restart is split into stop --no-block + start --no-block (see
+	// runner.restartVPP for why we no longer issue `systemctl restart`).
+	// Asserting the start side is sufficient — a stop without a follow-up
+	// start would leave vpp down, which isn't the intent of the plugin
+	// swap path.
 	sawRestart := false
 	h.cmd.mu.Lock()
 	defer h.cmd.mu.Unlock()
 	for _, c := range h.cmd.calls {
-		if c.name == "systemctl" && len(c.args) >= 2 && c.args[0] == "restart" && c.args[1] == "vpp.service" {
+		if c.name == "systemctl" && len(c.args) >= 3 && c.args[0] == "start" && c.args[1] == "--no-block" && c.args[2] == "vpp.service" {
 			sawRestart = true
 			break
 		}
 	}
 	if !sawRestart {
-		t.Fatalf("expected systemctl restart vpp.service for plugin swap; saw calls: %+v", h.cmd.calls)
+		t.Fatalf("expected systemctl start --no-block vpp.service for plugin swap; saw calls: %+v", h.cmd.calls)
 	}
 }
 
@@ -574,11 +590,14 @@ func TestRunnerApplyDoesNotRestartVPPForBinaryOnlySwap(t *testing.T) {
 		t.Fatalf("Apply: %v", err)
 	}
 
+	// Mirror of the plugin-swap assertion: a binary-only swap must not
+	// trigger the stop/start --no-block pair (the restart equivalent
+	// after the wedge-mitigation refactor in runner.restartVPP).
 	h.cmd.mu.Lock()
 	defer h.cmd.mu.Unlock()
 	for _, c := range h.cmd.calls {
-		if c.name == "systemctl" && len(c.args) >= 2 && c.args[0] == "restart" && c.args[1] == "vpp.service" {
-			t.Fatalf("unexpected systemctl restart vpp.service for binary-only swap; calls: %+v", h.cmd.calls)
+		if c.name == "systemctl" && len(c.args) >= 3 && c.args[0] == "start" && c.args[1] == "--no-block" && c.args[2] == "vpp.service" {
+			t.Fatalf("unexpected systemctl start --no-block vpp.service for binary-only swap; calls: %+v", h.cmd.calls)
 		}
 	}
 }
