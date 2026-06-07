@@ -161,10 +161,14 @@ MTIME=${SOURCE_DATE_EPOCH:-$(stat -c %Y "$STAGE/manifest.yaml")}
     cd "$STAGE"
     # Sort entries to give the tar a stable internal ordering. find -print0
     # then sort -z keeps newline-safe across weird paths (none expected
-    # but defensively).
+    # but defensively). --no-recursion is required because find already
+    # lists every entry; without it tar also descends into each
+    # directory and writes the contents a second time as type-1 hard
+    # links, which the upgrade runner rejects.
     find . -mindepth 1 -print0 |
         LC_ALL=C sort -z |
-        tar --null --files-from=- \
+        tar --no-recursion \
+            --null --files-from=- \
             --owner=0 --group=0 --numeric-owner \
             --mtime="@$MTIME" \
             --sort=name \
