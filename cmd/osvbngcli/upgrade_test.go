@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -299,5 +300,39 @@ func TestRunUpgradeActionApplyForwardsFirstBoot(t *testing.T) {
 	}
 	if !fake.lastApplyOpts.FirstBoot {
 		t.Fatal("ApplyOne was not invoked with FirstBoot=true")
+	}
+}
+
+// parseInvocation splits a command line at the first "--" token into
+// PathTokens (everything before) and FlagTokens (everything from the
+// flag onward). handleUpgrade has to merge both before forwarding to
+// runUpgradeAction; dropping FlagTokens silently swallowed
+// --first-boot/--force-retry/<tarball> and surfaced as
+// "apply requires exactly one tarball path argument" the first time
+// the integration harness invoked upgrade via piped stdin.
+func TestParseInvocationSplitsFlagsAndPositionalForApply(t *testing.T) {
+	inv, err := parseInvocation("upgrade apply --first-boot --force-retry /tmp/x.tar.gz")
+	if err != nil {
+		t.Fatalf("parseInvocation: %v", err)
+	}
+	if len(inv.PathTokens) != 2 {
+		t.Fatalf("PathTokens = %v, want [upgrade apply]", inv.PathTokens)
+	}
+	wantFlags := []string{"--first-boot", "--force-retry", "/tmp/x.tar.gz"}
+	if !reflect.DeepEqual(inv.FlagTokens, wantFlags) {
+		t.Fatalf("FlagTokens = %v, want %v", inv.FlagTokens, wantFlags)
+	}
+
+	merged := make([]string, 0, len(inv.PathTokens)-2+len(inv.FlagTokens))
+	merged = append(merged, inv.PathTokens[2:]...)
+	merged = append(merged, inv.FlagTokens...)
+
+	path, opts, err := parseApplyArgs(merged)
+	if err != nil {
+		t.Fatalf("parseApplyArgs(%v): %v", merged, err)
+	}
+	if path != "/tmp/x.tar.gz" || !opts.FirstBoot || !opts.ForceRetry {
+		t.Fatalf("path=%q FirstBoot=%v ForceRetry=%v, want /tmp/x.tar.gz true true",
+			path, opts.FirstBoot, opts.ForceRetry)
 	}
 }

@@ -73,7 +73,9 @@ func (c *CLI) handleUpgrade(invocation *Invocation) error {
 		return upgradeUsageError("missing sub-action")
 	}
 	subAction := invocation.PathTokens[1]
-	args := invocation.PathTokens[2:]
+	args := make([]string, 0, len(invocation.PathTokens)-2+len(invocation.FlagTokens))
+	args = append(args, invocation.PathTokens[2:]...)
+	args = append(args, invocation.FlagTokens...)
 
 	runner := newReplUpgradeRunner()
 
