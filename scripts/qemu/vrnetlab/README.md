@@ -24,7 +24,7 @@ vrnetlab/
 ```
 
 We do **not** vendor the upstream vrnetlab common library or makefile
-includes — those are MIT-licensed and not ours to ship. `build.sh`
+includes — those are not ours to ship. `build.sh`
 clones vrnetlab on demand and our kind drops in next to its peers
 (`sros/`, `csr/`, …) using the upstream's own Makefile machinery.
 
@@ -80,7 +80,7 @@ two lines:
 ```yaml
 bng1:
   kind: linux
-  image: veesixnetworks/osvbng:ci-v0.13.0   # was: veesixnetworks/osvbng:local
+  image: veesixnetworks/osvbng:ci-v0.13.0
   image-pull-policy: Never
   cap-add: [SYS_ADMIN, NET_ADMIN]
   env:
@@ -92,10 +92,3 @@ bng1:
 Requires `/dev/kvm` on the host. Boot time is ~60-90s per VM (vs
 ~3-5s for a Docker container), so reserve QEMU-mode runs for release
 validation rather than every PR.
-
-## Licensing
-
-Everything under this directory is osvbng-original, licensed under
-GPL-3.0-or-later (see osvbng's top-level LICENSE). The upstream
-vrnetlab project that `build.sh` clones is MIT-licensed and stays in
-its own clone path; we do not redistribute it.
