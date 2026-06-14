@@ -51,6 +51,8 @@ func NewComponent(deps component.Dependencies) (component.Component, error) {
 		return nil, fmt.Errorf("%s: %w", Namespace, err)
 	}
 
+	applyUDSDefaults(pluginCfg)
+
 	return &Component{
 		Base:   component.NewBaseAsync(Namespace),
 		logger: logger.Get(Namespace),
@@ -83,9 +85,25 @@ func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
 	c.logger.Info("Starting API server", "addr", c.listenAddr())
 
+	tlsCfg, err := c.cfg.TLS.BuildTLSConfig()
+	if err != nil {
+		return fmt.Errorf("build TLS config: %w", err)
+	}
+	c.server = &http.Server{
+		Addr:      c.listenAddr(),
+		Handler:   c.newMux(),
+		TLSConfig: tlsCfg,
+	}
+
 	c.Go(func() {
-		c.startServer()
+		c.startServer(tlsCfg)
 	})
+
+	if c.cfg.UDS.Enabled {
+		c.Go(func() {
+			c.startUDSServer()
+		})
+	}
 
 	return nil
 }
@@ -97,6 +115,12 @@ func (c *Component) Stop(ctx context.Context) error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		c.server.Shutdown(shutdownCtx)
+	}
+
+	if c.cfg.UDS.Enabled {
+		if err := os.Remove(c.cfg.UDS.Path); err != nil && !os.IsNotExist(err) {
+			c.logger.Warn("Failed to remove UDS socket file", "path", c.cfg.UDS.Path, "error", err)
+		}
 	}
 
 	c.mu.Lock()
@@ -130,20 +154,9 @@ func (c *Component) listenAddr() string {
 	return ":8080"
 }
 
-func (c *Component) startServer() {
+func (c *Component) startServer(tlsCfg *tls.Config) {
 	addr := c.listenAddr()
 	binding := c.cfg.ListenerBinding.Resolve()
-	tlsCfg, err := c.cfg.TLS.BuildTLSConfig()
-	if err != nil {
-		c.logger.Error("Failed to build TLS config", "error", err)
-		return
-	}
-
-	c.server = &http.Server{
-		Addr:      addr,
-		Handler:   c.newMux(),
-		TLSConfig: tlsCfg,
-	}
 
 	ln, err := netbind.ListenTCP(c.Ctx, "tcp", addr, binding)
 	if err != nil {
@@ -168,6 +181,19 @@ func (c *Component) startServer() {
 		c.mu.Lock()
 		c.running = false
 		c.mu.Unlock()
+	}
+}
+
+func (c *Component) startUDSServer() {
+	ln, err := listenUDS(c.cfg.UDS, c.logger)
+	if err != nil {
+		c.logger.Error("Failed to bind UDS API listener; TCP listener unaffected",
+			"path", c.cfg.UDS.Path, "error", err)
+		return
+	}
+	c.logger.Info("API server listening on UDS", "path", c.cfg.UDS.Path)
+	if err := c.server.Serve(ln); err != nil && err != http.ErrServerClosed {
+		c.logger.Error("UDS API listener error", "path", c.cfg.UDS.Path, "error", err)
 	}
 }
 

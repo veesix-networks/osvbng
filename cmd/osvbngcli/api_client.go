@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,9 +19,17 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
+const (
+	autoServerSentinel = "auto"
+	defaultUDSPath     = "/run/osvbng/api.sock"
+	defaultTCPURL      = "http://localhost:8080"
+	unixHTTPHost       = "http://unix"
+)
+
 type APIClient struct {
 	baseURL    *url.URL
 	httpClient *http.Client
+	socketPath string
 }
 
 type cachedContract struct {
@@ -42,20 +51,47 @@ func (e *APIError) Error() string {
 }
 
 func newAPIClient(server string) (*APIClient, error) {
+	if server == autoServerSentinel {
+		server = resolveAutoServer(defaultUDSPath, defaultTCPURL)
+	}
+
 	baseURL, err := normalizeServerURL(server)
 	if err != nil {
 		return nil, err
 	}
 
-	return &APIClient{
-		baseURL: baseURL,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
-	}, nil
+	client := &APIClient{
+		baseURL:    baseURL,
+		httpClient: &http.Client{Timeout: 10 * time.Second},
+	}
+
+	if baseURL.Scheme == "unix" {
+		client.socketPath = baseURL.Path
+		client.httpClient.Transport = &http.Transport{
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				return (&net.Dialer{}).DialContext(ctx, "unix", client.socketPath)
+			},
+		}
+	}
+
+	return client, nil
+}
+
+func resolveAutoServer(udsPath, tcpURL string) string {
+	if fi, err := os.Stat(udsPath); err == nil && fi.Mode()&os.ModeSocket != 0 {
+		return "unix://" + udsPath
+	}
+	return tcpURL
 }
 
 func (c *APIClient) baseURLString() string {
+	return strings.TrimRight(c.baseURL.String(), "/")
+}
+
+func (c *APIClient) requestBase() string {
+	if c.socketPath != "" {
+		return unixHTTPHost
+	}
 	return strings.TrimRight(c.baseURL.String(), "/")
 }
 
@@ -152,8 +188,7 @@ func (c *APIClient) doJSON(ctx context.Context, method, path string, query url.V
 }
 
 func (c *APIClient) resolvePath(path string) string {
-	base := strings.TrimRight(c.baseURL.String(), "/")
-	return base + path
+	return c.requestBase() + path
 }
 
 func decodeAPIError(resp *http.Response) error {
@@ -186,6 +221,16 @@ func normalizeServerURL(server string) (*url.URL, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse server URL: %w", err)
 	}
+
+	if parsed.Scheme == "unix" {
+		if parsed.Path == "" {
+			return nil, fmt.Errorf("unix URL %q is missing socket path", server)
+		}
+		parsed.RawQuery = ""
+		parsed.Fragment = ""
+		return parsed, nil
+	}
+
 	if parsed.Scheme == "" || parsed.Host == "" {
 		return nil, fmt.Errorf("invalid server URL %q", server)
 	}

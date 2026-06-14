@@ -13,6 +13,14 @@ type Config struct {
 	Enabled                 bool                    `json:"enabled" yaml:"enabled"`
 	ListenAddress           string                  `json:"listen_address,omitempty" yaml:"listen_address,omitempty"`
 	TLS                     netbind.ServerTLSConfig `json:"tls,omitempty" yaml:"tls,omitempty"`
+	UDS                     UDSConfig               `json:"uds,omitempty" yaml:"uds,omitempty"`
+}
+
+type UDSConfig struct {
+	Enabled bool   `json:"enabled" yaml:"enabled"`
+	Path    string `json:"path,omitempty" yaml:"path,omitempty"`
+	Mode    string `json:"mode,omitempty" yaml:"mode,omitempty"`
+	Group   string `json:"group,omitempty" yaml:"group,omitempty"`
 }
 
 func init() {
