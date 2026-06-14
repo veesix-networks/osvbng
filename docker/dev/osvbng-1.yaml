@@ -369,7 +369,8 @@ plugins:
         listen_address: :9090
     northbound.api:
         enabled: true
-        listen_address: :8080
+        listeners:
+            - address: :8080
         uds:
             enabled: true
             path: /run/osvbng/api.sock
