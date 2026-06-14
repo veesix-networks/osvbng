@@ -248,7 +248,8 @@ plugins:
         listen_address: :9090
     northbound.api:
         enabled: true
-        listen_address: :8080
+        listeners:
+            - address: :8080
     subscriber.auth.radius:
         servers:
             - host: 172.20.20.10

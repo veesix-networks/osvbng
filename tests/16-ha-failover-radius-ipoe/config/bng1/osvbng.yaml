@@ -124,7 +124,8 @@ aaa:
 plugins:
     northbound.api:
         enabled: true
-        listen_address: :8080
+        listeners:
+            - address: :8080
     subscriber.auth.radius:
         servers:
             - host: clab-osvbng-ha-failover-radius-ipoe-freeradius
