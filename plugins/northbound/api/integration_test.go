@@ -72,6 +72,73 @@ func TestUDSEndToEndOpenAPISpec(t *testing.T) {
 	}
 }
 
+func TestMultiTCPListenerBindAndServe(t *testing.T) {
+	ln1, addr1 := freeTCPListener(t)
+	ln2, addr2 := freeTCPListener(t)
+	ln1.Close()
+	ln2.Close()
+
+	configd := configmgr.NewConfigManager()
+	adapter := northbound.NewAdapter(show.NewRegistry(), configd.GetRegistry(), oper.NewRegistry(), configd)
+
+	cfg := &Config{
+		Enabled: true,
+		Listeners: []ListenerConfig{
+			{Address: addr1},
+			{Address: addr2},
+		},
+	}
+	if err := cfg.validateListeners(); err != nil {
+		t.Fatalf("validateListeners: %v", err)
+	}
+
+	c := &Component{
+		logger:   logger.Get(Namespace),
+		adapter:  adapter,
+		cfg:      cfg,
+		specJSON: []byte(`{"openapi":"3.0.3"}`),
+		specETag: `"multi-etag"`,
+	}
+	c.server = &http.Server{Handler: c.newMux()}
+
+	openAndServe(t, c, addr1, ln1)
+	openAndServe(t, c, addr2, ln2)
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = c.server.Shutdown(shutdownCtx)
+	})
+
+	for _, addr := range []string{addr1, addr2} {
+		resp, err := http.Get("http://" + addr + "/api/openapi.json")
+		if err != nil {
+			t.Fatalf("GET %s: %v", addr, err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("%s status = %d, want 200", addr, resp.StatusCode)
+		}
+	}
+}
+
+func freeTCPListener(t *testing.T) (net.Listener, string) {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("ephemeral listen: %v", err)
+	}
+	return ln, ln.Addr().String()
+}
+
+func openAndServe(t *testing.T, c *Component, addr string, _ net.Listener) {
+	t.Helper()
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		t.Fatalf("rebind %s: %v", addr, err)
+	}
+	go func() { _ = c.server.Serve(ln) }()
+}
+
 const unixHTTPHost = "http://unix"
 
 func newAPIClient(t *testing.T, server string) (*http.Client, error) {

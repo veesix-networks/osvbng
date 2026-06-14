@@ -13,7 +13,14 @@ type Config struct {
 	Enabled                 bool                    `json:"enabled" yaml:"enabled"`
 	ListenAddress           string                  `json:"listen_address,omitempty" yaml:"listen_address,omitempty"`
 	TLS                     netbind.ServerTLSConfig `json:"tls,omitempty" yaml:"tls,omitempty"`
+	Listeners               []ListenerConfig        `json:"listeners,omitempty" yaml:"listeners,omitempty"`
 	UDS                     UDSConfig               `json:"uds,omitempty" yaml:"uds,omitempty"`
+}
+
+type ListenerConfig struct {
+	Address                 string                  `json:"address" yaml:"address"`
+	netbind.ListenerBinding `json:",inline" yaml:",inline"`
+	TLS                     netbind.ServerTLSConfig `json:"tls,omitempty" yaml:"tls,omitempty"`
 }
 
 type UDSConfig struct {

@@ -7,9 +7,16 @@ import (
 )
 
 type Status struct {
-	State         string `json:"state"`
-	ListenAddress string `json:"listen_address"`
-	Running       bool   `json:"running"`
+	State     string           `json:"state"`
+	Listeners []ListenerStatus `json:"listeners"`
+	Running   bool             `json:"running"`
+}
+
+type ListenerStatus struct {
+	Address string `json:"address"`
+	VRF     string `json:"vrf,omitempty"`
+	TLS     bool   `json:"tls"`
+	Running bool   `json:"running"`
 }
 
 type PathsResponse struct {
