@@ -3679,8 +3679,12 @@ func (c *Component) restoreSessionToCache(ctx context.Context, sess *SessionStat
 		IPv6Address:   sess.IPv6Address,
 		IPv6LeaseTime: sess.IPv6LeaseTime,
 		DUID:          sess.DHCPv6DUID,
+		Username:      sess.Username,
+		Hostname:      sess.Hostname,
+		ClientID:      sess.ClientID,
 		AAASessionID:  sess.AcctSessionID,
 		ActivatedAt:   sess.BoundAt,
+		Attributes:    sess.Attributes,
 	}
 	if sess.IPv6Prefix != nil {
 		ipoeSess.IPv6Prefix = sess.IPv6Prefix.String()
