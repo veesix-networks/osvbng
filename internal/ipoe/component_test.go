@@ -12,8 +12,10 @@ import (
 
 	"github.com/google/gopacket/layers"
 
+	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/config"
+	"github.com/veesix-networks/osvbng/pkg/config/ip"
 	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
 	"github.com/veesix-networks/osvbng/pkg/events"
@@ -88,10 +90,10 @@ type fakeSRGProvider struct {
 	srgForGrp  string
 }
 
-func (f *fakeSRGProvider) GetVirtualMAC(string) net.HardwareAddr  { return f.virtualMAC }
-func (f *fakeSRGProvider) IsActive(string) bool                   { return f.active }
-func (f *fakeSRGProvider) GetSRGForGroup(string) string           { return f.srgForGrp }
-func (f *fakeSRGProvider) RequestGARP(string)                     {}
+func (f *fakeSRGProvider) GetVirtualMAC(string) net.HardwareAddr { return f.virtualMAC }
+func (f *fakeSRGProvider) IsActive(string) bool                  { return f.active }
+func (f *fakeSRGProvider) GetSRGForGroup(string) string          { return f.srgForGrp }
+func (f *fakeSRGProvider) RequestGARP(string)                    {}
 
 type fakeConfigManager struct {
 	cfg *config.Config
@@ -360,6 +362,160 @@ func TestProcessNSPacketCVLANGate(t *testing.T) {
 		defer bus.mu.Unlock()
 		if len(bus.egress) != 0 {
 			t.Fatalf("non-matching C-VLAN: expected 0 egress (gated), got %d", len(bus.egress))
+		}
+	})
+}
+
+func TestDHCPv4Mode(t *testing.T) {
+	mkCfg := func(mode string) *config.Config {
+		profile := &ip.IPv4Profile{}
+		if mode != "" {
+			profile.DHCP = &ip.IPv4DHCPOptions{Mode: mode}
+		}
+		return &config.Config{
+			SubscriberGroups: &subscriber.SubscriberGroupsConfig{
+				Groups: map[string]*subscriber.SubscriberGroup{
+					"tob": {IPv4Profile: "default", VLANs: []subscriber.VLANRange{{SVLAN: "3000", CVLAN: "any"}}},
+				},
+			},
+			IPv4Profiles: map[string]*ip.IPv4Profile{"default": profile},
+		}
+	}
+
+	tests := []struct {
+		name      string
+		cfg       *config.Config
+		svlan     uint16
+		cvlan     uint16
+		wantMode  string
+		wantGroup string
+	}{
+		{"unset_mode_defaults_to_server", mkCfg(""), 3000, 618, "server", "tob"},
+		{"explicit_server", mkCfg("server"), 3000, 618, "server", "tob"},
+		{"relay", mkCfg("relay"), 3000, 618, "relay", "tob"},
+		{"proxy", mkCfg("proxy"), 3000, 618, "proxy", "tob"},
+		{"no_group_match_is_server", mkCfg("relay"), 4000, 0, "server", ""},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Component{cfgMgr: &fakeConfigManager{cfg: tt.cfg}}
+			mode, group := c.dhcpv4Mode(tt.svlan, tt.cvlan)
+			if mode != tt.wantMode || group != tt.wantGroup {
+				t.Fatalf("dhcpv4Mode(%d,%d) = (%q,%q), want (%q,%q)",
+					tt.svlan, tt.cvlan, mode, group, tt.wantMode, tt.wantGroup)
+			}
+		})
+	}
+}
+
+func TestProcessDHCPForeignServer(t *testing.T) {
+	// groupMode sets the base "default" profile's mode; a separate "relay-prof"
+	// profile is always present so a per-session AAA override can be tested.
+	mkComponent := func(groupMode string) (*Component, *captureBus) {
+		base := &ip.IPv4Profile{}
+		if groupMode != "" {
+			base.DHCP = &ip.IPv4DHCPOptions{Mode: groupMode}
+		}
+		cfg := &config.Config{
+			SubscriberGroups: &subscriber.SubscriberGroupsConfig{
+				Groups: map[string]*subscriber.SubscriberGroup{
+					"tob": {IPv4Profile: "default", VLANs: []subscriber.VLANRange{{SVLAN: "3000", CVLAN: "any"}}},
+				},
+			},
+			IPv4Profiles: map[string]*ip.IPv4Profile{
+				"default":    base,
+				"relay-prof": {DHCP: &ip.IPv4DHCPOptions{Mode: "relay"}},
+			},
+		}
+		bus := &captureBus{}
+		c := &Component{
+			Base:     component.NewBase("ipoe-test"),
+			logger:   logger.NewTest(),
+			eventBus: bus,
+			srgMgr:   &fakeSRGProvider{active: true, virtualMAC: net.HardwareAddr{0x02, 0, 0, 0, 0, 1}, srgForGrp: "tob"},
+			ifMgr:    ifmgr.New(),
+			cfgMgr:   &fakeConfigManager{cfg: cfg},
+		}
+		return c, bus
+	}
+
+	clientMAC := net.HardwareAddr{0x50, 0x91, 0xe3, 0xcd, 0xb4, 0x2f}
+	srvPkt := func(xid uint32, msgType layers.DHCPMsgType, yourIP net.IP) *dataplane.ParsedPacket {
+		return &dataplane.ParsedPacket{
+			MAC:       clientMAC,
+			OuterVLAN: 3000,
+			InnerVLAN: 618,
+			SwIfIndex: 10,
+			DHCPv4: &layers.DHCPv4{
+				Xid:          xid,
+				YourClientIP: yourIP,
+				Flags:        0x8000,
+				Options: layers.DHCPOptions{
+					{Type: layers.DHCPOptMessageType, Data: []byte{byte(msgType)}, Length: 1},
+				},
+			},
+		}
+	}
+	newSess := func(xid uint32, allocCtx *allocator.Context) *SessionState {
+		return &SessionState{SessionID: "s", MAC: clientMAC, OuterVLAN: 3000, InnerVLAN: 618, GroupName: "tob", SRGName: "tob", EncapIfIndex: 10, XID: xid, AllocCtx: allocCtx}
+	}
+	egressCount := func(b *captureBus) int {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		return len(b.egress)
+	}
+
+	t.Run("server_mode_drops_foreign_ack_without_binding", func(t *testing.T) {
+		c, bus := mkComponent("")
+		sess := newSess(0x1234, nil)
+		c.xidIndex.Store(uint32(0x1234), sess)
+
+		before := ipoeDropForeignServer.WithLabelValues("tob", layers.DHCPMsgTypeAck.String()).Value()
+		if err := c.processDHCPPacket(srvPkt(0x1234, layers.DHCPMsgTypeAck, net.IPv4(100, 74, 90, 68))); err != nil {
+			t.Fatalf("processDHCPPacket: %v", err)
+		}
+		if sess.IPv4 != nil {
+			t.Fatalf("session bound foreign IP %v; must stay unbound in server mode", sess.IPv4)
+		}
+		if n := egressCount(bus); n != 0 {
+			t.Fatalf("foreign ACK forwarded: %d egress, want 0", n)
+		}
+		if got := ipoeDropForeignServer.WithLabelValues("tob", layers.DHCPMsgTypeAck.String()).Value(); got != before+1 {
+			t.Fatalf("drop counter = %d, want %d", got, before+1)
+		}
+	})
+
+	t.Run("relay_group_forwards_server_response", func(t *testing.T) {
+		c, bus := mkComponent("relay")
+		c.xidIndex.Store(uint32(0x2222), newSess(0x2222, nil))
+
+		before := ipoeDropForeignServer.WithLabelValues("tob", layers.DHCPMsgTypeNak.String()).Value()
+		if err := c.processDHCPPacket(srvPkt(0x2222, layers.DHCPMsgTypeNak, net.IPv4zero)); err != nil {
+			t.Fatalf("processDHCPPacket: %v", err)
+		}
+		if got := ipoeDropForeignServer.WithLabelValues("tob", layers.DHCPMsgTypeNak.String()).Value(); got != before {
+			t.Fatalf("relay mode incremented foreign-server drop counter: %d -> %d", before, got)
+		}
+		if n := egressCount(bus); n != 1 {
+			t.Fatalf("relay mode must forward server response: %d egress, want 1", n)
+		}
+	})
+
+	t.Run("per_session_relay_override_forwards_despite_server_group", func(t *testing.T) {
+		c, bus := mkComponent("") // group base profile is server mode
+		c.xidIndex.Store(uint32(0x3333), newSess(0x3333, &allocator.Context{ProfileName: "relay-prof"}))
+
+		before := ipoeDropForeignServer.WithLabelValues("tob", layers.DHCPMsgTypeNak.String()).Value()
+		if err := c.processDHCPPacket(srvPkt(0x3333, layers.DHCPMsgTypeNak, net.IPv4zero)); err != nil {
+			t.Fatalf("processDHCPPacket: %v", err)
+		}
+		if got := ipoeDropForeignServer.WithLabelValues("tob", layers.DHCPMsgTypeNak.String()).Value(); got != before {
+			t.Fatalf("per-session relay override was wrongly dropped: %d -> %d", before, got)
+		}
+		if n := egressCount(bus); n != 1 {
+			t.Fatalf("per-session relay override must forward: %d egress, want 1", n)
 		}
 	})
 }
