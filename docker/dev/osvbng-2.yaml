@@ -248,6 +248,11 @@ plugins:
     northbound.api:
         enabled: true
         listen_address: :8080
+        uds:
+            enabled: true
+            path: /run/osvbng/api.sock
+            mode: "0660"
+            group: osvbng
     subscriber.auth.local:
         allow_all: true
         database_path: /tmp/osvbng.db
