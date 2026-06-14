@@ -585,6 +585,33 @@ func (c *Component) processDHCPPacket(pkt *dataplane.ParsedPacket) error {
 	return nil
 }
 
+// dhcpv4Mode reports the configured DHCPv4 mode for the access VLAN's
+// subscriber group and the group name. It returns "server" (osvbng is the
+// authoritative DHCP server) when no group matches or no profile is bound.
+func (c *Component) dhcpv4Mode(svlan, cvlan uint16) (mode, group string) {
+	match, ok := c.cfgMgr.LookupSubscriberGroup(svlan, cvlan)
+	if !ok {
+		return "server", ""
+	}
+	mode = "server"
+	if cfg, err := c.cfgMgr.GetRunning(); err == nil && cfg != nil {
+		mode = cfg.IPv4Profiles[match.Group.IPv4Profile].GetMode()
+	}
+	return mode, match.Name
+}
+
+// sessionDHCPv4Mode resolves the authoritative DHCPv4 mode for a session,
+// preferring its AAA-resolved profile (which may differ from the group default,
+// e.g. RADIUS assigning a relay profile) and falling back to the access VLAN's
+// group profile when no profile is resolved yet.
+func (c *Component) sessionDHCPv4Mode(sess *SessionState) string {
+	if p := c.resolveIPv4Profile(sess.AllocCtx); p != nil {
+		return p.GetMode()
+	}
+	mode, _ := c.dhcpv4Mode(sess.OuterVLAN, sess.InnerVLAN)
+	return mode
+}
+
 func getDHCPMessageType(options layers.DHCPOptions) layers.DHCPMsgType {
 	for _, opt := range options {
 		if opt.Type == layers.DHCPOptMessageType {
@@ -1312,6 +1339,19 @@ func (c *Component) handleServerResponse(pkt *dataplane.ParsedPacket) error {
 	sess := val.(*SessionState)
 
 	msgType := getDHCPMessageType(pkt.DHCPv4.Options)
+
+	if mode := c.sessionDHCPv4Mode(sess); mode != "relay" && mode != "proxy" {
+		ipoeDropForeignServer.WithLabelValues(sess.GroupName, msgType.String()).Inc()
+		c.logger.WithGroup(logger.IPoEDHCP4).Warn("Dropping server-sourced DHCPv4 in server mode (foreign DHCP server)",
+			"message_type", msgType.String(),
+			"session_id", sess.SessionID,
+			"client_mac", sess.MAC.String(),
+			"svlan", sess.OuterVLAN,
+			"cvlan", sess.InnerVLAN,
+			"offered_ip", pkt.DHCPv4.YourClientIP.String())
+		return nil
+	}
+
 	c.logger.Debug("Forwarding DHCP to client", "message_type", msgType.String(), "mac", sess.MAC.String(), "session_id", sess.SessionID, "xid", fmt.Sprintf("0x%x", pkt.DHCPv4.Xid))
 
 	var vmac net.HardwareAddr

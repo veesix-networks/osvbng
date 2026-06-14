@@ -22,6 +22,12 @@ var ipoeDropFamilyV6 = telemetry.MustRegisterCounter(telemetry.CounterOpts{
 	Labels: []string{"group"},
 })
 
+var ipoeDropForeignServer = telemetry.MustRegisterCounter(telemetry.CounterOpts{
+	Name:   "ipoe.dhcpv4.dropped_foreign_server",
+	Help:   "Server-sourced DHCPv4 messages (OFFER/ACK/NAK) dropped because osvbng is the authoritative DHCP server on the access VLAN; indicates a foreign or rogue DHCP server.",
+	Labels: []string{"group", "type"},
+})
+
 var ndDropFamily = telemetry.MustRegisterCounter(telemetry.CounterOpts{
 	Name:   "ipoe.nd.dropped_family_disabled",
 	Help:   "IPv6 ND packets (RS/NS) dropped because the subscriber group has no ipv6-profile bound.",
