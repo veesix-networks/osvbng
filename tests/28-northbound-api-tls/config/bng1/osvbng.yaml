@@ -205,13 +205,14 @@ plugins:
         listen_address: :9090
     northbound.api:
         enabled: true
-        listen_address: :8443
-        tls:
-            cert_file: /etc/osvbng/certs/server.crt
-            key_file: /etc/osvbng/certs/server.key
-            ca_cert_file: /etc/osvbng/certs/ca.crt
-            client_auth: require
-            min_version: "1.3"
+        listeners:
+            - address: :8443
+              tls:
+                  cert_file: /etc/osvbng/certs/server.crt
+                  key_file: /etc/osvbng/certs/server.key
+                  ca_cert_file: /etc/osvbng/certs/ca.crt
+                  client_auth: require
+                  min_version: "1.3"
     subscriber.auth.local:
         allow_all: true
         database_path: /tmp/osvbng.db

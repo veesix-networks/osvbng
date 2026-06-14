@@ -156,7 +156,8 @@ aaa:
 plugins:
     northbound.api:
         enabled: true
-        listen_address: :8080
+        listeners:
+            - address: :8080
     subscriber.auth.local:
         allow_all: true
         database_path: /tmp/osvbng.db
