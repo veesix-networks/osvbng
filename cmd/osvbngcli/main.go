@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	serverAddr  = flag.String("server", "http://localhost:8080", "Northbound API base URL")
+	serverAddr  = flag.String("server", "auto", "Northbound API base URL; \"auto\" probes /run/osvbng/api.sock then falls back to http://localhost:8080")
 	showVersion = flag.Bool("version", false, "Print version and exit")
 )
 
