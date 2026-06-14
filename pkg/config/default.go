@@ -180,6 +180,12 @@ func Generate(opts GenerateOptions) (string, error) {
 		"northbound.api": map[string]interface{}{
 			"enabled":        true,
 			"listen_address": ":8080",
+			"uds": map[string]interface{}{
+				"enabled": true,
+				"path":    "/run/osvbng/api.sock",
+				"mode":    "0660",
+				"group":   "osvbng",
+			},
 		},
 	}
 
