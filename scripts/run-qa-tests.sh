@@ -161,6 +161,7 @@ if [ -n "$QEMU_TAG" ]; then
             sed -i \
                 -e "s|veesixnetworks/osvbng:local|veesixnetworks/osvbng:$QEMU_TAG|g" \
                 -e "/image: veesixnetworks\\/osvbng:$QEMU_TAG/a\\      devices: [\"/dev/kvm\"]" \
+                -e "/^    - endpoints:/a\\      mtu: 1500" \
                 "$topo"
             REWRITTEN_TOPOS+=("$topo")
         fi
