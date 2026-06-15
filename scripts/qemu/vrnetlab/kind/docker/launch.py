@@ -65,7 +65,7 @@ class Osvbng_vm(vrnetlab.VM):
         )
 
     def _build_seed_iso(self, ssh_pub_key: str) -> str:
-        cfg_path = "/config/osvbng.yaml"
+        cfg_path = "/etc/osvbng/osvbng.yaml"
         lines = [
             "#cloud-config",
             "ssh_authorized_keys:",
