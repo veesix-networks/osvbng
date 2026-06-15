@@ -70,12 +70,13 @@ class Osvbng_vm(vrnetlab.VM):
         # external veths in yet. The veth <-> tap tc-mirror bridges are
         # set up lazily in bootstrap_spin once the veths appear.
         #
-        # 9216 is the canonical jumbo MTU on Cisco/Juniper hardware
-        # and what most production BNG deployments terminate. Both the
-        # host tap and the guest virtio NIC (via host_mtu in gen_nics)
-        # are configured to it so what the test sees matches what the
-        # operator would see on a real box.
-        self._data_mtu = 9216
+        # 1500 matches osvbngd's per-interface default (interfaces.go's
+        # DefaultMTU) and what containerlab puts on the wrapper veths
+        # via the test topology's per-link `mtu` setting. Keeping the
+        # tap, the virtio NIC, and the guest kernel interface at the
+        # same value avoids VPP af_packet quietly dropping VLAN-tagged
+        # frames that exceed VPP's per-interface MTU.
+        self._data_mtu = 1500
         for i in range(1, self.num_nics + 1):
             tap = f"tap{i}"
             subprocess.run(["ip", "tuntap", "add", "mode", "tap", tap],
@@ -198,10 +199,10 @@ class Osvbng_vm(vrnetlab.VM):
             self.running = True
             self.logger.info("osvbng reached state=ready after %ds", self.spins)
             # The QEMU build has DPDK disabled and VPP attaches to data
-            # NICs via af-packet — which only delivers multicast frames
-            # to the socket if the kernel interface has allmulticast on.
-            # Without this, OSPF/LDP hellos arrive on the wire and
-            # tcpdump shows them, but VPP never sees them.
+            # NICs via af_packet, which depends on the kernel forwarding
+            # frames to the raw socket. Without promisc, broadcast DHCP
+            # discovers and OSPF multicast hellos never reach VPP, so
+            # subscriber sessions and routing adjacencies don't form.
             for i in range(1, self.num_nics + 1):
                 subprocess.run(
                     ["ssh", "-i", self.ssh_key_path,
@@ -209,7 +210,7 @@ class Osvbng_vm(vrnetlab.VM):
                      "-o", "UserKnownHostsFile=/dev/null",
                      "-o", "LogLevel=ERROR",
                      "-p", "2022", "root@127.0.0.1",
-                     f"ip link set eth{i} allmulticast on"],
+                     f"ip link set eth{i} mtu {self._data_mtu} promisc on"],
                     check=False, capture_output=True,
                 )
             # Surface a stable marker on container stdout so
