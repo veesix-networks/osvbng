@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	routingcomp "github.com/veesix-networks/osvbng/internal/routing"
 	"github.com/veesix-networks/osvbng/pkg/config/protocols"
 	"github.com/veesix-networks/osvbng/pkg/deps"
 	"github.com/veesix-networks/osvbng/pkg/handlers/conf"
@@ -15,14 +14,10 @@ func init() {
 	conf.RegisterFactory(NewBGPInstanceHandler)
 }
 
-type BGPInstanceHandler struct {
-	routing *routingcomp.Component
-}
+type BGPInstanceHandler struct{}
 
-func NewBGPInstanceHandler(deps *deps.ConfDeps) conf.Handler {
-	return &BGPInstanceHandler{
-		routing: deps.Routing,
-	}
+func NewBGPInstanceHandler(_ *deps.ConfDeps) conf.Handler {
+	return &BGPInstanceHandler{}
 }
 
 func (h *BGPInstanceHandler) Validate(ctx context.Context, hctx *conf.HandlerContext) error {
@@ -39,25 +34,11 @@ func (h *BGPInstanceHandler) Validate(ctx context.Context, hctx *conf.HandlerCon
 }
 
 func (h *BGPInstanceHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error {
-	cfg, ok := hctx.NewValue.(*protocols.BGPConfig)
-	if !ok {
-		return fmt.Errorf("expected *protocols.BGPConfig, got %T", hctx.NewValue)
-	}
-	return h.routing.ConfigureBGP(cfg.ASN, cfg.RouterID)
+	return nil
 }
 
 func (h *BGPInstanceHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) error {
-	// Rolling back a freshly-added instance has no OldValue; undo it using the
-	// value that was applied. Without this guard the nil type assertion panics
-	// and crashes the daemon mid-rollback, masking the error that triggered it.
-	cfg, ok := hctx.OldValue.(*protocols.BGPConfig)
-	if !ok {
-		cfg, ok = hctx.NewValue.(*protocols.BGPConfig)
-	}
-	if !ok {
-		return nil
-	}
-	return h.routing.RemoveBGP(cfg.ASN)
+	return nil
 }
 
 func (h *BGPInstanceHandler) PathPattern() paths.Path {
