@@ -6,13 +6,19 @@
 set -euo pipefail
 
 usage() {
-    echo "Usage: $0 [-r RUNS] [-o OUTPUT_DIR] [-t TEST_NAME] [-x TEST_NAME] [-h]"
+    echo "Usage: $0 [-r RUNS] [-o OUTPUT_DIR] [-t TEST_NAME] [-x TEST_NAME] [--qemu[=TAG]] [-h]"
     echo ""
     echo "Options:"
     echo "  -r RUNS        Number of runs per test (default: 5)"
     echo "  -o OUTPUT_DIR  Output directory for results (default: test-results/qa)"
     echo "  -t TEST_NAME   Run only this test suite (e.g. 01-smoke). Can be repeated."
     echo "  -x TEST_NAME   Exclude this test suite. Can be repeated. Mutually exclusive with -t."
+    echo "  --qemu[=TAG]   Swap the BNG image to a vrnetlab-wrapped QEMU build before each"
+    echo "                 test runs. With no TAG, picks the most-recently-built local image"
+    echo "                 matching 'veesixnetworks/osvbng:ci-v*' (mirroring 'make docker-local'"
+    echo "                 picking up 'veesixnetworks/osvbng:local'). Falls back to 'ci-vlocal'"
+    echo "                 if no ci-v* image is built. Topology files are rewritten in place"
+    echo "                 and restored on exit."
     echo "  -h             Show this help"
     echo ""
     echo "Examples:"
@@ -21,6 +27,8 @@ usage() {
     echo "  $0 -t 03-ipoe-local -r 10               # Single test, 10 runs"
     echo "  $0 -t 01-smoke -t 02-smoke-ha           # Two tests, 5 runs each"
     echo "  $0 -x 09-cgnat-ipoe-det -x 11-cgnat-pppoe-det  # All tests except these two"
+    echo "  $0 --qemu -t 01-smoke                   # Run via QEMU (ci-vlocal) instead of Docker"
+    echo "  $0 --qemu=ci-v0.14.0 -t 01-smoke        # Pin a specific QEMU build tag"
     exit 0
 }
 
@@ -28,6 +36,17 @@ RUNS=5
 QA_DIR=""
 FILTER_TESTS=()
 EXCLUDE_TESTS=()
+QEMU_TAG=""
+
+ARGS=()
+for arg in "$@"; do
+    case "$arg" in
+        --qemu)      QEMU_TAG="auto" ;;
+        --qemu=*)    QEMU_TAG="${arg#--qemu=}" ;;
+        *)           ARGS+=("$arg") ;;
+    esac
+done
+set -- "${ARGS[@]}"
 
 while getopts "r:o:t:x:h" opt; do
     case $opt in
@@ -109,6 +128,44 @@ echo "========================================" | tee -a "$SUMMARY"
 
 total_pass=0
 total_fail=0
+
+REWRITTEN_TOPOS=()
+restore_topologies() {
+    for f in "${REWRITTEN_TOPOS[@]:-}"; do
+        [ -n "$f" ] && [ -f "$f.qabak" ] && mv "$f.qabak" "$f"
+    done
+}
+trap restore_topologies EXIT
+
+if [ "$QEMU_TAG" = "auto" ]; then
+    # Mirror `make docker-local`: pick the freshest local build without
+    # making the operator look up the tag. `docker images` is sorted by
+    # creation time descending by default.
+    QEMU_TAG=$(docker images --format '{{.Tag}}' veesixnetworks/osvbng | awk '/^ci-v/ {print; exit}')
+    if [ -z "$QEMU_TAG" ]; then
+        QEMU_TAG="ci-vlocal"
+        echo "WARNING: no veesixnetworks/osvbng:ci-v* image found locally, falling back to $QEMU_TAG" >&2
+    fi
+fi
+
+if [ -n "$QEMU_TAG" ]; then
+    echo "QEMU mode: swapping BNG image -> veesixnetworks/osvbng:$QEMU_TAG" | tee -a "$SUMMARY"
+    for test in "${TESTS[@]}"; do
+        topo="tests/${test}/${test}.clab.yml"
+        if [ -f "$topo" ] && grep -q "veesixnetworks/osvbng:local" "$topo"; then
+            cp "$topo" "$topo.qabak"
+            # Swap the image tag and add /dev/kvm passthrough for each BNG
+            # node so the vrnetlab wrapper can boot QEMU with -enable-kvm.
+            # Indentation matches the 6-space convention used by every
+            # topology in tests/.
+            sed -i \
+                -e "s|veesixnetworks/osvbng:local|veesixnetworks/osvbng:$QEMU_TAG|g" \
+                -e "/image: veesixnetworks\\/osvbng:$QEMU_TAG/a\\      devices: [\"/dev/kvm\"]" \
+                "$topo"
+            REWRITTEN_TOPOS+=("$topo")
+        fi
+    done
+fi
 
 for test in "${TESTS[@]}"; do
     pass=0
