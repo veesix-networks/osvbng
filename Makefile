@@ -2,7 +2,7 @@
 # Licensed under the GNU General Public License v3.0 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-.PHONY: all build generate generate-proto clean run test cli build-cli docker-local docker-kea-local lint fmt robot-test clean-branches dev-vm dev-vm-sync
+.PHONY: all build generate generate-proto clean run test cli build-cli docker-local docker-kea-local lint fmt robot-test clean-branches dev-vm dev-vm-sync validate-artifacts tarball-smoke
 
 all: generate build
 
@@ -87,5 +87,15 @@ dev-vm-sync:
 
 dev-vm-provision:
 	@scripts/dev/reprovision-vm.sh
+
+validate-artifacts:
+	@go run ./scripts/release/validate-artifacts.go release/artifacts.yaml
+
+tarball-smoke:
+	@./scripts/release/build-test-tarball.sh \
+		-k /etc/osvbng/dev-cosign.key \
+		-v 0.0.0-smoke \
+		-o /tmp/osvbng-tarball-smoke
+	@go run ./scripts/release/validate-artifacts.go release/artifacts.yaml
 
 .DEFAULT_GOAL := all

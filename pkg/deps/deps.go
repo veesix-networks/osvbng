@@ -51,6 +51,12 @@ type ShowDeps struct {
 	Orchestrator     *component.Orchestrator
 }
 
+// OperConfigReloader is the narrow contract OperDeps needs without
+// importing *configmgr.ConfigManager (which would cycle through deps).
+type OperConfigReloader interface {
+	ReloadFRR() error
+}
+
 type OperDeps struct {
 	Subscriber       *subscriber.Component
 	Southbound       southbound.Southbound
@@ -58,6 +64,7 @@ type OperDeps struct {
 	HAManager        *ha.Manager
 	PluginComponents map[string]component.Component
 	CGNAT            *cgnatcomp.Component
+	ConfigReloader   OperConfigReloader
 }
 
 type ConfDeps struct {

@@ -43,7 +43,14 @@ func (h *InterfaceHandler) Apply(ctx context.Context, hctx *conf.HandlerContext)
 		return nil
 	}
 
-	return h.southbound.CreateInterface(cfg)
+	if err := h.southbound.CreateInterface(cfg); err != nil {
+		return err
+	}
+
+	if cfg.MTU == 0 {
+		return h.southbound.SetInterfaceMTU(cfg.Name, interfaces.DefaultMTU)
+	}
+	return nil
 }
 
 func (h *InterfaceHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) error {

@@ -72,8 +72,9 @@ func sha256Hex(b []byte) string {
 
 func goodManifest(artifactBody []byte) []byte {
 	return []byte(`
-osvbng_version: 0.13.1
-min_compatible_version: 0.12.0
+schema_version: 2
+osvbng_version: 0.14.0
+min_compatible_version: 0.13.1
 type: A
 build_commit: abc1234
 artifacts:
@@ -81,6 +82,7 @@ artifacts:
     source: osvbngd
     sha256: ` + sha256Hex(artifactBody) + `
     mode: "0755"
+    requires_restart: osvbngd
 `)
 }
 

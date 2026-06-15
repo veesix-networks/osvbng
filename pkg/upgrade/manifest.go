@@ -14,38 +14,25 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TierA is the only tier handled by this implementation. Tarballs declaring
-// any other tier value are refused early in the apply flow. The constant is
-// exported so callers and tests can reference the canonical value.
-const TierA = "A"
+const (
+	TierA                 = "A"
+	ManifestSchemaVersion = 2
+)
 
-// ManifestVersion is the schema version this build understands. Manifests
-// claiming a higher version are refused: a forward-incompatible change must
-// bump this constant in the build that supports it.
-const ManifestVersion = 1
-
-// Manifest describes the contents of a signed osvbng release tarball.
-// Only the Tier-A subset of fields is decoded here. Tier-B fields
-// (deb_packages, dpkg_baseline) are listed in tierBForbiddenKeys and cause
-// strict decoding to fail with a clear error directing the operator to the
-// Tier-B handler (separate spec).
 type Manifest struct {
-	OsvbngVersion        string             `yaml:"osvbng_version"`
-	MinCompatibleVersion string             `yaml:"min_compatible_version"`
-	Type                 string             `yaml:"type"`
-	BuildDate            time.Time          `yaml:"build_date"`
-	BuildCommit          string             `yaml:"build_commit"`
-	Artifacts            []ManifestArtifact `yaml:"artifacts"`
-	Hooks                ManifestHooks      `yaml:"hooks,omitempty"`
-	EstimatedOutageSec   int                `yaml:"estimated_outage_seconds,omitempty"`
-	RequiresReboot       bool               `yaml:"requires_reboot,omitempty"`
+	SchemaVersion          int                `yaml:"schema_version"`
+	OsvbngVersion          string             `yaml:"osvbng_version"`
+	MinCompatibleVersion   string             `yaml:"min_compatible_version"`
+	PreviousVersion        string             `yaml:"previous_version,omitempty"`
+	PreviousManifestSHA256 string             `yaml:"previous_manifest_sha256,omitempty"`
+	Type                   string             `yaml:"type"`
+	BuildDate              time.Time          `yaml:"build_date"`
+	BuildCommit            string             `yaml:"build_commit"`
+	Artifacts              []ManifestArtifact `yaml:"artifacts"`
+	Hooks                  ManifestHooks      `yaml:"hooks,omitempty"`
+	EstimatedOutageSec     int                `yaml:"estimated_outage_seconds,omitempty"`
 }
 
-// ManifestArtifact describes a single file the tarball will install.
-// expected_current_sha256 is optional: when set, drift detection warns
-// if the on-disk file no longer matches the expected pre-upgrade hash
-// (the apply continues anyway — the rollback snapshot preserves the
-// drifted bytes for forensics).
 type ManifestArtifact struct {
 	Path                  string `yaml:"path"`
 	Source                string `yaml:"source"`
@@ -54,26 +41,34 @@ type ManifestArtifact struct {
 	Mode                  string `yaml:"mode,omitempty"`
 	UID                   int    `yaml:"uid,omitempty"`
 	GID                   int    `yaml:"gid,omitempty"`
+	RequiresRestart       string `yaml:"requires_restart"`
 }
 
-// ManifestHooks names optional pre/post scripts inside the tarball
-// (relative paths under the staged extraction directory). Empty values
-// disable the hook stage.
 type ManifestHooks struct {
-	Pre  string `yaml:"pre,omitempty"`
-	Post string `yaml:"post,omitempty"`
+	Pre  HookEntry `yaml:"pre,omitempty"`
+	Post HookEntry `yaml:"post,omitempty"`
 }
 
-// tierBForbiddenKeys are top-level manifest keys reserved for the Tier-B
-// (apt-bundle) spec. Tier A refuses any manifest containing them, even
-// if `type: A` is declared, so a build-pipeline misconfiguration can't
-// silently produce a Tier-A tarball that ships Tier-B intent.
+type HookEntry struct {
+	Path   string `yaml:"path,omitempty"`
+	SHA256 string `yaml:"sha256,omitempty"`
+}
+
+// validRestartClasses is the load-bearing enum guard. KnownFields(true)
+// catches unknown keys but not bad values; a typo here would silently
+// under-restart.
+var validRestartClasses = map[string]bool{
+	"osvbngd": true,
+	"vpp":     true,
+	"both":    true,
+	"none":    true,
+}
+
 var tierBForbiddenKeys = []string{
 	"deb_packages",
 	"dpkg_baseline",
 }
 
-// ParseManifestFile reads and decodes a manifest from disk.
 func ParseManifestFile(path string) (*Manifest, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -82,13 +77,6 @@ func ParseManifestFile(path string) (*Manifest, error) {
 	return ParseManifest(data)
 }
 
-// ParseManifest decodes manifest YAML with strict field handling and the
-// Tier-B forbidden-fields guard, then runs structural validation.
-// Returns a fully validated Manifest ready for use by the apply flow.
-//
-// Strict decoding (KnownFields(true)) means unknown top-level or
-// artifact-level fields are hard errors: a typo'd field name fails fast
-// rather than silently being ignored.
 func ParseManifest(data []byte) (*Manifest, error) {
 	if err := checkForbiddenKeys(data); err != nil {
 		return nil, err
@@ -108,19 +96,16 @@ func ParseManifest(data []byte) (*Manifest, error) {
 	return &m, nil
 }
 
-// Validate performs structural and tier-policy checks on a decoded
-// manifest. Called automatically by ParseManifest; exposed so tests can
-// exercise it directly.
 func (m *Manifest) Validate() error {
 	if m.Type == "" {
 		return fmt.Errorf("manifest: type field is required")
 	}
 	if m.Type != TierA {
-		return fmt.Errorf("manifest: this build handles tier %q only; tarball declares tier %q (apt-bundle path is handled by a separate, later release)", TierA, m.Type)
+		return fmt.Errorf("manifest: this build handles tier %q only; tarball declares tier %q", TierA, m.Type)
 	}
 
-	if m.RequiresReboot {
-		return fmt.Errorf("manifest: requires_reboot=true is a Tier-B signal; Tier A is for non-reboot upgrades only")
+	if m.SchemaVersion != ManifestSchemaVersion {
+		return fmt.Errorf("manifest: schema_version=%d is not supported (this build accepts schema_version=%d only)", m.SchemaVersion, ManifestSchemaVersion)
 	}
 
 	if m.OsvbngVersion == "" {
@@ -151,17 +136,19 @@ func (m *Manifest) Validate() error {
 			return fmt.Errorf("manifest: artifact[%d] (%s) is a duplicate path", i, art.Path)
 		}
 		seen[art.Path] = true
+		if art.RequiresRestart == "" {
+			return fmt.Errorf("manifest: artifact[%d] (%s) requires_restart is empty (must be one of: osvbngd, vpp, both, none)", i, art.Path)
+		}
+		if !validRestartClasses[art.RequiresRestart] {
+			return fmt.Errorf("manifest: artifact[%d] (%s) requires_restart=%q is not a valid value (must be one of: osvbngd, vpp, both, none)", i, art.Path, art.RequiresRestart)
+		}
 	}
 
 	return nil
 }
 
-// checkForbiddenKeys scans the raw YAML for reserved Tier-B field names
-// before strict decoding kicks in. Without this, strict decoding's
-// "unknown field" error would surface for a Tier-B manifest fed to a
-// Tier-A build, but the message would be generic. The dedicated check
-// produces a clear "this is a Tier-B field" message that points the
-// operator at the right follow-up.
+// checkForbiddenKeys runs before strict decode so a Tier-B manifest hits
+// a tier-specific error message instead of generic "unknown field".
 func checkForbiddenKeys(data []byte) error {
 	var raw map[string]any
 	if err := yaml.Unmarshal(data, &raw); err != nil {

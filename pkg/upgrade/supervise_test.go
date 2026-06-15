@@ -154,6 +154,9 @@ func TestSupervisorSuspendAndRestoreAutoRestart(t *testing.T) {
 	if !strings.Contains(string(body), "Restart=no") {
 		t.Fatalf("drop-in content = %q, want Restart=no", string(body))
 	}
+	if !strings.Contains(string(body), "RuntimeDirectoryPreserve=yes") {
+		t.Fatalf("drop-in content = %q, want RuntimeDirectoryPreserve=yes", string(body))
+	}
 
 	// Verify daemon-reload was invoked.
 	gotReload := false

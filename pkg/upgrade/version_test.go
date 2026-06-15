@@ -23,22 +23,24 @@ func writeCurrentManifestFile(t *testing.T, dir, body string) {
 func TestCurrentInstalledVersionReadsManifest(t *testing.T) {
 	stateRoot := t.TempDir()
 	writeCurrentManifestFile(t, stateRoot, `
-osvbng_version: 0.13.1
-min_compatible_version: 0.12.0
+schema_version: 2
+osvbng_version: 0.14.0
+min_compatible_version: 0.13.1
 type: A
 build_commit: abc1234
 artifacts:
   - path: /usr/local/bin/osvbngd
     source: osvbngd
     sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    requires_restart: osvbngd
 `)
 
 	got, err := CurrentInstalledVersion(context.Background(), stateRoot, "/nonexistent/osvbngd", nil)
 	if err != nil {
 		t.Fatalf("CurrentInstalledVersion: %v", err)
 	}
-	if got != "0.13.1" {
-		t.Fatalf("got %q, want 0.13.1", got)
+	if got != "0.14.0" {
+		t.Fatalf("got %q, want 0.14.0", got)
 	}
 }
 
@@ -109,12 +111,13 @@ func TestParseVersionOutputVariants(t *testing.T) {
 func TestWriteCurrentManifestRoundtrip(t *testing.T) {
 	stateRoot := t.TempDir()
 	m := &Manifest{
-		OsvbngVersion:        "0.13.1",
-		MinCompatibleVersion: "0.12.0",
+		SchemaVersion:        ManifestSchemaVersion,
+		OsvbngVersion:        "0.14.0",
+		MinCompatibleVersion: "0.13.1",
 		Type:                 TierA,
 		BuildCommit:          "abc1234",
 		Artifacts: []ManifestArtifact{
-			{Path: "/usr/local/bin/osvbngd", Source: "osvbngd", SHA256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", Mode: "0755"},
+			{Path: "/usr/local/bin/osvbngd", Source: "osvbngd", SHA256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", Mode: "0755", RequiresRestart: "osvbngd"},
 		},
 	}
 
@@ -126,8 +129,8 @@ func TestWriteCurrentManifestRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CurrentInstalledVersion after WriteCurrentManifest: %v", err)
 	}
-	if got != "0.13.1" {
-		t.Fatalf("got %q, want 0.13.1", got)
+	if got != "0.14.0" {
+		t.Fatalf("got %q, want 0.14.0", got)
 	}
 
 	// Belt + suspenders: ensure no temp files were left behind.

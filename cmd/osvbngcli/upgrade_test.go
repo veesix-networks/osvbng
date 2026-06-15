@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -25,8 +26,9 @@ type fakeUpgradeRunner struct {
 	rollbackCalls atomic.Int32
 	statusCalls   atomic.Int32
 
-	lastPlanArg  string
-	lastApplyArg string
+	lastPlanArg   string
+	lastApplyArg  string
+	lastApplyOpts upgrade.ApplyOptions
 
 	planErr     error
 	applyErr    error
@@ -46,6 +48,17 @@ func (f *fakeUpgradeRunner) Plan(_ context.Context, tarballPath string) (*upgrad
 func (f *fakeUpgradeRunner) Apply(_ context.Context, tarballPath string) (*upgrade.ApplyResult, error) {
 	f.applyCalls.Add(1)
 	f.lastApplyArg = tarballPath
+	f.lastApplyOpts = upgrade.ApplyOptions{}
+	if f.applyErr != nil {
+		return nil, f.applyErr
+	}
+	return &upgrade.ApplyResult{From: "0.13.0", To: "0.13.1", JournalEndPhase: "completed"}, nil
+}
+
+func (f *fakeUpgradeRunner) ApplyOne(_ context.Context, tarballPath string, opts upgrade.ApplyOptions) (*upgrade.ApplyResult, error) {
+	f.applyCalls.Add(1)
+	f.lastApplyArg = tarballPath
+	f.lastApplyOpts = opts
 	if f.applyErr != nil {
 		return nil, f.applyErr
 	}
@@ -203,5 +216,123 @@ func TestSetUpgradeCancelInstallsAndClears(t *testing.T) {
 	cleanup()
 	if interruptActiveUpgrade() {
 		t.Fatal("interruptActiveUpgrade returned true after cleanup")
+	}
+}
+
+func TestParseApplyArgsTarballOnly(t *testing.T) {
+	path, opts, err := parseApplyArgs([]string{"/tmp/x.tar.gz"})
+	if err != nil {
+		t.Fatalf("parseApplyArgs: %v", err)
+	}
+	if path != "/tmp/x.tar.gz" {
+		t.Fatalf("path = %q, want /tmp/x.tar.gz", path)
+	}
+	if opts.FirstBoot || opts.ForceRetry {
+		t.Fatalf("opts = %+v, want both flags false", opts)
+	}
+}
+
+func TestParseApplyArgsFirstBoot(t *testing.T) {
+	path, opts, err := parseApplyArgs([]string{"--first-boot", "/tmp/x.tar.gz"})
+	if err != nil {
+		t.Fatalf("parseApplyArgs: %v", err)
+	}
+	if path != "/tmp/x.tar.gz" {
+		t.Fatalf("path = %q, want /tmp/x.tar.gz", path)
+	}
+	if !opts.FirstBoot {
+		t.Fatal("FirstBoot not set")
+	}
+	if opts.ForceRetry {
+		t.Fatal("ForceRetry should not be set")
+	}
+}
+
+func TestParseApplyArgsForceRetry(t *testing.T) {
+	_, opts, err := parseApplyArgs([]string{"/tmp/x.tar.gz", "--force-retry"})
+	if err != nil {
+		t.Fatalf("parseApplyArgs: %v", err)
+	}
+	if !opts.ForceRetry {
+		t.Fatal("ForceRetry not set")
+	}
+}
+
+func TestParseApplyArgsBothFlags(t *testing.T) {
+	_, opts, err := parseApplyArgs([]string{"--first-boot", "--force-retry", "/tmp/x.tar.gz"})
+	if err != nil {
+		t.Fatalf("parseApplyArgs: %v", err)
+	}
+	if !opts.FirstBoot || !opts.ForceRetry {
+		t.Fatalf("opts = %+v, want both true", opts)
+	}
+}
+
+func TestParseApplyArgsRejectsUnknownFlag(t *testing.T) {
+	if _, _, err := parseApplyArgs([]string{"--bogus", "/tmp/x.tar.gz"}); err == nil {
+		t.Fatal("parseApplyArgs accepted unknown flag")
+	}
+}
+
+func TestParseApplyArgsRejectsZeroPositional(t *testing.T) {
+	if _, _, err := parseApplyArgs([]string{"--first-boot"}); err == nil {
+		t.Fatal("parseApplyArgs accepted zero positional args")
+	}
+}
+
+func TestParseApplyArgsRejectsMultiplePositional(t *testing.T) {
+	if _, _, err := parseApplyArgs([]string{"/tmp/a.tar.gz", "/tmp/b.tar.gz"}); err == nil {
+		t.Fatal("parseApplyArgs accepted two positional args")
+	}
+}
+
+func TestRunUpgradeActionApplyForwardsFirstBoot(t *testing.T) {
+	fake := &fakeUpgradeRunner{}
+	withSuppressedStdout(t, func() {
+		err := runUpgradeAction(context.Background(), fake, "apply",
+			[]string{"--first-boot", "/tmp/x.tar.gz"})
+		if err != nil {
+			t.Fatalf("runUpgradeAction: %v", err)
+		}
+	})
+	if fake.applyCalls.Load() != 1 {
+		t.Fatalf("ApplyOne call count = %d, want 1", fake.applyCalls.Load())
+	}
+	if !fake.lastApplyOpts.FirstBoot {
+		t.Fatal("ApplyOne was not invoked with FirstBoot=true")
+	}
+}
+
+// parseInvocation splits a command line at the first "--" token into
+// PathTokens (everything before) and FlagTokens (everything from the
+// flag onward). handleUpgrade has to merge both before forwarding to
+// runUpgradeAction; dropping FlagTokens silently swallowed
+// --first-boot/--force-retry/<tarball> and surfaced as
+// "apply requires exactly one tarball path argument" the first time
+// the integration harness invoked upgrade via piped stdin.
+func TestParseInvocationSplitsFlagsAndPositionalForApply(t *testing.T) {
+	inv, err := parseInvocation("upgrade apply --first-boot --force-retry /tmp/x.tar.gz")
+	if err != nil {
+		t.Fatalf("parseInvocation: %v", err)
+	}
+	if len(inv.PathTokens) != 2 {
+		t.Fatalf("PathTokens = %v, want [upgrade apply]", inv.PathTokens)
+	}
+	wantFlags := []string{"--first-boot", "--force-retry", "/tmp/x.tar.gz"}
+	if !reflect.DeepEqual(inv.FlagTokens, wantFlags) {
+		t.Fatalf("FlagTokens = %v, want %v", inv.FlagTokens, wantFlags)
+	}
+
+	merged := make([]string, 0, len(inv.PathTokens)-2+len(inv.FlagTokens))
+	merged = append(merged, inv.PathTokens[2:]...)
+	merged = append(merged, inv.FlagTokens...)
+
+	path, opts, err := parseApplyArgs(merged)
+	if err != nil {
+		t.Fatalf("parseApplyArgs(%v): %v", merged, err)
+	}
+	if path != "/tmp/x.tar.gz" || !opts.FirstBoot || !opts.ForceRetry {
+		t.Fatalf("path=%q FirstBoot=%v ForceRetry=%v, want /tmp/x.tar.gz true true",
+			path, opts.FirstBoot, opts.ForceRetry)
 	}
 }

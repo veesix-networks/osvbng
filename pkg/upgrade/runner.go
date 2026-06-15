@@ -30,6 +30,7 @@ type Runner struct {
 	RollbackRoot  string // /var/opt/osvbng/rollback/
 	QuarantineDir string // /var/opt/osvbng/quarantine/
 	StateFile     string // /run/osvbng/state
+	VPPSocketPath string // /run/osvbng/dataplane_api.sock — checked after vpp restart
 	SystemdUnit   string // osvbng.service
 	DropInRoot    string // /run/systemd/system — parent of <unit>.d for the transient Restart= override
 	PubKey        string // /etc/osvbng/release-keys/cosign.pub
@@ -39,6 +40,12 @@ type Runner struct {
 	StallLimit     time.Duration
 	PollInterval   time.Duration
 	StateFileGrace time.Duration
+
+	// VPP restart timing. Zero values pick spec defaults. Tests
+	// override to keep test runtime fast.
+	VPPStopWait       time.Duration // max wait for vpp to leave running after stop --no-block
+	VPPActiveWait     time.Duration // max wait for vpp to reach active after start --no-block
+	VPPPollInterval   time.Duration // unitState poll interval inside the stop/start waits
 
 	// Injectables.
 	Cmd      Commander
@@ -56,6 +63,7 @@ func NewRunner(reporter ProgressReporter) *Runner {
 		RollbackRoot:  "/var/opt/osvbng/rollback",
 		QuarantineDir: "/var/opt/osvbng/quarantine",
 		StateFile:     "/run/osvbng/state",
+		VPPSocketPath: "/run/osvbng/dataplane_api.sock",
 		SystemdUnit:   "osvbng.service",
 		DropInRoot:    "/run/systemd/system",
 		PubKey:        "/etc/osvbng/release-keys/cosign.pub",
@@ -76,7 +84,6 @@ type PlanResult struct {
 	Tier               string
 	Artifacts          []ManifestArtifact
 	EstimatedOutageSec int
-	RequiresReboot     bool
 	DriftFindings      []DriftFinding
 	RollbackAvailable  bool
 }
@@ -145,7 +152,6 @@ func (r *Runner) Plan(ctx context.Context, tarballPath string) (*PlanResult, err
 		Tier:               staging.Manifest.Type,
 		Artifacts:          staging.Manifest.Artifacts,
 		EstimatedOutageSec: staging.Manifest.EstimatedOutageSec,
-		RequiresReboot:     staging.Manifest.RequiresReboot,
 		DriftFindings:      drift,
 		RollbackAvailable:  rbAvail,
 	}, nil
@@ -195,9 +201,17 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 		return nil, fmt.Errorf("verified signature but artifact digest mismatch: %v", mismatches)
 	}
 
-	from, _ := r.discoverCurrentVersion(ctx)
-	if opts.ExpectedFrom != "" && from != opts.ExpectedFrom {
-		return nil, fmt.Errorf("apply: chain coordinator expected from=%q but on-disk version is %q", opts.ExpectedFrom, from)
+	var from string
+	if opts.FirstBoot {
+		from = "first-boot"
+		if manifest.PreviousVersion != "" {
+			r.Reporter.Progress(fmt.Sprintf("first-boot: tarball declares stepwise prev=%s; overridden by --first-boot", manifest.PreviousVersion))
+		}
+	} else {
+		from, _ = r.discoverCurrentVersion(ctx)
+		if opts.ExpectedFrom != "" && from != opts.ExpectedFrom {
+			return nil, fmt.Errorf("apply: chain coordinator expected from=%q but on-disk version is %q", opts.ExpectedFrom, from)
+		}
 	}
 	r.Reporter.Progress(fmt.Sprintf("from %s → %s (Tier %s)", from, manifest.OsvbngVersion, manifest.Type))
 
@@ -210,27 +224,46 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 		}
 	}
 
-	// Begin recording the journal as we cross irreversible boundaries.
+	if !opts.FirstBoot {
+		if err := r.verifyPrevManifest(staging, manifest, from); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := r.checkPartialApply(opts); err != nil {
+		return nil, err
+	}
+
+	startPhase := "started"
+	if opts.FirstBoot {
+		startPhase = "first_boot_started"
+	}
 	journal := NewJournal(filepath.Join(r.StateRoot, "upgrade-state.json"))
 	if err := journal.Write(&JournalState{
 		From:      from,
 		To:        manifest.OsvbngVersion,
 		Tarball:   tarballPath,
 		StartedAt: time.Now().UTC(),
-		Phase:     "started",
+		Phase:     startPhase,
 	}); err != nil {
 		return nil, fmt.Errorf("write initial journal: %w", err)
 	}
 
-	r.Reporter.Stage(5, totalStages, "Snapshotting current version")
-	snapDir, _, err := Snapshot(r.RollbackRoot, from, manifest.OsvbngVersion, manifest)
-	if err != nil {
-		return nil, err
+	var snapDir string
+	if opts.FirstBoot {
+		r.Reporter.Stage(5, totalStages, "Snapshot (skipped on first-boot)")
+		r.Reporter.Progress("no prior install; nothing to snapshot")
+	} else {
+		r.Reporter.Stage(5, totalStages, "Snapshotting current version")
+		snapDir, _, err = Snapshot(r.RollbackRoot, from, manifest.OsvbngVersion, manifest)
+		if err != nil {
+			return nil, err
+		}
+		if err := journal.SetPhase("snapshot_done"); err != nil {
+			return nil, err
+		}
+		r.Reporter.Progress(snapDir)
 	}
-	if err := journal.SetPhase("snapshot_done"); err != nil {
-		return nil, err
-	}
-	r.Reporter.Progress(snapDir)
 
 	r.Reporter.Stage(6, totalStages, "Pre-apply hook")
 	if err := r.runHook(ctx, staging.Dir, manifest.Hooks.Pre, from, manifest.OsvbngVersion); err != nil {
@@ -262,22 +295,31 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 		return nil, err
 	}
 
+	if opts.FirstBoot {
+		_ = journal.SetPhase("first_boot_swapping")
+	}
 	r.Reporter.Stage(9, totalStages, "Swapping artifacts")
 	swapped, err := r.swapArtifacts(ctx, staging, manifest, journal)
 	if err != nil {
-		// Best-effort rollback of whatever swapped before the failure;
-		// attempt to restart the daemon either way so the operator is
-		// not left with a stopped service.
 		r.Reporter.Warn(fmt.Sprintf("swap loop failed after %d artifact(s): %v", len(swapped), err))
+		if opts.FirstBoot {
+			_ = journal.SetPhase("first_boot_aborted_mid_swap")
+			return nil, fmt.Errorf("first-boot apply failed mid-swap; image must be re-imaged (no rollback snapshot exists): %w", err)
+		}
 		_ = journal.SetPhase("aborted_mid_swap")
 		return r.rollbackAfterFailedApply(ctx, supervisor, journal, "swap loop failure")
 	}
 
-	// VPP keeps plugins loaded in memory; a fresh .so on disk only
-	// takes effect after a VPP restart. osvbng.service is already
-	// stopped so there's no cascade to worry about.
-	if r.swapTouchesPlugins(swapped) {
-		r.Reporter.Progress("plugin changed, restarting VPP")
+	// osvbng-config.service runs first so dataplane.conf reflects any new
+	// templates before vpp re-reads it.
+	plan := planFromManifest(manifest)
+	_ = swapped
+	if plan.NeedsVPP {
+		r.Reporter.Progress("plugin or dataplane template changed, rerunning osvbng-config.service and restarting VPP")
+		if err := r.restartConfigService(ctx); err != nil {
+			_ = journal.SetPhase("aborted_post_swap")
+			return r.rollbackAfterFailedApply(ctx, supervisor, journal, fmt.Sprintf("osvbng-config restart failed: %v", err))
+		}
 		if err := r.restartVPP(ctx); err != nil {
 			_ = journal.SetPhase("aborted_post_swap")
 			return r.rollbackAfterFailedApply(ctx, supervisor, journal, fmt.Sprintf("vpp restart failed: %v", err))
@@ -286,10 +328,18 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 
 	r.Reporter.Stage(10, totalStages, "Starting daemon")
 	if err := supervisor.Start(ctx); err != nil {
+		if opts.FirstBoot {
+			_ = journal.SetPhase("first_boot_aborted_post_swap")
+			return nil, fmt.Errorf("first-boot daemon start failed: %w", err)
+		}
 		_ = journal.SetPhase("aborted_post_swap")
 		return r.rollbackAfterFailedApply(ctx, supervisor, journal, "systemctl start failed")
 	}
-	if err := journal.SetPhase("daemon_started"); err != nil {
+	postStartPhase := "daemon_started"
+	if opts.FirstBoot {
+		postStartPhase = "first_boot_daemon_started"
+	}
+	if err := journal.SetPhase(postStartPhase); err != nil {
 		return nil, err
 	}
 
@@ -297,6 +347,10 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 	healthOutcome, healthMsg := r.waitHealthy(ctx, supervisor, manifest.OsvbngVersion)
 	if healthOutcome != HealthOK {
 		r.Reporter.Warn(fmt.Sprintf("health failed: %s — %s", healthOutcome, healthMsg))
+		if opts.FirstBoot {
+			_ = journal.SetPhase("first_boot_health_failed")
+			return nil, fmt.Errorf("first-boot health check failed (%s): %s", healthOutcome, healthMsg)
+		}
 		_ = journal.SetPhase("health_failed")
 		return r.rollbackAfterFailedApply(ctx, supervisor, journal, fmt.Sprintf("health %s: %s", healthOutcome, healthMsg))
 	}
@@ -305,18 +359,24 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 	if err := WriteCurrentManifest(r.StateRoot, manifest); err != nil {
 		return nil, fmt.Errorf("write current-manifest: %w", err)
 	}
-	if err := journal.SetPhase("completed"); err != nil {
+	completedPhase := "completed"
+	if opts.FirstBoot {
+		completedPhase = "first_boot_completed"
+	}
+	if err := journal.SetPhase(completedPhase); err != nil {
 		return nil, err
 	}
 
-	r.Reporter.Stage(13, totalStages, "Pruning old snapshots")
-	if opts.PrunePolicy == PruneKeepN {
-		keep := opts.KeepN
-		if keep == 0 {
-			keep = 1
-		}
-		if err := PruneSnapshots(r.RollbackRoot, keep); err != nil {
-			r.Reporter.Warn(fmt.Sprintf("prune snapshots: %v", err))
+	if !opts.FirstBoot {
+		r.Reporter.Stage(13, totalStages, "Pruning old snapshots")
+		if opts.PrunePolicy == PruneKeepN {
+			keep := opts.KeepN
+			if keep == 0 {
+				keep = 1
+			}
+			if err := PruneSnapshots(r.RollbackRoot, keep); err != nil {
+				r.Reporter.Warn(fmt.Sprintf("prune snapshots: %v", err))
+			}
 		}
 	}
 
@@ -331,7 +391,7 @@ func (r *Runner) ApplyOne(ctx context.Context, tarballPath string, opts ApplyOpt
 		SnapshotDir:     snapDir,
 		ArtifactsSwap:   swapped,
 		HealthOutcome:   healthOutcome.String(),
-		JournalEndPhase: "completed",
+		JournalEndPhase: completedPhase,
 	}, nil
 }
 
@@ -389,8 +449,13 @@ func (r *Runner) Rollback(ctx context.Context) (*RollbackResult, error) {
 		return nil, err
 	}
 
-	if r.swapTouchesPlugins(restored) {
-		r.Reporter.Progress("plugin restored, restarting VPP")
+	_ = restored
+	if meta.NeedsVPP {
+		r.Reporter.Progress("plugin or dataplane template restored, rerunning osvbng-config.service and restarting VPP")
+		if err := r.restartConfigService(ctx); err != nil {
+			_ = journal.SetPhase("rollback_failed")
+			return nil, fmt.Errorf("osvbng-config restart during rollback: %w", err)
+		}
 		if err := r.restartVPP(ctx); err != nil {
 			_ = journal.SetPhase("rollback_failed")
 			return nil, fmt.Errorf("vpp restart during rollback: %w", err)
@@ -463,6 +528,15 @@ func (r *Runner) defaults() {
 	if r.StateFileGrace == 0 {
 		r.StateFileGrace = 5 * time.Second
 	}
+	if r.VPPStopWait == 0 {
+		r.VPPStopWait = 30 * time.Second
+	}
+	if r.VPPActiveWait == 0 {
+		r.VPPActiveWait = 120 * time.Second
+	}
+	if r.VPPPollInterval == 0 {
+		r.VPPPollInterval = 500 * time.Millisecond
+	}
 	if r.Cmd == nil {
 		r.Cmd = execCommander{}
 	}
@@ -520,25 +594,183 @@ func (r *Runner) discoverCurrentVersion(ctx context.Context) (string, error) {
 	return CurrentInstalledVersion(ctx, r.StateRoot, r.BinaryPath, r.Cmd)
 }
 
-func (r *Runner) swapTouchesPlugins(paths []string) bool {
-	if r.PluginDir == "" {
-		return false
+func (r *Runner) verifyPrevManifest(staging *Staging, manifest *Manifest, currentVersion string) error {
+	if manifest.PreviousVersion == "" {
+		return nil
 	}
-	prefix := strings.TrimRight(r.PluginDir, "/") + "/"
-	for _, p := range paths {
-		if strings.HasPrefix(p, prefix) {
-			return true
+
+	prevManifestPath := filepath.Join(staging.Dir, "prev", "manifest.yaml")
+	prevSigPath := prevManifestPath + ".sig"
+
+	if _, err := os.Stat(prevManifestPath); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("stepwise upgrade: manifest declares previous_version=%s but tarball has no prev/manifest.yaml", manifest.PreviousVersion)
 		}
+		return fmt.Errorf("stat prev/manifest.yaml: %w", err)
 	}
-	return false
+
+	gotHash, err := sha256File(prevManifestPath)
+	if err != nil {
+		return fmt.Errorf("hash prev/manifest.yaml: %w", err)
+	}
+	if gotHash != manifest.PreviousManifestSHA256 {
+		return fmt.Errorf("stepwise upgrade: prev/manifest.yaml sha256 mismatch (manifest=%s, on-disk=%s); prev-manifest has been tampered between sign and apply",
+			manifest.PreviousManifestSHA256, gotHash)
+	}
+
+	if err := VerifyBlobSignature(prevManifestPath, prevSigPath, r.PubKey); err != nil {
+		return fmt.Errorf("stepwise upgrade: prev/manifest.yaml signature invalid: %w", err)
+	}
+
+	if currentVersion != manifest.PreviousVersion {
+		return fmt.Errorf("stepwise upgrade required: install v%s first (current is v%s, target tarball is v%s which requires v%s as the immediate predecessor)",
+			manifest.PreviousVersion, currentVersion, manifest.OsvbngVersion, manifest.PreviousVersion)
+	}
+
+	r.Reporter.Progress(fmt.Sprintf("prev-manifest verify OK (current=%s, prev=%s)", currentVersion, manifest.PreviousVersion))
+	return nil
 }
 
-func (r *Runner) restartVPP(ctx context.Context) error {
-	out, err := r.Cmd.Run(ctx, "systemctl", "restart", "vpp.service")
+// checkPartialApply prevents a fresh apply from clobbering the journal
+// of a partial apply, which would lose the only rollback to N-1.
+func (r *Runner) checkPartialApply(opts ApplyOptions) error {
+	journal := NewJournal(filepath.Join(r.StateRoot, "upgrade-state.json"))
+	state, err := journal.Read()
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
-		return fmt.Errorf("systemctl restart vpp.service: %w (%s)", err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("read existing journal: %w", err)
+	}
+	switch state.Phase {
+	case "completed", "rolled_back", "first_boot_completed":
+		return nil
+	}
+	if opts.ForceRetry {
+		r.Reporter.Warn(fmt.Sprintf("force-retry: prior apply ended at phase %q; proceeding anyway", state.Phase))
+		return nil
+	}
+	return fmt.Errorf("previous upgrade is in non-completed state (phase=%q, from=%s, to=%s); run `osvbngcli upgrade rollback` to restore N-1, OR investigate %s before retrying with --force-retry",
+		state.Phase, state.From, state.To, filepath.Join(r.StateRoot, "upgrade-state.json"))
+}
+
+// restartConfigService regenerates external configs by calling osvbngd
+// directly rather than `systemctl restart osvbng-config.service`. The
+// systemctl path deadlocked the system: a daemon-reload at stage 7 plus
+// a synchronous restart of a Requires= dependency caused systemd's job
+// queue to wedge ({vpp,frr,network.target} jobs stuck in start waiting
+// forever, observed in the qemu integration harness). osvbng-config is
+// a Type=oneshot that just runs `osvbngd ... generate-external`, so we
+// invoke that directly and never touch systemd here.
+func (r *Runner) restartConfigService(ctx context.Context) error {
+	regenCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	out, err := r.Cmd.Run(regenCtx, "/usr/local/bin/osvbngd", "-config", "/etc/osvbng/osvbng.yaml", "generate-external")
+	if err != nil {
+		return fmt.Errorf("osvbngd generate-external: %w (%s)", err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// restartVPP uses `--no-block` for both stop and start so the apply
+// flow never blocks indefinitely on systemd's job queue, then polls
+// `is-active` directly. Synchronous `systemctl restart` was observed
+// wedging in the qemu integration harness when issued after a
+// daemon-reload (the job sat in "start waiting" state for 20+ minutes
+// until externally cancelled). Splitting into stop + start with
+// --no-block sidesteps the transaction merge that triggered the wedge.
+func (r *Runner) restartVPP(ctx context.Context) error {
+	stopCtx, stopCancel := context.WithTimeout(ctx, 20*time.Second)
+	defer stopCancel()
+	if out, err := r.Cmd.Run(stopCtx, "systemctl", "stop", "--no-block", "vpp.service"); err != nil {
+		return fmt.Errorf("systemctl stop --no-block vpp.service: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+
+	// Wait for vpp.service to leave running before issuing start. systemd
+	// will accept stop+start interleaved otherwise it just collapses them
+	// to a restart transaction and we lose the split.
+	if err := r.waitVPPState(ctx, r.VPPStopWait, func(s string) bool {
+		return s == "inactive" || s == "failed"
+	}); err != nil {
+		// Time-out here isn't fatal: the start --no-block call below will
+		// either ride on top of the in-progress stop or get rejected with
+		// a clear error. Log and proceed.
+		r.Reporter.Warn(fmt.Sprintf("vpp.service did not reach inactive within %s; proceeding to start anyway", r.VPPStopWait))
+	}
+
+	startCtx, startCancel := context.WithTimeout(ctx, 20*time.Second)
+	defer startCancel()
+	if out, err := r.Cmd.Run(startCtx, "systemctl", "start", "--no-block", "vpp.service"); err != nil {
+		return fmt.Errorf("systemctl start --no-block vpp.service: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+
+	// Poll until vpp.service is active or the deadline expires. The
+	// production vpp.service drop-in installs an ExecStartPost that
+	// blocks unit activation until /run/osvbng/dataplane_api.sock is
+	// bound, so "active" here actually means "API listener is ready" —
+	// the runner no longer needs a separate socket-presence wait.
+	if err := r.waitVPPState(ctx, r.VPPActiveWait, func(s string) bool {
+		return s == "active"
+	}); err != nil {
+		return fmt.Errorf("vpp.service did not become active within %s after start --no-block", r.VPPActiveWait)
+	}
+
+	// FRR is cascade-stopped by systemd's PartOf=vpp.service when we
+	// stopped VPP above. PartOf does not propagate the start side, and
+	// Restart=always is cancelled on systemd-triggered stop, so the
+	// runner has to start FRR back. Without this osvbngd's startup
+	// vtysh call fails with "failed to connect to any daemons" and
+	// the daemon health gate trips.
+	frrCtx, frrCancel := context.WithTimeout(ctx, 20*time.Second)
+	defer frrCancel()
+	if out, err := r.Cmd.Run(frrCtx, "systemctl", "start", "frr.service"); err != nil {
+		return fmt.Errorf("systemctl start frr.service: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// waitVPPState polls unitState until pred returns true or the deadline
+// expires. ctx cancellation aborts the wait immediately.
+func (r *Runner) waitVPPState(ctx context.Context, max time.Duration, pred func(string) bool) error {
+	deadline := time.Now().Add(max)
+	for time.Now().Before(deadline) {
+		state, err := r.unitState(ctx, "vpp.service")
+		if err == nil && pred(state) {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(r.VPPPollInterval):
+		}
+	}
+	return fmt.Errorf("state predicate not satisfied within %s", max)
+}
+
+// unitState returns the systemd ActiveState for the given unit, e.g.
+// "active", "activating", "inactive", "failed". Uses a short bounded
+// context so it can't itself hang the apply flow. Accepts both bare
+// `--value` output ("active") and key=value formatted output
+// ("ActiveState=active") so the test fake's catch-all systemctl
+// response continues to parse.
+func (r *Runner) unitState(ctx context.Context, unit string) (string, error) {
+	showCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	out, err := r.Cmd.Run(showCtx, "systemctl", "show", "-p", "ActiveState", "--value", unit)
+	if err != nil {
+		return "", err
+	}
+	s := strings.TrimSpace(string(out))
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if v, ok := strings.CutPrefix(line, "ActiveState="); ok {
+			return strings.TrimSpace(v), nil
+		}
+	}
+	if idx := strings.IndexByte(s, '\n'); idx >= 0 {
+		s = s[:idx]
+	}
+	return s, nil
 }
 
 func (r *Runner) waitHealthy(ctx context.Context, sv *Supervisor, expectedVersion string) (HealthResult, string) {
@@ -640,16 +872,27 @@ func (r *Runner) restoreFromSnapshot(snapDir string, meta *SnapshotMetadata) ([]
 	return restored, nil
 }
 
-func (r *Runner) runHook(ctx context.Context, stagingDir, hookRel string, fromVersion, toVersion string) error {
-	if hookRel == "" {
+func (r *Runner) runHook(ctx context.Context, stagingDir string, hook HookEntry, fromVersion, toVersion string) error {
+	if hook.Path == "" {
 		return nil
 	}
-	hookPath := filepath.Join(stagingDir, hookRel)
+	if hook.SHA256 == "" {
+		return fmt.Errorf("hook %s declared without sha256; v2 manifests must hash every hook script", hook.Path)
+	}
+	hookPath := filepath.Join(stagingDir, hook.Path)
 	if _, err := os.Stat(hookPath); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("hook %s declared but not present in tarball", hookRel)
+			return fmt.Errorf("hook %s declared but not present in tarball", hook.Path)
 		}
 		return err
+	}
+	onDisk, err := sha256File(hookPath)
+	if err != nil {
+		return fmt.Errorf("sha256 hook %s: %w", hook.Path, err)
+	}
+	if onDisk != hook.SHA256 {
+		return fmt.Errorf("hook %s sha256 mismatch (manifest=%s, on-disk=%s); apply refused so the script cannot be tampered between extraction and exec",
+			hook.Path, hook.SHA256, onDisk)
 	}
 
 	cmd := exec.CommandContext(ctx, hookPath)
@@ -665,7 +908,8 @@ func (r *Runner) runHook(ctx context.Context, stagingDir, hookRel string, fromVe
 		r.Reporter.Detail(string(out))
 	}
 	if err != nil {
-		return fmt.Errorf("hook %s exited non-zero: %w", hookRel, err)
+		return fmt.Errorf("hook %s exited non-zero: %w", hook.Path, err)
 	}
 	return nil
 }
+

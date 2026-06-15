@@ -41,6 +41,12 @@ type ApplyOptions struct {
 	// KeepN is the snapshot retention count when PrunePolicy is
 	// PruneKeepN. Zero defaults to 1 (keep N-1).
 	KeepN int
+
+	// ForceRetry overrides the partial-apply guard.
+	ForceRetry bool
+
+	// FirstBoot is set by osvbng-firstboot.service only.
+	FirstBoot bool
 }
 
 // ApplyResult is what a successful ApplyOne returns. Carries explicit

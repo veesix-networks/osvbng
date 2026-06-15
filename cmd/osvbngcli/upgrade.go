@@ -20,6 +20,7 @@ import (
 type upgradeRunner interface {
 	Plan(ctx context.Context, tarballPath string) (*upgrade.PlanResult, error)
 	Apply(ctx context.Context, tarballPath string) (*upgrade.ApplyResult, error)
+	ApplyOne(ctx context.Context, tarballPath string, opts upgrade.ApplyOptions) (*upgrade.ApplyResult, error)
 	Rollback(ctx context.Context) (*upgrade.RollbackResult, error)
 	Status(ctx context.Context) (*upgrade.StatusResult, error)
 }
@@ -72,7 +73,9 @@ func (c *CLI) handleUpgrade(invocation *Invocation) error {
 		return upgradeUsageError("missing sub-action")
 	}
 	subAction := invocation.PathTokens[1]
-	args := invocation.PathTokens[2:]
+	args := make([]string, 0, len(invocation.PathTokens)-2+len(invocation.FlagTokens))
+	args = append(args, invocation.PathTokens[2:]...)
+	args = append(args, invocation.FlagTokens...)
 
 	runner := newReplUpgradeRunner()
 
@@ -101,15 +104,16 @@ func runUpgradeAction(ctx context.Context, runner upgradeRunner, subAction strin
 		return nil
 
 	case "apply":
-		if len(args) != 1 {
-			return upgradeUsageError("apply requires exactly one tarball path argument")
+		tarballPath, opts, err := parseApplyArgs(args)
+		if err != nil {
+			return err
 		}
 		ctx, cancel := context.WithCancel(ctx)
 		cleanup := setUpgradeCancel(cancel)
 		defer cleanup()
 		defer cancel()
 
-		res, err := runner.Apply(ctx, args[0])
+		res, err := runner.ApplyOne(ctx, tarballPath, opts)
 		if err != nil {
 			return err
 		}
@@ -168,7 +172,6 @@ func renderPlan(p *upgrade.PlanResult) {
 	fmt.Printf("From version:          %s\n", versionOrUnknown(p.From))
 	fmt.Printf("To version:            %s\n", p.To)
 	fmt.Printf("Estimated outage:      %ds\n", p.EstimatedOutageSec)
-	fmt.Printf("Requires reboot:       %v\n", p.RequiresReboot)
 	fmt.Printf("Rollback available:    %v\n", p.RollbackAvailable)
 	fmt.Println()
 	fmt.Printf("Artifacts changing (%d):\n", len(p.Artifacts))
@@ -224,4 +227,26 @@ func versionOrUnknown(s string) string {
 		return "(unknown)"
 	}
 	return s
+}
+
+func parseApplyArgs(args []string) (string, upgrade.ApplyOptions, error) {
+	var opts upgrade.ApplyOptions
+	var positional []string
+	for _, a := range args {
+		switch a {
+		case "--first-boot":
+			opts.FirstBoot = true
+		case "--force-retry":
+			opts.ForceRetry = true
+		default:
+			if strings.HasPrefix(a, "--") {
+				return "", opts, upgradeUsageError(fmt.Sprintf("unknown flag %q", a))
+			}
+			positional = append(positional, a)
+		}
+	}
+	if len(positional) != 1 {
+		return "", opts, upgradeUsageError("apply requires exactly one tarball path argument")
+	}
+	return positional[0], opts, nil
 }
