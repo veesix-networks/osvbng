@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/events"
+	"github.com/veesix-networks/osvbng/pkg/ifmgr"
 	vppinterfaces "github.com/veesix-networks/osvbng/pkg/vpp/binapi/interface"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/interface_types"
 	"go.fd.io/govpp/api"
@@ -47,7 +48,9 @@ func (w *InterfaceWatchSet) Len() int {
 	return len(w.items)
 }
 
-func (v *VPP) StartInterfaceWatcher(ctx context.Context, eventBus events.Bus, watchSet *InterfaceWatchSet) error {
+type InterfaceStateListener func(name string, adminUp, linkUp bool)
+
+func (v *VPP) StartInterfaceWatcher(ctx context.Context, eventBus events.Bus, watchSet *InterfaceWatchSet, listener InterfaceStateListener) error {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
 		return err
@@ -97,18 +100,25 @@ func (v *VPP) StartInterfaceWatcher(ctx context.Context, eventBus events.Bus, wa
 				}
 
 				idx := uint32(ev.SwIfIndex)
-				if !watchSet.Contains(idx) {
-					continue
-				}
-
 				adminUp := ev.Flags&interface_types.IF_STATUS_API_FLAG_ADMIN_UP != 0
 				linkUp := ev.Flags&interface_types.IF_STATUS_API_FLAG_LINK_UP != 0
 
 				name := ""
+				operatorManaged := false
 				if iface := v.ifMgr.Get(idx); iface != nil {
-					iface.AdminUp = adminUp
-					iface.LinkUp = linkUp
+					if iface.Type == ifmgr.IfTypeHardware || iface.Type == ifmgr.IfTypeSub {
+						iface.AdminUp = adminUp
+						iface.LinkUp = linkUp
+						operatorManaged = true
+					}
 					name = iface.Name
+				}
+				if operatorManaged && listener != nil && name != "" {
+					listener(name, adminUp, linkUp)
+				}
+
+				if !watchSet.Contains(idx) {
+					continue
 				}
 
 				eventBus.Publish(events.TopicInterfaceState, events.Event{

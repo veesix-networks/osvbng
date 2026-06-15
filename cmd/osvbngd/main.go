@@ -307,6 +307,8 @@ func main() {
 		mainLog.Info("Loaded DHCPv6 provider", "name", name)
 	}
 
+	watchSet := vpp.NewInterfaceWatchSet()
+
 	var haMgr *ha.Manager
 	var srgProvider ha.SRGProvider
 	if cfg.HA.Enabled {
@@ -328,8 +330,6 @@ func main() {
 			return idx, nil
 		}))
 
-		watchSet := vpp.NewInterfaceWatchSet()
-
 		haOpts = append(haOpts, ha.WithInterfaceWatchCallback(watchSet.Add))
 
 		if cfg.Protocols.BGP != nil && cfg.Protocols.BGP.ASN > 0 {
@@ -346,12 +346,12 @@ func main() {
 			log.Fatalf("Failed to create HA manager: %v", err)
 		}
 		srgProvider = haMgr
+	}
 
-		watchCtx, watchCancel := context.WithCancel(context.Background())
-		defer watchCancel()
-		if err := vpp.StartInterfaceWatcher(watchCtx, eventBus, watchSet); err != nil {
-			mainLog.Warn("Failed to start VPP interface watcher", "error", err)
-		}
+	watchCtx, watchCancel := context.WithCancel(context.Background())
+	defer watchCancel()
+	if err := vpp.StartInterfaceWatcher(watchCtx, eventBus, watchSet, configd.GetDataplaneState().OnInterfaceState); err != nil {
+		mainLog.Warn("Failed to start VPP interface watcher", "error", err)
 	}
 
 	ipoeComp, err := ipoe.New(coreDeps, srgProvider, ifMgr, dhcp4Providers, dhcp6Providers)
