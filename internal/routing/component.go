@@ -49,21 +49,6 @@ func (c *Component) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (c *Component) ConfigureBGP(asn uint32, routerID string) error {
-	args := []string{"-c", "configure terminal", "-c", fmt.Sprintf("router bgp %d", asn)}
-	if routerID != "" {
-		args = append(args, "-c", fmt.Sprintf("bgp router-id %s", routerID))
-	}
-
-	_, err := c.execVtysh(args...)
-	return err
-}
-
-func (c *Component) RemoveBGP(asn uint32) error {
-	_, err := c.execVtysh("-c", "configure terminal", "-c", fmt.Sprintf("no router bgp %d", asn))
-	return err
-}
-
 func (c *Component) AdvertiseBGPNetwork(asn uint32, vrf string, prefix string, ipv6 bool) error {
 	af := "ipv4"
 	routeCmd := fmt.Sprintf("ip route %s Null0", prefix)
