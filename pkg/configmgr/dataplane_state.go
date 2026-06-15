@@ -159,6 +159,15 @@ func (ds *DataplaneState) IsInterfaceEnabled(name string) bool {
 	return state.AdminUp
 }
 
+func (ds *DataplaneState) OnInterfaceState(name string, adminUp, linkUp bool) {
+	state := ds.InterfacesByName[name]
+	if state == nil {
+		return
+	}
+	state.AdminUp = adminUp
+	state.LinkUp = linkUp
+}
+
 func (ds *DataplaneState) GetInterfaceMTU(name string) uint32 {
 	state := ds.InterfacesByName[name]
 	if state == nil {
