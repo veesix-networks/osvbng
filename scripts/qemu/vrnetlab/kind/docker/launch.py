@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import logging
+import math
 import os
 import signal
 import subprocess
@@ -64,6 +65,26 @@ class Osvbng_vm(vrnetlab.VM):
             ["-drive", f"if=virtio,format=raw,readonly=on,file={seed_iso}"]
         )
 
+        # Create tap devices up-front so QEMU can attach to them at
+        # start time, regardless of whether containerlab has wired the
+        # external veths in yet. The veth <-> tap tc-mirror bridges are
+        # set up lazily in bootstrap_spin once the veths appear.
+        #
+        # 9216 is the canonical jumbo MTU on Cisco/Juniper hardware
+        # and what most production BNG deployments terminate. Both the
+        # host tap and the guest virtio NIC (via host_mtu in gen_nics)
+        # are configured to it so what the test sees matches what the
+        # operator would see on a real box.
+        self._data_mtu = 9216
+        for i in range(1, self.num_nics + 1):
+            tap = f"tap{i}"
+            subprocess.run(["ip", "tuntap", "add", "mode", "tap", tap],
+                           check=False)
+            subprocess.run(["ip", "link", "set", tap, "mtu",
+                            str(self._data_mtu)], check=False)
+            subprocess.run(["ip", "link", "set", tap, "up"], check=False)
+        self._bridged_nics = set()
+
     def _build_seed_iso(self, ssh_pub_key: str) -> str:
         cfg_path = "/etc/osvbng/osvbng.yaml"
         lines = [
@@ -103,9 +124,56 @@ class Osvbng_vm(vrnetlab.VM):
         )
         return seed
 
+    def gen_nics(self):
+        """Override the base socket-listen netdev with tap netdevs so
+        each data NIC binds to a host tap that's bridged (via
+        tc-mirror) to the container's matching ethN veth from
+        containerlab. Without this, the BNG's data path is unreachable
+        from the rest of the topology (subscriber container, core
+        router) because base vrnetlab assumes the peer is another QEMU
+        instance on a socket pair."""
+        res = []
+        for i in range(1, self.num_nics + 1):
+            pci_bus = math.floor(i / self.nics_per_pci_bus) + 1
+            addr = (i % self.nics_per_pci_bus) + 1
+            res.extend([
+                "-device",
+                f"{self.nic_type},netdev=p{i:02d},mac={vrnetlab.gen_mac(i)},"
+                f"bus=pci.{pci_bus},addr=0x{addr:x},"
+                f"host_mtu={self._data_mtu}",
+                "-netdev",
+                f"tap,id=p{i:02d},ifname=tap{i},script=no,downscript=no",
+            ])
+        return res
+
+    def _bridge_pending_veths(self):
+        """For every container eth that's appeared and not yet bridged,
+        wire tc-mirror in both directions between ethN and tapN. Called
+        on every bootstrap tick until all data NICs are stitched."""
+        for i in range(1, self.num_nics + 1):
+            if i in self._bridged_nics:
+                continue
+            eth = f"eth{i}"
+            if subprocess.run(["ip", "link", "show", eth],
+                              capture_output=True).returncode != 0:
+                continue
+            tap = f"tap{i}"
+            subprocess.run(["ip", "link", "set", eth, "up"], check=False)
+            for src, dst in ((eth, tap), (tap, eth)):
+                subprocess.run(["tc", "qdisc", "add", "dev", src, "clsact"],
+                               check=False, stderr=subprocess.DEVNULL)
+                subprocess.run([
+                    "tc", "filter", "add", "dev", src, "ingress",
+                    "matchall", "action", "mirred", "egress",
+                    "redirect", "dev", dst,
+                ], check=False, stderr=subprocess.DEVNULL)
+            self._bridged_nics.add(i)
+            self.logger.info("bridged %s <-> %s via tc-mirror", eth, tap)
+
     def bootstrap_spin(self):
         """No console expect/login dance — cloud-init does it all. Just
         wait until ssh into the VM works and osvbngd reports ready."""
+        self._bridge_pending_veths()
         if self.spins > 240:
             self.logger.warning("osvbng not ready after %ds, restarting VM", self.spins)
             self.stop()
@@ -129,6 +197,21 @@ class Osvbng_vm(vrnetlab.VM):
         if res.returncode == 0:
             self.running = True
             self.logger.info("osvbng reached state=ready after %ds", self.spins)
+            # The QEMU build has DPDK disabled and VPP attaches to data
+            # NICs via af-packet — which only delivers multicast frames
+            # to the socket if the kernel interface has allmulticast on.
+            # Without this, OSPF/LDP hellos arrive on the wire and
+            # tcpdump shows them, but VPP never sees them.
+            for i in range(1, self.num_nics + 1):
+                subprocess.run(
+                    ["ssh", "-i", self.ssh_key_path,
+                     "-o", "StrictHostKeyChecking=no",
+                     "-o", "UserKnownHostsFile=/dev/null",
+                     "-o", "LogLevel=ERROR",
+                     "-p", "2022", "root@127.0.0.1",
+                     f"ip link set eth{i} allmulticast on"],
+                    check=False, capture_output=True,
+                )
             # Surface a stable marker on container stdout so
             # `docker logs <wrapper> | grep "osvbng started successfully"`
             # works the same way it does for the Docker-native build.
