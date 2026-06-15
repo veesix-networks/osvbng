@@ -23,7 +23,11 @@ RUN apt-get update -qy \
 ARG IMAGE
 COPY $IMAGE /osvbng.qcow2
 COPY *.py /
-RUN chmod 0755 /launch.py /healthcheck.py
+RUN chmod 0755 /launch.py /healthcheck.py /vmshim.py \
+ && mv /vmshim.py /usr/local/bin/vmshim \
+ && ln -s vmshim /usr/local/bin/vppctl \
+ && ln -s vmshim /usr/local/bin/vtysh \
+ && ln -s vmshim /usr/local/bin/ip
 
 EXPOSE 22 8080 9090
 

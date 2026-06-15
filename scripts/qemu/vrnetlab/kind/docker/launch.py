@@ -129,6 +129,10 @@ class Osvbng_vm(vrnetlab.VM):
         if res.returncode == 0:
             self.running = True
             self.logger.info("osvbng reached state=ready after %ds", self.spins)
+            # Surface a stable marker on container stdout so
+            # `docker logs <wrapper> | grep "osvbng started successfully"`
+            # works the same way it does for the Docker-native build.
+            print("osvbng started successfully", flush=True)
             return
 
         self.spins += 1
