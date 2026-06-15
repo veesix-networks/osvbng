@@ -714,6 +714,18 @@ func (r *Runner) restartVPP(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("vpp.service did not become active within %s after start --no-block", r.VPPActiveWait)
 	}
+
+	// FRR is cascade-stopped by systemd's PartOf=vpp.service when we
+	// stopped VPP above. PartOf does not propagate the start side, and
+	// Restart=always is cancelled on systemd-triggered stop, so the
+	// runner has to start FRR back. Without this osvbngd's startup
+	// vtysh call fails with "failed to connect to any daemons" and
+	// the daemon health gate trips.
+	frrCtx, frrCancel := context.WithTimeout(ctx, 20*time.Second)
+	defer frrCancel()
+	if out, err := r.Cmd.Run(frrCtx, "systemctl", "start", "frr.service"); err != nil {
+		return fmt.Errorf("systemctl start frr.service: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
 	return nil
 }
 

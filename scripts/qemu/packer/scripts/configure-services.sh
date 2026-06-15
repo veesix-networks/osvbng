@@ -63,6 +63,7 @@ Description=FRRouting
 Documentation=https://frrouting.readthedocs.io/en/latest/setup.html
 After=network-pre.target systemd-sysctl.service vpp.service osvbng-config.service
 Requires=vpp.service
+PartOf=vpp.service
 OnFailure=heartbeat-failed@%n
 
 [Service]
