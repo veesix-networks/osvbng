@@ -11,7 +11,14 @@ with no caller changes.
 For `ip` specifically: only `ip netns exec <ns> <cmd> ...` is forwarded
 (the `dataplane` netns lives inside the VM, not the wrapper). All other
 `ip` invocations exec the real /usr/sbin/ip so the wrapper's own
-networking setup is untouched."""
+networking setup is untouched.
+
+For `pkill` of osvbngd or vpp_main: rsync /etc/osvbng/ into the guest
+before forwarding the kill. Docker-mode tests edit the bind-mounted
+config in place and expect the next osvbngd restart to pick the diff up;
+in QEMU mode the config seed only runs at first boot, so without a
+pre-restart sync the guest's `osvbngd` re-reads the same file and the
+soft-update/reconcile log markers the suite greps for never get emitted."""
 
 import os
 import shlex
@@ -26,12 +33,21 @@ if cmd == "ip":
             and sys.argv[2] == "exec"):
         os.execv("/usr/sbin/ip", sys.argv)
 
-ssh = [
-    "ssh", "-i", "/root/.ssh/id_ed25519",
+ssh_args = [
+    "-i", "/root/.ssh/id_ed25519",
     "-o", "StrictHostKeyChecking=no",
     "-o", "UserKnownHostsFile=/dev/null",
     "-o", "LogLevel=ERROR",
-    "-p", "2022", "root@127.0.0.1",
 ]
+ssh = ["ssh", *ssh_args, "-p", "2022", "root@127.0.0.1"]
+
+if cmd == "pkill" and any(a in ("osvbngd", "vpp_main") for a in sys.argv[1:]):
+    subprocess.run(
+        ["rsync", "-aq", "--no-owner", "--no-group",
+         "-e", " ".join(["ssh", *ssh_args, "-p", "2022"]),
+         "/etc/osvbng/", "root@127.0.0.1:/etc/osvbng/"],
+        check=False,
+    )
+
 remote = " ".join(shlex.quote(a) for a in [cmd, *sys.argv[1:]])
 sys.exit(subprocess.call(ssh + [remote]))

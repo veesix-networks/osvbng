@@ -26,6 +26,11 @@ logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 # container's eth0 alongside the default ssh forward.
 vrnetlab.HOST_FWDS.append(("tcp", 8080, 8080))
 vrnetlab.HOST_FWDS.append(("tcp", 9090, 9090))
+vrnetlab.HOST_FWDS.append(("tcp", 8443, 8443))
+vrnetlab.HOST_FWDS.append(("udp", 3799, 3799))
+# HA inter-BNG gRPC channel; without this the standby peer can't be
+# reached over the QEMU-wrapped mgmt iface.
+vrnetlab.HOST_FWDS.append(("tcp", 50051, 50051))
 
 
 class Osvbng_vm(vrnetlab.VM):
@@ -96,15 +101,34 @@ class Osvbng_vm(vrnetlab.VM):
             "ssh_pwauth: false",
             "package_update: false",
         ]
-        if os.path.exists(cfg_path):
+
+        # Anything the operator bind-mounted under /etc/osvbng/ needs
+        # to land inside the guest, not just at the wrapper container's
+        # filesystem. The big example is mTLS test certs; newer osvbngd
+        # validates cert files at config-load time, so a missing
+        # cert_file path crash-loops the daemon. Pull every regular
+        # file under /etc/osvbng/ into write_files, binary-encoded so
+        # certs/keys survive the YAML round-trip intact.
+        import base64
+        write_files = []
+        for root, _, files in os.walk("/etc/osvbng"):
+            for name in files:
+                src = os.path.join(root, name)
+                try:
+                    data = open(src, "rb").read()
+                except OSError as e:
+                    self.logger.warning("skipping %s: %s", src, e)
+                    continue
+                write_files.append((src, data))
+        if write_files:
             lines.append("write_files:")
-            lines.append("  - path: /etc/osvbng/osvbng.yaml")
+        for src, data in write_files:
+            lines.append(f"  - path: {src}")
             lines.append("    owner: root:root")
             lines.append("    permissions: '0644'")
-            lines.append("    content: |")
-            for line in open(cfg_path).read().splitlines():
-                lines.append("      " + line)
-        else:
+            lines.append("    encoding: b64")
+            lines.append("    content: " + base64.b64encode(data).decode("ascii"))
+        if not os.path.exists(cfg_path):
             self.logger.warning(
                 "%s not present; VM will boot with osvbngd default config", cfg_path
             )
@@ -217,6 +241,20 @@ class Osvbng_vm(vrnetlab.VM):
             # `docker logs <wrapper> | grep "osvbng started successfully"`
             # works the same way it does for the Docker-native build.
             print("osvbng started successfully", flush=True)
+            # Tail the guest's osvbngd journal to the wrapper's stdout so
+            # Robot keywords that grep `docker logs` for runtime markers
+            # (`cgnat reconcile: soft-update pool`, etc.) see the same
+            # stream they'd see from a Docker-native osvbngd.
+            subprocess.Popen(
+                ["ssh", "-i", self.ssh_key_path,
+                 "-o", "StrictHostKeyChecking=no",
+                 "-o", "UserKnownHostsFile=/dev/null",
+                 "-o", "LogLevel=ERROR",
+                 "-o", "ServerAliveInterval=30",
+                 "-p", "2022", "root@127.0.0.1",
+                 "journalctl -u osvbng -f -n 0 -o cat"],
+                stdout=sys.stdout, stderr=subprocess.STDOUT,
+            )
             return
 
         self.spins += 1

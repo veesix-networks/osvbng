@@ -17,6 +17,7 @@ RUN apt-get update -qy \
         qemu-utils \
         xorriso \
         openssh-client \
+        rsync \
         ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
@@ -27,7 +28,11 @@ RUN chmod 0755 /launch.py /healthcheck.py /vmshim.py \
  && mv /vmshim.py /usr/local/bin/vmshim \
  && ln -s vmshim /usr/local/bin/vppctl \
  && ln -s vmshim /usr/local/bin/vtysh \
- && ln -s vmshim /usr/local/bin/ip
+ && ln -s vmshim /usr/local/bin/ip \
+ && ln -s vmshim /usr/local/bin/osvbngcli \
+ && ln -s vmshim /usr/local/bin/pkill \
+ && ln -s vmshim /usr/local/bin/pgrep \
+ && ln -s vmshim /usr/local/bin/systemctl
 
 EXPOSE 22 8080 9090
 
