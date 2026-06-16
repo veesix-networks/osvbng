@@ -16,7 +16,19 @@ Supports ordered server failover with dead server detection and a three-tier att
 | `nas_port_type` | string | NAS-Port-Type AVP value | `Virtual` |
 | `dead_time` | duration | How long to skip a dead server | `30s` |
 | `dead_threshold` | int | Consecutive failures before marking dead | `3` |
+| `vrf` | string | Default VRF for outbound auth/accounting traffic. Per-server `vrf` overrides this. | |
+| `source_ip` | string | Default IPv4 source address for outbound auth/accounting. Per-server `source_ip` overrides this. | |
+| `source_ipv6` | string | Default IPv6 source address for outbound auth/accounting. Per-server `source_ipv6` overrides this. | |
+| `coa_listener` | [CoAListener](#coa-listener) | CoA/DM UDP listener settings (port, VRF, bind address). | |
+| `coa_clients` | [CoAClient](#coa-client)[] | Authorized CoA senders. | |
+| `coa_replay_window` | int | CoA Event-Timestamp replay window in seconds. Set to 0 to disable. | `300` |
 | `response_mappings` | [ResponseMapping](#response-mappings)[] | Custom Tier 3 attribute mappings | |
+
+### VRF and Source Address Cascade
+
+`vrf` / `source_ip` / `source_ipv6` at the plugin level are the default control-plane binding for outbound traffic to every server. A per-[Server](#server) entry may override any of those fields individually. Fields are merged field-by-field, so setting `source_ip` on one server does not blank out an inherited `vrf`.
+
+The CoA listener has its own binding ([CoAListener](#coa-listener)) and does not inherit from the plugin-level defaults. Incoming CoA arrives from RADIUS, not to it, so the cascade does not apply.
 
 ## Server
 
@@ -24,8 +36,13 @@ Supports ordered server failover with dead server detection and a three-tier att
 |-------|------|-------------|---------|
 | `host` | string | RADIUS server hostname or IP | `10.1.1.1` |
 | `secret` | string | Shared secret | `${RADIUS_SECRET}` |
+| `vrf` | string | Override plugin-level `vrf` for this server. | `mgmt-vrf` |
+| `source_ip` | string | Override plugin-level `source_ip` for this server (IPv4). | `10.0.0.1` |
+| `source_ipv6` | string | Override plugin-level `source_ipv6` for this server (IPv6). | `2001:db8::1` |
 
 Servers are tried in order. On timeout or error, the next server is attempted. After `dead_threshold` consecutive failures, a server is marked dead and skipped for `dead_time`.
+
+The binding fields are merged with the plugin-level defaults field by field: a server can override a single field while inheriting the rest. An IPv6 `host` resolves source binding through `source_ipv6`; an IPv4 host through `source_ip`.
 
 ## Attribute Mapping
 
@@ -121,13 +138,19 @@ osvbng can receive RADIUS Change of Authorization (CoA) and Disconnect-Message (
 
 CoA is implemented as a plugin component (`subscriber.auth.radius.coa`) that starts automatically when `coa_clients` is configured. It uses the event bus to communicate with subscriber components - no direct coupling.
 
+If `coa_clients` is empty or absent, the CoA listener is not started. Top-level fields are documented in the [main config table](#subscriberauthradius-v050) above; this section describes the [CoA Listener](#coa-listener) and [CoA Client](#coa-client) sub-blocks.
+
+### CoA Listener
+
+`coa_listener` configures the UDP socket osvbngd binds to for incoming CoA/DM requests. It does not inherit the plugin-level auth/accounting binding, so the listener can live in a different VRF and on a different source address than outbound auth traffic.
+
 | Field | Type | Description | Default |
 |-------|------|-------------|---------|
-| `coa_port` | int | UDP port to listen for CoA/DM requests | `3799` |
-| `coa_clients` | [CoAClient](#coa-client)[] | Authorized CoA senders | |
-| `coa_replay_window` | int | Event-Timestamp replay window in seconds. Set to 0 to disable. | `300` |
+| `port` | int | UDP port to listen for CoA/DM requests | `3799` |
+| `vrf` | string | Linux VRF master to bind the listener to. | |
+| `source_ip` | string | IPv4 address to bind the listener to. Empty = wildcard (`0.0.0.0`). | |
 
-If `coa_clients` is empty or absent, the CoA listener is not started.
+CoA-ACK / CoA-NAK / Disconnect-ACK responses are sent back over this same socket, so the reply path follows the listener's binding. There is no separate per-client reply binding.
 
 ### CoA Client
 
@@ -217,7 +240,8 @@ plugins:
     nas_port_type: Virtual
     dead_time: 30s
     dead_threshold: 3
-    coa_port: 3799
+    coa_listener:
+      port: 3799
     coa_clients:
       - host: 10.1.1.1
         secret: "${COA_SECRET}"
@@ -234,4 +258,29 @@ plugins:
         vendor_type: 1
         internal: qos.ingress-policy
         extract: "sub-qos-policy-in=(.+)"
+```
+
+### Per-VRF Servers
+
+A common deployment: auth/accounting reach two RADIUS servers in different VRFs, and CoA is received on a separate management VRF. The plugin-level `vrf` and `source_ip` set the default for outbound traffic; each server overrides as needed. `coa_listener` is bound independently.
+
+```yaml
+plugins:
+  subscriber.auth.radius:
+    vrf: aaa-vrf
+    source_ip: 10.0.0.1
+    servers:
+      - host: 10.1.1.1
+        secret: "${RADIUS_SECRET_PRIMARY}"
+      - host: 10.2.2.2
+        secret: "${RADIUS_SECRET_SECONDARY}"
+        vrf: aaa-vrf-backup
+        source_ip: 10.0.1.1
+    coa_listener:
+      port: 3799
+      vrf: mgmt-vrf
+      source_ip: 192.0.2.10
+    coa_clients:
+      - host: 10.1.1.1
+        secret: "${COA_SECRET}"
 ```
