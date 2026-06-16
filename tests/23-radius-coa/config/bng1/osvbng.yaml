@@ -215,6 +215,8 @@ plugins:
         coa_clients:
             - host: 172.20.20.0/24
               secret: testing123
+            - host: 10.0.0.0/24
+              secret: testing123
 
 monitoring:
   collect_interval: 30s

@@ -104,8 +104,9 @@ RuntimeDirectory=osvbng
 RuntimeDirectoryMode=0750
 RuntimeDirectoryPreserve=yes
 ExecStart=/usr/local/bin/osvbngd -config /etc/osvbng/osvbng.yaml
-Restart=on-failure
-RestartSec=5
+Restart=always
+RestartSec=2
+StartLimitIntervalSec=0
 StandardOutput=journal
 StandardError=journal
 
