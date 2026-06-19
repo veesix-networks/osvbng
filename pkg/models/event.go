@@ -1,15 +1,17 @@
 package models
 
 type AAARequest struct {
-	RequestID     string            `json:"request_id"`
-	Username      string            `json:"username"`
-	MAC           string            `json:"mac"`
-	AcctSessionID string            `json:"acct_session_id"`
-	SVLAN         uint16            `json:"svlan"`
-	CVLAN         uint16            `json:"cvlan"`
-	Interface     string            `json:"interface"`
-	PolicyName    string            `json:"policy_name"`
-	Attributes    map[string]string `json:"attributes,omitempty"`
+	RequestID       string            `json:"request_id"`
+	Username        string            `json:"username"`
+	MAC             string            `json:"mac"`
+	AcctSessionID   string            `json:"acct_session_id"`
+	SVLAN           uint16            `json:"svlan"`
+	CVLAN           uint16            `json:"cvlan"`
+	Interface       string            `json:"interface"`
+	AccessIfIndex   uint32            `json:"access_sw_if_index,omitempty"`
+	AccessInterface string            `json:"access_interface,omitempty"`
+	PolicyName      string            `json:"policy_name"`
+	Attributes      map[string]string `json:"attributes,omitempty"`
 }
 
 type AAAResponse struct {

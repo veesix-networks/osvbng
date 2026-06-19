@@ -35,6 +35,10 @@ type AccountingSession struct {
 	username          string
 	mac               string
 	ipv4Address       string
+	svlan             uint16
+	cvlan             uint16
+	accessIfIndex     uint32
+	accessInterface   string
 	attributes        map[string]string
 
 	// swIfIndex is the dataplane session interface AAA reads VPP
@@ -268,16 +272,22 @@ func (c *Component) sendAccountingUpdate(acctSession *AccountingSession, statsBy
 	acctSession.mu.Unlock()
 
 	session := &auth.Session{
-		SessionID:       acctSession.sessionID,
-		AcctSessionID:   acctSession.acctSessionID,
-		Username:        acctSession.username,
-		MAC:             acctSession.mac,
-		RxBytes:         rxBytes,
-		TxBytes:         txBytes,
-		RxPackets:       rxPackets,
-		TxPackets:       txPackets,
-		SessionDuration: uint32(time.Since(acctSession.authDate).Seconds()),
-		Attributes:      acctSession.attributes,
+		SessionID:         acctSession.sessionID,
+		AcctSessionID:     acctSession.acctSessionID,
+		Username:          acctSession.username,
+		MAC:               acctSession.mac,
+		AccessType:        string(acctSession.accessType),
+		AccessInterface:   acctSession.accessInterface,
+		SVLAN:             acctSession.svlan,
+		CVLAN:             acctSession.cvlan,
+		AccessIfIndex:     acctSession.accessIfIndex,
+		SubscriberIfIndex: acctSession.swIfIndex,
+		RxBytes:           rxBytes,
+		TxBytes:           txBytes,
+		RxPackets:         rxPackets,
+		TxPackets:         txPackets,
+		SessionDuration:   uint32(time.Since(acctSession.authDate).Seconds()),
+		Attributes:        acctSession.attributes,
 	}
 
 	if err := c.authProvider.UpdateAccounting(c.Ctx, session); err != nil {
@@ -305,15 +315,17 @@ func (c *Component) handleAAARequest(event events.Event) {
 	}
 
 	authReq := &auth.AuthRequest{
-		Username:      req.Username,
-		MAC:           req.MAC,
-		AcctSessionID: req.AcctSessionID,
-		SVLAN:         req.SVLAN,
-		CVLAN:         req.CVLAN,
-		Interface:     req.Interface,
-		AccessType:    string(data.AccessType),
-		PolicyName:    req.PolicyName,
-		Attributes:    attrs,
+		Username:        req.Username,
+		MAC:             req.MAC,
+		AcctSessionID:   req.AcctSessionID,
+		SVLAN:           req.SVLAN,
+		CVLAN:           req.CVLAN,
+		Interface:       req.Interface,
+		AccessIfIndex:   req.AccessIfIndex,
+		AccessInterface: req.AccessInterface,
+		AccessType:      string(data.AccessType),
+		PolicyName:      req.PolicyName,
+		Attributes:      attrs,
 	}
 
 	authResp, err := c.authProvider.Authenticate(c.Ctx, authReq)
@@ -427,9 +439,10 @@ func (c *Component) handleSessionLifecycle(event events.Event) {
 
 	sessionId := data.SessionID
 
-	var username, mac, ipv4Address, acctSessionID string
+	var username, mac, ipv4Address, acctSessionID, accessInterface string
 	var sessionState models.SessionState
-	var swIfIndex uint32
+	var swIfIndex, accessIfIndex uint32
+	var svlan, cvlan uint16
 	attributes := make(map[string]string)
 
 	switch data.AccessType {
@@ -439,11 +452,17 @@ func (c *Component) handleSessionLifecycle(event events.Event) {
 			mac = sess.MAC.String()
 			if sess.IPv4Address != nil {
 				ipv4Address = sess.IPv4Address.String()
-				attributes["ipv4_address"] = ipv4Address
 			}
 			username = sess.Username
 			acctSessionID = sess.AAASessionID
 			swIfIndex = sess.IfIndex
+			accessIfIndex = sess.AccessIfIndex
+			accessInterface = sess.AccessInterface
+			svlan = sess.OuterVLAN
+			cvlan = sess.InnerVLAN
+			for k, v := range sess.Attributes {
+				attributes[k] = v
+			}
 		}
 	case models.AccessTypePPPoE:
 		if sess, ok := data.Session.(*models.PPPSession); ok {
@@ -451,12 +470,21 @@ func (c *Component) handleSessionLifecycle(event events.Event) {
 			mac = sess.MAC.String()
 			if sess.IPv4Address != nil {
 				ipv4Address = sess.IPv4Address.String()
-				attributes["ipv4_address"] = ipv4Address
 			}
 			username = sess.Username
 			acctSessionID = sess.AAASessionID
 			swIfIndex = sess.IfIndex
+			accessIfIndex = sess.AccessIfIndex
+			accessInterface = sess.AccessInterface
+			svlan = sess.OuterVLAN
+			cvlan = sess.InnerVLAN
+			for k, v := range sess.Attributes {
+				attributes[k] = v
+			}
 		}
+	}
+	if ipv4Address != "" {
+		attributes["ipv4_address"] = ipv4Address
 	}
 
 	if sessionState == models.SessionStateReleased {
@@ -475,27 +503,37 @@ func (c *Component) handleSessionLifecycle(event events.Event) {
 
 	c.acctCacheMu.Lock()
 	acctSession := &AccountingSession{
-		sessionID:     sessionId,
-		acctSessionID: acctSessionID,
-		accessType:    data.AccessType,
-		authDate:      event.Timestamp,
-		username:      username,
-		mac:           mac,
-		ipv4Address:   ipv4Address,
-		attributes:    attributes,
-		swIfIndex:     swIfIndex,
+		sessionID:       sessionId,
+		acctSessionID:   acctSessionID,
+		accessType:      data.AccessType,
+		authDate:        event.Timestamp,
+		username:        username,
+		mac:             mac,
+		ipv4Address:     ipv4Address,
+		svlan:           svlan,
+		cvlan:           cvlan,
+		accessIfIndex:   accessIfIndex,
+		accessInterface: accessInterface,
+		attributes:      attributes,
+		swIfIndex:       swIfIndex,
 	}
 	c.acctCache[sessionId] = acctSession
 	c.acctCacheMu.Unlock()
 	c.checkpointAcctSession(acctSession)
 
 	session := &auth.Session{
-		SessionID:       sessionId,
-		AcctSessionID:   acctSessionID,
-		Username:        username,
-		MAC:             mac,
-		SessionDuration: 0,
-		Attributes:      attributes,
+		SessionID:         sessionId,
+		AcctSessionID:     acctSessionID,
+		Username:          username,
+		MAC:               mac,
+		AccessType:        string(data.AccessType),
+		AccessInterface:   accessInterface,
+		SVLAN:             svlan,
+		CVLAN:             cvlan,
+		AccessIfIndex:     accessIfIndex,
+		SubscriberIfIndex: swIfIndex,
+		SessionDuration:   0,
+		Attributes:        attributes,
 	}
 
 	go c.authProvider.StartAccounting(c.Ctx, session)
@@ -568,6 +606,8 @@ func (c *Component) handleSessionRestored(event events.Event) {
 		username:      username,
 		mac:           macStr,
 		ipv4Address:   ipv4,
+		svlan:         sess.GetOuterVLAN(),
+		cvlan:         sess.GetInnerVLAN(),
 		swIfIndex:     swIfIndex,
 		attributes:    map[string]string{"ipv4_address": ipv4},
 	}
@@ -600,9 +640,18 @@ func (c *Component) handleSessionRelease(sessionId, username, mac, acctSessionID
 	c.bucketMu.Unlock()
 
 	var sessionDuration uint32
+	var accessType, accessInterface string
+	var svlan, cvlan uint16
+	var accessIfIndex, subscriberIfIndex uint32
 	var rxBytes, txBytes, rxPackets, txPackets uint64
 	if exists && acctSession != nil {
 		sessionDuration = uint32(time.Since(acctSession.authDate).Seconds())
+		accessType = string(acctSession.accessType)
+		accessInterface = acctSession.accessInterface
+		svlan = acctSession.svlan
+		cvlan = acctSession.cvlan
+		accessIfIndex = acctSession.accessIfIndex
+		subscriberIfIndex = acctSession.swIfIndex
 
 		statsByIdx := c.fetchInterfaceStats()
 		acctSession.mu.Lock()
@@ -617,16 +666,22 @@ func (c *Component) handleSessionRelease(sessionId, username, mac, acctSessionID
 	}
 
 	session := &auth.Session{
-		SessionID:       sessionId,
-		AcctSessionID:   acctSessionID,
-		Username:        username,
-		MAC:             mac,
-		RxBytes:         rxBytes,
-		TxBytes:         txBytes,
-		RxPackets:       rxPackets,
-		TxPackets:       txPackets,
-		SessionDuration: sessionDuration,
-		Attributes:      attributes,
+		SessionID:         sessionId,
+		AcctSessionID:     acctSessionID,
+		Username:          username,
+		MAC:               mac,
+		AccessType:        accessType,
+		AccessInterface:   accessInterface,
+		SVLAN:             svlan,
+		CVLAN:             cvlan,
+		AccessIfIndex:     accessIfIndex,
+		SubscriberIfIndex: subscriberIfIndex,
+		RxBytes:           rxBytes,
+		TxBytes:           txBytes,
+		RxPackets:         rxPackets,
+		TxPackets:         txPackets,
+		SessionDuration:   sessionDuration,
+		Attributes:        attributes,
 	}
 
 	go c.authProvider.StopAccounting(c.Ctx, session)

@@ -218,14 +218,16 @@ func (s *SessionState) publishAAARequest(attrs map[string]string) {
 	}
 
 	aaaPayload := &models.AAARequest{
-		RequestID:     requestID,
-		Username:      username,
-		MAC:           s.MAC.String(),
-		AcctSessionID: s.AcctSessionID,
-		SVLAN:         s.OuterVLAN,
-		CVLAN:         s.InnerVLAN,
-		PolicyName:    policyName,
-		Attributes:    attrs,
+		RequestID:       requestID,
+		Username:        username,
+		MAC:             s.MAC.String(),
+		AcctSessionID:   s.AcctSessionID,
+		SVLAN:           s.OuterVLAN,
+		CVLAN:           s.InnerVLAN,
+		AccessIfIndex:   s.EncapIfIndex,
+		AccessInterface: s.component.accessInterfaceName(s.EncapIfIndex),
+		PolicyName:      policyName,
+		Attributes:      attrs,
 	}
 
 	s.component.logger.Debug("Publishing AAA request",
@@ -819,7 +821,6 @@ func (s *SessionState) onVPPSessionCreated(swIfIndex uint32, err error) {
 		s.component.echoGen.AddSession(s.PPPoESessionID, magic, 0)
 	}
 }
-
 
 func (s *SessionState) sendLCP(code, id uint8, data []byte) {
 	s.sendPPPPacket(ppp.ProtoLCP, code, id, data)

@@ -60,8 +60,14 @@ topology:
 
   links:
     - endpoints: [bng1:eth1, access-sw:bng1]
+      mtu: 1500
     - endpoints: [bng2:eth1, access-sw:bng2]
+      mtu: 1500
     - endpoints: [subscribers:eth1, access-sw:sub1]
+      mtu: 1500
     - endpoints: [bng1:eth2, corerouter1:eth1]
+      mtu: 1500
     - endpoints: [bng2:eth2, corerouter1:eth2]
+      mtu: 1500
     - endpoints: [corerouter1:eth3, subscribers:eth3]
+      mtu: 1500

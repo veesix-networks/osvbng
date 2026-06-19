@@ -50,4 +50,6 @@ topology:
 
   links:
     - endpoints: [lac:eth1, corerouter1:eth1]
+      mtu: 1500
     - endpoints: [corerouter1:eth2, bng1:eth1]
+      mtu: 1500

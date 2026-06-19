@@ -65,14 +65,14 @@ type Component struct {
 	cookieMgr *pppoe.CookieManager
 	echoGen   *EchoGenerator
 
-	sessions          map[string]*SessionState
-	sidIndex          map[uint16]*SessionState
-	sessionIDIndex    map[string]*SessionState
-	acctSessionIndex  map[string]*SessionState
-	usernameIndex     map[string]*SessionState
-	ipv4Index         map[string]*SessionState
-	ipv6Index         map[string]*SessionState
-	sessionMu         sync.RWMutex
+	sessions         map[string]*SessionState
+	sidIndex         map[uint16]*SessionState
+	sessionIDIndex   map[string]*SessionState
+	acctSessionIndex map[string]*SessionState
+	usernameIndex    map[string]*SessionState
+	ipv4Index        map[string]*SessionState
+	ipv6Index        map[string]*SessionState
+	sessionMu        sync.RWMutex
 
 	registry *allocator.Registry
 
@@ -226,13 +226,13 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 		exclusivity:      deps.Exclusivity,
 		acName:           defaultACName,
 		cookieMgr:        cookieMgr,
-		sessions:          make(map[string]*SessionState),
-		sidIndex:          make(map[uint16]*SessionState),
-		sessionIDIndex:    make(map[string]*SessionState),
-		acctSessionIndex:  make(map[string]*SessionState),
-		usernameIndex:     make(map[string]*SessionState),
-		ipv4Index:         make(map[string]*SessionState),
-		ipv6Index:         make(map[string]*SessionState),
+		sessions:         make(map[string]*SessionState),
+		sidIndex:         make(map[uint16]*SessionState),
+		sessionIDIndex:   make(map[string]*SessionState),
+		acctSessionIndex: make(map[string]*SessionState),
+		usernameIndex:    make(map[string]*SessionState),
+		ipv4Index:        make(map[string]*SessionState),
+		ipv6Index:        make(map[string]*SessionState),
 		registry:         allocator.GetGlobalRegistry(),
 		pppoeChan:        deps.PPPChan,
 		nextSessionID:    1,
@@ -692,18 +692,18 @@ func defaultMSSClampPolicyForMTU(mtu uint16) southbound.MSSClampPolicy {
 // hold s.mu for the bulk of its work - terminate() grabs it fresh at the end
 // for the final release sequence.
 type sessionTeardownSnapshot struct {
-	SessionID      string
-	PPPSessionID   uint16
-	MAC            net.HardwareAddr
-	OuterVLAN      uint16
-	InnerVLAN      uint16
-	VRF            string
-	ServiceGroup   string
-	SRGName        string
-	IPv4Address    net.IP
-	IPv6Address    net.IP
-	Username       string
-	AAASessionID   string
+	SessionID    string
+	PPPSessionID uint16
+	MAC          net.HardwareAddr
+	OuterVLAN    uint16
+	InnerVLAN    uint16
+	VRF          string
+	ServiceGroup string
+	SRGName      string
+	IPv4Address  net.IP
+	IPv6Address  net.IP
+	Username     string
+	AAASessionID string
 }
 
 // tearDownSessionAfterVPPFailure releases all in-process state for a PPPoE
@@ -1034,6 +1034,16 @@ func (c *Component) handleDeadPeer(sessionID uint16) {
 	sess.terminate()
 }
 
+func (c *Component) accessInterfaceName(encapIfIndex uint32) string {
+	if c.ifMgr == nil {
+		return ""
+	}
+	if iface := c.ifMgr.Get(encapIfIndex); iface != nil {
+		return iface.Name
+	}
+	return ""
+}
+
 func (c *Component) publishSessionLifecycle(payload models.SubscriberSession) error {
 	c.eventBus.Publish(events.TopicSessionLifecycle, events.Event{
 		Source: c.Name(),
@@ -1238,6 +1248,8 @@ func (c *Component) restoreSessionToCache(ctx context.Context, sess *SessionStat
 		OuterVLAN:        sess.OuterVLAN,
 		InnerVLAN:        sess.InnerVLAN,
 		IfIndex:          sess.SwIfIndex,
+		AccessIfIndex:    sess.EncapIfIndex,
+		AccessInterface:  c.accessInterfaceName(sess.EncapIfIndex),
 		VRF:              sess.VRF,
 		ServiceGroup:     sess.ServiceGroup.Name,
 		SRGName:          sess.SRGName,
@@ -1443,28 +1455,28 @@ func (c *Component) restoreFromHASync(srgName string) {
 		}
 
 		sess := &SessionState{
-			SessionID:      cp.SessionId,
-			AcctSessionID:  cp.AaaSessionId,
-			PPPoESessionID: pppoeSessionID,
-			MAC:            mac,
-			OuterVLAN:      outerVLAN,
-			InnerVLAN:      innerVLAN,
-			EncapIfIndex:   encapIfIndex,
-			SwIfIndex:      swIfIndex,
-			Phase:          ppp.PhaseOpen,
-			MixedAccess:    c.isMixedAccessSVLAN(outerVLAN),
-			IPv4Address:    ipv4,
-			IPv6Address:    ipv6,
-			Username:       cp.Username,
-			VRF:            cp.Vrf,
-			SRGName:        srgName,
-			BoundAt:        boundAt,
-			LastSeen:       now,
-			LCPMagic:       cp.LcpMagic,
+			SessionID:        cp.SessionId,
+			AcctSessionID:    cp.AaaSessionId,
+			PPPoESessionID:   pppoeSessionID,
+			MAC:              mac,
+			OuterVLAN:        outerVLAN,
+			InnerVLAN:        innerVLAN,
+			EncapIfIndex:     encapIfIndex,
+			SwIfIndex:        swIfIndex,
+			Phase:            ppp.PhaseOpen,
+			MixedAccess:      c.isMixedAccessSVLAN(outerVLAN),
+			IPv4Address:      ipv4,
+			IPv6Address:      ipv6,
+			Username:         cp.Username,
+			VRF:              cp.Vrf,
+			SRGName:          srgName,
+			BoundAt:          boundAt,
+			LastSeen:         now,
+			LCPMagic:         cp.LcpMagic,
 			NegotiatedPPPMTU: uint16(cp.NegotiatedPppMtu),
 			IPv4MSS:          uint16(cp.Ipv4Mss),
 			IPv6MSS:          uint16(cp.Ipv6Mss),
-			component:      c,
+			component:        c,
 		}
 
 		if ipv6Prefix != nil {
@@ -1551,27 +1563,27 @@ func (c *Component) ForEachSession(fn func(models.SubscriberSession) bool) {
 		}
 
 		snapshot := &models.PPPSession{
-			SessionID:    sess.SessionID,
-			State:        models.SessionStateActive,
-			AccessType:   string(models.AccessTypePPPoE),
-			Protocol:     string(models.ProtocolPPPoESession),
-			PPPSessionID: sess.PPPoESessionID,
-			MAC:          sess.MAC,
-			OuterVLAN:    sess.OuterVLAN,
-			InnerVLAN:    sess.InnerVLAN,
-			IfIndex:      sess.SwIfIndex,
-			VRF:          sess.VRF,
-			ServiceGroup: sess.ServiceGroup.Name,
-			SRGName:      sess.SRGName,
-			IPv4Address:  sess.IPv4Address,
-			IPv6Address:  sess.IPv6Address,
-			Username:     sess.Username,
-			AAASessionID: sess.AcctSessionID,
-			ActivatedAt:  sess.BoundAt,
-			IPv4Pool:     sess.allocatedPool,
-			IANAPool:     sess.allocatedIANAPool,
-			LCPMagic:     sess.LCPMagic,
-			Attributes:   sess.Attributes,
+			SessionID:        sess.SessionID,
+			State:            models.SessionStateActive,
+			AccessType:       string(models.AccessTypePPPoE),
+			Protocol:         string(models.ProtocolPPPoESession),
+			PPPSessionID:     sess.PPPoESessionID,
+			MAC:              sess.MAC,
+			OuterVLAN:        sess.OuterVLAN,
+			InnerVLAN:        sess.InnerVLAN,
+			IfIndex:          sess.SwIfIndex,
+			VRF:              sess.VRF,
+			ServiceGroup:     sess.ServiceGroup.Name,
+			SRGName:          sess.SRGName,
+			IPv4Address:      sess.IPv4Address,
+			IPv6Address:      sess.IPv6Address,
+			Username:         sess.Username,
+			AAASessionID:     sess.AcctSessionID,
+			ActivatedAt:      sess.BoundAt,
+			IPv4Pool:         sess.allocatedPool,
+			IANAPool:         sess.allocatedIANAPool,
+			LCPMagic:         sess.LCPMagic,
+			Attributes:       sess.Attributes,
 			NegotiatedPPPMTU: sess.NegotiatedPPPMTU,
 			IPv4MSS:          sess.IPv4MSS,
 			IPv6MSS:          sess.IPv6MSS,
@@ -1649,28 +1661,28 @@ func (c *Component) checkpointSessionSync(sess *SessionState) error {
 
 func (c *Component) buildModelSnapshot(sess *SessionState) *models.PPPSession {
 	snapshot := &models.PPPSession{
-		SessionID:    sess.SessionID,
-		State:        models.SessionStateActive,
-		AccessType:   string(models.AccessTypePPPoE),
-		Protocol:     string(models.ProtocolPPPoESession),
-		PPPSessionID: sess.PPPoESessionID,
-		MAC:          sess.MAC,
-		OuterVLAN:    sess.OuterVLAN,
-		InnerVLAN:    sess.InnerVLAN,
-		IfIndex:      sess.SwIfIndex,
-		VRF:          sess.VRF,
-		ServiceGroup: sess.ServiceGroup.Name,
-		SRGName:      sess.SRGName,
-		IPv4Address:  sess.IPv4Address,
-		IPv6Address:  sess.IPv6Address,
-		Username:     sess.Username,
-		AAASessionID: sess.AcctSessionID,
-		ActivatedAt:  sess.BoundAt,
-		LCPMagic:     sess.LCPMagic,
-		Attributes:   sess.Attributes,
+		SessionID:        sess.SessionID,
+		State:            models.SessionStateActive,
+		AccessType:       string(models.AccessTypePPPoE),
+		Protocol:         string(models.ProtocolPPPoESession),
+		PPPSessionID:     sess.PPPoESessionID,
+		MAC:              sess.MAC,
+		OuterVLAN:        sess.OuterVLAN,
+		InnerVLAN:        sess.InnerVLAN,
+		IfIndex:          sess.SwIfIndex,
+		VRF:              sess.VRF,
+		ServiceGroup:     sess.ServiceGroup.Name,
+		SRGName:          sess.SRGName,
+		IPv4Address:      sess.IPv4Address,
+		IPv6Address:      sess.IPv6Address,
+		Username:         sess.Username,
+		AAASessionID:     sess.AcctSessionID,
+		ActivatedAt:      sess.BoundAt,
+		LCPMagic:         sess.LCPMagic,
+		Attributes:       sess.Attributes,
 		NegotiatedPPPMTU: sess.NegotiatedPPPMTU,
-		IPv4MSS:      sess.IPv4MSS,
-		IPv6MSS:      sess.IPv6MSS,
+		IPv4MSS:          sess.IPv4MSS,
+		IPv6MSS:          sess.IPv6MSS,
 	}
 	if sess.IPv6Prefix != nil {
 		snapshot.IPv6Prefix = sess.IPv6Prefix.String()

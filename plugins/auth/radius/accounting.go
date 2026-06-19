@@ -37,6 +37,8 @@ func (p *Provider) sendAccounting(session *auth.Session, statusType uint32) erro
 	packet := radius.New(radius.CodeAccountingRequest, nil)
 
 	packet.Add(40, encodeUint32(statusType))
+	packet.Add(45, encodeUint32(1))
+	packet.Add(41, encodeUint32(0))
 
 	if session.AcctSessionID != "" {
 		packet.Add(44, radius.Attribute(session.AcctSessionID))
@@ -47,6 +49,9 @@ func (p *Provider) sendAccounting(session *auth.Session, statusType uint32) erro
 	if session.MAC != "" {
 		packet.Add(31, radius.Attribute(session.MAC))
 	}
+	if circuitID, ok := session.Attributes[aaa.AttrCircuitID]; ok {
+		packet.Add(30, radius.Attribute(circuitID))
+	}
 
 	if p.cfg.NASIdentifier != "" {
 		packet.Add(32, radius.Attribute(p.cfg.NASIdentifier))
@@ -55,6 +60,15 @@ func (p *Provider) sendAccounting(session *auth.Session, statusType uint32) erro
 		if ip := net.ParseIP(p.cfg.NASIP); ip != nil {
 			packet.Add(4, radius.Attribute(ip.To4()))
 		}
+	}
+
+	packet.Add(6, encodeUint32(serviceTypeForAccess(session.AccessType)))
+	if session.AccessIfIndex > 0 {
+		packet.Add(5, encodeUint32(session.AccessIfIndex))
+	}
+	packet.Add(61, encodeUint32(nasPortTypeValue(p.cfg.NASPortType)))
+	if nasPortID := p.formatNASPortID(session.AccessInterface, session.SVLAN, session.CVLAN, session.SubscriberIfIndex); nasPortID != "" {
+		packet.Add(87, radius.Attribute(nasPortID))
 	}
 
 	packet.Add(46, encodeUint32(uint32(session.SessionDuration)))
@@ -84,6 +98,18 @@ func (p *Provider) sendAccounting(session *auth.Session, statusType uint32) erro
 			if encoded := encodeIPv6Prefix(v); encoded != nil {
 				packet.Add(123, encoded)
 			}
+		}
+	}
+
+	for i := range p.acctMappings {
+		v, ok := session.Attributes[p.acctMappings[i].internal]
+		if !ok {
+			continue
+		}
+		if p.acctMappings[i].vendorID > 0 {
+			packet.Add(26, encodeVSARequest(p.acctMappings[i].vendorID, p.acctMappings[i].vendorType, []byte(v)))
+		} else {
+			packet.Add(p.acctMappings[i].attrType, radius.Attribute(v))
 		}
 	}
 

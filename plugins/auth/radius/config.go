@@ -27,27 +27,30 @@ const (
 	DefaultNASPortType     = "Virtual"
 	DefaultCoAPort         = 3799
 	DefaultCoAReplayWindow = 300
+	DefaultNASPortIDFormat = "{interface}:{svlan}.{cvlan}"
 )
 
 type Config struct {
 	netbind.EndpointBinding `json:",inline" yaml:",inline"`
 
-	Servers          []ServerConfig    `json:"servers" yaml:"servers"`
-	AuthPort         int               `json:"auth_port,omitempty" yaml:"auth_port,omitempty"`
-	AcctPort         int               `json:"acct_port,omitempty" yaml:"acct_port,omitempty"`
-	Timeout          time.Duration     `json:"timeout,omitempty" yaml:"timeout,omitempty"`
-	Retries          int               `json:"retries,omitempty" yaml:"retries,omitempty"`
-	NASIdentifier    string            `json:"nas_identifier,omitempty" yaml:"nas_identifier,omitempty"`
-	NASIP            string            `json:"nas_ip,omitempty" yaml:"nas_ip,omitempty"`
-	NASPortType      string            `json:"nas_port_type,omitempty" yaml:"nas_port_type,omitempty"`
-	DeadTime         time.Duration     `json:"dead_time,omitempty" yaml:"dead_time,omitempty"`
-	DeadThreshold    int               `json:"dead_threshold,omitempty" yaml:"dead_threshold,omitempty"`
-	Dictionaries     []string          `json:"dictionaries,omitempty" yaml:"dictionaries,omitempty"`
-	ResponseMappings []CustomMapping   `json:"response_mappings,omitempty" yaml:"response_mappings,omitempty"`
-	RequestMappings  []RequestMapping  `json:"request_mappings,omitempty" yaml:"request_mappings,omitempty"`
-	CoAListener      CoAListenerConfig `json:"coa_listener,omitempty" yaml:"coa_listener,omitempty"`
-	CoAClients       []CoAClientConfig `json:"coa_clients,omitempty" yaml:"coa_clients,omitempty"`
-	CoAReplayWindow  int64             `json:"coa_replay_window,omitempty" yaml:"coa_replay_window,omitempty"`
+	Servers            []ServerConfig    `json:"servers" yaml:"servers"`
+	AuthPort           int               `json:"auth_port,omitempty" yaml:"auth_port,omitempty"`
+	AcctPort           int               `json:"acct_port,omitempty" yaml:"acct_port,omitempty"`
+	Timeout            time.Duration     `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	Retries            int               `json:"retries,omitempty" yaml:"retries,omitempty"`
+	NASIdentifier      string            `json:"nas_identifier,omitempty" yaml:"nas_identifier,omitempty"`
+	NASIP              string            `json:"nas_ip,omitempty" yaml:"nas_ip,omitempty"`
+	NASPortType        string            `json:"nas_port_type,omitempty" yaml:"nas_port_type,omitempty"`
+	NASPortIDFormat    string            `json:"nas_port_id_format,omitempty" yaml:"nas_port_id_format,omitempty"`
+	DeadTime           time.Duration     `json:"dead_time,omitempty" yaml:"dead_time,omitempty"`
+	DeadThreshold      int               `json:"dead_threshold,omitempty" yaml:"dead_threshold,omitempty"`
+	Dictionaries       []string          `json:"dictionaries,omitempty" yaml:"dictionaries,omitempty"`
+	ResponseMappings   []CustomMapping   `json:"response_mappings,omitempty" yaml:"response_mappings,omitempty"`
+	RequestMappings    []RequestMapping  `json:"request_mappings,omitempty" yaml:"request_mappings,omitempty"`
+	AccountingMappings []RequestMapping  `json:"accounting_mappings,omitempty" yaml:"accounting_mappings,omitempty"`
+	CoAListener        CoAListenerConfig `json:"coa_listener,omitempty" yaml:"coa_listener,omitempty"`
+	CoAClients         []CoAClientConfig `json:"coa_clients,omitempty" yaml:"coa_clients,omitempty"`
+	CoAReplayWindow    int64             `json:"coa_replay_window,omitempty" yaml:"coa_replay_window,omitempty"`
 }
 
 type ServerConfig struct {
@@ -101,6 +104,9 @@ func (c *Config) applyDefaults() {
 	if c.NASPortType == "" {
 		c.NASPortType = DefaultNASPortType
 	}
+	if c.NASPortIDFormat == "" {
+		c.NASPortIDFormat = DefaultNASPortIDFormat
+	}
 	if c.DeadTime == 0 {
 		c.DeadTime = DefaultDeadTime
 	}
@@ -148,6 +154,14 @@ func (c *Config) validate() error {
 		}
 		if m.RadiusAttr == "" && m.VendorID == 0 {
 			return fmt.Errorf("request_mappings[%d]: radius_attr or vendor_id is required", i)
+		}
+	}
+	for i, m := range c.AccountingMappings {
+		if m.Internal == "" {
+			return fmt.Errorf("accounting_mappings[%d]: internal attribute is required", i)
+		}
+		if m.RadiusAttr == "" && m.VendorID == 0 {
+			return fmt.Errorf("accounting_mappings[%d]: radius_attr or vendor_id is required", i)
 		}
 	}
 	for i, c := range c.CoAClients {

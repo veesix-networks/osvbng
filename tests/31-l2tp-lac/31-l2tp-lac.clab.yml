@@ -43,7 +43,10 @@ topology:
   links:
     # PPPoE subscriber traffic (L2)
     - endpoints: [bng1:eth1, subscribers:eth1]
+      mtu: 1500
     # L2TP backbone (L3) — osvbng-LAC ↔ bngblaster-LNS
     - endpoints: [bng1:eth2, subscribers:eth2]
+      mtu: 1500
     # Optional FRR core for routing context
     - endpoints: [bng1:eth3, corerouter1:eth1]
+      mtu: 1500

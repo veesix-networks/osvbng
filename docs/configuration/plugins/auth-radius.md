@@ -14,6 +14,7 @@ Supports ordered server failover with dead server detection and a three-tier att
 | `nas_identifier` | string | NAS-Identifier AVP. Falls back to `aaa.nas_identifier` | |
 | `nas_ip` | string | NAS-IP-Address AVP. Falls back to `aaa.nas_ip` | |
 | `nas_port_type` | string | NAS-Port-Type AVP value | `Virtual` |
+| `nas_port_id_format` | string | NAS-Port-Id template. See [placeholders](#nas-port-id-format) | `{interface}:{svlan}.{cvlan}` |
 | `dead_time` | duration | How long to skip a dead server | `30s` |
 | `dead_threshold` | int | Consecutive failures before marking dead | `3` |
 | `vrf` | string | Default VRF for outbound auth/accounting traffic. Per-server `vrf` overrides this. | |
@@ -23,6 +24,8 @@ Supports ordered server failover with dead server detection and a three-tier att
 | `coa_clients` | [CoAClient](#coa-client)[] | Authorized CoA senders. | |
 | `coa_replay_window` | int | CoA Event-Timestamp replay window in seconds. Set to 0 to disable. | `300` |
 | `response_mappings` | [ResponseMapping](#response-mappings)[] | Custom Tier 3 attribute mappings | |
+| `request_mappings` | RequestMapping[] | Custom attributes added to Access-Request | |
+| `accounting_mappings` | RequestMapping[] | Custom attributes added to Accounting-Request | |
 
 ### VRF and Source Address Cascade
 
@@ -101,14 +104,47 @@ The following AVPs are included in every Access-Request:
 | User-Name | 1 | AAA policy username |
 | User-Password / CHAP-Password | 2/3 | Subscriber credentials |
 | NAS-IP-Address | 4 | `nas_ip` config |
-| Service-Type | 6 | `2` (Framed) for PPPoE, `5` (Outbound) for IPoE |
+| Service-Type | 6 | `2` (Framed) for PPPoE/IPoE/L2TP, `5` (Outbound) otherwise |
 | Calling-Station-Id | 31 | Subscriber MAC |
 | NAS-Identifier | 32 | `nas_identifier` config |
 | Called-Station-Id | 30 | Circuit ID (if available) |
 | Acct-Session-Id | 44 | Session accounting ID |
 | Event-Timestamp | 55 | Current time |
+| NAS-Port | 5 | Access sub-interface sw_if_index |
 | NAS-Port-Type | 61 | `nas_port_type` config |
-| NAS-Port-Id | 87 | Subscriber interface |
+| NAS-Port-Id | 87 | Formatted per `nas_port_id_format` |
+
+### NAS-Port-Id format
+
+`nas_port_id_format` builds NAS-Port-Id (attribute 87) from these placeholders. The same format is used for Access-Request and Accounting.
+
+| Placeholder | Value |
+|---|---|
+| `{interface}` | Access sub-interface name, e.g. `eth1.100` (the `.100` is the sub-interface index, not the S-VLAN) |
+| `{svlan}` | Outer (S-)VLAN tag |
+| `{cvlan}` | Inner (C-)VLAN tag |
+| `{subscriber_index}` | Subscriber dataplane sw_if_index. Accounting only; `0` in Access-Request (the subscriber interface is created after authentication) |
+
+Default: `{interface}:{svlan}.{cvlan}` → e.g. `eth1.100:100.2`.
+
+### Request Mappings
+
+`request_mappings` adds attributes to the Access-Request, sourced from the subscriber's internal attributes. Each entry takes `internal` plus either a `radius_attr` name or a `vendor_id`/`vendor_type` pair. A mapping only emits when its `internal` attribute is set for that session.
+
+Internal attributes available as sources:
+
+| Internal | Source | Access types |
+|---|---|---|
+| `circuit_id` | Agent Circuit ID — DHCP Option 82 sub-option 1 / PPPoE TR-101 tag | IPoE, PPPoE |
+| `remote_id` | Agent Remote ID — DHCP Option 82 sub-option 2 / PPPoE TR-101 tag | IPoE, PPPoE |
+| `hostname` | Client hostname — DHCP Option 12 | IPoE |
+
+```yaml
+request_mappings:
+  - internal: remote_id
+    vendor_id: 3561
+    vendor_type: 2
+```
 
 ## Accounting
 
@@ -119,18 +155,43 @@ Accounting-Request packets include:
 | AVP | Type | Description |
 |-----|------|-------------|
 | Acct-Status-Type | 40 | Start (1), Interim-Update (3), Stop (2) |
+| Acct-Authentic | 45 | RADIUS (1) |
+| Acct-Delay-Time | 41 | Seconds the record has been delayed (0) |
 | Acct-Session-Id | 44 | Session accounting ID |
 | User-Name | 1 | Subscriber username |
 | Calling-Station-Id | 31 | Subscriber MAC |
 | NAS-Identifier | 32 | NAS identifier |
 | NAS-IP-Address | 4 | NAS IP |
+| Called-Station-Id | 30 | Circuit ID (if available) |
+| Service-Type | 6 | Framed (2) for subscriber access types |
+| NAS-Port | 5 | Access sub-interface sw_if_index |
+| NAS-Port-Type | 61 | From `nas_port_type` |
+| NAS-Port-Id | 87 | Formatted per `nas_port_id_format` |
 | Acct-Session-Time | 46 | Session duration (seconds) |
-| Acct-Input-Octets | 42 | RX bytes |
-| Acct-Output-Octets | 43 | TX bytes |
+| Acct-Input-Octets | 42 | RX bytes (lower 32 bits) |
+| Acct-Output-Octets | 43 | TX bytes (lower 32 bits) |
+| Acct-Input-Gigawords | 52 | RX bytes (upper 32 bits), when non-zero |
+| Acct-Output-Gigawords | 53 | TX bytes (upper 32 bits), when non-zero |
 | Acct-Input-Packets | 47 | RX packets |
 | Acct-Output-Packets | 48 | TX packets |
 | Framed-IP-Address | 8 | Assigned IPv4 address |
+| Framed-IPv6-Prefix | 97 | Assigned IPv6 WAN prefix |
+| Delegated-IPv6-Prefix | 123 | Delegated IPv6 prefix |
 | Event-Timestamp | 55 | Current time |
+
+### Accounting Mappings
+
+`accounting_mappings` adds vendor or standard attributes to Accounting-Request packets, sourced from the subscriber's internal attributes. Each entry takes `internal` plus either a `radius_attr` name or a `vendor_id`/`vendor_type` pair, the same as `request_mappings`. A mapping only emits when its `internal` attribute is set on the session.
+
+```yaml
+accounting_mappings:
+  - internal: circuit_id
+    vendor_id: 3561
+    vendor_type: 1
+  - internal: vrf
+    vendor_id: 4874
+    vendor_type: 1
+```
 
 ## CoA / Disconnect-Message (RFC 5176)
 
