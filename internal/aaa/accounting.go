@@ -22,27 +22,34 @@ import (
 // SessionState required.
 //
 // Field design notes:
+//
 //   - LastReported* are the cumulative values most recently acknowledged
 //     by the RADIUS Accounting server. They are the billing system's
 //     source of truth and only advance on Accounting-Response success.
+//
 //   - CurrentBaseline* are the VPP per-interface counter values at the
 //     moment the current baseline was established (initial bind or
 //     post-rebaseline after a VPP restart).
+//
 //   - PriorDelta* carries the cumulative count contributed by previous
 //     VPP restart cycles that the live VPP counter pair no longer
 //     includes. The Acct-Interim cumulative formula is:
 //
-//	cumulative = (current_vpp - CurrentBaseline) + PriorDelta
+//     cumulative = (current_vpp - CurrentBaseline) + PriorDelta
 type AccountingCheckpoint struct {
-	SessionID     string            `json:"session_id"`
-	AcctSessionID string            `json:"acct_session_id"`
-	AccessType    models.AccessType `json:"access_type"`
-	Username      string            `json:"username"`
-	MAC           string            `json:"mac"`
-	IPv4Address   string            `json:"ipv4_address,omitempty"`
-	AuthDate      time.Time         `json:"auth_date"`
-	SwIfIndex     uint32            `json:"sw_if_index"`
-	Attributes    map[string]string `json:"attributes,omitempty"`
+	SessionID       string            `json:"session_id"`
+	AcctSessionID   string            `json:"acct_session_id"`
+	AccessType      models.AccessType `json:"access_type"`
+	Username        string            `json:"username"`
+	MAC             string            `json:"mac"`
+	IPv4Address     string            `json:"ipv4_address,omitempty"`
+	AuthDate        time.Time         `json:"auth_date"`
+	SwIfIndex       uint32            `json:"sw_if_index"`
+	SVLAN           uint16            `json:"svlan,omitempty"`
+	CVLAN           uint16            `json:"cvlan,omitempty"`
+	AccessIfIndex   uint32            `json:"access_sw_if_index,omitempty"`
+	AccessInterface string            `json:"access_interface,omitempty"`
+	Attributes      map[string]string `json:"attributes,omitempty"`
 
 	LastReportedInOctets   uint64 `json:"last_reported_in_octets,omitempty"`
 	LastReportedOutOctets  uint64 `json:"last_reported_out_octets,omitempty"`
@@ -68,15 +75,19 @@ func (c *Component) checkpointAcctSession(s *AccountingSession) {
 		return
 	}
 	cp := &AccountingCheckpoint{
-		SessionID:     s.sessionID,
-		AcctSessionID: s.acctSessionID,
-		AccessType:    s.accessType,
-		Username:      s.username,
-		MAC:           s.mac,
-		IPv4Address:   s.ipv4Address,
-		AuthDate:      s.authDate,
-		SwIfIndex:     s.swIfIndex,
-		Attributes:    s.attributes,
+		SessionID:       s.sessionID,
+		AcctSessionID:   s.acctSessionID,
+		AccessType:      s.accessType,
+		Username:        s.username,
+		MAC:             s.mac,
+		IPv4Address:     s.ipv4Address,
+		AuthDate:        s.authDate,
+		SwIfIndex:       s.swIfIndex,
+		SVLAN:           s.svlan,
+		CVLAN:           s.cvlan,
+		AccessIfIndex:   s.accessIfIndex,
+		AccessInterface: s.accessInterface,
+		Attributes:      s.attributes,
 
 		LastReportedInOctets:   s.lastReportedInOctets,
 		LastReportedOutOctets:  s.lastReportedOutOctets,
@@ -144,16 +155,20 @@ func (c *Component) loadAcctSessions(ctx context.Context) (int, error) {
 		}
 		c.acctCacheMu.Lock()
 		c.acctCache[cp.SessionID] = &AccountingSession{
-			sessionID:             cp.SessionID,
-			acctSessionID:         cp.AcctSessionID,
-			accessType:            cp.AccessType,
-			authDate:              cp.AuthDate,
-			username:              cp.Username,
-			mac:                   cp.MAC,
-			ipv4Address:           cp.IPv4Address,
-			attributes:            cp.Attributes,
-			swIfIndex:             cp.SwIfIndex,
-			pendingSessionConfirm: true,
+			sessionID:              cp.SessionID,
+			acctSessionID:          cp.AcctSessionID,
+			accessType:             cp.AccessType,
+			authDate:               cp.AuthDate,
+			username:               cp.Username,
+			mac:                    cp.MAC,
+			ipv4Address:            cp.IPv4Address,
+			svlan:                  cp.SVLAN,
+			cvlan:                  cp.CVLAN,
+			accessIfIndex:          cp.AccessIfIndex,
+			accessInterface:        cp.AccessInterface,
+			attributes:             cp.Attributes,
+			swIfIndex:              cp.SwIfIndex,
+			pendingSessionConfirm:  true,
 			pendingConfirmDeadline: time.Now().Add(pruneAcctOrphansAfter),
 
 			lastReportedInOctets:   cp.LastReportedInOctets,

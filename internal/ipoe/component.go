@@ -24,9 +24,9 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	aaacfg "github.com/veesix-networks/osvbng/pkg/config/aaa"
+	"github.com/veesix-networks/osvbng/pkg/config/ip"
 	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
-	"github.com/veesix-networks/osvbng/pkg/config/ip"
 	"github.com/veesix-networks/osvbng/pkg/dhcp"
 	"github.com/veesix-networks/osvbng/pkg/dhcp4"
 	"github.com/veesix-networks/osvbng/pkg/dhcp6"
@@ -73,8 +73,8 @@ type Component struct {
 	dhcp6Chan  <-chan *dataplane.ParsedPacket
 	ipv6NDChan <-chan *dataplane.ParsedPacket
 
-	aaaRespSub  events.Subscription
-	haStateSub  events.Subscription
+	aaaRespSub   events.Subscription
+	haStateSub   events.Subscription
 	mutationSub  events.Subscription
 	terminateSub events.Subscription
 
@@ -379,6 +379,16 @@ func (c *Component) resolveIPv6Profile(ctx *allocator.Context) *ip.IPv6Profile {
 		return nil
 	}
 	return cfg.IPv6Profiles[ctx.IPv6ProfileName]
+}
+
+func (c *Component) accessInterfaceName(encapIfIndex uint32) string {
+	if c.ifMgr == nil {
+		return ""
+	}
+	if iface := c.ifMgr.Get(encapIfIndex); iface != nil {
+		return iface.Name
+	}
+	return ""
 }
 
 func (c *Component) resolveAccessInterfaceName(encapIfIndex uint32) string {
@@ -917,15 +927,17 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 	}
 
 	aaaPayload := &models.AAARequest{
-		RequestID:     requestID,
-		Username:      username,
-		MAC:           pkt.MAC.String(),
-		AcctSessionID: sess.AcctSessionID,
-		SVLAN:         pkt.OuterVLAN,
-		CVLAN:         pkt.InnerVLAN,
-		Interface:     accessInterface,
-		PolicyName:    policyName,
-		Attributes:    aaaAttrs,
+		RequestID:       requestID,
+		Username:        username,
+		MAC:             pkt.MAC.String(),
+		AcctSessionID:   sess.AcctSessionID,
+		SVLAN:           pkt.OuterVLAN,
+		CVLAN:           pkt.InnerVLAN,
+		Interface:       accessInterface,
+		AccessIfIndex:   sess.EncapIfIndex,
+		AccessInterface: c.accessInterfaceName(sess.EncapIfIndex),
+		PolicyName:      policyName,
+		Attributes:      aaaAttrs,
 	}
 
 	c.eventBus.Publish(events.TopicAAARequest, events.Event{
@@ -1161,15 +1173,17 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 	}
 
 	aaaPayload := &models.AAARequest{
-		RequestID:     requestID,
-		Username:      username,
-		MAC:           pkt.MAC.String(),
-		AcctSessionID: sess.AcctSessionID,
-		SVLAN:         pkt.OuterVLAN,
-		CVLAN:         pkt.InnerVLAN,
-		Interface:     accessInterface,
-		PolicyName:    policyName,
-		Attributes:    aaaAttrs,
+		RequestID:       requestID,
+		Username:        username,
+		MAC:             pkt.MAC.String(),
+		AcctSessionID:   sess.AcctSessionID,
+		SVLAN:           pkt.OuterVLAN,
+		CVLAN:           pkt.InnerVLAN,
+		Interface:       accessInterface,
+		AccessIfIndex:   sess.EncapIfIndex,
+		AccessInterface: c.accessInterfaceName(sess.EncapIfIndex),
+		PolicyName:      policyName,
+		Attributes:      aaaAttrs,
 	}
 
 	c.eventBus.Publish(events.TopicAAARequest, events.Event{
@@ -1511,26 +1525,28 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 	c.logger.Debug("Publishing session lifecycle event", "session_id", sess.SessionID, "sw_if_index", ipoeSwIfIndex, "ipv4", sess.IPv4.String())
 
 	ipoeSess := &models.IPoESession{
-		SessionID:     sess.SessionID,
-		State:         models.SessionStateActive,
-		AccessType:    string(models.AccessTypeIPoE),
-		Protocol:      string(models.ProtocolDHCPv4),
-		MAC:           sess.MAC,
-		OuterVLAN:     sess.OuterVLAN,
-		InnerVLAN:     sess.InnerVLAN,
-		VLANCount:     c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
-		IfIndex:       ipoeSwIfIndex,
-		VRF:           sess.VRF,
-		ServiceGroup:  sess.ServiceGroup.Name,
-		SRGName:       sess.SRGName,
-		IPv4Address:   sess.IPv4,
-		LeaseTime:     sess.LeaseTime,
-		IPv6Address:   snapshotIPv6,
-		IPv6LeaseTime: snapshotIPv6LeaseTime,
-		DUID:          sess.DHCPv6DUID,
-		Username:      sess.Username,
-		AAASessionID:  sess.AcctSessionID,
-		ActivatedAt:   time.Now(),
+		SessionID:       sess.SessionID,
+		State:           models.SessionStateActive,
+		AccessType:      string(models.AccessTypeIPoE),
+		Protocol:        string(models.ProtocolDHCPv4),
+		MAC:             sess.MAC,
+		OuterVLAN:       sess.OuterVLAN,
+		InnerVLAN:       sess.InnerVLAN,
+		VLANCount:       c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
+		IfIndex:         ipoeSwIfIndex,
+		AccessIfIndex:   sess.EncapIfIndex,
+		AccessInterface: c.accessInterfaceName(sess.EncapIfIndex),
+		VRF:             sess.VRF,
+		ServiceGroup:    sess.ServiceGroup.Name,
+		SRGName:         sess.SRGName,
+		IPv4Address:     sess.IPv4,
+		LeaseTime:       sess.LeaseTime,
+		IPv6Address:     snapshotIPv6,
+		IPv6LeaseTime:   snapshotIPv6LeaseTime,
+		DUID:            sess.DHCPv6DUID,
+		Username:        sess.Username,
+		AAASessionID:    sess.AcctSessionID,
+		ActivatedAt:     time.Now(),
 	}
 	if sess.AllocCtx != nil {
 		ipoeSess.IPv4Pool = sess.AllocCtx.AllocatedPool
@@ -2296,15 +2312,17 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 	}
 
 	aaaPayload := &models.AAARequest{
-		RequestID:     requestID,
-		Username:      username,
-		MAC:           pkt.MAC.String(),
-		AcctSessionID: sess.AcctSessionID,
-		SVLAN:         pkt.OuterVLAN,
-		CVLAN:         pkt.InnerVLAN,
-		Interface:     accessInterface,
-		PolicyName:    policyName,
-		Attributes:    aaaAttrs,
+		RequestID:       requestID,
+		Username:        username,
+		MAC:             pkt.MAC.String(),
+		AcctSessionID:   sess.AcctSessionID,
+		SVLAN:           pkt.OuterVLAN,
+		CVLAN:           pkt.InnerVLAN,
+		Interface:       accessInterface,
+		AccessIfIndex:   sess.EncapIfIndex,
+		AccessInterface: c.accessInterfaceName(sess.EncapIfIndex),
+		PolicyName:      policyName,
+		Attributes:      aaaAttrs,
 	}
 
 	c.logger.WithGroup(logger.IPoEDHCP6).Debug("Publishing AAA request for DHCPv6 SOLICIT", "session_id", sess.SessionID, "username", username)
@@ -2939,27 +2957,29 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, msg *dhcp6.Message) er
 	}
 
 	ipoeSess := &models.IPoESession{
-		SessionID:     sess.SessionID,
-		State:         models.SessionStateActive,
-		AccessType:    string(models.AccessTypeIPoE),
-		Protocol:      string(models.ProtocolDHCPv6),
-		MAC:           sess.MAC,
-		OuterVLAN:     sess.OuterVLAN,
-		InnerVLAN:     sess.InnerVLAN,
-		VLANCount:     c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
-		IfIndex:       ipoeSwIfIndex,
-		VRF:           sess.VRF,
-		ServiceGroup:  sess.ServiceGroup.Name,
-		SRGName:       sess.SRGName,
-		IPv4Address:   snapshotIPv4,
-		LeaseTime:     snapshotLeaseTime,
-		IPv6Address:   ianaAddr,
-		IPv6Prefix:    prefixStr,
-		IPv6LeaseTime: sess.IPv6LeaseTime,
-		DUID:          sess.DHCPv6DUID,
-		Username:      sess.Username,
-		AAASessionID:  sess.AcctSessionID,
-		ActivatedAt:   time.Now(),
+		SessionID:       sess.SessionID,
+		State:           models.SessionStateActive,
+		AccessType:      string(models.AccessTypeIPoE),
+		Protocol:        string(models.ProtocolDHCPv6),
+		MAC:             sess.MAC,
+		OuterVLAN:       sess.OuterVLAN,
+		InnerVLAN:       sess.InnerVLAN,
+		VLANCount:       c.getVLANCount(sess.OuterVLAN, sess.InnerVLAN),
+		IfIndex:         ipoeSwIfIndex,
+		AccessIfIndex:   sess.EncapIfIndex,
+		AccessInterface: c.accessInterfaceName(sess.EncapIfIndex),
+		VRF:             sess.VRF,
+		ServiceGroup:    sess.ServiceGroup.Name,
+		SRGName:         sess.SRGName,
+		IPv4Address:     snapshotIPv4,
+		LeaseTime:       snapshotLeaseTime,
+		IPv6Address:     ianaAddr,
+		IPv6Prefix:      prefixStr,
+		IPv6LeaseTime:   sess.IPv6LeaseTime,
+		DUID:            sess.DHCPv6DUID,
+		Username:        sess.Username,
+		AAASessionID:    sess.AcctSessionID,
+		ActivatedAt:     time.Now(),
 	}
 	if sess.AllocCtx != nil {
 		ipoeSess.IPv4Pool = sess.AllocCtx.AllocatedPool
@@ -3019,7 +3039,6 @@ func (c *Component) sendDHCPv6Response(sess *SessionState, rawDHCPv6 []byte) err
 	})
 	return nil
 }
-
 
 func (c *Component) consumeIPv6NDPackets() {
 	if c.ipv6NDChan == nil {
@@ -4082,27 +4101,27 @@ func (c *Component) checkpointSessionSync(sess *SessionState) error {
 
 func (c *Component) buildModelSnapshot(sess *SessionState) *models.IPoESession {
 	snapshot := &models.IPoESession{
-		SessionID:    sess.SessionID,
-		State:        models.SessionState(sess.State),
-		AccessType:   string(models.AccessTypeIPoE),
-		MAC:          sess.MAC,
-		OuterVLAN:    sess.OuterVLAN,
-		InnerVLAN:    sess.InnerVLAN,
-		IfIndex:      sess.IPoESwIfIndex,
-		VRF:          sess.VRF,
-		ServiceGroup: sess.ServiceGroup.Name,
-		SRGName:      sess.SRGName,
-		IPv4Address:  sess.IPv4,
-		LeaseTime:    sess.LeaseTime,
-		Hostname:     sess.Hostname,
-		ClientID:     sess.ClientID,
-		IPv6Address:  sess.IPv6Address,
+		SessionID:     sess.SessionID,
+		State:         models.SessionState(sess.State),
+		AccessType:    string(models.AccessTypeIPoE),
+		MAC:           sess.MAC,
+		OuterVLAN:     sess.OuterVLAN,
+		InnerVLAN:     sess.InnerVLAN,
+		IfIndex:       sess.IPoESwIfIndex,
+		VRF:           sess.VRF,
+		ServiceGroup:  sess.ServiceGroup.Name,
+		SRGName:       sess.SRGName,
+		IPv4Address:   sess.IPv4,
+		LeaseTime:     sess.LeaseTime,
+		Hostname:      sess.Hostname,
+		ClientID:      sess.ClientID,
+		IPv6Address:   sess.IPv6Address,
 		IPv6LeaseTime: sess.IPv6LeaseTime,
-		DUID:         sess.DHCPv6DUID,
-		Username:     sess.Username,
-		AAASessionID: sess.AcctSessionID,
-		ActivatedAt:  sess.BoundAt,
-		Attributes:   sess.Attributes,
+		DUID:          sess.DHCPv6DUID,
+		Username:      sess.Username,
+		AAASessionID:  sess.AcctSessionID,
+		ActivatedAt:   sess.BoundAt,
+		Attributes:    sess.Attributes,
 	}
 	if sess.IPv6Prefix != nil {
 		snapshot.IPv6Prefix = sess.IPv6Prefix.String()

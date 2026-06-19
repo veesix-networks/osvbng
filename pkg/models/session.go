@@ -38,10 +38,12 @@ type IPoESession struct {
 	InnerVLAN uint16
 	VLANCount int
 
-	IfIndex      uint32
-	VRF          string
-	ServiceGroup string
-	SRGName      string
+	IfIndex         uint32
+	AccessIfIndex   uint32
+	AccessInterface string
+	VRF             string
+	ServiceGroup    string
+	SRGName         string
 
 	IPv4Address net.IP
 	LeaseTime   uint32
@@ -153,10 +155,12 @@ type PPPSession struct {
 	InnerVLAN uint16
 	VLANCount int
 
-	IfIndex      uint32
-	VRF          string
-	ServiceGroup string
-	SRGName      string
+	IfIndex         uint32
+	AccessIfIndex   uint32
+	AccessInterface string
+	VRF             string
+	ServiceGroup    string
+	SRGName         string
 
 	IPv4Address net.IP
 	IPv6Address net.IP

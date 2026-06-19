@@ -90,8 +90,8 @@ func TestServiceTypeForAccess(t *testing.T) {
 	if serviceTypeForAccess("pppoe") != 2 {
 		t.Fatal("pppoe should be 2 (Framed)")
 	}
-	if serviceTypeForAccess("ipoe") != 5 {
-		t.Fatal("ipoe should be 5 (Outbound)")
+	if serviceTypeForAccess("ipoe") != 2 {
+		t.Fatal("ipoe should be 2 (Framed)")
 	}
 	if serviceTypeForAccess("") != 5 {
 		t.Fatal("empty should default to 5")

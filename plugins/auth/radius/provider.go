@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -56,6 +58,7 @@ type Provider struct {
 	tier2Index      map[vendorKey]*vendorMapping
 	tier3           []compiledCustomMapping
 	requestMappings []compiledRequestMapping
+	acctMappings    []compiledRequestMapping
 
 	radiusStats *internalaaa.RADIUSStats
 }
@@ -164,6 +167,23 @@ func New(cfg *config.Config) (auth.AuthProvider, error) {
 		reqMappings = append(reqMappings, cm)
 	}
 
+	var acctMappings []compiledRequestMapping
+	for _, m := range pluginCfg.AccountingMappings {
+		cm := compiledRequestMapping{
+			internal:   m.Internal,
+			vendorID:   m.VendorID,
+			vendorType: m.VendorType,
+		}
+		if m.RadiusAttr != "" {
+			attrType, ok := resolveAttrName(m.RadiusAttr)
+			if !ok {
+				return nil, fmt.Errorf("accounting_mappings: unknown radius attribute %q", m.RadiusAttr)
+			}
+			cm.attrType = attrType
+		}
+		acctMappings = append(acctMappings, cm)
+	}
+
 	p := &Provider{
 		cfg:             pluginCfg,
 		globalCfg:       cfg,
@@ -174,6 +194,7 @@ func New(cfg *config.Config) (auth.AuthProvider, error) {
 		tier2Index:      buildTier2Index(),
 		tier3:           tier3,
 		requestMappings: reqMappings,
+		acctMappings:    acctMappings,
 		radiusStats:     stats,
 	}
 
@@ -346,8 +367,15 @@ func (p *Provider) addRequestAVPs(packet *radius.Packet, req *auth.AuthRequest) 
 		packet.Add(31, radius.Attribute(req.MAC))
 	}
 
-	if req.Interface != "" {
-		packet.Add(87, radius.Attribute(req.Interface))
+	iface := req.AccessInterface
+	if iface == "" {
+		iface = req.Interface
+	}
+	if req.AccessIfIndex > 0 {
+		packet.Add(5, encodeUint32(req.AccessIfIndex))
+	}
+	if nasPortID := p.formatNASPortID(iface, req.SVLAN, req.CVLAN, 0); nasPortID != "" {
+		packet.Add(87, radius.Attribute(nasPortID))
 	}
 
 	if req.AcctSessionID != "" {
@@ -488,9 +516,18 @@ func encodeUint32(v uint32) radius.Attribute {
 	return radius.Attribute(buf)
 }
 
+func (p *Provider) formatNASPortID(iface string, svlan, cvlan uint16, subscriberIndex uint32) string {
+	return strings.NewReplacer(
+		"{interface}", iface,
+		"{svlan}", strconv.Itoa(int(svlan)),
+		"{cvlan}", strconv.Itoa(int(cvlan)),
+		"{subscriber_index}", strconv.Itoa(int(subscriberIndex)),
+	).Replace(p.cfg.NASPortIDFormat)
+}
+
 func serviceTypeForAccess(accessType string) uint32 {
 	switch accessType {
-	case "pppoe":
+	case "pppoe", "ipoe", "l2tp", "lac", "lns":
 		return 2
 	default:
 		return 5

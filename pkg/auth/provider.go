@@ -21,11 +21,13 @@ type AuthRequest struct {
 	AcctSessionID string
 	Attributes    map[string]string
 
-	SVLAN      uint16
-	CVLAN      uint16
-	Interface  string
-	AccessType string
-	PolicyName string
+	SVLAN           uint16
+	CVLAN           uint16
+	Interface       string
+	AccessIfIndex   uint32
+	AccessInterface string
+	AccessType      string
+	PolicyName      string
 
 	SubscriberGroup *subscriber.SubscriberGroup
 }
@@ -36,14 +38,20 @@ type AuthResponse struct {
 }
 
 type Session struct {
-	SessionID       string
-	AcctSessionID   string
-	Username        string
-	MAC             string
-	RxPackets       uint64
-	RxBytes         uint64
-	TxPackets       uint64
-	TxBytes         uint64
-	SessionDuration uint32
-	Attributes      map[string]string
+	SessionID         string
+	AcctSessionID     string
+	Username          string
+	MAC               string
+	AccessType        string
+	AccessInterface   string
+	SVLAN             uint16
+	CVLAN             uint16
+	AccessIfIndex     uint32
+	SubscriberIfIndex uint32
+	RxPackets         uint64
+	RxBytes           uint64
+	TxPackets         uint64
+	TxBytes           uint64
+	SessionDuration   uint32
+	Attributes        map[string]string
 }
