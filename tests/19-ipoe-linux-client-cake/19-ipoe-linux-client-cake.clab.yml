@@ -49,4 +49,6 @@ topology:
 
   links:
     - endpoints: [bng1:eth1, subscriber:eth1]
+      mtu: 1500
     - endpoints: [bng1:eth2, corerouter1:eth1]
+      mtu: 1500
