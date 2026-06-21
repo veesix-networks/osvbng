@@ -3380,6 +3380,15 @@ func (c *Component) emitPeriodicRA(sess *SessionState, cfg *config.Config, now t
 
 	match, matched := c.cfgMgr.LookupSubscriberGroup(svlan, cvlan)
 	if !matched || !groupV6Enabled(match.Group) {
+		// group v6 was turned off while this session was advertising: send one final
+		// RA with Router Lifetime 0 so the host drops its default route now instead of
+		// waiting out the lifetime (RFC 4861 §6.2.5). due!=zero means it was advertising.
+		if !due.IsZero() {
+			c.ceaseSessionRA(srgName, encapIfIndex, svlan, cvlan)
+			sess.mu.Lock()
+			sess.nextRADue = time.Time{}
+			sess.mu.Unlock()
+		}
 		return
 	}
 
@@ -3437,6 +3446,41 @@ func (c *Component) emitPeriodicRA(sess *SessionState, cfg *config.Config, now t
 	sess.mu.Lock()
 	sess.nextRADue = now.Add(refresh)
 	sess.mu.Unlock()
+}
+
+// ceaseSessionRA sends a single multicast RA with Router Lifetime 0 so a subscriber
+// drops its default route immediately when the BNG stops being its default router
+// (RFC 4861 §6.2.5). Used only on a genuine cessation (group v6 disabled), never on a
+// transient osvbngd restart — that path keeps the route alive via opdb restore.
+func (c *Component) ceaseSessionRA(srgName string, encapIfIndex uint32, svlan, cvlan uint16) {
+	var parentSwIfIndex uint32
+	if c.ifMgr != nil {
+		if iface := c.ifMgr.Get(encapIfIndex); iface != nil {
+			parentSwIfIndex = iface.SupSwIfIndex
+		}
+	}
+	srcMAC := c.getLocalMAC(srgName, parentSwIfIndex)
+	if srcMAC == nil {
+		return
+	}
+	srcIP := linkLocalFromMAC(srcMAC)
+	if srcIP == nil {
+		return
+	}
+	var outerTPID uint16
+	if c.ifMgr != nil {
+		outerTPID = c.ifMgr.OuterTPID(encapIfIndex)
+	}
+	_ = c.buildAndPublishRA(raEgressTarget{
+		dstMAC:          net.HardwareAddr{0x33, 0x33, 0x00, 0x00, 0x00, 0x01},
+		srcMAC:          srcMAC,
+		dstIP:           net.ParseIP("ff02::1"),
+		srcIP:           srcIP,
+		outerVLAN:       svlan,
+		innerVLAN:       cvlan,
+		outerTPID:       outerTPID,
+		parentSwIfIndex: parentSwIfIndex,
+	}, southbound.IPv6RAConfig{Managed: true, Other: true, RouterLifetime: 0}, nil)
 }
 
 func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbound.IPv6RAConfig, prefixes []raPrefixInfo) error {

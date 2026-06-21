@@ -475,6 +475,29 @@ func TestPeriodicRAEmit(t *testing.T) {
 	})
 }
 
+func TestCeaseSessionRA(t *testing.T) {
+	t.Parallel()
+
+	c, bus := newNSPTestComponent(t, net.HardwareAddr{0xaa, 0xc1, 0xab, 0x1f, 0xe2, 0xfa}, true)
+	c.ceaseSessionRA("access1", 10, 100, 0)
+
+	bus.mu.Lock()
+	defer bus.mu.Unlock()
+	if len(bus.egress) != 1 {
+		t.Fatalf("expected 1 cease RA, got %d", len(bus.egress))
+	}
+	eg := bus.egress[0]
+	if eg.Packet.DstMAC != "33:33:00:00:00:01" {
+		t.Fatalf("cease dstMAC = %s, want all-nodes multicast", eg.Packet.DstMAC)
+	}
+	if dst := raLayerDstIP(t, eg.Packet.RawData); !dst.Equal(net.ParseIP("ff02::1")) {
+		t.Fatalf("cease dstIP = %s, want ff02::1", dst)
+	}
+	if rl := raLayerRouterLifetime(t, eg.Packet.RawData); rl != 0 {
+		t.Fatalf("cease RouterLifetime = %d, want 0", rl)
+	}
+}
+
 func TestProcessNSPacket(t *testing.T) {
 	t.Parallel()
 
