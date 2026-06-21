@@ -180,12 +180,13 @@ func newNSPTestComponent(t *testing.T, virtualMAC net.HardwareAddr, active bool)
 	srg := &fakeSRGProvider{active: active, virtualMAC: virtualMAC, srgForGrp: "access1"}
 
 	c := &Component{
-		Base:     component.NewBase("ipoe-test"),
-		logger:   logger.NewTest(),
-		eventBus: bus,
-		srgMgr:   srg,
-		ifMgr:    ifMgr,
-		cfgMgr:   &fakeConfigManager{cfg: cfg},
+		Base:      component.NewBase("ipoe-test"),
+		logger:    logger.NewTest(),
+		eventBus:  bus,
+		srgMgr:    srg,
+		ifMgr:     ifMgr,
+		cfgMgr:    &fakeConfigManager{cfg: cfg},
+		raBuckets: make(map[int][]string),
 	}
 	return c, bus
 }
@@ -293,6 +294,183 @@ func TestRAPrefixOnLink(t *testing.T) {
 		}
 		if vl := binary.BigEndian.Uint32(opt.Data[2:6]); vl != 7200 {
 			t.Fatalf("on-link Valid Lifetime = %d, want 7200", vl)
+		}
+	})
+}
+
+func raLayerDstIP(t *testing.T, raw []byte) net.IP {
+	t.Helper()
+	pkt := gopacket.NewPacket(raw, layers.LayerTypeIPv6, gopacket.Default)
+	l := pkt.Layer(layers.LayerTypeIPv6)
+	if l == nil {
+		t.Fatalf("egress packet has no IPv6 layer")
+	}
+	return l.(*layers.IPv6).DstIP
+}
+
+func raLayerRouterLifetime(t *testing.T, raw []byte) uint16 {
+	t.Helper()
+	pkt := gopacket.NewPacket(raw, layers.LayerTypeIPv6, gopacket.Default)
+	l := pkt.Layer(layers.LayerTypeICMPv6RouterAdvertisement)
+	if l == nil {
+		t.Fatalf("egress packet has no Router Advertisement layer")
+	}
+	return l.(*layers.ICMPv6RouterAdvertisement).RouterLifetime
+}
+
+func TestRARouterLifetimeCap(t *testing.T) {
+	t.Parallel()
+
+	vmac := net.HardwareAddr{0xaa, 0xc1, 0xab, 0x1f, 0xe2, 0xfa}
+	c, bus := newNSPTestComponent(t, vmac, true)
+
+	err := c.buildAndPublishRA(raEgressTarget{
+		dstMAC:    net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
+		srcMAC:    vmac,
+		dstIP:     net.ParseIP("fe80::baad:f00d"),
+		srcIP:     net.ParseIP("fe80::1"),
+		outerVLAN: 100,
+	}, southbound.IPv6RAConfig{Managed: true, Other: true, RouterLifetime: 100000}, nil)
+	if err != nil {
+		t.Fatalf("buildAndPublishRA: %v", err)
+	}
+
+	bus.mu.Lock()
+	defer bus.mu.Unlock()
+	if got := raLayerRouterLifetime(t, bus.egress[0].Packet.RawData); got != 9000 {
+		t.Fatalf("RouterLifetime = %d, want 9000 (RFC 4861 §4.2 cap)", got)
+	}
+}
+
+func TestRARefreshInterval(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		rc   southbound.IPv6RAConfig
+		want time.Duration
+	}{
+		{"zero_lifetime_no_periodic", southbound.IPv6RAConfig{RouterLifetime: 0, MaxInterval: 600}, 0},
+		{"third_of_lifetime", southbound.IPv6RAConfig{RouterLifetime: 1800, MaxInterval: 600, MinInterval: 200}, 600 * time.Second},
+		{"capped_by_max_interval", southbound.IPv6RAConfig{RouterLifetime: 9000, MaxInterval: 600, MinInterval: 200}, 600 * time.Second},
+		{"short_lifetime", southbound.IPv6RAConfig{RouterLifetime: 30, MaxInterval: 600, MinInterval: 5}, 10 * time.Second},
+		{"floored_by_min_interval", southbound.IPv6RAConfig{RouterLifetime: 30, MaxInterval: 600, MinInterval: 20}, 20 * time.Second},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := raRefreshInterval(tt.rc); got != tt.want {
+				t.Fatalf("raRefreshInterval = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRABucketMaintenance(t *testing.T) {
+	t.Parallel()
+
+	c, _ := newNSPTestComponent(t, net.HardwareAddr{0xaa, 0xc1, 0xab, 0x1f, 0xe2, 0xfa}, true)
+	c.raBucketCount = 16
+
+	sess := &SessionState{SessionID: "sess-A"}
+	bucket := c.raBucketOf("sess-A")
+	if c.raBucketOf("sess-A") != bucket {
+		t.Fatal("raBucketOf is not deterministic")
+	}
+
+	c.placeSessionInRABucket(sess)
+	c.raBucketMu.RLock()
+	n := len(c.raBuckets[bucket])
+	c.raBucketMu.RUnlock()
+	if n != 1 {
+		t.Fatalf("bucket %d has %d entries after place, want 1", bucket, n)
+	}
+
+	c.removeSessionFromRABucket(sess)
+	c.raBucketMu.RLock()
+	n = len(c.raBuckets[bucket])
+	c.raBucketMu.RUnlock()
+	if n != 0 {
+		t.Fatalf("bucket %d has %d entries after remove, want 0", bucket, n)
+	}
+}
+
+func TestPeriodicRAEmit(t *testing.T) {
+	t.Parallel()
+
+	vmac := net.HardwareAddr{0xaa, 0xc1, 0xab, 0x1f, 0xe2, 0xfa}
+	subMAC := net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}
+	mkSess := func(ll net.IP, due time.Time) *SessionState {
+		return &SessionState{
+			SessionID:       "s1",
+			OuterVLAN:       100,
+			EncapIfIndex:    10,
+			MAC:             subMAC,
+			IPv6Bound:       true,
+			ClientLinkLocal: ll,
+			nextRADue:       due,
+		}
+	}
+
+	t.Run("unicast_to_client_link_local", func(t *testing.T) {
+		c, bus := newNSPTestComponent(t, vmac, true)
+		cfg, _ := c.cfgMgr.GetRunning()
+		c.emitPeriodicRA(mkSess(net.ParseIP("fe80::baad:f00d"), time.Time{}), cfg, time.Now())
+
+		bus.mu.Lock()
+		defer bus.mu.Unlock()
+		if len(bus.egress) != 1 {
+			t.Fatalf("expected 1 egress, got %d", len(bus.egress))
+		}
+		if bus.egress[0].Packet.DstMAC != subMAC.String() {
+			t.Fatalf("dstMAC = %s, want %s", bus.egress[0].Packet.DstMAC, subMAC)
+		}
+		if dst := raLayerDstIP(t, bus.egress[0].Packet.RawData); !dst.Equal(net.ParseIP("fe80::baad:f00d")) {
+			t.Fatalf("dstIP = %s, want fe80::baad:f00d", dst)
+		}
+	})
+
+	t.Run("multicast_fallback_when_link_local_unknown", func(t *testing.T) {
+		c, bus := newNSPTestComponent(t, vmac, true)
+		cfg, _ := c.cfgMgr.GetRunning()
+		c.emitPeriodicRA(mkSess(nil, time.Time{}), cfg, time.Now())
+
+		bus.mu.Lock()
+		defer bus.mu.Unlock()
+		if len(bus.egress) != 1 {
+			t.Fatalf("expected 1 egress, got %d", len(bus.egress))
+		}
+		if bus.egress[0].Packet.DstMAC != "33:33:00:00:00:01" {
+			t.Fatalf("dstMAC = %s, want all-nodes multicast", bus.egress[0].Packet.DstMAC)
+		}
+		if dst := raLayerDstIP(t, bus.egress[0].Packet.RawData); !dst.Equal(net.ParseIP("ff02::1")) {
+			t.Fatalf("dstIP = %s, want ff02::1", dst)
+		}
+	})
+
+	t.Run("not_due_is_skipped", func(t *testing.T) {
+		c, bus := newNSPTestComponent(t, vmac, true)
+		cfg, _ := c.cfgMgr.GetRunning()
+		c.emitPeriodicRA(mkSess(net.ParseIP("fe80::1"), time.Now().Add(time.Hour)), cfg, time.Now())
+
+		bus.mu.Lock()
+		defer bus.mu.Unlock()
+		if len(bus.egress) != 0 {
+			t.Fatalf("expected no egress for not-due session, got %d", len(bus.egress))
+		}
+	})
+
+	t.Run("standby_srg_is_skipped", func(t *testing.T) {
+		c, bus := newNSPTestComponent(t, vmac, false)
+		cfg, _ := c.cfgMgr.GetRunning()
+		c.emitPeriodicRA(mkSess(net.ParseIP("fe80::1"), time.Time{}), cfg, time.Now())
+
+		bus.mu.Lock()
+		defer bus.mu.Unlock()
+		if len(bus.egress) != 0 {
+			t.Fatalf("expected no egress on standby SRG, got %d", len(bus.egress))
 		}
 	})
 }

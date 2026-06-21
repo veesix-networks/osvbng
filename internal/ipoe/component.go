@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"net"
 	"strings"
 	"sync"
@@ -23,6 +24,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
+	"github.com/veesix-networks/osvbng/pkg/config"
 	aaacfg "github.com/veesix-networks/osvbng/pkg/config/aaa"
 	"github.com/veesix-networks/osvbng/pkg/config/ip"
 	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
@@ -68,6 +70,10 @@ type Component struct {
 	usernameIndex    sync.Map
 	ipv4Index        sync.Map
 	ipv6Index        sync.Map
+
+	raBuckets     map[int][]string
+	raBucketMu    sync.RWMutex
+	raBucketCount int
 
 	dhcpChan   <-chan *dataplane.ParsedPacket
 	dhcp6Chan  <-chan *dataplane.ParsedPacket
@@ -133,6 +139,8 @@ type SessionState struct {
 	Closing      bool
 	AAAInFlight  bool
 	MixedAccess  bool
+
+	nextRADue time.Time
 }
 
 func (c *Component) isMixedAccessSVLAN(svlan uint16) bool {
@@ -183,6 +191,7 @@ func (c *Component) addSessionToIndexes(sess *SessionState) {
 	if sess.IPv6Address != nil {
 		c.ipv6Index.Store(sess.IPv6Address.String(), sess)
 	}
+	c.placeSessionInRABucket(sess)
 }
 
 func (c *Component) removeSessionFromIndexes(sess *SessionState) {
@@ -198,6 +207,7 @@ func (c *Component) removeSessionFromIndexes(sess *SessionState) {
 	if sess.IPv6Address != nil {
 		c.ipv6Index.Delete(sess.IPv6Address.String())
 	}
+	c.removeSessionFromRABucket(sess)
 }
 
 func (c *Component) resolveTargetFromEvent(ev *events.SubscriberMutationEvent) *SessionState {
@@ -505,6 +515,7 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 		dhcpChan:         deps.DHCPChan,
 		dhcp6Chan:        deps.DHCPv6Chan,
 		ipv6NDChan:       deps.IPv6NDChan,
+		raBuckets:        make(map[int][]string),
 	}
 
 	return c, nil
@@ -513,6 +524,12 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
 	c.logger.Info("Starting IPoE component")
+
+	if cfg, err := c.cfgMgr.GetRunning(); err == nil && cfg != nil {
+		c.raBucketCount = c.computeRABucketCount(cfg)
+	} else {
+		c.raBucketCount = raMaxBucketCount
+	}
 
 	c.SetReadyState(component.StateRestoring)
 
@@ -526,6 +543,7 @@ func (c *Component) Start(ctx context.Context) error {
 	c.terminateSub = c.eventBus.Subscribe(events.TopicSubscriberTerminate, c.handleSubscriberTerminate)
 
 	c.Go(c.cleanupSessions)
+	c.Go(c.periodicRAEmitter)
 	c.Go(c.consumeDHCPPackets)
 	c.Go(c.consumeDHCPv6Packets)
 	c.Go(c.consumeIPv6NDPackets)
@@ -3125,6 +3143,22 @@ func (c *Component) processRSPacket(pkt *dataplane.ParsedPacket) error {
 		return nil
 	}
 
+	raConfig, prefixes := c.resolveGroupRA(cfg, group)
+
+	c.logger.Debug("Processing RS packet",
+		"mac", pkt.MAC.String(),
+		"svlan", pkt.OuterVLAN,
+		"cvlan", pkt.InnerVLAN,
+		"src_ip", pkt.IPv6.SrcIP,
+		"managed", raConfig.Managed,
+		"other", raConfig.Other,
+		"prefixes", len(prefixes),
+	)
+
+	return c.sendRAResponse(pkt, raConfig, prefixes)
+}
+
+func (c *Component) resolveGroupRA(cfg *config.Config, group *subscriber.SubscriberGroup) (southbound.IPv6RAConfig, []raPrefixInfo) {
 	raConfig := southbound.IPv6RAConfig{
 		Managed:        true,
 		Other:          true,
@@ -3166,29 +3200,243 @@ func (c *Component) processRSPacket(pkt *dataplane.ParsedPacket) error {
 	}
 
 	var prefixes []raPrefixInfo
-
-	if profile := cfg.IPv6Profiles[group.IPv6Profile]; profile != nil {
-		for _, pool := range profile.IANAPools {
-			prefixes = append(prefixes, raPrefixInfo{
-				network:       pool.Network,
-				validTime:     pool.ValidTime,
-				preferredTime: pool.PreferredTime,
-				onLink:        onLink,
-			})
+	if group != nil {
+		if profile := cfg.IPv6Profiles[group.IPv6Profile]; profile != nil {
+			for _, pool := range profile.IANAPools {
+				prefixes = append(prefixes, raPrefixInfo{
+					network:       pool.Network,
+					validTime:     pool.ValidTime,
+					preferredTime: pool.PreferredTime,
+					onLink:        onLink,
+				})
+			}
 		}
 	}
 
-	c.logger.Debug("Processing RS packet",
-		"mac", pkt.MAC.String(),
-		"svlan", pkt.OuterVLAN,
-		"cvlan", pkt.InnerVLAN,
-		"src_ip", pkt.IPv6.SrcIP,
-		"managed", raConfig.Managed,
-		"other", raConfig.Other,
-		"prefixes", len(prefixes),
-	)
+	return raConfig, prefixes
+}
 
-	return c.sendRAResponse(pkt, raConfig, prefixes)
+const (
+	raTickInterval   = time.Second
+	raMinBucketCount = 10
+	raMaxBucketCount = 600
+)
+
+// raRefreshInterval is how often a session's RA must be re-sent to keep its default
+// route alive: well inside the Router Lifetime (RFC 4861 §6.2.1), with a /3 margin so
+// a single lost RA does not drop the route. Zero means not a default router (no RAs).
+func raRefreshInterval(rc southbound.IPv6RAConfig) time.Duration {
+	rl := rc.RouterLifetime
+	if rl == 0 {
+		return 0
+	}
+	if rl > 9000 {
+		rl = 9000
+	}
+	refresh := rc.MaxInterval
+	if refresh == 0 {
+		refresh = 600
+	}
+	if third := rl / 3; third < refresh {
+		refresh = third
+	}
+	minI := rc.MinInterval
+	if minI == 0 {
+		minI = 3
+	}
+	if refresh < minI {
+		refresh = minI
+	}
+	if refresh < 1 {
+		refresh = 1
+	}
+	return time.Duration(refresh) * time.Second
+}
+
+// computeRABucketCount sizes the emitter wheel so a session is visited within the
+// shortest resolved refresh interval across RA-advertising groups, keeping the
+// per-tick batch bounded (one bucket walked per second).
+func (c *Component) computeRABucketCount(cfg *config.Config) int {
+	minRefresh := raMaxBucketCount
+	if cfg != nil && cfg.SubscriberGroups != nil {
+		for _, g := range cfg.SubscriberGroups.Groups {
+			if !groupV6Enabled(g) {
+				continue
+			}
+			rc, _ := c.resolveGroupRA(cfg, g)
+			if ri := int(raRefreshInterval(rc) / time.Second); ri > 0 && ri < minRefresh {
+				minRefresh = ri
+			}
+		}
+	}
+	if minRefresh < raMinBucketCount {
+		minRefresh = raMinBucketCount
+	}
+	if minRefresh > raMaxBucketCount {
+		minRefresh = raMaxBucketCount
+	}
+	return minRefresh
+}
+
+func (c *Component) raBucketOf(sessionID string) int {
+	if c.raBucketCount <= 0 {
+		return 0
+	}
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(sessionID))
+	return int(h.Sum32() % uint32(c.raBucketCount))
+}
+
+func (c *Component) placeSessionInRABucket(sess *SessionState) {
+	if c.raBucketCount <= 0 || sess.SessionID == "" {
+		return
+	}
+	b := c.raBucketOf(sess.SessionID)
+	c.raBucketMu.Lock()
+	c.raBuckets[b] = append(c.raBuckets[b], sess.SessionID)
+	c.raBucketMu.Unlock()
+}
+
+func (c *Component) removeSessionFromRABucket(sess *SessionState) {
+	if c.raBucketCount <= 0 || sess.SessionID == "" {
+		return
+	}
+	b := c.raBucketOf(sess.SessionID)
+	c.raBucketMu.Lock()
+	ids := c.raBuckets[b]
+	for i, id := range ids {
+		if id == sess.SessionID {
+			c.raBuckets[b] = append(ids[:i], ids[i+1:]...)
+			break
+		}
+	}
+	c.raBucketMu.Unlock()
+}
+
+// periodicRAEmitter sends unsolicited RAs so subscriber default routes are refreshed
+// before they expire (RFC 4861 §6.2). One goroutine walks one bucket per tick;
+// sessions are hashed into buckets on add/remove, not re-scanned per tick.
+func (c *Component) periodicRAEmitter() {
+	if c.raBucketCount <= 0 {
+		return
+	}
+	ticker := time.NewTicker(raTickInterval)
+	defer ticker.Stop()
+
+	bucket := 0
+	for {
+		select {
+		case <-c.Ctx.Done():
+			return
+		case <-ticker.C:
+			c.emitRABucket(bucket)
+			bucket = (bucket + 1) % c.raBucketCount
+		}
+	}
+}
+
+func (c *Component) emitRABucket(bucket int) {
+	c.raBucketMu.RLock()
+	ids := append([]string(nil), c.raBuckets[bucket]...)
+	c.raBucketMu.RUnlock()
+	if len(ids) == 0 {
+		return
+	}
+
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil {
+		return
+	}
+
+	now := time.Now()
+	for _, id := range ids {
+		if v, ok := c.sessionIndex.Load(id); ok {
+			c.emitPeriodicRA(v.(*SessionState), cfg, now)
+		}
+	}
+}
+
+func (c *Component) emitPeriodicRA(sess *SessionState, cfg *config.Config, now time.Time) {
+	sess.mu.Lock()
+	closing := sess.Closing
+	v6bound := sess.IPv6Bound
+	svlan := sess.OuterVLAN
+	cvlan := sess.InnerVLAN
+	encapIfIndex := sess.EncapIfIndex
+	mac := sess.MAC
+	clientLL := sess.ClientLinkLocal
+	due := sess.nextRADue
+	sessID := sess.SessionID
+	sess.mu.Unlock()
+
+	if closing || !v6bound {
+		return
+	}
+
+	srgName := c.resolveSRGName(svlan, cvlan)
+	if c.srgMgr != nil && !c.srgMgr.IsActive(srgName) {
+		return
+	}
+
+	match, matched := c.cfgMgr.LookupSubscriberGroup(svlan, cvlan)
+	if !matched || !groupV6Enabled(match.Group) {
+		return
+	}
+
+	raConfig, prefixes := c.resolveGroupRA(cfg, match.Group)
+	refresh := raRefreshInterval(raConfig)
+	if refresh <= 0 {
+		return
+	}
+	if !due.IsZero() && now.Before(due) {
+		return
+	}
+
+	var parentSwIfIndex uint32
+	if c.ifMgr != nil {
+		if iface := c.ifMgr.Get(encapIfIndex); iface != nil {
+			parentSwIfIndex = iface.SupSwIfIndex
+		}
+	}
+
+	srcMAC := c.getLocalMAC(srgName, parentSwIfIndex)
+	if srcMAC == nil {
+		return
+	}
+	srcIP := linkLocalFromMAC(srcMAC)
+	if srcIP == nil {
+		return
+	}
+
+	dstMAC := mac
+	dstIP := clientLL
+	if len(dstIP) == 0 || dstIP.IsUnspecified() {
+		dstMAC = net.HardwareAddr{0x33, 0x33, 0x00, 0x00, 0x00, 0x01}
+		dstIP = net.ParseIP("ff02::1")
+	}
+
+	var outerTPID uint16
+	if c.ifMgr != nil {
+		outerTPID = c.ifMgr.OuterTPID(encapIfIndex)
+	}
+
+	if err := c.buildAndPublishRA(raEgressTarget{
+		dstMAC:          dstMAC,
+		srcMAC:          srcMAC,
+		dstIP:           dstIP,
+		srcIP:           srcIP,
+		outerVLAN:       svlan,
+		innerVLAN:       cvlan,
+		outerTPID:       outerTPID,
+		parentSwIfIndex: parentSwIfIndex,
+	}, raConfig, prefixes); err != nil {
+		c.logger.Warn("Periodic RA emit failed", "session_id", sessID, "error", err)
+		return
+	}
+
+	sess.mu.Lock()
+	sess.nextRADue = now.Add(refresh)
+	sess.mu.Unlock()
 }
 
 func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbound.IPv6RAConfig, prefixes []raPrefixInfo) error {
