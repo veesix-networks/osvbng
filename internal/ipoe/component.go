@@ -74,6 +74,7 @@ type Component struct {
 	raBuckets     map[int][]string
 	raBucketMu    sync.RWMutex
 	raBucketCount int
+	raTemplates   map[string]*raTemplate
 
 	dhcpChan   <-chan *dataplane.ParsedPacket
 	dhcp6Chan  <-chan *dataplane.ParsedPacket
@@ -516,6 +517,7 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 		dhcp6Chan:        deps.DHCPv6Chan,
 		ipv6NDChan:       deps.IPv6NDChan,
 		raBuckets:        make(map[int][]string),
+		raTemplates:      make(map[string]*raTemplate),
 	}
 
 	return c, nil
@@ -3429,7 +3431,23 @@ func (c *Component) emitPeriodicRA(sess *SessionState, cfg *config.Config, now t
 		outerTPID = c.ifMgr.OuterTPID(encapIfIndex)
 	}
 
-	if err := c.buildAndPublishRA(raEgressTarget{
+	// Replicate the cached per-(group x SRG x config) RA template: copy it and patch
+	// only the per-subscriber IPv6 destination + checksum, instead of re-serializing a
+	// full RA every emit. The QinQ/MAC headers are not in RawData — the egress plugin
+	// builds them from the raEgressTarget fields downstream.
+	key := fmt.Sprintf("%s|%s|%d", match.Name, srgName, parentSwIfIndex)
+	tmpl, err := c.raTemplateFor(key, raTemplateSig(raConfig, prefixes, srcMAC, srcIP), raConfig, prefixes, srcMAC, srcIP)
+	if err != nil {
+		c.logger.Warn("Periodic RA template build failed", "session_id", sessID, "error", err)
+		return
+	}
+
+	raw := make([]byte, len(tmpl.rawData))
+	copy(raw, tmpl.rawData)
+	copy(raw[24:40], dstIP.To16())
+	raPatchChecksum(raw)
+
+	c.publishRA(raw, raEgressTarget{
 		dstMAC:          dstMAC,
 		srcMAC:          srcMAC,
 		dstIP:           dstIP,
@@ -3438,10 +3456,7 @@ func (c *Component) emitPeriodicRA(sess *SessionState, cfg *config.Config, now t
 		innerVLAN:       cvlan,
 		outerTPID:       outerTPID,
 		parentSwIfIndex: parentSwIfIndex,
-	}, raConfig, prefixes); err != nil {
-		c.logger.Warn("Periodic RA emit failed", "session_id", sessID, "error", err)
-		return
-	}
+	})
 
 	sess.mu.Lock()
 	sess.nextRADue = now.Add(refresh)
@@ -3525,6 +3540,20 @@ func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbo
 }
 
 func (c *Component) buildAndPublishRA(t raEgressTarget, raConfig southbound.IPv6RAConfig, prefixes []raPrefixInfo) error {
+	raw, err := c.buildRARawData(raConfig, prefixes, t.srcMAC, t.srcIP, t.dstIP)
+	if err != nil {
+		return err
+	}
+	c.publishRA(raw, t)
+	return nil
+}
+
+// buildRARawData serializes the IPv6 + ICMPv6 Router Advertisement (the egress
+// RawData; the Ethernet/QinQ frame is assembled downstream from raEgressTarget).
+// This is the expensive part of emitting an RA — the periodic emitter caches the
+// result per (group x SRG x config) and replicates it per subscriber via
+// raTemplateFor, so this runs once per config rather than per advertisement.
+func (c *Component) buildRARawData(raConfig southbound.IPv6RAConfig, prefixes []raPrefixInfo, srcMAC net.HardwareAddr, srcIP, dstIP net.IP) ([]byte, error) {
 	var raFlags uint8
 	if raConfig.Managed {
 		raFlags |= 0x80
@@ -3536,7 +3565,7 @@ func (c *Component) buildAndPublishRA(t raEgressTarget, raConfig southbound.IPv6
 	var raOptions layers.ICMPv6Options
 	raOptions = append(raOptions, layers.ICMPv6Option{
 		Type: layers.ICMPv6OptSourceAddress,
-		Data: t.srcMAC,
+		Data: srcMAC,
 	})
 
 	for _, prefix := range prefixes {
@@ -3600,8 +3629,8 @@ func (c *Component) buildAndPublishRA(t raEgressTarget, raConfig southbound.IPv6
 		Version:    6,
 		HopLimit:   255,
 		NextHeader: layers.IPProtocolICMPv6,
-		SrcIP:      t.srcIP,
-		DstIP:      t.dstIP,
+		SrcIP:      srcIP,
+		DstIP:      dstIP,
 	}
 
 	icmpv6Layer.SetNetworkLayerForChecksum(ipv6Layer)
@@ -3613,37 +3642,113 @@ func (c *Component) buildAndPublishRA(t raEgressTarget, raConfig southbound.IPv6
 	}
 
 	if err := gopacket.SerializeLayers(buf, opts, ipv6Layer, icmpv6Layer, raLayer); err != nil {
-		return fmt.Errorf("serialize RA: %w", err)
+		return nil, fmt.Errorf("serialize RA: %w", err)
 	}
+	return buf.Bytes(), nil
+}
 
-	egressPayload := &models.EgressPacketPayload{
-		DstMAC:    t.dstMAC.String(),
-		SrcMAC:    t.srcMAC.String(),
-		OuterVLAN: t.outerVLAN,
-		InnerVLAN: t.innerVLAN,
-		OuterTPID: t.outerTPID,
-		SwIfIndex: t.parentSwIfIndex,
-		RawData:   buf.Bytes(),
-	}
-
-	c.logger.Debug("Sending RA",
-		"dst_mac", egressPayload.DstMAC,
-		"src_mac", egressPayload.SrcMAC,
-		"svlan", t.outerVLAN,
-		"cvlan", t.innerVLAN,
-		"managed", raConfig.Managed,
-		"other", raConfig.Other,
-		"router_lifetime", routerLifetime,
-	)
-
+func (c *Component) publishRA(rawData []byte, t raEgressTarget) {
 	c.eventBus.Publish(events.TopicEgress, events.Event{
 		Source: c.Name(),
 		Data: &events.EgressEvent{
 			Protocol: models.ProtocolIPv6ND,
-			Packet:   *egressPayload,
+			Packet: models.EgressPacketPayload{
+				DstMAC:    t.dstMAC.String(),
+				SrcMAC:    t.srcMAC.String(),
+				OuterVLAN: t.outerVLAN,
+				InnerVLAN: t.innerVLAN,
+				OuterTPID: t.outerTPID,
+				SwIfIndex: t.parentSwIfIndex,
+				RawData:   rawData,
+			},
 		},
 	})
-	return nil
+}
+
+// raTemplate is a pre-serialized RA (IPv6 + ICMPv6) shared by every subscriber in a
+// (group x SRG x config) tuple. Its IPv6 destination is zeroed and its ICMPv6 checksum
+// is left 0; the emitter replicates it per subscriber by copying and patching only the
+// destination + checksum (raPatchChecksum). `sig` rebuilds it on a config change.
+type raTemplate struct {
+	sig     uint64
+	rawData []byte
+}
+
+func raTemplateSig(raConfig southbound.IPv6RAConfig, prefixes []raPrefixInfo, srcMAC net.HardwareAddr, srcIP net.IP) uint64 {
+	h := fnv.New64a()
+	var b [4]byte
+	var flags byte
+	if raConfig.Managed {
+		flags |= 1
+	}
+	if raConfig.Other {
+		flags |= 2
+	}
+	_, _ = h.Write([]byte{flags})
+	binary.BigEndian.PutUint32(b[:], raConfig.RouterLifetime)
+	_, _ = h.Write(b[:])
+	for _, p := range prefixes {
+		_, _ = h.Write([]byte(p.network))
+		binary.BigEndian.PutUint32(b[:], p.validTime)
+		_, _ = h.Write(b[:])
+		binary.BigEndian.PutUint32(b[:], p.preferredTime)
+		_, _ = h.Write(b[:])
+		if p.onLink {
+			_, _ = h.Write([]byte{1})
+		} else {
+			_, _ = h.Write([]byte{0})
+		}
+	}
+	_, _ = h.Write(srcMAC)
+	_, _ = h.Write(srcIP)
+	return h.Sum64()
+}
+
+// raTemplateFor returns the cached pre-serialized RA for key, rebuilding it (the
+// expensive serialize) only when the config signature changes. Emitter-goroutine
+// owned, so no lock.
+func (c *Component) raTemplateFor(key string, sig uint64, raConfig southbound.IPv6RAConfig, prefixes []raPrefixInfo, srcMAC net.HardwareAddr, srcIP net.IP) (*raTemplate, error) {
+	if t, ok := c.raTemplates[key]; ok && t.sig == sig {
+		return t, nil
+	}
+	raw, err := c.buildRARawData(raConfig, prefixes, srcMAC, srcIP, net.IPv6zero)
+	if err != nil {
+		return nil, err
+	}
+	raw[42], raw[43] = 0, 0 // checksum is recomputed per subscriber once the dst is patched
+	t := &raTemplate{sig: sig, rawData: raw}
+	c.raTemplates[key] = t
+	return t, nil
+}
+
+func raSum16(b []byte) uint32 {
+	var s uint32
+	n := len(b)
+	for i := 0; i+1 < n; i += 2 {
+		s += uint32(b[i])<<8 | uint32(b[i+1])
+	}
+	if n%2 == 1 {
+		s += uint32(b[n-1]) << 8
+	}
+	return s
+}
+
+func raFold16(s uint32) uint16 {
+	for s>>16 != 0 {
+		s = (s & 0xffff) + (s >> 16)
+	}
+	return uint16(s)
+}
+
+// raPatchChecksum recomputes the ICMPv6 checksum over a replicated RA buffer
+// (IPv6 + ICMPv6, checksum field [42:44] must already be 0 and the dst patched).
+func raPatchChecksum(raw []byte) {
+	if len(raw) < 44 {
+		return
+	}
+	msg := raw[40:]
+	s := raSum16(raw[8:24]) + raSum16(raw[24:40]) + uint32(len(msg)) + 58 + raSum16(msg)
+	binary.BigEndian.PutUint16(raw[42:44], ^raFold16(s))
 }
 
 func (c *Component) processNSPacket(pkt *dataplane.ParsedPacket) error {

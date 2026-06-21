@@ -5,6 +5,7 @@
 package ipoe
 
 import (
+	"bytes"
 	"encoding/binary"
 	"net"
 	"sync"
@@ -180,13 +181,14 @@ func newNSPTestComponent(t *testing.T, virtualMAC net.HardwareAddr, active bool)
 	srg := &fakeSRGProvider{active: active, virtualMAC: virtualMAC, srgForGrp: "access1"}
 
 	c := &Component{
-		Base:      component.NewBase("ipoe-test"),
-		logger:    logger.NewTest(),
-		eventBus:  bus,
-		srgMgr:    srg,
-		ifMgr:     ifMgr,
-		cfgMgr:    &fakeConfigManager{cfg: cfg},
-		raBuckets: make(map[int][]string),
+		Base:        component.NewBase("ipoe-test"),
+		logger:      logger.NewTest(),
+		eventBus:    bus,
+		srgMgr:      srg,
+		ifMgr:       ifMgr,
+		cfgMgr:      &fakeConfigManager{cfg: cfg},
+		raBuckets:   make(map[int][]string),
+		raTemplates: make(map[string]*raTemplate),
 	}
 	return c, bus
 }
@@ -495,6 +497,38 @@ func TestCeaseSessionRA(t *testing.T) {
 	}
 	if rl := raLayerRouterLifetime(t, eg.Packet.RawData); rl != 0 {
 		t.Fatalf("cease RouterLifetime = %d, want 0", rl)
+	}
+}
+
+func TestRATemplateMatchesFullBuild(t *testing.T) {
+	t.Parallel()
+
+	c, _ := newNSPTestComponent(t, net.HardwareAddr{0xaa, 0xc1, 0xab, 0x1f, 0xe2, 0xfa}, true)
+	raConfig := southbound.IPv6RAConfig{Managed: true, Other: true, RouterLifetime: 1800}
+	prefixes := []raPrefixInfo{{network: "2001:db8:0:1::/64", validTime: 7200, preferredTime: 3600, onLink: false}}
+	srcMAC := net.HardwareAddr{0xaa, 0xc1, 0xab, 0x1f, 0xe2, 0xfa}
+	srcIP := linkLocalFromMAC(srcMAC)
+
+	sig := raTemplateSig(raConfig, prefixes, srcMAC, srcIP)
+	tmpl, err := c.raTemplateFor("k", sig, raConfig, prefixes, srcMAC, srcIP)
+	if err != nil {
+		t.Fatalf("raTemplateFor: %v", err)
+	}
+
+	// A replicated-and-patched RA must be byte-identical to a full serialize for the
+	// same destination — this is the checksum-fold safety net for both unicast and multicast.
+	for _, dst := range []net.IP{net.ParseIP("fe80::baad:f00d"), net.ParseIP("ff02::1")} {
+		full, err := c.buildRARawData(raConfig, prefixes, srcMAC, srcIP, dst)
+		if err != nil {
+			t.Fatalf("buildRARawData(%s): %v", dst, err)
+		}
+		repl := make([]byte, len(tmpl.rawData))
+		copy(repl, tmpl.rawData)
+		copy(repl[24:40], dst.To16())
+		raPatchChecksum(repl)
+		if !bytes.Equal(full, repl) {
+			t.Fatalf("templated RA for %s differs from full build:\n full=%x\n repl=%x", dst, full, repl)
+		}
 	}
 }
 
