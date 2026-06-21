@@ -47,6 +47,7 @@ type IPv6RAConfig struct {
 	RouterLifetime uint32 `json:"router_lifetime,omitempty" yaml:"router_lifetime,omitempty"`
 	MaxInterval    uint32 `json:"max_interval,omitempty" yaml:"max_interval,omitempty"`
 	MinInterval    uint32 `json:"min_interval,omitempty" yaml:"min_interval,omitempty"`
+	OnLink         *bool  `json:"on_link,omitempty" yaml:"on_link,omitempty"`
 }
 
 func (r *IPv6RAConfig) GetManaged() bool {
@@ -82,6 +83,13 @@ func (r *IPv6RAConfig) GetMinInterval() uint32 {
 		return 200
 	}
 	return r.MinInterval
+}
+
+func (r *IPv6RAConfig) GetOnLink() bool {
+	if r == nil || r.OnLink == nil {
+		return false
+	}
+	return *r.OnLink
 }
 
 type DHCPRelayServer struct {

@@ -466,6 +466,7 @@ type raPrefixInfo struct {
 	network       string
 	validTime     uint32
 	preferredTime uint32
+	onLink        bool
 }
 
 func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manager, dhcp4Providers map[string]dhcp4.DHCPProvider, dhcp6Providers map[string]dhcp6.DHCPProvider) (*Component, error) {
@@ -3145,6 +3146,11 @@ func (c *Component) processRSPacket(pkt *dataplane.ParsedPacket) error {
 		}
 	}
 
+	onLink := cfg.DHCPv6.RA.GetOnLink()
+	if group != nil && group.IPv6 != nil && group.IPv6.RA != nil && group.IPv6.RA.OnLink != nil {
+		onLink = *group.IPv6.RA.OnLink
+	}
+
 	var prefixes []raPrefixInfo
 
 	if profile := cfg.IPv6Profiles[group.IPv6Profile]; profile != nil {
@@ -3153,6 +3159,7 @@ func (c *Component) processRSPacket(pkt *dataplane.ParsedPacket) error {
 				network:       pool.Network,
 				validTime:     pool.ValidTime,
 				preferredTime: pool.PreferredTime,
+				onLink:        onLink,
 			})
 		}
 	}
@@ -3225,10 +3232,17 @@ func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbo
 		if preferredLifetime == 0 {
 			preferredLifetime = 604800
 		}
+		if !prefix.onLink {
+			// off-link: deprecate the prefix (L=1, lifetime 0) so a host drops any stale
+			// on-link route and installs none, routing via the link-local default gateway
+			// instead of resolving in-prefix destinations directly (RFC 4861 §6.3.4)
+			validLifetime = 0
+			preferredLifetime = 0
+		}
 
 		prefixData := make([]byte, 30)
 		prefixData[0] = byte(prefixLen)
-		prefixData[1] = 0x80 // L (on-link) flag
+		prefixData[1] = 0x80 // L flag
 		binary.BigEndian.PutUint32(prefixData[2:6], validLifetime)
 		binary.BigEndian.PutUint32(prefixData[6:10], preferredLifetime)
 		// 4 bytes reserved (10:14)

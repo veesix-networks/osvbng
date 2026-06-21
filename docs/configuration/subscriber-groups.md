@@ -43,6 +43,7 @@ Defines how subscribers are grouped and configured based on VLAN. Each group bin
 | `router_lifetime` | int | Router lifetime in seconds | `1800` |
 | `max_interval` | int | Max RA interval in seconds | `600` |
 | `min_interval` | int | Min RA interval in seconds | `200` |
+| `on_link` | bool | Advertise the access prefix on-link (L flag) for this group; overrides `dhcpv6.ra.on_link`. Default `false` (off-link, subscribers route via the BNG) | `false` |
 
 ## Group BGP
 

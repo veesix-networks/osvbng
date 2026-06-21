@@ -153,6 +153,7 @@ type SubscriberIPv6RA struct {
 	RouterLifetime uint32 `json:"router_lifetime,omitempty" yaml:"router_lifetime,omitempty"`
 	MaxInterval    uint32 `json:"max_interval,omitempty" yaml:"max_interval,omitempty"`
 	MinInterval    uint32 `json:"min_interval,omitempty" yaml:"min_interval,omitempty"`
+	OnLink         *bool  `json:"on_link,omitempty" yaml:"on_link,omitempty"`
 }
 
 type SubscriberBGP struct {

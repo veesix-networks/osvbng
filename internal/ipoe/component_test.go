@@ -5,11 +5,13 @@
 package ipoe
 
 import (
+	"encoding/binary"
 	"net"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 
 	"github.com/veesix-networks/osvbng/pkg/allocator"
@@ -22,6 +24,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/ifmgr"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
 
 func TestLinkLocalFromMAC(t *testing.T) {
@@ -216,6 +219,82 @@ func nsPacket(t *testing.T, target net.IP, source net.IP) *dataplane.ParsedPacke
 		},
 		ICMPv6: icmp,
 	}
+}
+
+func raPrefixOption(t *testing.T, raw []byte) layers.ICMPv6Option {
+	t.Helper()
+
+	pkt := gopacket.NewPacket(raw, layers.LayerTypeIPv6, gopacket.Default)
+	raLayer := pkt.Layer(layers.LayerTypeICMPv6RouterAdvertisement)
+	if raLayer == nil {
+		t.Fatalf("egress packet has no Router Advertisement layer")
+	}
+	for _, opt := range raLayer.(*layers.ICMPv6RouterAdvertisement).Options {
+		if opt.Type == layers.ICMPv6OptPrefixInfo {
+			return opt
+		}
+	}
+	t.Fatalf("Router Advertisement has no Prefix Information option")
+	return layers.ICMPv6Option{}
+}
+
+func TestRAPrefixOnLink(t *testing.T) {
+	t.Parallel()
+
+	vmac := net.HardwareAddr{0xaa, 0xc1, 0xab, 0x1f, 0xe2, 0xfa}
+
+	prefixOpt := func(t *testing.T, onLink bool) layers.ICMPv6Option {
+		c, bus := newNSPTestComponent(t, vmac, true)
+		pkt := &dataplane.ParsedPacket{
+			Protocol:  models.ProtocolIPv6ND,
+			MAC:       net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
+			OuterVLAN: 100,
+			SwIfIndex: 10,
+			IPv6:      &layers.IPv6{SrcIP: net.ParseIP("fe80::baad:f00d")},
+		}
+		raConfig := southbound.IPv6RAConfig{Managed: true, Other: true, RouterLifetime: 1800}
+		prefixes := []raPrefixInfo{{network: "2001:db8:0:1::/64", validTime: 7200, preferredTime: 3600, onLink: onLink}}
+
+		if err := c.sendRAResponse(pkt, raConfig, prefixes); err != nil {
+			t.Fatalf("sendRAResponse returned error: %v", err)
+		}
+
+		bus.mu.Lock()
+		defer bus.mu.Unlock()
+		if len(bus.egress) != 1 {
+			t.Fatalf("expected 1 egress RA, got %d", len(bus.egress))
+		}
+		return raPrefixOption(t, bus.egress[0].Packet.RawData)
+	}
+
+	t.Run("off_link_default_deprecates_prefix", func(t *testing.T) {
+		opt := prefixOpt(t, false)
+		if opt.Data[1]&0x80 == 0 {
+			t.Fatalf("L flag must stay set so a host processes the §6.3.4 cancellation, flags=%#x", opt.Data[1])
+		}
+		if opt.Data[1]&0x40 != 0 {
+			t.Fatalf("A flag must be clear, flags=%#x", opt.Data[1])
+		}
+		if vl := binary.BigEndian.Uint32(opt.Data[2:6]); vl != 0 {
+			t.Fatalf("off-link Valid Lifetime must be 0, got %d", vl)
+		}
+		if pl := binary.BigEndian.Uint32(opt.Data[6:10]); pl != 0 {
+			t.Fatalf("off-link Preferred Lifetime must be 0, got %d", pl)
+		}
+	})
+
+	t.Run("on_link_advertises_lifetimes", func(t *testing.T) {
+		opt := prefixOpt(t, true)
+		if opt.Data[1]&0x80 == 0 {
+			t.Fatalf("L flag must be set when on_link, flags=%#x", opt.Data[1])
+		}
+		if opt.Data[1]&0x40 != 0 {
+			t.Fatalf("A flag must be clear, flags=%#x", opt.Data[1])
+		}
+		if vl := binary.BigEndian.Uint32(opt.Data[2:6]); vl != 7200 {
+			t.Fatalf("on-link Valid Lifetime = %d, want 7200", vl)
+		}
+	})
 }
 
 func TestProcessNSPacket(t *testing.T) {
