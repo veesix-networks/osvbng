@@ -469,6 +469,20 @@ type raPrefixInfo struct {
 	onLink        bool
 }
 
+// raEgressTarget carries the per-advertisement addressing for buildAndPublishRA.
+// L2 and L3 destinations are independent so a multicast RA (dstIP ff02::1) uses
+// the all-nodes multicast MAC rather than a unicast subscriber MAC.
+type raEgressTarget struct {
+	dstMAC          net.HardwareAddr
+	srcMAC          net.HardwareAddr
+	dstIP           net.IP
+	srcIP           net.IP
+	outerVLAN       uint16
+	innerVLAN       uint16
+	outerTPID       uint16
+	parentSwIfIndex uint32
+}
+
 func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manager, dhcp4Providers map[string]dhcp4.DHCPProvider, dhcp6Providers map[string]dhcp6.DHCPProvider) (*Component, error) {
 	log := logger.Get(logger.IPoE)
 
@@ -3186,12 +3200,12 @@ func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbo
 	}
 
 	srgName := c.resolveSRGName(pkt.OuterVLAN, pkt.InnerVLAN)
-	srcMACBytes := c.getLocalMAC(srgName, parentSwIfIndex)
-	if srcMACBytes == nil {
+	srcMAC := c.getLocalMAC(srgName, parentSwIfIndex)
+	if srcMAC == nil {
 		return fmt.Errorf("no source MAC available")
 	}
 
-	srcIP := linkLocalFromMAC(srcMACBytes)
+	srcIP := linkLocalFromMAC(srcMAC)
 	if srcIP == nil {
 		return fmt.Errorf("no IPv6 source address available for S-VLAN %d", pkt.OuterVLAN)
 	}
@@ -3201,6 +3215,24 @@ func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbo
 		dstIP = net.ParseIP("ff02::1")
 	}
 
+	var outerTPID uint16
+	if c.ifMgr != nil {
+		outerTPID = c.ifMgr.OuterTPID(pkt.SwIfIndex)
+	}
+
+	return c.buildAndPublishRA(raEgressTarget{
+		dstMAC:          pkt.MAC,
+		srcMAC:          srcMAC,
+		dstIP:           dstIP,
+		srcIP:           srcIP,
+		outerVLAN:       pkt.OuterVLAN,
+		innerVLAN:       pkt.InnerVLAN,
+		outerTPID:       outerTPID,
+		parentSwIfIndex: parentSwIfIndex,
+	}, raConfig, prefixes)
+}
+
+func (c *Component) buildAndPublishRA(t raEgressTarget, raConfig southbound.IPv6RAConfig, prefixes []raPrefixInfo) error {
 	var raFlags uint8
 	if raConfig.Managed {
 		raFlags |= 0x80
@@ -3212,7 +3244,7 @@ func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbo
 	var raOptions layers.ICMPv6Options
 	raOptions = append(raOptions, layers.ICMPv6Option{
 		Type: layers.ICMPv6OptSourceAddress,
-		Data: srcMACBytes,
+		Data: t.srcMAC,
 	})
 
 	for _, prefix := range prefixes {
@@ -3254,10 +3286,15 @@ func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbo
 		})
 	}
 
+	routerLifetime := raConfig.RouterLifetime
+	if routerLifetime > 9000 {
+		routerLifetime = 9000 // RFC 4861 §4.2 maximum router lifetime
+	}
+
 	raLayer := &layers.ICMPv6RouterAdvertisement{
 		HopLimit:       64,
 		Flags:          raFlags,
-		RouterLifetime: uint16(raConfig.RouterLifetime),
+		RouterLifetime: uint16(routerLifetime),
 		ReachableTime:  0,
 		RetransTimer:   0,
 		Options:        raOptions,
@@ -3271,8 +3308,8 @@ func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbo
 		Version:    6,
 		HopLimit:   255,
 		NextHeader: layers.IPProtocolICMPv6,
-		SrcIP:      srcIP,
-		DstIP:      dstIP,
+		SrcIP:      t.srcIP,
+		DstIP:      t.dstIP,
 	}
 
 	icmpv6Layer.SetNetworkLayerForChecksum(ipv6Layer)
@@ -3288,22 +3325,23 @@ func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbo
 	}
 
 	egressPayload := &models.EgressPacketPayload{
-		DstMAC:    pkt.MAC.String(),
-		SrcMAC:    srcMACBytes.String(),
-		OuterVLAN: pkt.OuterVLAN,
-		InnerVLAN: pkt.InnerVLAN,
-		OuterTPID: c.ifMgr.OuterTPID(pkt.SwIfIndex),
-		SwIfIndex: parentSwIfIndex,
+		DstMAC:    t.dstMAC.String(),
+		SrcMAC:    t.srcMAC.String(),
+		OuterVLAN: t.outerVLAN,
+		InnerVLAN: t.innerVLAN,
+		OuterTPID: t.outerTPID,
+		SwIfIndex: t.parentSwIfIndex,
 		RawData:   buf.Bytes(),
 	}
 
-	c.logger.Debug("Sending RA response",
-		"dst_mac", pkt.MAC.String(),
-		"src_mac", srcMACBytes.String(),
-		"svlan", pkt.OuterVLAN,
-		"cvlan", pkt.InnerVLAN,
+	c.logger.Debug("Sending RA",
+		"dst_mac", egressPayload.DstMAC,
+		"src_mac", egressPayload.SrcMAC,
+		"svlan", t.outerVLAN,
+		"cvlan", t.innerVLAN,
 		"managed", raConfig.Managed,
 		"other", raConfig.Other,
+		"router_lifetime", routerLifetime,
 	)
 
 	c.eventBus.Publish(events.TopicEgress, events.Event{
