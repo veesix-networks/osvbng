@@ -48,12 +48,10 @@ ${session-count}        1
     ...    sw_if_index. Subscriber traffic must resume with the same
     ...    opdb session set and the same IP addresses.
     ...
-    ...    v6 gateway ping is intentionally omitted: with a link-local
-    ...    RA source per RFC 4861 §6.1.2, the subscriber routes
-    ...    off-prefix traffic via the link-local default route, so the
-    ...    BNG's loopback global IP is not directly reachable from the
-    ...    subscriber side. Reaching ${core-router-v6} via the link-local
-    ...    default gateway is the end-to-end check.
+    ...    The in-prefix v6 gateway (${v6-gateway}) is reachable because the
+    ...    RA advertises the access /64 off-link: the subscriber routes it via
+    ...    the link-local default gateway and the BNG locally delivers to the
+    ...    gateway loopback. ${core-router-v6} covers the off-prefix path.
     Restart osvbngd                                ${bng1}
     Wait For osvbngd Down                          ${bng1}
     Wait For osvbng Healthy                        bng1    ${lab-name}
@@ -61,6 +59,7 @@ ${session-count}        1
     Verify OpDB Session IP Addresses Match         ${bng1}    ${OPDB_SNAPSHOT}
     Verify Subscriber Has Stable Lease V4
     Verify Subscriber Can Ping                     ${v4-gateway}
+    Verify Subscriber Can Ping                     ${v6-gateway}    -6
     Verify Subscriber Can Ping                     ${core-router-v4}
     Verify Subscriber Can Ping                     ${core-router-v6}    -6
 
