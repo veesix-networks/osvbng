@@ -44,6 +44,7 @@ Defines how subscribers are grouped and configured based on VLAN. Each group bin
 | `max_interval` | int | Max RA interval in seconds | `600` |
 | `min_interval` | int | Min RA interval in seconds | `200` |
 | `on_link` | bool | Advertise the access prefix on-link (L flag) for this group; overrides `dhcpv6.ra.on_link`. Default `false` (off-link, subscribers route via the BNG) | `false` |
+| `unicast` | bool | Deliver periodic RAs as per-subscriber unicast vs multicast for this group; overrides `dhcpv6.ra.unicast`. Default `true` (unicast, multicast fallback when the client link-local is unknown) | `true` |
 
 ## Group BGP
 
