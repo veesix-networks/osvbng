@@ -33,6 +33,7 @@ Default RA settings applied to subscriber sessions.
 | `max_interval` | int | Maximum interval in seconds between unsolicited RA messages | `600` |
 | `min_interval` | int | Minimum interval in seconds between unsolicited RA messages | `200` |
 | `on_link` | bool | Advertise the access prefix on-link (L flag). Default `false`: the prefix is off-link so subscribers route all traffic via the BNG; set `true` only for shared-LAN segments where subscribers reach each other directly | `false` |
+| `unicast` | bool | Deliver periodic RAs as per-subscriber unicast (to the client link-local) rather than multicast `ff02::1`. Default `true`; falls back to multicast when the client link-local isn't yet known | `true` |
 
 ## Example
 

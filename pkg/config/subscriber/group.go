@@ -154,6 +154,7 @@ type SubscriberIPv6RA struct {
 	MaxInterval    uint32 `json:"max_interval,omitempty" yaml:"max_interval,omitempty"`
 	MinInterval    uint32 `json:"min_interval,omitempty" yaml:"min_interval,omitempty"`
 	OnLink         *bool  `json:"on_link,omitempty" yaml:"on_link,omitempty"`
+	Unicast        *bool  `json:"unicast,omitempty" yaml:"unicast,omitempty"`
 }
 
 type SubscriberBGP struct {

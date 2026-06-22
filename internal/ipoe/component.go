@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"net"
 	"strings"
 	"sync"
@@ -23,6 +24,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
+	"github.com/veesix-networks/osvbng/pkg/config"
 	aaacfg "github.com/veesix-networks/osvbng/pkg/config/aaa"
 	"github.com/veesix-networks/osvbng/pkg/config/ip"
 	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
@@ -68,6 +70,11 @@ type Component struct {
 	usernameIndex    sync.Map
 	ipv4Index        sync.Map
 	ipv6Index        sync.Map
+
+	raBuckets     map[int][]string
+	raBucketMu    sync.RWMutex
+	raBucketCount int
+	raGroupStates map[string]*raGroupState
 
 	dhcpChan   <-chan *dataplane.ParsedPacket
 	dhcp6Chan  <-chan *dataplane.ParsedPacket
@@ -133,6 +140,8 @@ type SessionState struct {
 	Closing      bool
 	AAAInFlight  bool
 	MixedAccess  bool
+
+	nextRADue time.Time
 }
 
 func (c *Component) isMixedAccessSVLAN(svlan uint16) bool {
@@ -183,6 +192,7 @@ func (c *Component) addSessionToIndexes(sess *SessionState) {
 	if sess.IPv6Address != nil {
 		c.ipv6Index.Store(sess.IPv6Address.String(), sess)
 	}
+	c.placeSessionInRABucket(sess)
 }
 
 func (c *Component) removeSessionFromIndexes(sess *SessionState) {
@@ -198,6 +208,7 @@ func (c *Component) removeSessionFromIndexes(sess *SessionState) {
 	if sess.IPv6Address != nil {
 		c.ipv6Index.Delete(sess.IPv6Address.String())
 	}
+	c.removeSessionFromRABucket(sess)
 }
 
 func (c *Component) resolveTargetFromEvent(ev *events.SubscriberMutationEvent) *SessionState {
@@ -469,6 +480,20 @@ type raPrefixInfo struct {
 	onLink        bool
 }
 
+// raEgressTarget carries the per-advertisement addressing for buildAndPublishRA.
+// L2 and L3 destinations are independent so a multicast RA (dstIP ff02::1) uses
+// the all-nodes multicast MAC rather than a unicast subscriber MAC.
+type raEgressTarget struct {
+	dstMAC          net.HardwareAddr
+	srcMAC          net.HardwareAddr
+	dstIP           net.IP
+	srcIP           net.IP
+	outerVLAN       uint16
+	innerVLAN       uint16
+	outerTPID       uint16
+	parentSwIfIndex uint32
+}
+
 func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manager, dhcp4Providers map[string]dhcp4.DHCPProvider, dhcp6Providers map[string]dhcp6.DHCPProvider) (*Component, error) {
 	log := logger.Get(logger.IPoE)
 
@@ -491,6 +516,8 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 		dhcpChan:         deps.DHCPChan,
 		dhcp6Chan:        deps.DHCPv6Chan,
 		ipv6NDChan:       deps.IPv6NDChan,
+		raBuckets:        make(map[int][]string),
+		raGroupStates:    make(map[string]*raGroupState),
 	}
 
 	return c, nil
@@ -499,6 +526,12 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
 	c.logger.Info("Starting IPoE component")
+
+	if cfg, err := c.cfgMgr.GetRunning(); err == nil && cfg != nil {
+		c.raBucketCount = c.computeRABucketCount(cfg)
+	} else {
+		c.raBucketCount = raMaxBucketCount
+	}
 
 	c.SetReadyState(component.StateRestoring)
 
@@ -512,6 +545,7 @@ func (c *Component) Start(ctx context.Context) error {
 	c.terminateSub = c.eventBus.Subscribe(events.TopicSubscriberTerminate, c.handleSubscriberTerminate)
 
 	c.Go(c.cleanupSessions)
+	c.Go(c.periodicRAEmitter)
 	c.Go(c.consumeDHCPPackets)
 	c.Go(c.consumeDHCPv6Packets)
 	c.Go(c.consumeIPv6NDPackets)
@@ -3111,6 +3145,22 @@ func (c *Component) processRSPacket(pkt *dataplane.ParsedPacket) error {
 		return nil
 	}
 
+	raConfig, prefixes := c.resolveGroupRA(cfg, group)
+
+	c.logger.Debug("Processing RS packet",
+		"mac", pkt.MAC.String(),
+		"svlan", pkt.OuterVLAN,
+		"cvlan", pkt.InnerVLAN,
+		"src_ip", pkt.IPv6.SrcIP,
+		"managed", raConfig.Managed,
+		"other", raConfig.Other,
+		"prefixes", len(prefixes),
+	)
+
+	return c.sendRAResponse(pkt, raConfig, prefixes)
+}
+
+func (c *Component) resolveGroupRA(cfg *config.Config, group *subscriber.SubscriberGroup) (southbound.IPv6RAConfig, []raPrefixInfo) {
 	raConfig := southbound.IPv6RAConfig{
 		Managed:        true,
 		Other:          true,
@@ -3152,29 +3202,291 @@ func (c *Component) processRSPacket(pkt *dataplane.ParsedPacket) error {
 	}
 
 	var prefixes []raPrefixInfo
-
-	if profile := cfg.IPv6Profiles[group.IPv6Profile]; profile != nil {
-		for _, pool := range profile.IANAPools {
-			prefixes = append(prefixes, raPrefixInfo{
-				network:       pool.Network,
-				validTime:     pool.ValidTime,
-				preferredTime: pool.PreferredTime,
-				onLink:        onLink,
-			})
+	if group != nil {
+		if profile := cfg.IPv6Profiles[group.IPv6Profile]; profile != nil {
+			for _, pool := range profile.IANAPools {
+				prefixes = append(prefixes, raPrefixInfo{
+					network:       pool.Network,
+					validTime:     pool.ValidTime,
+					preferredTime: pool.PreferredTime,
+					onLink:        onLink,
+				})
+			}
 		}
 	}
 
-	c.logger.Debug("Processing RS packet",
-		"mac", pkt.MAC.String(),
-		"svlan", pkt.OuterVLAN,
-		"cvlan", pkt.InnerVLAN,
-		"src_ip", pkt.IPv6.SrcIP,
-		"managed", raConfig.Managed,
-		"other", raConfig.Other,
-		"prefixes", len(prefixes),
-	)
+	return raConfig, prefixes
+}
 
-	return c.sendRAResponse(pkt, raConfig, prefixes)
+// raUnicast reports whether periodic RAs for this group are delivered as per-subscriber
+// unicast (default) or multicast. Global dhcpv6.ra default, per-group override.
+func (c *Component) raUnicast(cfg *config.Config, group *subscriber.SubscriberGroup) bool {
+	unicast := cfg.DHCPv6.RA.GetUnicast()
+	if group != nil && group.IPv6 != nil && group.IPv6.RA != nil && group.IPv6.RA.Unicast != nil {
+		unicast = *group.IPv6.RA.Unicast
+	}
+	return unicast
+}
+
+const (
+	raTickInterval   = time.Second
+	raMinBucketCount = 10
+	raMaxBucketCount = 600
+)
+
+// raRefreshInterval is how often a session's RA must be re-sent to keep its default
+// route alive: well inside the Router Lifetime (RFC 4861 §6.2.1), with a /3 margin so
+// a single lost RA does not drop the route. Zero means not a default router (no RAs).
+func raRefreshInterval(rc southbound.IPv6RAConfig) time.Duration {
+	rl := rc.RouterLifetime
+	if rl == 0 {
+		return 0
+	}
+	if rl > 9000 {
+		rl = 9000
+	}
+	refresh := rc.MaxInterval
+	if refresh == 0 {
+		refresh = 600
+	}
+	if third := rl / 3; third < refresh {
+		refresh = third
+	}
+	minI := rc.MinInterval
+	if minI == 0 {
+		minI = 3
+	}
+	if refresh < minI {
+		refresh = minI
+	}
+	if refresh < 1 {
+		refresh = 1
+	}
+	return time.Duration(refresh) * time.Second
+}
+
+// computeRABucketCount sizes the emitter wheel so a session is visited within the
+// shortest resolved refresh interval across RA-advertising groups, keeping the
+// per-tick batch bounded (one bucket walked per second).
+func (c *Component) computeRABucketCount(cfg *config.Config) int {
+	minRefresh := raMaxBucketCount
+	if cfg != nil && cfg.SubscriberGroups != nil {
+		for _, g := range cfg.SubscriberGroups.Groups {
+			if !groupV6Enabled(g) {
+				continue
+			}
+			rc, _ := c.resolveGroupRA(cfg, g)
+			if ri := int(raRefreshInterval(rc) / time.Second); ri > 0 && ri < minRefresh {
+				minRefresh = ri
+			}
+		}
+	}
+	if minRefresh < raMinBucketCount {
+		minRefresh = raMinBucketCount
+	}
+	if minRefresh > raMaxBucketCount {
+		minRefresh = raMaxBucketCount
+	}
+	return minRefresh
+}
+
+func (c *Component) raBucketOf(sessionID string) int {
+	if c.raBucketCount <= 0 {
+		return 0
+	}
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(sessionID))
+	return int(h.Sum32() % uint32(c.raBucketCount))
+}
+
+func (c *Component) placeSessionInRABucket(sess *SessionState) {
+	if c.raBucketCount <= 0 || sess.SessionID == "" {
+		return
+	}
+	b := c.raBucketOf(sess.SessionID)
+	c.raBucketMu.Lock()
+	c.raBuckets[b] = append(c.raBuckets[b], sess.SessionID)
+	c.raBucketMu.Unlock()
+}
+
+func (c *Component) removeSessionFromRABucket(sess *SessionState) {
+	if c.raBucketCount <= 0 || sess.SessionID == "" {
+		return
+	}
+	b := c.raBucketOf(sess.SessionID)
+	c.raBucketMu.Lock()
+	ids := c.raBuckets[b]
+	for i, id := range ids {
+		if id == sess.SessionID {
+			c.raBuckets[b] = append(ids[:i], ids[i+1:]...)
+			break
+		}
+	}
+	c.raBucketMu.Unlock()
+}
+
+// periodicRAEmitter sends unsolicited RAs so subscriber default routes are refreshed
+// before they expire (RFC 4861 §6.2). One goroutine walks one bucket per tick;
+// sessions are hashed into buckets on add/remove, not re-scanned per tick.
+func (c *Component) periodicRAEmitter() {
+	if c.raBucketCount <= 0 {
+		return
+	}
+	ticker := time.NewTicker(raTickInterval)
+	defer ticker.Stop()
+
+	bucket := 0
+	for {
+		select {
+		case <-c.Ctx.Done():
+			return
+		case <-ticker.C:
+			c.emitRABucket(bucket)
+			bucket = (bucket + 1) % c.raBucketCount
+		}
+	}
+}
+
+func (c *Component) emitRABucket(bucket int) {
+	c.raBucketMu.RLock()
+	ids := append([]string(nil), c.raBuckets[bucket]...)
+	c.raBucketMu.RUnlock()
+	if len(ids) == 0 {
+		return
+	}
+
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil {
+		return
+	}
+
+	now := time.Now()
+	for _, id := range ids {
+		if v, ok := c.sessionIndex.Load(id); ok {
+			c.emitPeriodicRA(v.(*SessionState), cfg, now)
+		}
+	}
+}
+
+func (c *Component) emitPeriodicRA(sess *SessionState, cfg *config.Config, now time.Time) {
+	sess.mu.Lock()
+	closing := sess.Closing
+	v6bound := sess.IPv6Bound
+	svlan := sess.OuterVLAN
+	cvlan := sess.InnerVLAN
+	encapIfIndex := sess.EncapIfIndex
+	mac := sess.MAC
+	clientLL := sess.ClientLinkLocal
+	due := sess.nextRADue
+	sess.mu.Unlock()
+
+	if closing || !v6bound {
+		return
+	}
+
+	srgName := c.resolveSRGName(svlan, cvlan)
+	if c.srgMgr != nil && !c.srgMgr.IsActive(srgName) {
+		return
+	}
+
+	match, matched := c.cfgMgr.LookupSubscriberGroup(svlan, cvlan)
+	if !matched || !groupV6Enabled(match.Group) {
+		// group v6 was turned off while this session was advertising: send one final
+		// RA with Router Lifetime 0 so the host drops its default route now instead of
+		// waiting out the lifetime (RFC 4861 §6.2.5). due!=zero means it was advertising.
+		if !due.IsZero() {
+			c.ceaseSessionRA(srgName, encapIfIndex, svlan, cvlan)
+			sess.mu.Lock()
+			sess.nextRADue = time.Time{}
+			sess.mu.Unlock()
+		}
+		return
+	}
+
+	var parentSwIfIndex uint32
+	var outerTPID uint16
+	if c.ifMgr != nil {
+		if iface := c.ifMgr.Get(encapIfIndex); iface != nil {
+			parentSwIfIndex = iface.SupSwIfIndex
+		}
+		outerTPID = c.ifMgr.OuterTPID(encapIfIndex)
+	}
+
+	// All config-derived work (resolve RA config, parse prefixes, serialize the RA
+	// template, derive the source MAC, the unicast policy and the refresh interval) is
+	// done once per (group x SRG x parent) and reused for every subscriber until the
+	// running config changes — keyed on the config pointer, which GetRunning swaps only
+	// on commit. Per subscriber this is just a map lookup plus a copy-and-patch.
+	key := fmt.Sprintf("%s|%s|%d", match.Name, srgName, parentSwIfIndex)
+	st := c.raGroupStateFor(key, match.Group, srgName, parentSwIfIndex, cfg)
+	if st == nil {
+		return
+	}
+	if !due.IsZero() && now.Before(due) {
+		return
+	}
+
+	dstMAC := mac
+	dstIP := clientLL
+	if !st.unicast || len(dstIP) == 0 || dstIP.IsUnspecified() {
+		// multicast: the group opted out of unicast RAs, or the client link-local
+		// isn't known yet
+		dstMAC = net.HardwareAddr{0x33, 0x33, 0x00, 0x00, 0x00, 0x01}
+		dstIP = net.ParseIP("ff02::1")
+	}
+
+	raw := make([]byte, len(st.rawData))
+	copy(raw, st.rawData)
+	copy(raw[24:40], dstIP.To16())
+	raPatchChecksum(raw)
+
+	c.publishRA(raw, raEgressTarget{
+		dstMAC:          dstMAC,
+		srcMAC:          st.srcMAC,
+		outerVLAN:       svlan,
+		innerVLAN:       cvlan,
+		outerTPID:       outerTPID,
+		parentSwIfIndex: parentSwIfIndex,
+	})
+
+	sess.mu.Lock()
+	sess.nextRADue = now.Add(st.refresh)
+	sess.mu.Unlock()
+}
+
+// ceaseSessionRA sends a single multicast RA with Router Lifetime 0 so a subscriber
+// drops its default route immediately when the BNG stops being its default router
+// (RFC 4861 §6.2.5). Used only on a genuine cessation (group v6 disabled), never on a
+// transient osvbngd restart — that path keeps the route alive via opdb restore.
+func (c *Component) ceaseSessionRA(srgName string, encapIfIndex uint32, svlan, cvlan uint16) {
+	var parentSwIfIndex uint32
+	if c.ifMgr != nil {
+		if iface := c.ifMgr.Get(encapIfIndex); iface != nil {
+			parentSwIfIndex = iface.SupSwIfIndex
+		}
+	}
+	srcMAC := c.getLocalMAC(srgName, parentSwIfIndex)
+	if srcMAC == nil {
+		return
+	}
+	srcIP := linkLocalFromMAC(srcMAC)
+	if srcIP == nil {
+		return
+	}
+	var outerTPID uint16
+	if c.ifMgr != nil {
+		outerTPID = c.ifMgr.OuterTPID(encapIfIndex)
+	}
+	_ = c.buildAndPublishRA(raEgressTarget{
+		dstMAC:          net.HardwareAddr{0x33, 0x33, 0x00, 0x00, 0x00, 0x01},
+		srcMAC:          srcMAC,
+		dstIP:           net.ParseIP("ff02::1"),
+		srcIP:           srcIP,
+		outerVLAN:       svlan,
+		innerVLAN:       cvlan,
+		outerTPID:       outerTPID,
+		parentSwIfIndex: parentSwIfIndex,
+	}, southbound.IPv6RAConfig{Managed: true, Other: true, RouterLifetime: 0}, nil)
 }
 
 func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbound.IPv6RAConfig, prefixes []raPrefixInfo) error {
@@ -3186,12 +3498,12 @@ func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbo
 	}
 
 	srgName := c.resolveSRGName(pkt.OuterVLAN, pkt.InnerVLAN)
-	srcMACBytes := c.getLocalMAC(srgName, parentSwIfIndex)
-	if srcMACBytes == nil {
+	srcMAC := c.getLocalMAC(srgName, parentSwIfIndex)
+	if srcMAC == nil {
 		return fmt.Errorf("no source MAC available")
 	}
 
-	srcIP := linkLocalFromMAC(srcMACBytes)
+	srcIP := linkLocalFromMAC(srcMAC)
 	if srcIP == nil {
 		return fmt.Errorf("no IPv6 source address available for S-VLAN %d", pkt.OuterVLAN)
 	}
@@ -3201,6 +3513,38 @@ func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbo
 		dstIP = net.ParseIP("ff02::1")
 	}
 
+	var outerTPID uint16
+	if c.ifMgr != nil {
+		outerTPID = c.ifMgr.OuterTPID(pkt.SwIfIndex)
+	}
+
+	return c.buildAndPublishRA(raEgressTarget{
+		dstMAC:          pkt.MAC,
+		srcMAC:          srcMAC,
+		dstIP:           dstIP,
+		srcIP:           srcIP,
+		outerVLAN:       pkt.OuterVLAN,
+		innerVLAN:       pkt.InnerVLAN,
+		outerTPID:       outerTPID,
+		parentSwIfIndex: parentSwIfIndex,
+	}, raConfig, prefixes)
+}
+
+func (c *Component) buildAndPublishRA(t raEgressTarget, raConfig southbound.IPv6RAConfig, prefixes []raPrefixInfo) error {
+	raw, err := c.buildRARawData(raConfig, prefixes, t.srcMAC, t.srcIP, t.dstIP)
+	if err != nil {
+		return err
+	}
+	c.publishRA(raw, t)
+	return nil
+}
+
+// buildRARawData serializes the IPv6 + ICMPv6 Router Advertisement (the egress
+// RawData; the Ethernet/QinQ frame is assembled downstream from raEgressTarget).
+// This is the expensive part of emitting an RA — the periodic emitter caches the
+// result per (group x SRG x config) and replicates it per subscriber via
+// raTemplateFor, so this runs once per config rather than per advertisement.
+func (c *Component) buildRARawData(raConfig southbound.IPv6RAConfig, prefixes []raPrefixInfo, srcMAC net.HardwareAddr, srcIP, dstIP net.IP) ([]byte, error) {
 	var raFlags uint8
 	if raConfig.Managed {
 		raFlags |= 0x80
@@ -3212,7 +3556,7 @@ func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbo
 	var raOptions layers.ICMPv6Options
 	raOptions = append(raOptions, layers.ICMPv6Option{
 		Type: layers.ICMPv6OptSourceAddress,
-		Data: srcMACBytes,
+		Data: srcMAC,
 	})
 
 	for _, prefix := range prefixes {
@@ -3254,10 +3598,15 @@ func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbo
 		})
 	}
 
+	routerLifetime := raConfig.RouterLifetime
+	if routerLifetime > 9000 {
+		routerLifetime = 9000 // RFC 4861 §4.2 maximum router lifetime
+	}
+
 	raLayer := &layers.ICMPv6RouterAdvertisement{
 		HopLimit:       64,
 		Flags:          raFlags,
-		RouterLifetime: uint16(raConfig.RouterLifetime),
+		RouterLifetime: uint16(routerLifetime),
 		ReachableTime:  0,
 		RetransTimer:   0,
 		Options:        raOptions,
@@ -3284,36 +3633,112 @@ func (c *Component) sendRAResponse(pkt *dataplane.ParsedPacket, raConfig southbo
 	}
 
 	if err := gopacket.SerializeLayers(buf, opts, ipv6Layer, icmpv6Layer, raLayer); err != nil {
-		return fmt.Errorf("serialize RA: %w", err)
+		return nil, fmt.Errorf("serialize RA: %w", err)
 	}
+	return buf.Bytes(), nil
+}
 
-	egressPayload := &models.EgressPacketPayload{
-		DstMAC:    pkt.MAC.String(),
-		SrcMAC:    srcMACBytes.String(),
-		OuterVLAN: pkt.OuterVLAN,
-		InnerVLAN: pkt.InnerVLAN,
-		OuterTPID: c.ifMgr.OuterTPID(pkt.SwIfIndex),
-		SwIfIndex: parentSwIfIndex,
-		RawData:   buf.Bytes(),
-	}
-
-	c.logger.Debug("Sending RA response",
-		"dst_mac", pkt.MAC.String(),
-		"src_mac", srcMACBytes.String(),
-		"svlan", pkt.OuterVLAN,
-		"cvlan", pkt.InnerVLAN,
-		"managed", raConfig.Managed,
-		"other", raConfig.Other,
-	)
-
+func (c *Component) publishRA(rawData []byte, t raEgressTarget) {
 	c.eventBus.Publish(events.TopicEgress, events.Event{
 		Source: c.Name(),
 		Data: &events.EgressEvent{
 			Protocol: models.ProtocolIPv6ND,
-			Packet:   *egressPayload,
+			Packet: models.EgressPacketPayload{
+				DstMAC:    t.dstMAC.String(),
+				SrcMAC:    t.srcMAC.String(),
+				OuterVLAN: t.outerVLAN,
+				InnerVLAN: t.innerVLAN,
+				OuterTPID: t.outerTPID,
+				SwIfIndex: t.parentSwIfIndex,
+				RawData:   rawData,
+			},
 		},
 	})
-	return nil
+}
+
+// raGroupState is the fully-resolved RA state shared by every subscriber in a
+// (group x SRG x parent) tuple: the pre-serialized RA template (IPv6 + ICMPv6 with the
+// destination and checksum zeroed), the unicast policy, the refresh interval and the
+// source MAC. It is resolved once and reused for every subscriber until the running
+// config changes — `cfg` is the running-config pointer, which GetRunning swaps only on
+// commit, so a plain pointer comparison detects a config change for free.
+type raGroupState struct {
+	cfg     *config.Config
+	rawData []byte
+	unicast bool
+	refresh time.Duration
+	srcMAC  net.HardwareAddr
+}
+
+// raGroupStateFor returns the cached state for key, re-resolving (the expensive config
+// walk + serialize) only when the running config has changed. It returns nil on a
+// transient failure (e.g. source MAC not yet available) without caching so the next
+// emit retries. Emitter-goroutine owned, so no lock.
+func (c *Component) raGroupStateFor(key string, group *subscriber.SubscriberGroup, srgName string, parent uint32, cfg *config.Config) *raGroupState {
+	if st, ok := c.raGroupStates[key]; ok && st.cfg == cfg {
+		return st
+	}
+
+	srcMAC := c.getLocalMAC(srgName, parent)
+	if srcMAC == nil {
+		return nil
+	}
+	srcIP := linkLocalFromMAC(srcMAC)
+	if srcIP == nil {
+		return nil
+	}
+
+	raConfig, prefixes := c.resolveGroupRA(cfg, group)
+	refresh := raRefreshInterval(raConfig)
+	if refresh <= 0 {
+		return nil
+	}
+
+	raw, err := c.buildRARawData(raConfig, prefixes, srcMAC, srcIP, net.IPv6zero)
+	if err != nil {
+		return nil
+	}
+	raw[42], raw[43] = 0, 0 // checksum recomputed per subscriber once the dst is patched
+
+	st := &raGroupState{
+		cfg:     cfg,
+		rawData: raw,
+		unicast: c.raUnicast(cfg, group),
+		refresh: refresh,
+		srcMAC:  srcMAC,
+	}
+	c.raGroupStates[key] = st
+	return st
+}
+
+func raSum16(b []byte) uint32 {
+	var s uint32
+	n := len(b)
+	for i := 0; i+1 < n; i += 2 {
+		s += uint32(b[i])<<8 | uint32(b[i+1])
+	}
+	if n%2 == 1 {
+		s += uint32(b[n-1]) << 8
+	}
+	return s
+}
+
+func raFold16(s uint32) uint16 {
+	for s>>16 != 0 {
+		s = (s & 0xffff) + (s >> 16)
+	}
+	return uint16(s)
+}
+
+// raPatchChecksum recomputes the ICMPv6 checksum over a replicated RA buffer
+// (IPv6 + ICMPv6, checksum field [42:44] must already be 0 and the dst patched).
+func raPatchChecksum(raw []byte) {
+	if len(raw) < 44 {
+		return
+	}
+	msg := raw[40:]
+	s := raSum16(raw[8:24]) + raSum16(raw[24:40]) + uint32(len(msg)) + 58 + raSum16(msg)
+	binary.BigEndian.PutUint16(raw[42:44], ^raFold16(s))
 }
 
 func (c *Component) processNSPacket(pkt *dataplane.ParsedPacket) error {
