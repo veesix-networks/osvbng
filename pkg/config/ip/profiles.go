@@ -48,6 +48,7 @@ type IPv6RAConfig struct {
 	MaxInterval    uint32 `json:"max_interval,omitempty" yaml:"max_interval,omitempty"`
 	MinInterval    uint32 `json:"min_interval,omitempty" yaml:"min_interval,omitempty"`
 	OnLink         *bool  `json:"on_link,omitempty" yaml:"on_link,omitempty"`
+	Unicast        *bool  `json:"unicast,omitempty" yaml:"unicast,omitempty"`
 }
 
 func (r *IPv6RAConfig) GetManaged() bool {
@@ -90,6 +91,13 @@ func (r *IPv6RAConfig) GetOnLink() bool {
 		return false
 	}
 	return *r.OnLink
+}
+
+func (r *IPv6RAConfig) GetUnicast() bool {
+	if r == nil || r.Unicast == nil {
+		return true
+	}
+	return *r.Unicast
 }
 
 type DHCPRelayServer struct {

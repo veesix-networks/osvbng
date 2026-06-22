@@ -74,7 +74,7 @@ type Component struct {
 	raBuckets     map[int][]string
 	raBucketMu    sync.RWMutex
 	raBucketCount int
-	raTemplates   map[string]*raTemplate
+	raGroupStates map[string]*raGroupState
 
 	dhcpChan   <-chan *dataplane.ParsedPacket
 	dhcp6Chan  <-chan *dataplane.ParsedPacket
@@ -517,7 +517,7 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 		dhcp6Chan:        deps.DHCPv6Chan,
 		ipv6NDChan:       deps.IPv6NDChan,
 		raBuckets:        make(map[int][]string),
-		raTemplates:      make(map[string]*raTemplate),
+		raGroupStates:    make(map[string]*raGroupState),
 	}
 
 	return c, nil
@@ -3218,6 +3218,16 @@ func (c *Component) resolveGroupRA(cfg *config.Config, group *subscriber.Subscri
 	return raConfig, prefixes
 }
 
+// raUnicast reports whether periodic RAs for this group are delivered as per-subscriber
+// unicast (default) or multicast. Global dhcpv6.ra default, per-group override.
+func (c *Component) raUnicast(cfg *config.Config, group *subscriber.SubscriberGroup) bool {
+	unicast := cfg.DHCPv6.RA.GetUnicast()
+	if group != nil && group.IPv6 != nil && group.IPv6.RA != nil && group.IPv6.RA.Unicast != nil {
+		unicast = *group.IPv6.RA.Unicast
+	}
+	return unicast
+}
+
 const (
 	raTickInterval   = time.Second
 	raMinBucketCount = 10
@@ -3368,7 +3378,6 @@ func (c *Component) emitPeriodicRA(sess *SessionState, cfg *config.Config, now t
 	mac := sess.MAC
 	clientLL := sess.ClientLinkLocal
 	due := sess.nextRADue
-	sessID := sess.SessionID
 	sess.mu.Unlock()
 
 	if closing || !v6bound {
@@ -3394,64 +3403,46 @@ func (c *Component) emitPeriodicRA(sess *SessionState, cfg *config.Config, now t
 		return
 	}
 
-	raConfig, prefixes := c.resolveGroupRA(cfg, match.Group)
-	refresh := raRefreshInterval(raConfig)
-	if refresh <= 0 {
+	var parentSwIfIndex uint32
+	var outerTPID uint16
+	if c.ifMgr != nil {
+		if iface := c.ifMgr.Get(encapIfIndex); iface != nil {
+			parentSwIfIndex = iface.SupSwIfIndex
+		}
+		outerTPID = c.ifMgr.OuterTPID(encapIfIndex)
+	}
+
+	// All config-derived work (resolve RA config, parse prefixes, serialize the RA
+	// template, derive the source MAC, the unicast policy and the refresh interval) is
+	// done once per (group x SRG x parent) and reused for every subscriber until the
+	// running config changes — keyed on the config pointer, which GetRunning swaps only
+	// on commit. Per subscriber this is just a map lookup plus a copy-and-patch.
+	key := fmt.Sprintf("%s|%s|%d", match.Name, srgName, parentSwIfIndex)
+	st := c.raGroupStateFor(key, match.Group, srgName, parentSwIfIndex, cfg)
+	if st == nil {
 		return
 	}
 	if !due.IsZero() && now.Before(due) {
 		return
 	}
 
-	var parentSwIfIndex uint32
-	if c.ifMgr != nil {
-		if iface := c.ifMgr.Get(encapIfIndex); iface != nil {
-			parentSwIfIndex = iface.SupSwIfIndex
-		}
-	}
-
-	srcMAC := c.getLocalMAC(srgName, parentSwIfIndex)
-	if srcMAC == nil {
-		return
-	}
-	srcIP := linkLocalFromMAC(srcMAC)
-	if srcIP == nil {
-		return
-	}
-
 	dstMAC := mac
 	dstIP := clientLL
-	if len(dstIP) == 0 || dstIP.IsUnspecified() {
+	if !st.unicast || len(dstIP) == 0 || dstIP.IsUnspecified() {
+		// multicast: the group opted out of unicast RAs, or the client link-local
+		// isn't known yet
 		dstMAC = net.HardwareAddr{0x33, 0x33, 0x00, 0x00, 0x00, 0x01}
 		dstIP = net.ParseIP("ff02::1")
 	}
 
-	var outerTPID uint16
-	if c.ifMgr != nil {
-		outerTPID = c.ifMgr.OuterTPID(encapIfIndex)
-	}
-
-	// Replicate the cached per-(group x SRG x config) RA template: copy it and patch
-	// only the per-subscriber IPv6 destination + checksum, instead of re-serializing a
-	// full RA every emit. The QinQ/MAC headers are not in RawData — the egress plugin
-	// builds them from the raEgressTarget fields downstream.
-	key := fmt.Sprintf("%s|%s|%d", match.Name, srgName, parentSwIfIndex)
-	tmpl, err := c.raTemplateFor(key, raTemplateSig(raConfig, prefixes, srcMAC, srcIP), raConfig, prefixes, srcMAC, srcIP)
-	if err != nil {
-		c.logger.Warn("Periodic RA template build failed", "session_id", sessID, "error", err)
-		return
-	}
-
-	raw := make([]byte, len(tmpl.rawData))
-	copy(raw, tmpl.rawData)
+	raw := make([]byte, len(st.rawData))
+	copy(raw, st.rawData)
 	copy(raw[24:40], dstIP.To16())
 	raPatchChecksum(raw)
 
 	c.publishRA(raw, raEgressTarget{
 		dstMAC:          dstMAC,
-		srcMAC:          srcMAC,
-		dstIP:           dstIP,
-		srcIP:           srcIP,
+		srcMAC:          st.srcMAC,
 		outerVLAN:       svlan,
 		innerVLAN:       cvlan,
 		outerTPID:       outerTPID,
@@ -3459,7 +3450,7 @@ func (c *Component) emitPeriodicRA(sess *SessionState, cfg *config.Config, now t
 	})
 
 	sess.mu.Lock()
-	sess.nextRADue = now.Add(refresh)
+	sess.nextRADue = now.Add(st.refresh)
 	sess.mu.Unlock()
 }
 
@@ -3665,60 +3656,59 @@ func (c *Component) publishRA(rawData []byte, t raEgressTarget) {
 	})
 }
 
-// raTemplate is a pre-serialized RA (IPv6 + ICMPv6) shared by every subscriber in a
-// (group x SRG x config) tuple. Its IPv6 destination is zeroed and its ICMPv6 checksum
-// is left 0; the emitter replicates it per subscriber by copying and patching only the
-// destination + checksum (raPatchChecksum). `sig` rebuilds it on a config change.
-type raTemplate struct {
-	sig     uint64
+// raGroupState is the fully-resolved RA state shared by every subscriber in a
+// (group x SRG x parent) tuple: the pre-serialized RA template (IPv6 + ICMPv6 with the
+// destination and checksum zeroed), the unicast policy, the refresh interval and the
+// source MAC. It is resolved once and reused for every subscriber until the running
+// config changes — `cfg` is the running-config pointer, which GetRunning swaps only on
+// commit, so a plain pointer comparison detects a config change for free.
+type raGroupState struct {
+	cfg     *config.Config
 	rawData []byte
+	unicast bool
+	refresh time.Duration
+	srcMAC  net.HardwareAddr
 }
 
-func raTemplateSig(raConfig southbound.IPv6RAConfig, prefixes []raPrefixInfo, srcMAC net.HardwareAddr, srcIP net.IP) uint64 {
-	h := fnv.New64a()
-	var b [4]byte
-	var flags byte
-	if raConfig.Managed {
-		flags |= 1
+// raGroupStateFor returns the cached state for key, re-resolving (the expensive config
+// walk + serialize) only when the running config has changed. It returns nil on a
+// transient failure (e.g. source MAC not yet available) without caching so the next
+// emit retries. Emitter-goroutine owned, so no lock.
+func (c *Component) raGroupStateFor(key string, group *subscriber.SubscriberGroup, srgName string, parent uint32, cfg *config.Config) *raGroupState {
+	if st, ok := c.raGroupStates[key]; ok && st.cfg == cfg {
+		return st
 	}
-	if raConfig.Other {
-		flags |= 2
-	}
-	_, _ = h.Write([]byte{flags})
-	binary.BigEndian.PutUint32(b[:], raConfig.RouterLifetime)
-	_, _ = h.Write(b[:])
-	for _, p := range prefixes {
-		_, _ = h.Write([]byte(p.network))
-		binary.BigEndian.PutUint32(b[:], p.validTime)
-		_, _ = h.Write(b[:])
-		binary.BigEndian.PutUint32(b[:], p.preferredTime)
-		_, _ = h.Write(b[:])
-		if p.onLink {
-			_, _ = h.Write([]byte{1})
-		} else {
-			_, _ = h.Write([]byte{0})
-		}
-	}
-	_, _ = h.Write(srcMAC)
-	_, _ = h.Write(srcIP)
-	return h.Sum64()
-}
 
-// raTemplateFor returns the cached pre-serialized RA for key, rebuilding it (the
-// expensive serialize) only when the config signature changes. Emitter-goroutine
-// owned, so no lock.
-func (c *Component) raTemplateFor(key string, sig uint64, raConfig southbound.IPv6RAConfig, prefixes []raPrefixInfo, srcMAC net.HardwareAddr, srcIP net.IP) (*raTemplate, error) {
-	if t, ok := c.raTemplates[key]; ok && t.sig == sig {
-		return t, nil
+	srcMAC := c.getLocalMAC(srgName, parent)
+	if srcMAC == nil {
+		return nil
 	}
+	srcIP := linkLocalFromMAC(srcMAC)
+	if srcIP == nil {
+		return nil
+	}
+
+	raConfig, prefixes := c.resolveGroupRA(cfg, group)
+	refresh := raRefreshInterval(raConfig)
+	if refresh <= 0 {
+		return nil
+	}
+
 	raw, err := c.buildRARawData(raConfig, prefixes, srcMAC, srcIP, net.IPv6zero)
 	if err != nil {
-		return nil, err
+		return nil
 	}
-	raw[42], raw[43] = 0, 0 // checksum is recomputed per subscriber once the dst is patched
-	t := &raTemplate{sig: sig, rawData: raw}
-	c.raTemplates[key] = t
-	return t, nil
+	raw[42], raw[43] = 0, 0 // checksum recomputed per subscriber once the dst is patched
+
+	st := &raGroupState{
+		cfg:     cfg,
+		rawData: raw,
+		unicast: c.raUnicast(cfg, group),
+		refresh: refresh,
+		srcMAC:  srcMAC,
+	}
+	c.raGroupStates[key] = st
+	return st
 }
 
 func raSum16(b []byte) uint32 {

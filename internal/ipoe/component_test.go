@@ -181,14 +181,14 @@ func newNSPTestComponent(t *testing.T, virtualMAC net.HardwareAddr, active bool)
 	srg := &fakeSRGProvider{active: active, virtualMAC: virtualMAC, srgForGrp: "access1"}
 
 	c := &Component{
-		Base:        component.NewBase("ipoe-test"),
-		logger:      logger.NewTest(),
-		eventBus:    bus,
-		srgMgr:      srg,
-		ifMgr:       ifMgr,
-		cfgMgr:      &fakeConfigManager{cfg: cfg},
-		raBuckets:   make(map[int][]string),
-		raTemplates: make(map[string]*raTemplate),
+		Base:          component.NewBase("ipoe-test"),
+		logger:        logger.NewTest(),
+		eventBus:      bus,
+		srgMgr:        srg,
+		ifMgr:         ifMgr,
+		cfgMgr:        &fakeConfigManager{cfg: cfg},
+		raBuckets:     make(map[int][]string),
+		raGroupStates: make(map[string]*raGroupState),
 	}
 	return c, bus
 }
@@ -475,6 +475,29 @@ func TestPeriodicRAEmit(t *testing.T) {
 			t.Fatalf("expected no egress on standby SRG, got %d", len(bus.egress))
 		}
 	})
+
+	t.Run("group_unicast_disabled_forces_multicast", func(t *testing.T) {
+		c, bus := newNSPTestComponent(t, vmac, true)
+		cfg, _ := c.cfgMgr.GetRunning()
+		off := false
+		cfg.SubscriberGroups.Groups["access1"].IPv6 = &subscriber.SubscriberIPv6{
+			RA: &subscriber.SubscriberIPv6RA{Unicast: &off},
+		}
+		// client link-local IS known, but the group opted out of unicast RAs
+		c.emitPeriodicRA(mkSess(net.ParseIP("fe80::baad:f00d"), time.Time{}), cfg, time.Now())
+
+		bus.mu.Lock()
+		defer bus.mu.Unlock()
+		if len(bus.egress) != 1 {
+			t.Fatalf("expected 1 egress, got %d", len(bus.egress))
+		}
+		if bus.egress[0].Packet.DstMAC != "33:33:00:00:00:01" {
+			t.Fatalf("unicast-disabled dstMAC = %s, want all-nodes multicast", bus.egress[0].Packet.DstMAC)
+		}
+		if dst := raLayerDstIP(t, bus.egress[0].Packet.RawData); !dst.Equal(net.ParseIP("ff02::1")) {
+			t.Fatalf("unicast-disabled dstIP = %s, want ff02::1", dst)
+		}
+	})
 }
 
 func TestCeaseSessionRA(t *testing.T) {
@@ -509,11 +532,13 @@ func TestRATemplateMatchesFullBuild(t *testing.T) {
 	srcMAC := net.HardwareAddr{0xaa, 0xc1, 0xab, 0x1f, 0xe2, 0xfa}
 	srcIP := linkLocalFromMAC(srcMAC)
 
-	sig := raTemplateSig(raConfig, prefixes, srcMAC, srcIP)
-	tmpl, err := c.raTemplateFor("k", sig, raConfig, prefixes, srcMAC, srcIP)
+	// The template is a full serialize with the dst and checksum zeroed — the same
+	// bytes raGroupStateFor caches.
+	tmpl, err := c.buildRARawData(raConfig, prefixes, srcMAC, srcIP, net.IPv6zero)
 	if err != nil {
-		t.Fatalf("raTemplateFor: %v", err)
+		t.Fatalf("buildRARawData(template): %v", err)
 	}
+	tmpl[42], tmpl[43] = 0, 0
 
 	// A replicated-and-patched RA must be byte-identical to a full serialize for the
 	// same destination — this is the checksum-fold safety net for both unicast and multicast.
@@ -522,8 +547,8 @@ func TestRATemplateMatchesFullBuild(t *testing.T) {
 		if err != nil {
 			t.Fatalf("buildRARawData(%s): %v", dst, err)
 		}
-		repl := make([]byte, len(tmpl.rawData))
-		copy(repl, tmpl.rawData)
+		repl := make([]byte, len(tmpl))
+		copy(repl, tmpl)
 		copy(repl[24:40], dst.To16())
 		raPatchChecksum(repl)
 		if !bytes.Equal(full, repl) {
