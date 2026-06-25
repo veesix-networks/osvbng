@@ -172,10 +172,11 @@ func main() {
 	ifMgr := ifmgr.New()
 
 	vpp, err := vpp.NewVPP(vpp.VPPConfig{
-		Connection: vppConn,
-		IfMgr:      ifMgr,
-		UseDPDK:    cfg.Dataplane.DPDK != nil && len(cfg.Dataplane.DPDK.Devices) > 0,
-		RxMode:     cfg.Dataplane.RxMode,
+		Connection:  vppConn,
+		IfMgr:       ifMgr,
+		UseDPDK:     cfg.Dataplane.DPDK != nil && len(cfg.Dataplane.DPDK.Devices) > 0,
+		RxMode:      cfg.Dataplane.RxMode,
+		NumRxQueues: cpu.WorkerCoreCount(),
 	})
 	if err != nil {
 		log.Fatalf("Failed to create VPP southbound: %v", err)
@@ -369,7 +370,7 @@ func main() {
 		log.Fatalf("Failed to create arp component: %v", err)
 	}
 
-	pppoeComp, err := pppoe.New(coreDeps, srgProvider, ifMgr)
+	pppoeComp, err := pppoe.New(coreDeps, srgProvider, ifMgr, dhcp6Providers)
 	if err != nil {
 		log.Fatalf("Failed to create pppoe component: %v", err)
 	}

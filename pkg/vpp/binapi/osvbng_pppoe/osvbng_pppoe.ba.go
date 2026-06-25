@@ -7,7 +7,7 @@
 // Package osvbng_pppoe contains generated bindings for API file osvbng_pppoe.api.
 //
 // Contents:
-// -  6 messages
+// - 10 messages
 package osvbng_pppoe
 
 import (
@@ -27,7 +27,7 @@ const _ = api.GoVppAPIPackageIsVersion2
 const (
 	APIFile    = "osvbng_pppoe"
 	APIVersion = "1.0.0"
-	VersionCrc = 0x6fc03417
+	VersionCrc = 0x22a21b38
 )
 
 // Set or delete a PPPoE session
@@ -162,23 +162,29 @@ func (m *OsvbngPppoeAddDelSessionReply) Unmarshal(b []byte) error {
 //   - client_mac - the client ethernet address
 //   - outer_vlan - S-VLAN tag
 //   - inner_vlan - C-VLAN tag
+//   - client_ipv6 - IPv6 WAN address (:: if not bound)
+//   - ipv6_bound - IPv6 binding active
+//   - delegated_prefix - delegated prefix (::/0 if no PD)
 //
 // OsvbngPppoeSessionDetails defines message 'osvbng_pppoe_session_details'.
 type OsvbngPppoeSessionDetails struct {
-	SwIfIndex    interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
-	SessionID    uint16                         `binapi:"u16,name=session_id" json:"session_id,omitempty"`
-	ClientIP     ip_types.Address               `binapi:"address,name=client_ip" json:"client_ip,omitempty"`
-	EncapIfIndex interface_types.InterfaceIndex `binapi:"interface_index,name=encap_if_index" json:"encap_if_index,omitempty"`
-	DecapVrfID   uint32                         `binapi:"u32,name=decap_vrf_id" json:"decap_vrf_id,omitempty"`
-	LocalMac     ethernet_types.MacAddress      `binapi:"mac_address,name=local_mac" json:"local_mac,omitempty"`
-	ClientMac    ethernet_types.MacAddress      `binapi:"mac_address,name=client_mac" json:"client_mac,omitempty"`
-	OuterVlan    uint16                         `binapi:"u16,name=outer_vlan" json:"outer_vlan,omitempty"`
-	InnerVlan    uint16                         `binapi:"u16,name=inner_vlan" json:"inner_vlan,omitempty"`
+	SwIfIndex       interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
+	SessionID       uint16                         `binapi:"u16,name=session_id" json:"session_id,omitempty"`
+	ClientIP        ip_types.Address               `binapi:"address,name=client_ip" json:"client_ip,omitempty"`
+	EncapIfIndex    interface_types.InterfaceIndex `binapi:"interface_index,name=encap_if_index" json:"encap_if_index,omitempty"`
+	DecapVrfID      uint32                         `binapi:"u32,name=decap_vrf_id" json:"decap_vrf_id,omitempty"`
+	LocalMac        ethernet_types.MacAddress      `binapi:"mac_address,name=local_mac" json:"local_mac,omitempty"`
+	ClientMac       ethernet_types.MacAddress      `binapi:"mac_address,name=client_mac" json:"client_mac,omitempty"`
+	OuterVlan       uint16                         `binapi:"u16,name=outer_vlan" json:"outer_vlan,omitempty"`
+	InnerVlan       uint16                         `binapi:"u16,name=inner_vlan" json:"inner_vlan,omitempty"`
+	ClientIPv6      ip_types.IP6Address            `binapi:"ip6_address,name=client_ipv6" json:"client_ipv6,omitempty"`
+	IPv6Bound       bool                           `binapi:"bool,name=ipv6_bound" json:"ipv6_bound,omitempty"`
+	DelegatedPrefix ip_types.Prefix                `binapi:"prefix,name=delegated_prefix" json:"delegated_prefix,omitempty"`
 }
 
 func (m *OsvbngPppoeSessionDetails) Reset()               { *m = OsvbngPppoeSessionDetails{} }
 func (*OsvbngPppoeSessionDetails) GetMessageName() string { return "osvbng_pppoe_session_details" }
-func (*OsvbngPppoeSessionDetails) GetCrcString() string   { return "97890e59" }
+func (*OsvbngPppoeSessionDetails) GetCrcString() string   { return "ca430c5c" }
 func (*OsvbngPppoeSessionDetails) GetMessageType() api.MessageType {
 	return api.ReplyMessage
 }
@@ -197,6 +203,11 @@ func (m *OsvbngPppoeSessionDetails) Size() (size int) {
 	size += 1 * 6  // m.ClientMac
 	size += 2      // m.OuterVlan
 	size += 2      // m.InnerVlan
+	size += 1 * 16 // m.ClientIPv6
+	size += 1      // m.IPv6Bound
+	size += 1      // m.DelegatedPrefix.Address.Af
+	size += 1 * 16 // m.DelegatedPrefix.Address.Un
+	size += 1      // m.DelegatedPrefix.Len
 	return size
 }
 func (m *OsvbngPppoeSessionDetails) Marshal(b []byte) ([]byte, error) {
@@ -214,6 +225,11 @@ func (m *OsvbngPppoeSessionDetails) Marshal(b []byte) ([]byte, error) {
 	buf.EncodeBytes(m.ClientMac[:], 6)
 	buf.EncodeUint16(m.OuterVlan)
 	buf.EncodeUint16(m.InnerVlan)
+	buf.EncodeBytes(m.ClientIPv6[:], 16)
+	buf.EncodeBool(m.IPv6Bound)
+	buf.EncodeUint8(uint8(m.DelegatedPrefix.Address.Af))
+	buf.EncodeBytes(m.DelegatedPrefix.Address.Un.XXX_UnionData[:], 16)
+	buf.EncodeUint8(m.DelegatedPrefix.Len)
 	return buf.Bytes(), nil
 }
 func (m *OsvbngPppoeSessionDetails) Unmarshal(b []byte) error {
@@ -228,6 +244,11 @@ func (m *OsvbngPppoeSessionDetails) Unmarshal(b []byte) error {
 	copy(m.ClientMac[:], buf.DecodeBytes(6))
 	m.OuterVlan = buf.DecodeUint16()
 	m.InnerVlan = buf.DecodeUint16()
+	copy(m.ClientIPv6[:], buf.DecodeBytes(16))
+	m.IPv6Bound = buf.DecodeBool()
+	m.DelegatedPrefix.Address.Af = ip_types.AddressFamily(buf.DecodeUint8())
+	copy(m.DelegatedPrefix.Address.Un.XXX_UnionData[:], buf.DecodeBytes(16))
+	m.DelegatedPrefix.Len = buf.DecodeUint8()
 	return nil
 }
 
@@ -264,6 +285,100 @@ func (m *OsvbngPppoeSessionDump) Marshal(b []byte) ([]byte, error) {
 func (m *OsvbngPppoeSessionDump) Unmarshal(b []byte) error {
 	buf := codec.NewBuffer(b)
 	m.SwIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
+	return nil
+}
+
+// Set/clear delegated prefix for a PPPoE session (after DHCPv6 IA_PD)
+//   - sw_if_index - the PPPoE session interface
+//   - prefix - delegated prefix
+//   - next_hop - next-hop for prefix route (link-local or IA_NA address)
+//   - is_add - add (1) or remove (0) binding
+//
+// OsvbngPppoeSetDelegatedPrefix defines message 'osvbng_pppoe_set_delegated_prefix'.
+type OsvbngPppoeSetDelegatedPrefix struct {
+	SwIfIndex interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
+	Prefix    ip_types.Prefix                `binapi:"prefix,name=prefix" json:"prefix,omitempty"`
+	NextHop   ip_types.IP6Address            `binapi:"ip6_address,name=next_hop" json:"next_hop,omitempty"`
+	IsAdd     bool                           `binapi:"bool,name=is_add" json:"is_add,omitempty"`
+}
+
+func (m *OsvbngPppoeSetDelegatedPrefix) Reset() { *m = OsvbngPppoeSetDelegatedPrefix{} }
+func (*OsvbngPppoeSetDelegatedPrefix) GetMessageName() string {
+	return "osvbng_pppoe_set_delegated_prefix"
+}
+func (*OsvbngPppoeSetDelegatedPrefix) GetCrcString() string { return "80a8a97d" }
+func (*OsvbngPppoeSetDelegatedPrefix) GetMessageType() api.MessageType {
+	return api.RequestMessage
+}
+
+func (m *OsvbngPppoeSetDelegatedPrefix) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4      // m.SwIfIndex
+	size += 1      // m.Prefix.Address.Af
+	size += 1 * 16 // m.Prefix.Address.Un
+	size += 1      // m.Prefix.Len
+	size += 1 * 16 // m.NextHop
+	size += 1      // m.IsAdd
+	return size
+}
+func (m *OsvbngPppoeSetDelegatedPrefix) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeUint32(uint32(m.SwIfIndex))
+	buf.EncodeUint8(uint8(m.Prefix.Address.Af))
+	buf.EncodeBytes(m.Prefix.Address.Un.XXX_UnionData[:], 16)
+	buf.EncodeUint8(m.Prefix.Len)
+	buf.EncodeBytes(m.NextHop[:], 16)
+	buf.EncodeBool(m.IsAdd)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngPppoeSetDelegatedPrefix) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.SwIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
+	m.Prefix.Address.Af = ip_types.AddressFamily(buf.DecodeUint8())
+	copy(m.Prefix.Address.Un.XXX_UnionData[:], buf.DecodeBytes(16))
+	m.Prefix.Len = buf.DecodeUint8()
+	copy(m.NextHop[:], buf.DecodeBytes(16))
+	m.IsAdd = buf.DecodeBool()
+	return nil
+}
+
+// OsvbngPppoeSetDelegatedPrefixReply defines message 'osvbng_pppoe_set_delegated_prefix_reply'.
+type OsvbngPppoeSetDelegatedPrefixReply struct {
+	Retval int32 `binapi:"i32,name=retval" json:"retval,omitempty"`
+}
+
+func (m *OsvbngPppoeSetDelegatedPrefixReply) Reset() { *m = OsvbngPppoeSetDelegatedPrefixReply{} }
+func (*OsvbngPppoeSetDelegatedPrefixReply) GetMessageName() string {
+	return "osvbng_pppoe_set_delegated_prefix_reply"
+}
+func (*OsvbngPppoeSetDelegatedPrefixReply) GetCrcString() string { return "e8d4e804" }
+func (*OsvbngPppoeSetDelegatedPrefixReply) GetMessageType() api.MessageType {
+	return api.ReplyMessage
+}
+
+func (m *OsvbngPppoeSetDelegatedPrefixReply) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.Retval
+	return size
+}
+func (m *OsvbngPppoeSetDelegatedPrefixReply) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeInt32(m.Retval)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngPppoeSetDelegatedPrefixReply) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.Retval = buf.DecodeInt32()
 	return nil
 }
 
@@ -353,14 +468,99 @@ func (m *OsvbngPppoeSetLacTunnelReply) Unmarshal(b []byte) error {
 	return nil
 }
 
+// Set/clear the IPv6 WAN address on a PPPoE session (after DHCPv6 IA_NA)
+//   - sw_if_index - the PPPoE session interface
+//   - client_ip - assigned IPv6 address
+//   - is_add - add (1) or remove (0) binding
+//
+// OsvbngPppoeSetSessionIPv6 defines message 'osvbng_pppoe_set_session_ipv6'.
+type OsvbngPppoeSetSessionIPv6 struct {
+	SwIfIndex interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
+	ClientIP  ip_types.IP6Address            `binapi:"ip6_address,name=client_ip" json:"client_ip,omitempty"`
+	IsAdd     bool                           `binapi:"bool,name=is_add" json:"is_add,omitempty"`
+}
+
+func (m *OsvbngPppoeSetSessionIPv6) Reset()               { *m = OsvbngPppoeSetSessionIPv6{} }
+func (*OsvbngPppoeSetSessionIPv6) GetMessageName() string { return "osvbng_pppoe_set_session_ipv6" }
+func (*OsvbngPppoeSetSessionIPv6) GetCrcString() string   { return "aa625d9a" }
+func (*OsvbngPppoeSetSessionIPv6) GetMessageType() api.MessageType {
+	return api.RequestMessage
+}
+
+func (m *OsvbngPppoeSetSessionIPv6) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4      // m.SwIfIndex
+	size += 1 * 16 // m.ClientIP
+	size += 1      // m.IsAdd
+	return size
+}
+func (m *OsvbngPppoeSetSessionIPv6) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeUint32(uint32(m.SwIfIndex))
+	buf.EncodeBytes(m.ClientIP[:], 16)
+	buf.EncodeBool(m.IsAdd)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngPppoeSetSessionIPv6) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.SwIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
+	copy(m.ClientIP[:], buf.DecodeBytes(16))
+	m.IsAdd = buf.DecodeBool()
+	return nil
+}
+
+// OsvbngPppoeSetSessionIPv6Reply defines message 'osvbng_pppoe_set_session_ipv6_reply'.
+type OsvbngPppoeSetSessionIPv6Reply struct {
+	Retval int32 `binapi:"i32,name=retval" json:"retval,omitempty"`
+}
+
+func (m *OsvbngPppoeSetSessionIPv6Reply) Reset() { *m = OsvbngPppoeSetSessionIPv6Reply{} }
+func (*OsvbngPppoeSetSessionIPv6Reply) GetMessageName() string {
+	return "osvbng_pppoe_set_session_ipv6_reply"
+}
+func (*OsvbngPppoeSetSessionIPv6Reply) GetCrcString() string { return "e8d4e804" }
+func (*OsvbngPppoeSetSessionIPv6Reply) GetMessageType() api.MessageType {
+	return api.ReplyMessage
+}
+
+func (m *OsvbngPppoeSetSessionIPv6Reply) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.Retval
+	return size
+}
+func (m *OsvbngPppoeSetSessionIPv6Reply) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeInt32(m.Retval)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngPppoeSetSessionIPv6Reply) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.Retval = buf.DecodeInt32()
+	return nil
+}
+
 func init() { file_osvbng_pppoe_binapi_init() }
 func file_osvbng_pppoe_binapi_init() {
 	api.RegisterMessage((*OsvbngPppoeAddDelSession)(nil), "osvbng_pppoe_add_del_session_0ae5915d")
 	api.RegisterMessage((*OsvbngPppoeAddDelSessionReply)(nil), "osvbng_pppoe_add_del_session_reply_5383d31f")
-	api.RegisterMessage((*OsvbngPppoeSessionDetails)(nil), "osvbng_pppoe_session_details_97890e59")
+	api.RegisterMessage((*OsvbngPppoeSessionDetails)(nil), "osvbng_pppoe_session_details_ca430c5c")
 	api.RegisterMessage((*OsvbngPppoeSessionDump)(nil), "osvbng_pppoe_session_dump_f9e6675e")
+	api.RegisterMessage((*OsvbngPppoeSetDelegatedPrefix)(nil), "osvbng_pppoe_set_delegated_prefix_80a8a97d")
+	api.RegisterMessage((*OsvbngPppoeSetDelegatedPrefixReply)(nil), "osvbng_pppoe_set_delegated_prefix_reply_e8d4e804")
 	api.RegisterMessage((*OsvbngPppoeSetLacTunnel)(nil), "osvbng_pppoe_set_lac_tunnel_19c5a170")
 	api.RegisterMessage((*OsvbngPppoeSetLacTunnelReply)(nil), "osvbng_pppoe_set_lac_tunnel_reply_e8d4e804")
+	api.RegisterMessage((*OsvbngPppoeSetSessionIPv6)(nil), "osvbng_pppoe_set_session_ipv6_aa625d9a")
+	api.RegisterMessage((*OsvbngPppoeSetSessionIPv6Reply)(nil), "osvbng_pppoe_set_session_ipv6_reply_e8d4e804")
 }
 
 // Messages returns list of all messages in this module.
@@ -370,7 +570,11 @@ func AllMessages() []api.Message {
 		(*OsvbngPppoeAddDelSessionReply)(nil),
 		(*OsvbngPppoeSessionDetails)(nil),
 		(*OsvbngPppoeSessionDump)(nil),
+		(*OsvbngPppoeSetDelegatedPrefix)(nil),
+		(*OsvbngPppoeSetDelegatedPrefixReply)(nil),
 		(*OsvbngPppoeSetLacTunnel)(nil),
 		(*OsvbngPppoeSetLacTunnelReply)(nil),
+		(*OsvbngPppoeSetSessionIPv6)(nil),
+		(*OsvbngPppoeSetSessionIPv6Reply)(nil),
 	}
 }

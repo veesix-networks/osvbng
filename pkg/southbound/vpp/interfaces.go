@@ -1426,6 +1426,15 @@ func (v *VPP) renameVPPInterface(oldName, newName string) error {
 	return nil
 }
 
+// afPacketRxQueues returns the host-interface RX queue count, derived from the
+// dataplane worker count so the kernel fans flows across all workers (minimum 1).
+func (v *VPP) afPacketRxQueues() uint16 {
+	if v.numRxQueues > 1 {
+		return uint16(v.numRxQueues)
+	}
+	return 1
+}
+
 func (v *VPP) createVPPHostInterface(linuxIface string) (string, error) {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
@@ -1437,7 +1446,7 @@ func (v *VPP) createVPPHostInterface(linuxIface string) (string, error) {
 		HostIfName:      linuxIface,
 		UseRandomHwAddr: false,
 		Flags:           uint32(af_packet.AF_PACKET_API_FLAG_QDISC_BYPASS | af_packet.AF_PACKET_API_FLAG_CKSUM_GSO),
-		NumRxQueues:     1,
+		NumRxQueues:     v.afPacketRxQueues(),
 	}
 
 	var mac net.HardwareAddr

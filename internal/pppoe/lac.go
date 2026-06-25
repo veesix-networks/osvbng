@@ -140,6 +140,7 @@ func (c *Component) handleLACDecision(event events.Event) {
 		sess.BoundAt = time.Now()
 		sess.pendingAuthType = ""
 		sess.pendingAuthRequestID = ""
+		c.removeSessionFromRABucket(sess)
 
 		var tunneledTo net.IP
 		if data.PeerIP != "" {

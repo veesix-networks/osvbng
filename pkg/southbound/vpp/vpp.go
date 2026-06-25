@@ -17,22 +17,23 @@ import (
 var _ southbound.Southbound = (*VPP)(nil)
 
 type VPP struct {
-	conn           *core.Connection
-	ifMgr          *ifmgr.Manager
-	logger         *logger.Logger
-	fibChan        api.Channel
-	fibMux         sync.Mutex
-	useDPDK        bool
-	rxMode         string
-	asyncWorker    *AsyncWorker
-	statsClient    *StatsClient
-	vrfResolver    func(string) (uint32, bool, bool, error)
-	lcpNs          *netlink.Handle
-	policerNames   map[uint32][2]string
-	policerMu      sync.Mutex
-	schedulerIfs   map[uint32]bool
-	schedulerMu    sync.Mutex
-	aclReg         *aclRegistry
+	conn         *core.Connection
+	ifMgr        *ifmgr.Manager
+	logger       *logger.Logger
+	fibChan      api.Channel
+	fibMux       sync.Mutex
+	useDPDK      bool
+	rxMode       string
+	asyncWorker  *AsyncWorker
+	statsClient  *StatsClient
+	vrfResolver  func(string) (uint32, bool, bool, error)
+	lcpNs        *netlink.Handle
+	policerNames map[uint32][2]string
+	policerMu    sync.Mutex
+	schedulerIfs map[uint32]bool
+	schedulerMu  sync.Mutex
+	aclReg       *aclRegistry
+	numRxQueues  int
 }
 
 type VPPConfig struct {
@@ -41,6 +42,7 @@ type VPPConfig struct {
 	UseDPDK         bool
 	RxMode          string
 	StatsSocketPath string
+	NumRxQueues     int
 }
 
 func NewVPP(cfg VPPConfig) (*VPP, error) {
@@ -71,17 +73,18 @@ func NewVPP(cfg VPPConfig) (*VPP, error) {
 	}
 
 	v := &VPP{
-		conn:           conn,
-		ifMgr:          cfg.IfMgr,
-		logger:         logger.Get(logger.Southbound),
-		fibChan:        fibChan,
-		useDPDK:        cfg.UseDPDK,
-		rxMode:         cfg.RxMode,
-		asyncWorker:    asyncWorker,
-		statsClient:    statsClient,
+		conn:         conn,
+		ifMgr:        cfg.IfMgr,
+		logger:       logger.Get(logger.Southbound),
+		fibChan:      fibChan,
+		useDPDK:      cfg.UseDPDK,
+		rxMode:       cfg.RxMode,
+		asyncWorker:  asyncWorker,
+		statsClient:  statsClient,
 		policerNames: make(map[uint32][2]string),
 		schedulerIfs: make(map[uint32]bool),
 		aclReg:       newACLRegistry(),
+		numRxQueues:  cfg.NumRxQueues,
 	}
 
 	if err := v.LoadInterfaces(); err != nil {

@@ -9,6 +9,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/ethernet_types"
 	vppinterfaces "github.com/veesix-networks/osvbng/pkg/vpp/binapi/interface"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/interface_types"
+	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/ip_types"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/osvbng_pppoe"
 	"go.fd.io/govpp/api"
 )
@@ -209,7 +210,6 @@ func (v *VPP) rollbackPPPoESession(sessionID uint16, swIdx uint32, clientIP net.
 		"original_error", originalErr)
 }
 
-
 func (v *VPP) DeletePPPoESession(sessionID uint16, clientIP net.IP, clientMAC net.HardwareAddr) error {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
@@ -251,7 +251,6 @@ func (v *VPP) DeletePPPoESession(sessionID uint16, clientIP net.IP, clientMAC ne
 
 	return nil
 }
-
 
 func (v *VPP) AddPPPoESessionAsync(sessionID uint16, clientIP net.IP, clientMAC net.HardwareAddr, localMAC net.HardwareAddr, encapIfIndex uint32, outerVLAN uint16, innerVLAN uint16, decapVrfID uint32, pppMTU uint16, policy southbound.MSSClampPolicy, callback func(uint32, error)) {
 	clientAddr, err := v.toAddress(clientIP)
@@ -371,7 +370,6 @@ func (v *VPP) AddPPPoESessionAsync(sessionID uint16, clientIP net.IP, clientMAC 
 	})
 }
 
-
 func (v *VPP) DeletePPPoESessionAsync(sessionID uint16, clientIP net.IP, clientMAC net.HardwareAddr, callback func(error)) {
 	clientAddr, err := v.toAddress(clientIP)
 	if err != nil {
@@ -431,4 +429,186 @@ func (v *VPP) SetPPPoESessionLACTunneled(swIfIndex uint32, lacL2TPSessionIndex u
 		return fmt.Errorf("set lac tunnel rv=%d", reply.Retval)
 	}
 	return nil
+}
+
+func (v *VPP) PPPoESetSessionIPv6(swIfIndex uint32, clientIP net.IP, isAdd bool) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	ip6 := clientIP.To16()
+	if ip6 == nil || clientIP.To4() != nil {
+		return fmt.Errorf("invalid IPv6 address: %s", clientIP)
+	}
+
+	var clientAddr ip_types.IP6Address
+	copy(clientAddr[:], ip6)
+
+	req := &osvbng_pppoe.OsvbngPppoeSetSessionIPv6{
+		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+		ClientIP:  clientAddr,
+		IsAdd:     isAdd,
+	}
+
+	reply := &osvbng_pppoe.OsvbngPppoeSetSessionIPv6Reply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("set pppoe session ipv6: %w", err)
+	}
+	if reply.Retval != 0 {
+		return fmt.Errorf("set pppoe session ipv6 failed: retval=%d", reply.Retval)
+	}
+
+	if isAdd {
+		v.ifMgr.AddIPv6Address(swIfIndex, clientIP)
+	} else {
+		v.ifMgr.RemoveIPv6Address(swIfIndex, clientIP)
+	}
+
+	v.logger.Debug("Set PPPoE session IPv6", "sw_if_index", swIfIndex, "client_ip", clientIP.String(), "is_add", isAdd)
+	return nil
+}
+
+func (v *VPP) PPPoESetDelegatedPrefix(swIfIndex uint32, prefix net.IPNet, nextHop net.IP, isAdd bool) error {
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	prefixLen, _ := prefix.Mask.Size()
+	ip6 := prefix.IP.To16()
+	if ip6 == nil || prefix.IP.To4() != nil {
+		return fmt.Errorf("invalid IPv6 prefix: %s", prefix.String())
+	}
+
+	var prefixAddr ip_types.IP6Address
+	copy(prefixAddr[:], ip6)
+
+	var nextHopAddr ip_types.IP6Address
+	if nextHop != nil {
+		nh6 := nextHop.To16()
+		if nh6 == nil {
+			return fmt.Errorf("invalid IPv6 next-hop: %s", nextHop)
+		}
+		copy(nextHopAddr[:], nh6)
+	}
+
+	req := &osvbng_pppoe.OsvbngPppoeSetDelegatedPrefix{
+		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+		Prefix: ip_types.Prefix{
+			Address: ip_types.Address{
+				Af: ip_types.ADDRESS_IP6,
+				Un: ip_types.AddressUnionIP6(prefixAddr),
+			},
+			Len: uint8(prefixLen),
+		},
+		NextHop: nextHopAddr,
+		IsAdd:   isAdd,
+	}
+
+	reply := &osvbng_pppoe.OsvbngPppoeSetDelegatedPrefixReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("set pppoe delegated prefix: %w", err)
+	}
+	if reply.Retval != 0 {
+		return fmt.Errorf("set pppoe delegated prefix failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Debug("Set PPPoE delegated prefix", "sw_if_index", swIfIndex, "prefix", prefix.String(), "next_hop", nextHop, "is_add", isAdd)
+	return nil
+}
+
+func (v *VPP) PPPoESetSessionIPv6Async(swIfIndex uint32, clientIP net.IP, isAdd bool, callback func(error)) {
+	ip6 := clientIP.To16()
+	if ip6 == nil || clientIP.To4() != nil {
+		callback(fmt.Errorf("invalid IPv6 address: %s", clientIP))
+		return
+	}
+
+	var clientAddr ip_types.IP6Address
+	copy(clientAddr[:], ip6)
+
+	req := &osvbng_pppoe.OsvbngPppoeSetSessionIPv6{
+		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+		ClientIP:  clientAddr,
+		IsAdd:     isAdd,
+	}
+
+	v.asyncWorker.SendAsync(req, func(reply api.Message, err error) {
+		if err != nil {
+			callback(err)
+			return
+		}
+		r, ok := reply.(*osvbng_pppoe.OsvbngPppoeSetSessionIPv6Reply)
+		if !ok {
+			callback(fmt.Errorf("unexpected reply type: %T", reply))
+			return
+		}
+		if r.Retval != 0 {
+			callback(fmt.Errorf("VPP error: retval=%d", r.Retval))
+			return
+		}
+		if isAdd {
+			v.ifMgr.AddIPv6Address(swIfIndex, clientIP)
+		} else {
+			v.ifMgr.RemoveIPv6Address(swIfIndex, clientIP)
+		}
+		v.logger.Debug("Set PPPoE session IPv6 (async)", "sw_if_index", swIfIndex, "client_ip", clientIP.String(), "is_add", isAdd)
+		callback(nil)
+	})
+}
+
+func (v *VPP) PPPoESetDelegatedPrefixAsync(swIfIndex uint32, prefix net.IPNet, nextHop net.IP, isAdd bool, callback func(error)) {
+	prefixLen, _ := prefix.Mask.Size()
+	ip6 := prefix.IP.To16()
+	if ip6 == nil || prefix.IP.To4() != nil {
+		callback(fmt.Errorf("invalid IPv6 prefix: %s", prefix.String()))
+		return
+	}
+
+	var prefixAddr ip_types.IP6Address
+	copy(prefixAddr[:], ip6)
+
+	var nextHopAddr ip_types.IP6Address
+	if nextHop != nil {
+		nh6 := nextHop.To16()
+		if nh6 == nil {
+			callback(fmt.Errorf("invalid IPv6 next-hop: %s", nextHop))
+			return
+		}
+		copy(nextHopAddr[:], nh6)
+	}
+
+	req := &osvbng_pppoe.OsvbngPppoeSetDelegatedPrefix{
+		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+		Prefix: ip_types.Prefix{
+			Address: ip_types.Address{
+				Af: ip_types.ADDRESS_IP6,
+				Un: ip_types.AddressUnionIP6(prefixAddr),
+			},
+			Len: uint8(prefixLen),
+		},
+		NextHop: nextHopAddr,
+		IsAdd:   isAdd,
+	}
+
+	v.asyncWorker.SendAsync(req, func(reply api.Message, err error) {
+		if err != nil {
+			callback(err)
+			return
+		}
+		r, ok := reply.(*osvbng_pppoe.OsvbngPppoeSetDelegatedPrefixReply)
+		if !ok {
+			callback(fmt.Errorf("unexpected reply type: %T", reply))
+			return
+		}
+		if r.Retval != 0 {
+			callback(fmt.Errorf("VPP error: retval=%d", r.Retval))
+			return
+		}
+		v.logger.Debug("Set PPPoE delegated prefix (async)", "sw_if_index", swIfIndex, "prefix", prefix.String(), "next_hop", nextHop, "is_add", isAdd)
+		callback(nil)
+	})
 }

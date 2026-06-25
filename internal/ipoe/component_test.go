@@ -15,6 +15,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 
+	"github.com/veesix-networks/osvbng/internal/ra"
 	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/config"
@@ -63,7 +64,7 @@ func TestLinkLocalFromMAC(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := linkLocalFromMAC(tt.mac)
+			got := ra.LinkLocalFromMAC(tt.mac)
 
 			if tt.want == nil {
 				if got != nil {
@@ -73,7 +74,7 @@ func TestLinkLocalFromMAC(t *testing.T) {
 			}
 
 			if !got.Equal(tt.want) {
-				t.Fatalf("linkLocalFromMAC(%s) = %s, want %s", tt.mac, got, tt.want)
+				t.Fatalf("ra.LinkLocalFromMAC(%s) = %s, want %s", tt.mac, got, tt.want)
 			}
 			if !got.IsLinkLocalUnicast() {
 				t.Fatalf("output %s is not a link-local unicast", got)
@@ -181,14 +182,14 @@ func newNSPTestComponent(t *testing.T, virtualMAC net.HardwareAddr, active bool)
 	srg := &fakeSRGProvider{active: active, virtualMAC: virtualMAC, srgForGrp: "access1"}
 
 	c := &Component{
-		Base:          component.NewBase("ipoe-test"),
-		logger:        logger.NewTest(),
-		eventBus:      bus,
-		srgMgr:        srg,
-		ifMgr:         ifMgr,
-		cfgMgr:        &fakeConfigManager{cfg: cfg},
-		raBuckets:     make(map[int][]string),
-		raGroupStates: make(map[string]*raGroupState),
+		Base:      component.NewBase("ipoe-test"),
+		logger:    logger.NewTest(),
+		eventBus:  bus,
+		srgMgr:    srg,
+		ifMgr:     ifMgr,
+		cfgMgr:    &fakeConfigManager{cfg: cfg},
+		raBuckets: make(map[int][]string),
+		raEngine:  ra.NewEngine(true, logger.NewTest()),
 	}
 	return c, bus
 }
@@ -256,7 +257,7 @@ func TestRAPrefixOnLink(t *testing.T) {
 			IPv6:      &layers.IPv6{SrcIP: net.ParseIP("fe80::baad:f00d")},
 		}
 		raConfig := southbound.IPv6RAConfig{Managed: true, Other: true, RouterLifetime: 1800}
-		prefixes := []raPrefixInfo{{network: "2001:db8:0:1::/64", validTime: 7200, preferredTime: 3600, onLink: onLink}}
+		prefixes := []ra.PrefixInfo{{Network: "2001:db8:0:1::/64", ValidTime: 7200, PreferredTime: 3600, OnLink: onLink}}
 
 		if err := c.sendRAResponse(pkt, raConfig, prefixes); err != nil {
 			t.Fatalf("sendRAResponse returned error: %v", err)
@@ -363,7 +364,7 @@ func TestRARefreshInterval(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := raRefreshInterval(tt.rc); got != tt.want {
+			if got := ra.RefreshInterval(tt.rc); got != tt.want {
 				t.Fatalf("raRefreshInterval = %s, want %s", got, tt.want)
 			}
 		})
@@ -528,29 +529,29 @@ func TestRATemplateMatchesFullBuild(t *testing.T) {
 
 	c, _ := newNSPTestComponent(t, net.HardwareAddr{0xaa, 0xc1, 0xab, 0x1f, 0xe2, 0xfa}, true)
 	raConfig := southbound.IPv6RAConfig{Managed: true, Other: true, RouterLifetime: 1800}
-	prefixes := []raPrefixInfo{{network: "2001:db8:0:1::/64", validTime: 7200, preferredTime: 3600, onLink: false}}
+	prefixes := []ra.PrefixInfo{{Network: "2001:db8:0:1::/64", ValidTime: 7200, PreferredTime: 3600, OnLink: false}}
 	srcMAC := net.HardwareAddr{0xaa, 0xc1, 0xab, 0x1f, 0xe2, 0xfa}
-	srcIP := linkLocalFromMAC(srcMAC)
+	srcIP := ra.LinkLocalFromMAC(srcMAC)
 
 	// The template is a full serialize with the dst and checksum zeroed — the same
-	// bytes raGroupStateFor caches.
-	tmpl, err := c.buildRARawData(raConfig, prefixes, srcMAC, srcIP, net.IPv6zero)
+	// bytes the RA engine caches.
+	tmpl, err := ra.BuildRARawData(raConfig, prefixes, srcMAC, srcIP, net.IPv6zero, true, c.logger)
 	if err != nil {
-		t.Fatalf("buildRARawData(template): %v", err)
+		t.Fatalf("BuildRARawData(template): %v", err)
 	}
 	tmpl[42], tmpl[43] = 0, 0
 
 	// A replicated-and-patched RA must be byte-identical to a full serialize for the
 	// same destination — this is the checksum-fold safety net for both unicast and multicast.
 	for _, dst := range []net.IP{net.ParseIP("fe80::baad:f00d"), net.ParseIP("ff02::1")} {
-		full, err := c.buildRARawData(raConfig, prefixes, srcMAC, srcIP, dst)
+		full, err := ra.BuildRARawData(raConfig, prefixes, srcMAC, srcIP, dst, true, c.logger)
 		if err != nil {
-			t.Fatalf("buildRARawData(%s): %v", dst, err)
+			t.Fatalf("BuildRARawData(%s): %v", dst, err)
 		}
 		repl := make([]byte, len(tmpl))
 		copy(repl, tmpl)
 		copy(repl[24:40], dst.To16())
-		raPatchChecksum(repl)
+		ra.PatchChecksum(repl)
 		if !bytes.Equal(full, repl) {
 			t.Fatalf("templated RA for %s differs from full build:\n full=%x\n repl=%x", dst, full, repl)
 		}
@@ -561,7 +562,7 @@ func TestProcessNSPacket(t *testing.T) {
 	t.Parallel()
 
 	vmac := net.HardwareAddr{0xaa, 0xc1, 0xab, 0x1f, 0xe2, 0xfa}
-	ourLinkLocal := linkLocalFromMAC(vmac)
+	ourLinkLocal := ra.LinkLocalFromMAC(vmac)
 
 	t.Run("solicited_unicast_NS_for_our_link_local", func(t *testing.T) {
 		c, bus := newNSPTestComponent(t, vmac, true)
@@ -661,7 +662,7 @@ func TestProcessNSPacketCVLANGate(t *testing.T) {
 	t.Parallel()
 
 	vmac := net.HardwareAddr{0xaa, 0xc1, 0xab, 0x1f, 0xe2, 0xfa}
-	ourLinkLocal := linkLocalFromMAC(vmac)
+	ourLinkLocal := ra.LinkLocalFromMAC(vmac)
 	host := net.ParseIP("fe80::baad:f00d")
 
 	cfg := &config.Config{

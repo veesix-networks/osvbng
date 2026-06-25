@@ -13,6 +13,7 @@ import (
 	"github.com/google/gopacket/layers"
 	"github.com/google/uuid"
 	pppdisp "github.com/veesix-networks/osvbng/internal/ppp"
+	"github.com/veesix-networks/osvbng/internal/ra"
 	"github.com/veesix-networks/osvbng/pkg/aaa"
 	"github.com/veesix-networks/osvbng/pkg/allocator"
 	aaacfg "github.com/veesix-networks/osvbng/pkg/config/aaa"
@@ -70,6 +71,7 @@ func (s *SessionState) initPPP() {
 		},
 		OnProtocolReject:   s.handleProtocolReject,
 		SendProtocolReject: s.sendProtocolReject,
+		HandleIPv6:         s.handleIPv6Packet,
 	}
 }
 
@@ -550,6 +552,14 @@ func (s *SessionState) startNCP() {
 	s.ipcp.FSM().Up()
 	s.ipcp.FSM().Open()
 
+	// Set the IPv6CP local interface identifier deterministically from the
+	// BNG-side MAC so the negotiated link-local matches the source the RA / NA
+	// path advertises (RFC 5072 §5); without this the default IID is random and
+	// the advertised gateway would not match the PPP interface identity.
+	if bngMAC, _ := s.bngSourceMAC(); len(bngMAC) == 6 {
+		s.ipv6cp.SetInterfaceID(ppp.IPv6CPConfigFromMAC(bngMAC).InterfaceID)
+	}
+
 	s.ipv6cp.FSM().Up()
 	s.ipv6cp.FSM().Open()
 }
@@ -612,6 +622,10 @@ func (s *SessionState) allocateIANAFromPool() {
 	s.IPv6Address = allocated
 	s.allocatedIANAPool = poolName
 	s.AllocCtx.AllocatedIANAPool = poolName
+	// Make DHCPv6 reuse this address rather than allocating a second one: when
+	// a client later solicits, dhcp.ResolveV6 sees ctx.IPv6Address already set
+	// and binds it instead of pulling a fresh address from the pool.
+	s.AllocCtx.IPv6Address = allocated
 	s.component.logger.Debug("Allocated IPv6 IANA from pool",
 		"session_id", s.SessionID,
 		"pool", poolName,
@@ -661,12 +675,15 @@ func (s *SessionState) onIPCPDown() {
 func (s *SessionState) onIPv6CPUp() {
 	s.component.logger.Debug("IPv6CP up", "session_id", s.SessionID)
 	s.ipv6cpOpen = true
+	s.component.placeSessionInRABucket(s)
 	s.checkOpen()
 }
 
 func (s *SessionState) onIPv6CPDown() {
 	s.component.logger.Debug("IPv6CP down", "session_id", s.SessionID)
 	s.ipv6cpOpen = false
+	s.component.removeSessionFromRABucket(s)
+	s.nextRADue = time.Time{}
 }
 
 func (s *SessionState) checkOpen() {
@@ -895,7 +912,20 @@ func (s *SessionState) sendPPPPacket(proto uint16, code, id uint8, data []byte) 
 	pppPayload[3] = id
 	binary.BigEndian.PutUint16(pppPayload[4:6], uint16(pktLen))
 	copy(pppPayload[6:], data)
+	s.publishSessionFrame(proto, pppPayload)
+}
 
+// sendIPv6Packet sends a raw IPv6 datagram over the session as PPP protocol
+// 0x0057 (RFC 5072 §2 — a single IPv6 packet, no PPP control header), for the
+// in-band RA / NA / DHCPv6 replies the dataplane does not originate.
+func (s *SessionState) sendIPv6Packet(ipv6 []byte) {
+	pppPayload := make([]byte, 2+len(ipv6))
+	binary.BigEndian.PutUint16(pppPayload[0:2], ppp.ProtoIPv6)
+	copy(pppPayload[2:], ipv6)
+	s.publishSessionFrame(ppp.ProtoIPv6, pppPayload)
+}
+
+func (s *SessionState) publishSessionFrame(proto uint16, pppPayload []byte) {
 	pppoeLayer := &layers.PPPoE{
 		Version:   pppoeVersion,
 		Type:      pppoeType,
@@ -911,35 +941,15 @@ func (s *SessionState) sendPPPPacket(proto uint16, code, id uint8, data []byte) 
 		return
 	}
 
-	var srcMAC string
-	var parentSwIfIndex uint32
-	if s.component.srgMgr != nil {
-		srgName := s.SRGName
-		if srgName == "" {
-			srgName = s.component.resolveSRGName(s.OuterVLAN, s.InnerVLAN)
-		}
-		if vmac := s.component.srgMgr.GetVirtualMAC(srgName); vmac != nil {
-			srcMAC = vmac.String()
-		}
-	}
-	if s.component.ifMgr != nil {
-		if iface := s.component.ifMgr.Get(s.EncapIfIndex); iface != nil {
-			parentSwIfIndex = iface.SupSwIfIndex
-		}
-		if srcMAC == "" {
-			if parent := s.component.ifMgr.Get(parentSwIfIndex); parent != nil && len(parent.MAC) >= 6 {
-				srcMAC = net.HardwareAddr(parent.MAC[:6]).String()
-			}
-		}
-	}
-	if srcMAC == "" {
+	srcMAC, parentSwIfIndex := s.bngSourceMAC()
+	if srcMAC == nil {
 		s.component.logger.Error("No source MAC available", "svlan", s.OuterVLAN)
 		return
 	}
 
 	egressPayload := models.EgressPacketPayload{
 		DstMAC:    s.MAC.String(),
-		SrcMAC:    srcMAC,
+		SrcMAC:    srcMAC.String(),
 		OuterVLAN: s.OuterVLAN,
 		InnerVLAN: s.InnerVLAN,
 		OuterTPID: s.component.ifMgr.OuterTPID(s.EncapIfIndex),
@@ -947,10 +957,8 @@ func (s *SessionState) sendPPPPacket(proto uint16, code, id uint8, data []byte) 
 		RawData:   buf.Bytes(),
 	}
 
-	s.component.logger.Debug("Sending PPP packet",
+	s.component.logger.Debug("Sending PPP session frame",
 		"proto", fmt.Sprintf("0x%04x", proto),
-		"code", code,
-		"id", id,
 		"pppoe_session_id", s.PPPoESessionID)
 
 	s.component.eventBus.Publish(events.TopicEgress, events.Event{
@@ -960,6 +968,113 @@ func (s *SessionState) sendPPPPacket(proto uint16, code, id uint8, data []byte) 
 			Packet:   egressPayload,
 		},
 	})
+}
+
+// bngSourceMAC resolves the BNG-side source MAC for egress (the SRG virtual MAC
+// when set, else the access parent's hardware MAC) and the parent sw_if_index.
+func (s *SessionState) bngSourceMAC() (net.HardwareAddr, uint32) {
+	var srcMAC net.HardwareAddr
+	var parentSwIfIndex uint32
+	if s.component.srgMgr != nil {
+		srgName := s.SRGName
+		if srgName == "" {
+			srgName = s.component.resolveSRGName(s.OuterVLAN, s.InnerVLAN)
+		}
+		if vmac := s.component.srgMgr.GetVirtualMAC(srgName); vmac != nil {
+			srcMAC = vmac
+		}
+	}
+	if s.component.ifMgr != nil {
+		if iface := s.component.ifMgr.Get(s.EncapIfIndex); iface != nil {
+			parentSwIfIndex = iface.SupSwIfIndex
+		}
+		if srcMAC == nil {
+			if parent := s.component.ifMgr.Get(parentSwIfIndex); parent != nil && len(parent.MAC) >= 6 {
+				srcMAC = net.HardwareAddr(parent.MAC[:6])
+			}
+		}
+	}
+	return srcMAC, parentSwIfIndex
+}
+
+// handleIPv6Packet receives a raw IPv6 datagram punted from the in-band PPP
+// 0x0057 path and routes the control-plane messages: Router Solicitation -> RA,
+// Neighbor Solicitation -> NA, DHCPv6 (UDP/547) -> the DHCPv6 handler. Bulk IPv6
+// data is forwarded by the dataplane and never reaches here. Runs under s.mu.
+func (s *SessionState) handleIPv6Packet(payload []byte) error {
+	pkt := gopacket.NewPacket(payload, layers.LayerTypeIPv6, gopacket.Default)
+	ip6, _ := pkt.Layer(layers.LayerTypeIPv6).(*layers.IPv6)
+	if ip6 == nil {
+		return nil
+	}
+	if pkt.Layer(layers.LayerTypeICMPv6RouterSolicitation) != nil {
+		return s.processRSPacket(ip6.SrcIP)
+	}
+	if nsLayer := pkt.Layer(layers.LayerTypeICMPv6NeighborSolicitation); nsLayer != nil {
+		return s.processNSPacket(ip6.SrcIP, nsLayer.(*layers.ICMPv6NeighborSolicitation).TargetAddress)
+	}
+	if udp, _ := pkt.Layer(layers.LayerTypeUDP).(*layers.UDP); udp != nil && udp.DstPort == 547 {
+		return s.handleDHCPv6(ip6.SrcIP, udp.Payload)
+	}
+	return nil
+}
+
+// processRSPacket answers a Router Solicitation with an RA sourced from the
+// BNG-side PPP link-local (off-link PIO by default, no Source Link-Layer Address
+// option on the point-to-point link).
+func (s *SessionState) processRSPacket(peerLinkLocal net.IP) error {
+	cfg, err := s.component.cfgMgr.GetRunning()
+	if err != nil || cfg == nil {
+		return nil
+	}
+	match, ok := s.component.cfgMgr.LookupSubscriberGroup(s.OuterVLAN, s.InnerVLAN)
+	if !ok {
+		return nil
+	}
+	bngMAC, _ := s.bngSourceMAC()
+	if bngMAC == nil {
+		return nil
+	}
+
+	dstIP := peerLinkLocal
+	if len(dstIP) == 0 || dstIP.IsUnspecified() {
+		dstIP = net.ParseIP("ff02::1")
+	}
+
+	raConfig, prefixes := ra.ResolveGroupRA(cfg, match.Group)
+	raw, err := ra.BuildRARawData(raConfig, prefixes, bngMAC, ra.LinkLocalFromMAC(bngMAC), dstIP, false, s.component.logger)
+	if err != nil {
+		return err
+	}
+	s.sendIPv6Packet(raw)
+	return nil
+}
+
+// processNSPacket answers a Neighbor Solicitation for the BNG-side PPP
+// link-local with an NA, serving NUD of the gateway over the point-to-point
+// link. Solicitations for any other target are ignored.
+func (s *SessionState) processNSPacket(peer, target net.IP) error {
+	bngMAC, _ := s.bngSourceMAC()
+	if bngMAC == nil {
+		return nil
+	}
+	bngLL := ra.LinkLocalFromMAC(bngMAC)
+	if !target.Equal(bngLL) {
+		return nil
+	}
+
+	solicited := len(peer) != 0 && !peer.IsUnspecified()
+	dstIP := peer
+	if !solicited {
+		dstIP = net.ParseIP("ff02::1")
+	}
+
+	raw, err := ra.BuildNARawData(bngLL, bngLL, dstIP, bngMAC, solicited, false)
+	if err != nil {
+		return err
+	}
+	s.sendIPv6Packet(raw)
+	return nil
 }
 
 func (s *SessionState) terminate() {

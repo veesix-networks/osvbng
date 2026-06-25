@@ -169,6 +169,11 @@ type PPPSession struct {
 	IPCPState   string
 	IPv6CPState string
 
+	// DHCPv6-over-PPP lease state, carried through the HA checkpoint so a
+	// standby can release the provider lease and validate Renew after promotion.
+	DUID          []byte
+	IPv6LeaseTime uint32
+
 	Username string
 
 	AAASessionID string

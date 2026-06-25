@@ -167,6 +167,24 @@ func (c *Component) setupSessionRestore(ctx context.Context, sess *SessionState)
 		return fmt.Errorf("apply service group bindings: %w", err)
 	}
 
+	// Re-apply the DHCPv6-bound IPv6 address / delegated prefix: the plugin
+	// re-creates the session with v6 state cleared, so the restored binding
+	// must be re-programmed on the fresh interface.
+	if sess.IPv6Address != nil {
+		if err := c.vpp.PPPoESetSessionIPv6(swIfIndex, sess.IPv6Address, true); err != nil {
+			c.logger.Warn("Failed to re-apply IPv6 on restored PPPoE session", "session_id", sess.SessionID, "error", err)
+		}
+	}
+	if sess.IPv6Prefix != nil {
+		nextHop := sess.IPv6Address
+		if nextHop == nil {
+			nextHop = net.IPv6zero
+		}
+		if err := c.vpp.PPPoESetDelegatedPrefix(swIfIndex, *sess.IPv6Prefix, nextHop, true); err != nil {
+			c.logger.Warn("Failed to re-apply delegated prefix on restored PPPoE session", "session_id", sess.SessionID, "error", err)
+		}
+	}
+
 	c.setupSessionUnnumbered(sess.SessionID, swIfIndex, c.resolveUnnumberedLoopback(sess))
 
 	// MixedAccess exclusivity is claimed inside installInMemoryState ->

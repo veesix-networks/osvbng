@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/gopacket/layers"
+	"github.com/veesix-networks/osvbng/internal/ra"
 	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/config"
@@ -106,7 +107,7 @@ func TestProcessRSPacketFamilyGate(t *testing.T) {
 
 func TestProcessNSPacketFamilyGate(t *testing.T) {
 	vmac := net.HardwareAddr{0xaa, 0xc1, 0xab, 0x1f, 0xe2, 0xfa}
-	ourLinkLocal := linkLocalFromMAC(vmac)
+	ourLinkLocal := ra.LinkLocalFromMAC(vmac)
 	host := net.ParseIP("fe80::baad:f00d")
 
 	c, bus := familyTestComponent(t, &subscriber.SubscriberGroup{

@@ -271,6 +271,8 @@ func sessionToCheckpoint(sess models.SubscriberSession) *hapb.SessionCheckpoint 
 		cp.Ipv6CpState = s.IPv6CPState
 		cp.Ipv4Pool = s.IPv4Pool
 		cp.IanaPool = s.IANAPool
+		cp.Dhcpv6Duid = s.DUID
+		cp.Ipv6LeaseTime = s.IPv6LeaseTime
 		cp.LcpMagic = s.LCPMagic
 		cp.AaaAttributes = s.Attributes
 		cp.NegotiatedPppMtu = uint32(s.NegotiatedPPPMTU)

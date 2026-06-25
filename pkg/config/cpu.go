@@ -93,6 +93,11 @@ func (r *ResolvedCPU) WriteEnvFile(path string) error {
 }
 
 // CPCoreCount returns the number of control plane cores in the resolved layout.
+// WorkerCoreCount returns the number of dataplane worker threads.
+func (r *ResolvedCPU) WorkerCoreCount() int {
+	return countCoresFromSet(r.WorkerCores)
+}
+
 func (r *ResolvedCPU) CPCoreCount() int {
 	cores, err := parseCoreSet(r.CPCores)
 	if err != nil {
