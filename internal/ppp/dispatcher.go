@@ -19,8 +19,8 @@ import (
 )
 
 var (
-	ErrFrameShort           = errors.New("ppp dispatcher: frame shorter than 4 header bytes")
-	ErrFrameLengthMismatch  = errors.New("ppp dispatcher: declared length exceeds payload")
+	ErrFrameShort          = errors.New("ppp dispatcher: frame shorter than 4 header bytes")
+	ErrFrameLengthMismatch = errors.New("ppp dispatcher: declared length exceeds payload")
 )
 
 // Dispatcher holds references to the per-session FSMs and a set of
@@ -60,6 +60,13 @@ type Dispatcher struct {
 	// arrives. The host typically wraps the original frame and sends
 	// it back as LCP Protocol-Reject.
 	SendProtocolReject func(proto uint16, payload []byte)
+
+	// HandleIPv6 receives the raw IPv6 datagram carried in PPP protocol
+	// 0x0057 (RFC 5072 §2 — a bare IPv6 packet, no PPP control header).
+	// Only the control plane's RS / NS / DHCPv6 punts arrive here; bulk
+	// IPv6 data is forwarded by the dataplane and never reaches the
+	// dispatcher. Called only in the network phase with IPv6CP Opened.
+	HandleIPv6 func(payload []byte) error
 }
 
 // HandleFrame parses a PPP frame and routes it. `proto` is the PPP
@@ -71,6 +78,17 @@ type Dispatcher struct {
 // the FSM Input methods and the host callbacks all read/write
 // session state.
 func (d *Dispatcher) HandleFrame(proto uint16, payload []byte) error {
+	// IPv6 (0x0057) carries a raw IPv6 datagram with no PPP control header,
+	// so it must be handled before the code/id/length parse below. Punt it
+	// up only once IPv6CP is Opened in the network phase; otherwise drop.
+	if proto == ppp.ProtoIPv6 {
+		if d.HandleIPv6 != nil && d.inNetworkPhase() &&
+			d.IPv6CP != nil && d.IPv6CP.FSM().State() == ppp.Opened {
+			return d.HandleIPv6(payload)
+		}
+		return nil
+	}
+
 	if len(payload) < 4 {
 		return ErrFrameShort
 	}

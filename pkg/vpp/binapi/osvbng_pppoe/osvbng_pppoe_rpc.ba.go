@@ -15,7 +15,9 @@ import (
 type RPCService interface {
 	OsvbngPppoeAddDelSession(ctx context.Context, in *OsvbngPppoeAddDelSession) (*OsvbngPppoeAddDelSessionReply, error)
 	OsvbngPppoeSessionDump(ctx context.Context, in *OsvbngPppoeSessionDump) (RPCService_OsvbngPppoeSessionDumpClient, error)
+	OsvbngPppoeSetDelegatedPrefix(ctx context.Context, in *OsvbngPppoeSetDelegatedPrefix) (*OsvbngPppoeSetDelegatedPrefixReply, error)
 	OsvbngPppoeSetLacTunnel(ctx context.Context, in *OsvbngPppoeSetLacTunnel) (*OsvbngPppoeSetLacTunnelReply, error)
+	OsvbngPppoeSetSessionIPv6(ctx context.Context, in *OsvbngPppoeSetSessionIPv6) (*OsvbngPppoeSetSessionIPv6Reply, error)
 }
 
 type serviceClient struct {
@@ -78,8 +80,26 @@ func (c *serviceClient_OsvbngPppoeSessionDumpClient) Recv() (*OsvbngPppoeSession
 	}
 }
 
+func (c *serviceClient) OsvbngPppoeSetDelegatedPrefix(ctx context.Context, in *OsvbngPppoeSetDelegatedPrefix) (*OsvbngPppoeSetDelegatedPrefixReply, error) {
+	out := new(OsvbngPppoeSetDelegatedPrefixReply)
+	err := c.conn.Invoke(ctx, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, api.RetvalToVPPApiError(out.Retval)
+}
+
 func (c *serviceClient) OsvbngPppoeSetLacTunnel(ctx context.Context, in *OsvbngPppoeSetLacTunnel) (*OsvbngPppoeSetLacTunnelReply, error) {
 	out := new(OsvbngPppoeSetLacTunnelReply)
+	err := c.conn.Invoke(ctx, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, api.RetvalToVPPApiError(out.Retval)
+}
+
+func (c *serviceClient) OsvbngPppoeSetSessionIPv6(ctx context.Context, in *OsvbngPppoeSetSessionIPv6) (*OsvbngPppoeSetSessionIPv6Reply, error) {
+	out := new(OsvbngPppoeSetSessionIPv6Reply)
 	err := c.conn.Invoke(ctx, in, out)
 	if err != nil {
 		return nil, err

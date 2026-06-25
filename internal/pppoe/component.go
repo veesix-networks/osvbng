@@ -18,11 +18,13 @@ import (
 	"github.com/google/uuid"
 	hapb "github.com/veesix-networks/osvbng/api/proto/ha"
 	pppdisp "github.com/veesix-networks/osvbng/internal/ppp"
+	"github.com/veesix-networks/osvbng/internal/ra"
 	"github.com/veesix-networks/osvbng/pkg/allocator"
 	"github.com/veesix-networks/osvbng/pkg/cache"
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/dataplane"
+	"github.com/veesix-networks/osvbng/pkg/dhcp6"
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/ha"
 	"github.com/veesix-networks/osvbng/pkg/ifmgr"
@@ -73,6 +75,23 @@ type Component struct {
 	ipv4Index        map[string]*SessionState
 	ipv6Index        map[string]*SessionState
 	sessionMu        sync.RWMutex
+
+	// Periodic RA engine. raEngine caches the per-group RA template (no
+	// Source Link-Layer Address option on the point-to-point link). RA bucket
+	// membership is tied to the IPv6CP lifecycle, not the broad session
+	// indexes, so only locally-terminated IPv6-up sessions are advertised to.
+	raEngine      *ra.Engine
+	raBuckets     map[int][]string
+	raBucketMu    sync.RWMutex
+	raBucketCount int
+
+	// DHCPv6 over PPP. dhcp6Providers is the same encap-agnostic provider map
+	// IPoE uses (keyed by mode: local/relay/proxy); empty means DHCPv6 is not
+	// configured and in-band UDP-547 packets are dropped. dhcp6Sem bounds the
+	// concurrent provider I/O so it never runs on the receive path under the
+	// session lock.
+	dhcp6Providers map[string]dhcp6.DHCPProvider
+	dhcp6Sem       chan struct{}
 
 	registry *allocator.Registry
 
@@ -147,6 +166,11 @@ type SessionState struct {
 	ipcpOpen   bool
 	ipv6cpOpen bool
 
+	// nextRADue is when this session's periodic RA must next be sent to keep
+	// the subscriber's default route alive. Zero means due immediately (set on
+	// IPv6CP up); maintained by the periodic emitter.
+	nextRADue time.Time
+
 	pap            *ppp.PAPHandler
 	chap           *ppp.CHAPHandler
 	chapChallenge  []byte
@@ -189,6 +213,15 @@ type SessionState struct {
 	allocatedPool     string
 	allocatedIANAPool string
 
+	// DHCPv6-over-PPP lease state. DHCPv6DUID keys the provider lease (so it
+	// can be released on teardown and validated on Renew); IPv6LeaseTime /
+	// IPv6BoundAt record the IA-NA lease. ClientLinkLocal is the reply
+	// destination, learned from the inbound DHCPv6 / RS source.
+	DHCPv6DUID      []byte
+	IPv6LeaseTime   uint32
+	IPv6BoundAt     time.Time
+	ClientLinkLocal net.IP
+
 	MixedAccess bool
 
 	// L2TPBinding is set when this PPPoE session has been handed off to
@@ -202,7 +235,7 @@ type SessionState struct {
 	mu        sync.Mutex
 }
 
-func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manager) (*Component, error) {
+func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manager, dhcp6Providers map[string]dhcp6.DHCPProvider) (*Component, error) {
 	log := logger.Get(logger.PPPoE)
 
 	cookieMgr, err := pppoe.NewCookieManager(cookieTTL)
@@ -233,6 +266,10 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 		usernameIndex:    make(map[string]*SessionState),
 		ipv4Index:        make(map[string]*SessionState),
 		ipv6Index:        make(map[string]*SessionState),
+		raEngine:         ra.NewEngine(false, log),
+		raBuckets:        make(map[int][]string),
+		dhcp6Providers:   dhcp6Providers,
+		dhcp6Sem:         make(chan struct{}, 16),
 		registry:         allocator.GetGlobalRegistry(),
 		pppoeChan:        deps.PPPChan,
 		nextSessionID:    1,
@@ -321,6 +358,8 @@ func (c *Component) removeFromIndexes(sess *SessionState) {
 		owner := session.Owner{Protocol: session.ProtoPPPoE, SessionID: sess.SessionID, Key: tk}
 		c.exclusivity.Release(tk, owner)
 	}
+	c.removeSessionFromRABucket(sess)
+	c.releaseDHCPv6Lease(sess)
 }
 
 func (c *Component) isMixedAccessSVLAN(svlan uint16) bool {
@@ -392,6 +431,12 @@ func (c *Component) Start(ctx context.Context) error {
 
 	c.SetReadyState(component.StateRestoring)
 
+	if cfg, err := c.cfgMgr.GetRunning(); err == nil {
+		c.raBucketCount = c.computeRABucketCount(cfg)
+	} else {
+		c.raBucketCount = raMaxBucketCount
+	}
+
 	if err := c.restoreSessions(ctx); err != nil {
 		c.logger.Warn("Failed to restore sessions from OpDB", "error", err)
 	}
@@ -404,6 +449,7 @@ func (c *Component) Start(ctx context.Context) error {
 
 	c.echoGen.Start()
 	c.Go(c.consumePPPoEPackets)
+	c.Go(c.periodicRAEmitter)
 
 	c.SetReadyState(component.StateReady)
 	c.eventBus.Publish(events.TopicComponentReady, events.Event{
@@ -1181,6 +1227,9 @@ func (c *Component) installInMemoryState(sess *SessionState) {
 			sess.ipcpOpen = true
 		}
 		if sess.ipv6cp != nil && sess.IPv6Address != nil {
+			if bngMAC, _ := sess.bngSourceMAC(); len(bngMAC) == 6 {
+				sess.ipv6cp.SetInterfaceID(ppp.IPv6CPConfigFromMAC(bngMAC).InterfaceID)
+			}
 			sess.ipv6cp.FSM().Restore()
 			sess.ipv6cpOpen = true
 		}
@@ -1195,6 +1244,9 @@ func (c *Component) installInMemoryState(sess *SessionState) {
 		if sess.PPPoESessionID >= c.nextSessionID {
 			c.nextSessionID = sess.PPPoESessionID + 1
 		}
+	}
+	if sess.ipv6cpOpen {
+		c.placeSessionInRABucket(sess)
 	}
 }
 
@@ -1476,6 +1528,8 @@ func (c *Component) restoreFromHASync(srgName string) {
 			NegotiatedPPPMTU: uint16(cp.NegotiatedPppMtu),
 			IPv4MSS:          uint16(cp.Ipv4Mss),
 			IPv6MSS:          uint16(cp.Ipv6Mss),
+			DHCPv6DUID:       cp.Dhcpv6Duid,
+			IPv6LeaseTime:    cp.Ipv6LeaseTime,
 			component:        c,
 		}
 
@@ -1683,6 +1737,8 @@ func (c *Component) buildModelSnapshot(sess *SessionState) *models.PPPSession {
 		NegotiatedPPPMTU: sess.NegotiatedPPPMTU,
 		IPv4MSS:          sess.IPv4MSS,
 		IPv6MSS:          sess.IPv6MSS,
+		DUID:             sess.DHCPv6DUID,
+		IPv6LeaseTime:    sess.IPv6LeaseTime,
 	}
 	if sess.IPv6Prefix != nil {
 		snapshot.IPv6Prefix = sess.IPv6Prefix.String()

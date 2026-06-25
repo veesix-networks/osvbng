@@ -2,6 +2,8 @@
 
 DHCPv6 provider configuration. IANA pools, prefix delegation pools, and timing parameters are defined in [IPv6 profiles](ipv6-profiles.md), referenced by [subscriber groups](subscriber-groups.md) via `ipv6-profile`.
 
+These settings apply to both **IPoE and PPPoE** subscribers. PPPoE carries Router Advertisements, Neighbor Advertisements and DHCPv6 (IA-NA + IA-PD) in-band over the PPP session, so a dual-stack PPPoE subscriber gets the same default route, address and delegated prefix as IPoE from the same configuration. The `unicast` knob below is IPoE-only: PPPoE is point-to-point, so periodic RAs always reach the single peer over the session.
+
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
 | `provider` | string | DHCPv6 provider: `local` | `local` |
