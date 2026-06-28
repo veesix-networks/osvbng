@@ -74,45 +74,14 @@ func discoverPacket(mac net.HardwareAddr) *dataplane.ParsedPacket {
 }
 
 // A policy format that references an absent identity token ($remote-id$ with no
-// Option 82) must drop the DISCOVER without publishing an AAA request, bump the
-// drop counter, and clear AAAInFlight so a retransmit re-fires the guard.
-func TestHandleDiscoverEmptyUsernameDrops(t *testing.T) {
+// Option 82) must NOT gate the DISCOVER: the AAA request is published with the
+// MAC fallback as User-Name and UsernameFallback set so the provider decides,
+// and the fallback counter increments.
+func TestHandleDiscoverUnresolvedUsernameFallsBack(t *testing.T) {
 	c, bus := emptyUsernameComponent(t, "$remote-id$")
 	mac := net.HardwareAddr{0xaa, 0x42, 0xa1, 0x0a, 0x54, 0x97}
 
-	before := aaa.UsernameEmptyDrops.WithLabelValues("p1", "grp", "ipoe-dhcpv4").Value()
-
-	if err := c.handleDiscover(discoverPacket(mac)); err != nil {
-		t.Fatalf("handleDiscover returned error: %v", err)
-	}
-
-	if bus.aaaReqs != 0 {
-		t.Fatalf("expected no AAA request published, got %d", bus.aaaReqs)
-	}
-	if got := aaa.UsernameEmptyDrops.WithLabelValues("p1", "grp", "ipoe-dhcpv4").Value(); got != before+1 {
-		t.Fatalf("drop counter: want %d, got %d", before+1, got)
-	}
-
-	val, ok := c.sessions.Load(c.makeSessionKeyV4(mac, 100, 0))
-	if !ok {
-		t.Fatalf("session not found after DISCOVER")
-	}
-	sess := val.(*SessionState)
-	sess.mu.Lock()
-	inFlight := sess.AAAInFlight
-	sess.mu.Unlock()
-	if inFlight {
-		t.Fatalf("AAAInFlight must be reset to false on empty-username drop")
-	}
-}
-
-// A resolvable format ($mac-address$ always expands) must NOT drop: the AAA
-// request is published and the drop counter is untouched.
-func TestHandleDiscoverResolvableUsernamePublishes(t *testing.T) {
-	c, bus := emptyUsernameComponent(t, "$mac-address$")
-	mac := net.HardwareAddr{0xaa, 0x42, 0xa1, 0x0a, 0x54, 0x98}
-
-	before := aaa.UsernameEmptyDrops.WithLabelValues("p1", "grp", "ipoe-dhcpv4").Value()
+	before := aaa.UsernameFallbacks.WithLabelValues("p1", "grp", "ipoe-dhcpv4").Value()
 
 	if err := c.handleDiscover(discoverPacket(mac)); err != nil {
 		t.Fatalf("handleDiscover returned error: %v", err)
@@ -121,7 +90,39 @@ func TestHandleDiscoverResolvableUsernamePublishes(t *testing.T) {
 	if bus.aaaReqs != 1 {
 		t.Fatalf("expected exactly one AAA request published, got %d", bus.aaaReqs)
 	}
-	if got := aaa.UsernameEmptyDrops.WithLabelValues("p1", "grp", "ipoe-dhcpv4").Value(); got != before {
-		t.Fatalf("drop counter must not change on resolvable username: want %d, got %d", before, got)
+	if got := aaa.UsernameFallbacks.WithLabelValues("p1", "grp", "ipoe-dhcpv4").Value(); got != before+1 {
+		t.Fatalf("fallback counter: want %d, got %d", before+1, got)
+	}
+	if bus.lastAAAReq == nil {
+		t.Fatalf("no AAA request captured")
+	}
+	if !bus.lastAAAReq.Request.UsernameFallback {
+		t.Fatalf("UsernameFallback must be set on unresolved policy username")
+	}
+	if bus.lastAAAReq.Request.Username != mac.String() {
+		t.Fatalf("fallback User-Name: want %q, got %q", mac.String(), bus.lastAAAReq.Request.Username)
+	}
+}
+
+// A resolvable format ($mac-address$ always expands) publishes the AAA request
+// with UsernameFallback clear and the fallback counter untouched.
+func TestHandleDiscoverResolvableUsernamePublishes(t *testing.T) {
+	c, bus := emptyUsernameComponent(t, "$mac-address$")
+	mac := net.HardwareAddr{0xaa, 0x42, 0xa1, 0x0a, 0x54, 0x98}
+
+	before := aaa.UsernameFallbacks.WithLabelValues("p1", "grp", "ipoe-dhcpv4").Value()
+
+	if err := c.handleDiscover(discoverPacket(mac)); err != nil {
+		t.Fatalf("handleDiscover returned error: %v", err)
+	}
+
+	if bus.aaaReqs != 1 {
+		t.Fatalf("expected exactly one AAA request published, got %d", bus.aaaReqs)
+	}
+	if got := aaa.UsernameFallbacks.WithLabelValues("p1", "grp", "ipoe-dhcpv4").Value(); got != before {
+		t.Fatalf("fallback counter must not change on resolvable username: want %d, got %d", before, got)
+	}
+	if bus.lastAAAReq == nil || bus.lastAAAReq.Request.UsernameFallback {
+		t.Fatalf("UsernameFallback must be clear on resolvable username")
 	}
 }

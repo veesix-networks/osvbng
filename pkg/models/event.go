@@ -12,6 +12,13 @@ type AAARequest struct {
 	AccessInterface string            `json:"access_interface,omitempty"`
 	PolicyName      string            `json:"policy_name"`
 	Attributes      map[string]string `json:"attributes,omitempty"`
+
+	// UsernameFallback is set when the policy.format references an identity
+	// token (e.g. $remote-id$) that was absent at request time, so Username
+	// holds the MAC fallback rather than the configured identity. Auth
+	// providers that require the configured identity (RADIUS) gate on this;
+	// providers that authorise on MAC or allow_all (local) ignore it.
+	UsernameFallback bool `json:"username_fallback,omitempty"`
 }
 
 type AAAResponse struct {

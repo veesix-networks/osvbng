@@ -230,6 +230,12 @@ func (p *Provider) Stats() *internalaaa.RADIUSStats {
 }
 
 func (p *Provider) Authenticate(ctx context.Context, req *auth.AuthRequest) (*auth.AuthResponse, error) {
+	if req.UsernameFallback {
+		p.logger.Warn("authentication gated: policy username unresolved, required identifier missing",
+			"username", req.Username, "policy", req.PolicyName, "mac", req.MAC)
+		return &auth.AuthResponse{Allowed: false}, nil
+	}
+
 	packet := radius.New(radius.CodeAccessRequest, nil)
 
 	p.addRequestAVPs(packet, req)
