@@ -315,17 +315,18 @@ func (c *Component) handleAAARequest(event events.Event) {
 	}
 
 	authReq := &auth.AuthRequest{
-		Username:        req.Username,
-		MAC:             req.MAC,
-		AcctSessionID:   req.AcctSessionID,
-		SVLAN:           req.SVLAN,
-		CVLAN:           req.CVLAN,
-		Interface:       req.Interface,
-		AccessIfIndex:   req.AccessIfIndex,
-		AccessInterface: req.AccessInterface,
-		AccessType:      string(data.AccessType),
-		PolicyName:      req.PolicyName,
-		Attributes:      attrs,
+		Username:         req.Username,
+		MAC:              req.MAC,
+		AcctSessionID:    req.AcctSessionID,
+		SVLAN:            req.SVLAN,
+		CVLAN:            req.CVLAN,
+		Interface:        req.Interface,
+		AccessIfIndex:    req.AccessIfIndex,
+		AccessInterface:  req.AccessInterface,
+		AccessType:       string(data.AccessType),
+		PolicyName:       req.PolicyName,
+		UsernameFallback: req.UsernameFallback,
+		Attributes:       attrs,
 	}
 
 	authResp, err := c.authProvider.Authenticate(c.Ctx, authReq)

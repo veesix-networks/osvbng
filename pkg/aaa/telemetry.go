@@ -6,12 +6,14 @@ package aaa
 
 import "github.com/veesix-networks/osvbng/pkg/telemetry"
 
-// UsernameEmptyDrops counts AAA-publish attempts dropped because a configured
-// policy.format expanded to an empty User-Name. Lives in pkg/aaa (a leaf both
-// the IPoE and PPPoE packages already import) so the single counter can be
-// shared across access types without an import cycle.
-var UsernameEmptyDrops = telemetry.MustRegisterCounter(telemetry.CounterOpts{
-	Name:   "aaa.policy.username_empty_drops",
-	Help:   "AAA-publish attempts dropped because the configured policy.format expanded to an empty User-Name. Labels: policy name, subscriber-group name, access type.",
+// UsernameFallbacks counts AAA requests where the configured policy.format
+// could not be resolved (a referenced identity token was absent) and the
+// User-Name fell back to the MAC. The request is still published; the auth
+// provider decides whether to gate. Lives in pkg/aaa (a leaf both the IPoE
+// and PPPoE packages already import) so the single counter can be shared
+// across access types without an import cycle.
+var UsernameFallbacks = telemetry.MustRegisterCounter(telemetry.CounterOpts{
+	Name:   "aaa.policy.username_fallbacks",
+	Help:   "AAA requests where the configured policy.format could not be resolved and the User-Name fell back to the MAC. Labels: policy name, subscriber-group name, access type.",
 	Labels: []string{"policy", "group", "access_type"},
 })

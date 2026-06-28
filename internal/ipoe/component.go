@@ -908,6 +908,7 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 		}
 	}
 	aaaAttrs := make(map[string]string)
+	var usernameFallback bool
 	if policyName != "" {
 		if policy := cfg.AAA.GetPolicyByType(policyName, aaacfg.PolicyTypeDHCP); policy != nil {
 			ctx := &aaacfg.PolicyContext{
@@ -919,19 +920,15 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 				Hostname:   hostname,
 			}
 			expanded, ok := policy.ExpandFormatChecked(ctx)
-			if !ok && policy.Format != "" {
-				c.logger.WithGroup(logger.IPoEDHCP4).Warn("AAA username empty after policy expansion; dropping DISCOVER",
+			if ok {
+				username = expanded
+			} else if policy.Format != "" {
+				usernameFallback = true
+				c.logger.WithGroup(logger.IPoEDHCP4).Warn("AAA policy username unresolved; using MAC fallback",
 					"policy", policyName, "group", groupName, "mac", pkt.MAC.String(),
 					"svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN, "format", policy.Format,
 					"remote_id", string(remoteID), "circuit_id", string(circuitID), "hostname", hostname)
-				aaa.UsernameEmptyDrops.WithLabelValues(policyName, groupName, "ipoe-dhcpv4").Inc()
-				sess.mu.Lock()
-				sess.AAAInFlight = false
-				sess.mu.Unlock()
-				return nil
-			}
-			if ok {
-				username = expanded
+				aaa.UsernameFallbacks.WithLabelValues(policyName, groupName, "ipoe-dhcpv4").Inc()
 			}
 			if policy.Password != "" {
 				aaaAttrs[aaa.AttrPassword] = policy.ExpandPassword(ctx)
@@ -956,17 +953,18 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 	}
 
 	aaaPayload := &models.AAARequest{
-		RequestID:       requestID,
-		Username:        username,
-		MAC:             pkt.MAC.String(),
-		AcctSessionID:   sess.AcctSessionID,
-		SVLAN:           pkt.OuterVLAN,
-		CVLAN:           pkt.InnerVLAN,
-		Interface:       accessInterface,
-		AccessIfIndex:   sess.EncapIfIndex,
-		AccessInterface: c.accessInterfaceName(sess.EncapIfIndex),
-		PolicyName:      policyName,
-		Attributes:      aaaAttrs,
+		RequestID:        requestID,
+		Username:         username,
+		MAC:              pkt.MAC.String(),
+		AcctSessionID:    sess.AcctSessionID,
+		SVLAN:            pkt.OuterVLAN,
+		CVLAN:            pkt.InnerVLAN,
+		Interface:        accessInterface,
+		AccessIfIndex:    sess.EncapIfIndex,
+		AccessInterface:  c.accessInterfaceName(sess.EncapIfIndex),
+		PolicyName:       policyName,
+		UsernameFallback: usernameFallback,
+		Attributes:       aaaAttrs,
 	}
 
 	c.eventBus.Publish(events.TopicAAARequest, events.Event{
@@ -1154,6 +1152,7 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 		}
 	}
 	aaaAttrs := make(map[string]string)
+	var usernameFallback bool
 	if policyName != "" {
 		if policy := cfg.AAA.GetPolicyByType(policyName, aaacfg.PolicyTypeDHCP); policy != nil {
 			ctx := &aaacfg.PolicyContext{
@@ -1165,19 +1164,15 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 				Hostname:   hostname,
 			}
 			expanded, ok := policy.ExpandFormatChecked(ctx)
-			if !ok && policy.Format != "" {
-				c.logger.WithGroup(logger.IPoEDHCP4).Warn("AAA username empty after policy expansion; dropping REQUEST",
+			if ok {
+				username = expanded
+			} else if policy.Format != "" {
+				usernameFallback = true
+				c.logger.WithGroup(logger.IPoEDHCP4).Warn("AAA policy username unresolved; using MAC fallback",
 					"policy", policyName, "group", groupName, "mac", pkt.MAC.String(),
 					"svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN, "format", policy.Format,
 					"remote_id", string(remoteID), "circuit_id", string(circuitID), "hostname", hostname)
-				aaa.UsernameEmptyDrops.WithLabelValues(policyName, groupName, "ipoe-dhcpv4").Inc()
-				sess.mu.Lock()
-				sess.AAAInFlight = false
-				sess.mu.Unlock()
-				return nil
-			}
-			if ok {
-				username = expanded
+				aaa.UsernameFallbacks.WithLabelValues(policyName, groupName, "ipoe-dhcpv4").Inc()
 			}
 			if policy.Password != "" {
 				aaaAttrs[aaa.AttrPassword] = policy.ExpandPassword(ctx)
@@ -1202,17 +1197,18 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 	}
 
 	aaaPayload := &models.AAARequest{
-		RequestID:       requestID,
-		Username:        username,
-		MAC:             pkt.MAC.String(),
-		AcctSessionID:   sess.AcctSessionID,
-		SVLAN:           pkt.OuterVLAN,
-		CVLAN:           pkt.InnerVLAN,
-		Interface:       accessInterface,
-		AccessIfIndex:   sess.EncapIfIndex,
-		AccessInterface: c.accessInterfaceName(sess.EncapIfIndex),
-		PolicyName:      policyName,
-		Attributes:      aaaAttrs,
+		RequestID:        requestID,
+		Username:         username,
+		MAC:              pkt.MAC.String(),
+		AcctSessionID:    sess.AcctSessionID,
+		SVLAN:            pkt.OuterVLAN,
+		CVLAN:            pkt.InnerVLAN,
+		Interface:        accessInterface,
+		AccessIfIndex:    sess.EncapIfIndex,
+		AccessInterface:  c.accessInterfaceName(sess.EncapIfIndex),
+		PolicyName:       policyName,
+		UsernameFallback: usernameFallback,
+		Attributes:       aaaAttrs,
 	}
 
 	c.eventBus.Publish(events.TopicAAARequest, events.Event{
@@ -2280,6 +2276,7 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 		}
 	}
 	aaaAttrs := make(map[string]string)
+	var usernameFallback bool
 	if policyName != "" {
 		if policy := cfg.AAA.GetPolicyByType(policyName, aaacfg.PolicyTypeDHCP); policy != nil {
 			ctx := &aaacfg.PolicyContext{
@@ -2290,19 +2287,15 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 				CircuitID:  string(circuitID),
 			}
 			expanded, ok := policy.ExpandFormatChecked(ctx)
-			if !ok && policy.Format != "" {
-				c.logger.WithGroup(logger.IPoEDHCP6).Warn("AAA username empty after policy expansion; dropping SOLICIT",
+			if ok {
+				username = expanded
+			} else if policy.Format != "" {
+				usernameFallback = true
+				c.logger.WithGroup(logger.IPoEDHCP6).Warn("AAA policy username unresolved; using MAC fallback",
 					"policy", policyName, "group", groupName, "mac", pkt.MAC.String(),
 					"svlan", pkt.OuterVLAN, "cvlan", pkt.InnerVLAN, "format", policy.Format,
 					"remote_id", string(remoteID), "circuit_id", string(circuitID))
-				aaa.UsernameEmptyDrops.WithLabelValues(policyName, groupName, "ipoe-dhcpv6").Inc()
-				sess.mu.Lock()
-				sess.AAAInFlight = false
-				sess.mu.Unlock()
-				return nil
-			}
-			if ok {
-				username = expanded
+				aaa.UsernameFallbacks.WithLabelValues(policyName, groupName, "ipoe-dhcpv6").Inc()
 			}
 			if policy.Password != "" {
 				aaaAttrs[aaa.AttrPassword] = policy.ExpandPassword(ctx)
@@ -2323,17 +2316,18 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 	}
 
 	aaaPayload := &models.AAARequest{
-		RequestID:       requestID,
-		Username:        username,
-		MAC:             pkt.MAC.String(),
-		AcctSessionID:   sess.AcctSessionID,
-		SVLAN:           pkt.OuterVLAN,
-		CVLAN:           pkt.InnerVLAN,
-		Interface:       accessInterface,
-		AccessIfIndex:   sess.EncapIfIndex,
-		AccessInterface: c.accessInterfaceName(sess.EncapIfIndex),
-		PolicyName:      policyName,
-		Attributes:      aaaAttrs,
+		RequestID:        requestID,
+		Username:         username,
+		MAC:              pkt.MAC.String(),
+		AcctSessionID:    sess.AcctSessionID,
+		SVLAN:            pkt.OuterVLAN,
+		CVLAN:            pkt.InnerVLAN,
+		Interface:        accessInterface,
+		AccessIfIndex:    sess.EncapIfIndex,
+		AccessInterface:  c.accessInterfaceName(sess.EncapIfIndex),
+		PolicyName:       policyName,
+		UsernameFallback: usernameFallback,
+		Attributes:       aaaAttrs,
 	}
 
 	c.logger.WithGroup(logger.IPoEDHCP6).Debug("Publishing AAA request for DHCPv6 SOLICIT", "session_id", sess.SessionID, "username", username)

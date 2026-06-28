@@ -29,6 +29,12 @@ type AuthRequest struct {
 	AccessType      string
 	PolicyName      string
 
+	// UsernameFallback indicates Username is the MAC fallback because the
+	// policy.format could not be resolved (a referenced identity token was
+	// absent). RADIUS rejects on this so a configured identity is never
+	// silently replaced by the MAC; local authorises normally.
+	UsernameFallback bool
+
 	SubscriberGroup *subscriber.SubscriberGroup
 }
 

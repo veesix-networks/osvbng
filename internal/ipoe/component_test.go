@@ -116,15 +116,19 @@ func (f *fakeConfigManager) LookupSubscriberGroup(svlan, cvlan uint16) (subscrib
 }
 
 type captureBus struct {
-	mu      sync.Mutex
-	egress  []events.EgressEvent
-	aaaReqs int
+	mu         sync.Mutex
+	egress     []events.EgressEvent
+	aaaReqs    int
+	lastAAAReq *events.AAARequestEvent
 }
 
 func (b *captureBus) Publish(topic string, ev events.Event) {
 	if topic == events.TopicAAARequest {
 		b.mu.Lock()
 		b.aaaReqs++
+		if req, ok := ev.Data.(*events.AAARequestEvent); ok {
+			b.lastAAAReq = req
+		}
 		b.mu.Unlock()
 		return
 	}

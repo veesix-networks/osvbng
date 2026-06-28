@@ -168,6 +168,7 @@ func (s *SessionState) publishAAARequest(attrs map[string]string) {
 	username := s.Username
 	var policyName string
 	var groupName string
+	var usernameFallback bool
 	if cfg != nil && cfg.SubscriberGroups != nil {
 		if match, ok := s.component.cfgMgr.LookupSubscriberGroup(s.OuterVLAN, s.InnerVLAN); ok {
 			groupName = match.Name
@@ -184,26 +185,16 @@ func (s *SessionState) publishAAARequest(attrs map[string]string) {
 				AgentRemoteID:  s.AgentRemoteID,
 			}
 			expanded, ok := policy.ExpandFormatChecked(ctx)
-			if !ok && policy.Format != "" {
-				s.component.logger.Warn("AAA username empty after policy expansion; failing PPPoE auth",
+			if ok {
+				username = expanded
+			} else if policy.Format != "" {
+				usernameFallback = true
+				s.component.logger.Warn("AAA policy username unresolved; using supplied username",
 					"session_id", s.SessionID, "policy", policyName, "group", groupName,
 					"mac", s.MAC.String(), "svlan", s.OuterVLAN, "cvlan", s.InnerVLAN,
 					"format", policy.Format, "agent_circuit_id", s.AgentCircuitID,
 					"agent_remote_id", s.AgentRemoteID, "auth_type", s.pendingAuthType)
-				aaa.UsernameEmptyDrops.WithLabelValues(policyName, groupName, "pppoe").Inc()
-				switch s.pendingAuthType {
-				case "pap":
-					s.sendPAPNak(s.pendingPAPID)
-				case "chap":
-					s.sendCHAPFailure(s.pendingCHAPID)
-				}
-				s.lcp.FSM().Close()
-				s.pendingAuthType = ""
-				s.pendingAuthRequestID = ""
-				return
-			}
-			if ok {
-				username = expanded
+				aaa.UsernameFallbacks.WithLabelValues(policyName, groupName, "pppoe").Inc()
 			}
 			s.component.logger.Debug("Built username from policy",
 				"policy", policyName,
@@ -220,16 +211,17 @@ func (s *SessionState) publishAAARequest(attrs map[string]string) {
 	}
 
 	aaaPayload := &models.AAARequest{
-		RequestID:       requestID,
-		Username:        username,
-		MAC:             s.MAC.String(),
-		AcctSessionID:   s.AcctSessionID,
-		SVLAN:           s.OuterVLAN,
-		CVLAN:           s.InnerVLAN,
-		AccessIfIndex:   s.EncapIfIndex,
-		AccessInterface: s.component.accessInterfaceName(s.EncapIfIndex),
-		PolicyName:      policyName,
-		Attributes:      attrs,
+		RequestID:        requestID,
+		Username:         username,
+		MAC:              s.MAC.String(),
+		AcctSessionID:    s.AcctSessionID,
+		SVLAN:            s.OuterVLAN,
+		CVLAN:            s.InnerVLAN,
+		AccessIfIndex:    s.EncapIfIndex,
+		AccessInterface:  s.component.accessInterfaceName(s.EncapIfIndex),
+		PolicyName:       policyName,
+		UsernameFallback: usernameFallback,
+		Attributes:       attrs,
 	}
 
 	s.component.logger.Debug("Publishing AAA request",

@@ -19,14 +19,18 @@ import (
 )
 
 type pppCaptureBus struct {
-	aaaReqs int
-	egress  int
+	aaaReqs    int
+	egress     int
+	lastAAAReq *events.AAARequestEvent
 }
 
-func (b *pppCaptureBus) Publish(topic string, _ events.Event) {
+func (b *pppCaptureBus) Publish(topic string, ev events.Event) {
 	switch topic {
 	case events.TopicAAARequest:
 		b.aaaReqs++
+		if req, ok := ev.Data.(*events.AAARequestEvent); ok {
+			b.lastAAAReq = req
+		}
 	case events.TopicEgress:
 		b.egress++
 	}
@@ -93,44 +97,54 @@ func pppEmptyUsernameSession(t *testing.T, format string) (*SessionState, *pppCa
 	return s, bus
 }
 
-// A PPP policy format that expands to empty must fail auth: no AAA request is
-// published, the drop counter increments, a PAP-NAK is emitted, and the pending
-// auth fields are cleared so a retried Auth-Request cannot double-fire.
-func TestPublishAAARequestEmptyUsernameFailsAuth(t *testing.T) {
+// A PPP policy format that cannot resolve must NOT fail auth in the protocol
+// layer: the AAA request is published with the supplied username as fallback and
+// UsernameFallback set, the fallback counter increments, no PAP-NAK is emitted,
+// and the pending auth fields stay live so the provider's verdict is honoured.
+func TestPublishAAARequestUnresolvedUsernameFallsBack(t *testing.T) {
 	s, bus := pppEmptyUsernameSession(t, "$remote-id$")
 
-	before := aaa.UsernameEmptyDrops.WithLabelValues("p1", "grp", "pppoe").Value()
-	s.publishAAARequest(map[string]string{})
-
-	if bus.aaaReqs != 0 {
-		t.Fatalf("expected no AAA request published, got %d", bus.aaaReqs)
-	}
-	if got := aaa.UsernameEmptyDrops.WithLabelValues("p1", "grp", "pppoe").Value(); got != before+1 {
-		t.Fatalf("drop counter: want %d, got %d", before+1, got)
-	}
-	if bus.egress == 0 {
-		t.Fatalf("expected a PAP-NAK to be emitted on auth failure")
-	}
-	if s.pendingAuthType != "" {
-		t.Fatalf("pendingAuthType must be cleared, got %q", s.pendingAuthType)
-	}
-	if s.pendingAuthRequestID != "" {
-		t.Fatalf("pendingAuthRequestID must be cleared, got %q", s.pendingAuthRequestID)
-	}
-}
-
-// A resolvable PPP format publishes the AAA request and does not increment the
-// drop counter.
-func TestPublishAAARequestResolvableUsernamePublishes(t *testing.T) {
-	s, bus := pppEmptyUsernameSession(t, "$mac-address$")
-
-	before := aaa.UsernameEmptyDrops.WithLabelValues("p1", "grp", "pppoe").Value()
+	before := aaa.UsernameFallbacks.WithLabelValues("p1", "grp", "pppoe").Value()
 	s.publishAAARequest(map[string]string{})
 
 	if bus.aaaReqs != 1 {
 		t.Fatalf("expected exactly one AAA request published, got %d", bus.aaaReqs)
 	}
-	if got := aaa.UsernameEmptyDrops.WithLabelValues("p1", "grp", "pppoe").Value(); got != before {
-		t.Fatalf("drop counter must not change on resolvable username: want %d, got %d", before, got)
+	if got := aaa.UsernameFallbacks.WithLabelValues("p1", "grp", "pppoe").Value(); got != before+1 {
+		t.Fatalf("fallback counter: want %d, got %d", before+1, got)
+	}
+	if bus.egress != 0 {
+		t.Fatalf("no PAP-NAK must be emitted: gating is the provider's job, got %d egress", bus.egress)
+	}
+	if bus.lastAAAReq == nil || !bus.lastAAAReq.Request.UsernameFallback {
+		t.Fatalf("UsernameFallback must be set on unresolved policy username")
+	}
+	if bus.lastAAAReq.Request.Username != "subscriber@isp" {
+		t.Fatalf("fallback User-Name: want %q, got %q", "subscriber@isp", bus.lastAAAReq.Request.Username)
+	}
+	if s.pendingAuthType == "" {
+		t.Fatalf("pendingAuthType must stay live until the provider responds")
+	}
+	if s.pendingAuthRequestID == "" {
+		t.Fatalf("pendingAuthRequestID must stay live until the provider responds")
+	}
+}
+
+// A resolvable PPP format publishes the AAA request with UsernameFallback clear
+// and does not increment the fallback counter.
+func TestPublishAAARequestResolvableUsernamePublishes(t *testing.T) {
+	s, bus := pppEmptyUsernameSession(t, "$mac-address$")
+
+	before := aaa.UsernameFallbacks.WithLabelValues("p1", "grp", "pppoe").Value()
+	s.publishAAARequest(map[string]string{})
+
+	if bus.aaaReqs != 1 {
+		t.Fatalf("expected exactly one AAA request published, got %d", bus.aaaReqs)
+	}
+	if got := aaa.UsernameFallbacks.WithLabelValues("p1", "grp", "pppoe").Value(); got != before {
+		t.Fatalf("fallback counter must not change on resolvable username: want %d, got %d", before, got)
+	}
+	if bus.lastAAAReq == nil || bus.lastAAAReq.Request.UsernameFallback {
+		t.Fatalf("UsernameFallback must be clear on resolvable username")
 	}
 }
