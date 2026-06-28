@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+
+	"github.com/veesix-networks/osvbng/cmd/osvbngcli/orderedjson"
 )
 
 type OutputFormat string
@@ -46,9 +48,37 @@ func (f *GenericFormatter) formatJSON(data interface{}) (string, error) {
 }
 
 func (f *GenericFormatter) formatYAML(data interface{}, indent int) (string, error) {
-	var sb strings.Builder
 	prefix := strings.Repeat("  ", indent)
 
+	switch d := data.(type) {
+	case *orderedjson.Object:
+		var sb strings.Builder
+		for _, k := range d.Keys {
+			val := d.Vals[k]
+			if isOrderedContainer(val) {
+				sb.WriteString(fmt.Sprintf("%s%s:\n", prefix, k))
+				nested, _ := f.formatYAML(val, indent+1)
+				sb.WriteString(nested)
+			} else {
+				sb.WriteString(fmt.Sprintf("%s%s: %v\n", prefix, k, val))
+			}
+		}
+		return sb.String(), nil
+	case []any:
+		var sb strings.Builder
+		for _, e := range d {
+			if isOrderedContainer(e) {
+				sb.WriteString(fmt.Sprintf("%s-\n", prefix))
+				nested, _ := f.formatYAML(e, indent+1)
+				sb.WriteString(nested)
+			} else {
+				sb.WriteString(fmt.Sprintf("%s- %v\n", prefix, e))
+			}
+		}
+		return sb.String(), nil
+	}
+
+	var sb strings.Builder
 	v := reflect.ValueOf(data)
 
 	for v.Kind() == reflect.Ptr {
@@ -141,8 +171,21 @@ func (f *GenericFormatter) formatYAML(data interface{}, indent int) (string, err
 }
 
 func (f *GenericFormatter) formatCLI(data interface{}) (string, error) {
-	if data == nil {
+	switch d := data.(type) {
+	case nil:
 		return "No data\n", nil
+	case *orderedjson.Object:
+		return f.formatOrderedTree(d, 0)
+	case []any:
+		if len(d) == 0 {
+			return "No data\n", nil
+		}
+		if _, ok := d[0].(*orderedjson.Object); ok {
+			return f.formatOrderedTable(d)
+		}
+		// Slice of scalars (e.g. path lists): reuse the reflection path,
+		// which also handles the path-hierarchy rendering.
+		return f.formatTable(reflect.ValueOf(d))
 	}
 
 	v := reflect.ValueOf(data)
@@ -161,6 +204,152 @@ func (f *GenericFormatter) formatCLI(data interface{}) (string, error) {
 	default:
 		return f.formatTree(data, 0)
 	}
+}
+
+// formatOrderedTable renders a slice of *orderedjson.Object as an aligned
+// table. Columns are taken in first-seen key order across the rows, which is
+// the server's struct-field order, so the layout is stable across invocations.
+func (f *GenericFormatter) formatOrderedTable(rows []any) (string, error) {
+	if len(rows) == 0 {
+		return "No data\n", nil
+	}
+
+	var cols []string
+	seen := make(map[string]bool)
+	objs := make([]*orderedjson.Object, len(rows))
+	for i, r := range rows {
+		obj, ok := r.(*orderedjson.Object)
+		if !ok {
+			return f.formatTable(reflect.ValueOf(rows))
+		}
+		objs[i] = obj
+		for _, k := range obj.Keys {
+			if !seen[k] {
+				seen[k] = true
+				cols = append(cols, k)
+			}
+		}
+	}
+
+	colWidths := make([]int, len(cols))
+	for i, c := range cols {
+		colWidths[i] = len(c)
+	}
+
+	cells := make([][]string, len(objs))
+	for i, obj := range objs {
+		row := make([]string, len(cols))
+		for j, c := range cols {
+			val, ok := obj.Vals[c]
+			if !ok || val == nil {
+				row[j] = "-"
+			} else {
+				row[j] = cellString(val)
+			}
+			if len(row[j]) > colWidths[j] {
+				colWidths[j] = len(row[j])
+			}
+		}
+		cells[i] = row
+	}
+
+	var sb strings.Builder
+	for i, c := range cols {
+		sb.WriteString(fmt.Sprintf("%-*s  ", colWidths[i], c))
+	}
+	sb.WriteString("\n")
+	for _, w := range colWidths {
+		sb.WriteString(strings.Repeat("-", w) + "  ")
+	}
+	sb.WriteString("\n")
+	for _, row := range cells {
+		for j, val := range row {
+			sb.WriteString(fmt.Sprintf("%-*s  ", colWidths[j], val))
+		}
+		sb.WriteString("\n")
+	}
+	return sb.String(), nil
+}
+
+// formatOrderedTree renders a single *orderedjson.Object as an indented tree
+// in key order, recursing into nested objects and arrays.
+func (f *GenericFormatter) formatOrderedTree(obj *orderedjson.Object, indent int) (string, error) {
+	var sb strings.Builder
+	prefix := strings.Repeat("  ", indent)
+	for _, k := range obj.Keys {
+		val := obj.Vals[k]
+		switch cv := val.(type) {
+		case *orderedjson.Object:
+			sb.WriteString(fmt.Sprintf("%s%s:\n", prefix, k))
+			if len(cv.Keys) == 0 {
+				sb.WriteString(fmt.Sprintf("%s  (none)\n", prefix))
+			} else {
+				nested, _ := f.formatOrderedTree(cv, indent+1)
+				sb.WriteString(nested)
+			}
+		case []any:
+			sb.WriteString(fmt.Sprintf("%s%s:\n", prefix, k))
+			if len(cv) == 0 {
+				sb.WriteString(fmt.Sprintf("%s  (none)\n", prefix))
+			} else {
+				nested, _ := f.formatOrderedSliceTree(cv, indent+1)
+				sb.WriteString(nested)
+			}
+		default:
+			sb.WriteString(fmt.Sprintf("%s%s: %s\n", prefix, k, leafString(val)))
+		}
+	}
+	return sb.String(), nil
+}
+
+func (f *GenericFormatter) formatOrderedSliceTree(arr []any, indent int) (string, error) {
+	var sb strings.Builder
+	prefix := strings.Repeat("  ", indent)
+	for i, e := range arr {
+		switch cv := e.(type) {
+		case *orderedjson.Object:
+			sb.WriteString(fmt.Sprintf("%s[%d]:\n", prefix, i))
+			nested, _ := f.formatOrderedTree(cv, indent+1)
+			sb.WriteString(nested)
+		case []any:
+			sb.WriteString(fmt.Sprintf("%s[%d]:\n", prefix, i))
+			nested, _ := f.formatOrderedSliceTree(cv, indent+1)
+			sb.WriteString(nested)
+		default:
+			sb.WriteString(fmt.Sprintf("%s[%d]: %s\n", prefix, i, leafString(e)))
+		}
+	}
+	return sb.String(), nil
+}
+
+// cellString renders a table cell. Scalars print plainly; nested objects and
+// arrays collapse to compact ordered JSON so a row stays on one line.
+func cellString(v any) string {
+	switch v.(type) {
+	case *orderedjson.Object, []any:
+		b, err := json.Marshal(v)
+		if err != nil {
+			return fmt.Sprintf("%v", v)
+		}
+		return string(b)
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+func leafString(v any) string {
+	if v == nil {
+		return "(none)"
+	}
+	return fmt.Sprintf("%v", v)
+}
+
+func isOrderedContainer(v any) bool {
+	switch v.(type) {
+	case *orderedjson.Object, []any:
+		return true
+	}
+	return false
 }
 
 func (f *GenericFormatter) formatTable(v reflect.Value) (string, error) {

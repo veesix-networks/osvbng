@@ -19,7 +19,6 @@ import (
 	"github.com/veesix-networks/osvbng/plugins/exporter/prometheus/metrics"
 	"github.com/veesix-networks/osvbng/plugins/exporter/prometheus/show"
 
-	_ "github.com/veesix-networks/osvbng/plugins/exporter/prometheus/cli"
 	_ "github.com/veesix-networks/osvbng/plugins/exporter/prometheus/conf"
 	_ "github.com/veesix-networks/osvbng/plugins/exporter/prometheus/show"
 )
