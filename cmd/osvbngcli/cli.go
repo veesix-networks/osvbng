@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/chzyer/readline"
+	"github.com/veesix-networks/osvbng/cmd/osvbngcli/orderedjson"
 )
 
 type CLI struct {
@@ -28,8 +30,8 @@ type CLI struct {
 }
 
 type showResponseEnvelope struct {
-	Path string      `json:"path"`
-	Data interface{} `json:"data"`
+	Path string          `json:"path"`
+	Data json.RawMessage `json:"data"`
 }
 
 type operationResponse struct {
@@ -361,13 +363,21 @@ func (c *CLI) executeGeneratedCommand(invocation *Invocation) error {
 		if err := c.api.doJSON(ctx, command.Method, command.apiCommandPath(pathParams), query, nil, &response); err != nil {
 			return err
 		}
-		return c.printFormatted(response.Data, invocation.Format)
+		payload, err := orderedjson.Decode(response.Data)
+		if err != nil {
+			return fmt.Errorf("decode show response: %w", err)
+		}
+		return c.printFormatted(payload, invocation.Format)
 	case CommandExec:
-		var response interface{}
+		var response json.RawMessage
 		if err := c.api.doJSON(ctx, command.Method, command.apiCommandPath(pathParams), query, body, &response); err != nil {
 			return err
 		}
-		return c.printFormatted(response, invocation.Format)
+		payload, err := orderedjson.Decode(response)
+		if err != nil {
+			return fmt.Errorf("decode response: %w", err)
+		}
+		return c.printFormatted(payload, invocation.Format)
 	case CommandSet:
 		return c.executeSetCommand(ctx, command, pathParams, query, body, invocation.Format)
 	default:
