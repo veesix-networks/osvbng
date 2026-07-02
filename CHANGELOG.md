@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.15.0](https://github.com/veesix-networks/osvbng/compare/v0.14.0...v0.15.0) (2026-06-28)
+
+
+### Features
+
+* **aaa:** standardize radius nas-port/nas-port-id and extend accounting attributes ([#380](https://github.com/veesix-networks/osvbng/issues/380)) ([426970e](https://github.com/veesix-networks/osvbng/commit/426970e277d6d15dccf640427043a4d27c5e9003))
+* **ipoe:** periodic unsolicited RAs so subscriber default routes don't expire ([#384](https://github.com/veesix-networks/osvbng/issues/384)) ([83b0330](https://github.com/veesix-networks/osvbng/commit/83b033028c5b9471d0cc565327160718ec465348))
+* **pppoe:** ipv6 ra/nd + dhcpv6 over ppp; derive af_packet rx-queues from workers ([#385](https://github.com/veesix-networks/osvbng/issues/385)) ([84dc880](https://github.com/veesix-networks/osvbng/commit/84dc8807268712419cffe2355d34b3cb7b500f9b))
+
+
+### Bug Fixes
+
+* **aaa:** stop policy username expansion from gating local auth ([aec07e3](https://github.com/veesix-networks/osvbng/commit/aec07e3bd94683cc72079035ccc61e10dd61eee5))
+* **aaa:** stop policy username expansion from gating local auth ([#388](https://github.com/veesix-networks/osvbng/issues/388)) ([40eda4e](https://github.com/veesix-networks/osvbng/commit/40eda4e765206c4077a24ef69f70586e1a512ae7))
+* **cgnat:** rebuild plugin so with thread-safe shared session pool ([c7e96d7](https://github.com/veesix-networks/osvbng/commit/c7e96d7fbf2a6d6c01f5e230fc66b0e857f19b73))
+* **cgnat:** rebuild plugin so with thread-safe shared session pool ([#386](https://github.com/veesix-networks/osvbng/issues/386)) ([2864846](https://github.com/veesix-networks/osvbng/commit/2864846de4e2452263d5f19feaa38637c9a8310a))
+* **cli:** stabilise show output column order and drop dead gRPC command framework ([#389](https://github.com/veesix-networks/osvbng/issues/389)) ([d694f98](https://github.com/veesix-networks/osvbng/commit/d694f98fba80e30946c3395aa7ba3126113e0edf))
+* **ipoe:** advertise subscriber RA prefix off-link by default ([#382](https://github.com/veesix-networks/osvbng/issues/382)) ([dc2e34d](https://github.com/veesix-networks/osvbng/commit/dc2e34dc8d81f01758645df66b24803ea6ecafbf))
+
 ## [0.14.0](https://github.com/veesix-networks/osvbng/compare/v0.13.0...v0.14.0) (2026-06-16)
 
 
