@@ -106,6 +106,7 @@ type SessionState struct {
 	IPv4                net.IP
 	LeaseTime           uint32
 	BoundAt             time.Time
+	ActivatedAt         time.Time
 	XID                 uint32
 	Hostname            string
 	ClientID            []byte
@@ -1498,6 +1499,9 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 	sess.IPv4 = pkt.DHCPv4.YourClientIP
 	sess.LeaseTime = leaseTime
 	sess.BoundAt = time.Now()
+	if sess.ActivatedAt.IsZero() {
+		sess.ActivatedAt = sess.BoundAt
+	}
 	mac := sess.MAC
 	svlan := sess.OuterVLAN
 	cvlan := sess.InnerVLAN
@@ -1571,7 +1575,7 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 		DUID:            sess.DHCPv6DUID,
 		Username:        sess.Username,
 		AAASessionID:    sess.AcctSessionID,
-		ActivatedAt:     time.Now(),
+		ActivatedAt:     sess.ActivatedAt,
 	}
 	if sess.AllocCtx != nil {
 		ipoeSess.IPv4Pool = sess.AllocCtx.AllocatedPool
@@ -2897,6 +2901,9 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, msg *dhcp6.Message) er
 	sess.IPv6Prefix = pdPrefix
 	sess.IPv6LeaseTime = validTime
 	sess.IPv6BoundAt = time.Now()
+	if sess.ActivatedAt.IsZero() {
+		sess.ActivatedAt = sess.IPv6BoundAt
+	}
 	sess.IPv6Bound = true
 	ipoeSwIfIndex := sess.IPoESwIfIndex
 	v4AlreadyBound := sess.State == "bound" && sess.IPv4 != nil
@@ -2984,7 +2991,7 @@ func (c *Component) handleDHCPv6Reply(sess *SessionState, msg *dhcp6.Message) er
 		DUID:            sess.DHCPv6DUID,
 		Username:        sess.Username,
 		AAASessionID:    sess.AcctSessionID,
-		ActivatedAt:     time.Now(),
+		ActivatedAt:     sess.ActivatedAt,
 	}
 	if sess.AllocCtx != nil {
 		ipoeSess.IPv4Pool = sess.AllocCtx.AllocatedPool
@@ -3828,7 +3835,7 @@ func (c *Component) restoreSessionToCache(ctx context.Context, sess *SessionStat
 		Hostname:      sess.Hostname,
 		ClientID:      sess.ClientID,
 		AAASessionID:  sess.AcctSessionID,
-		ActivatedAt:   sess.BoundAt,
+		ActivatedAt:   sess.ActivatedAt,
 		Attributes:    sess.Attributes,
 	}
 	if sess.IPv6Prefix != nil {
@@ -4044,6 +4051,7 @@ func (c *Component) restoreFromHASync(srgName string) {
 			LeaseTime:          cp.Ipv4LeaseTime,
 			IPv6LeaseTime:      cp.Ipv6LeaseTime,
 			BoundAt:            boundAt,
+			ActivatedAt:        boundAt,
 			IPv6BoundAt:        boundAt,
 			AAAApproved:        true,
 			Username:           cp.Username,
@@ -4155,7 +4163,7 @@ func (c *Component) ForEachSession(fn func(models.SubscriberSession) bool) {
 			Hostname:      sess.Hostname,
 			Username:      sess.Username,
 			AAASessionID:  sess.AcctSessionID,
-			ActivatedAt:   sess.BoundAt,
+			ActivatedAt:   sess.ActivatedAt,
 			Attributes:    sess.Attributes,
 			RelayInfo:     map[uint8][]byte{},
 		}
@@ -4246,7 +4254,7 @@ func (c *Component) buildModelSnapshot(sess *SessionState) *models.IPoESession {
 		DUID:          sess.DHCPv6DUID,
 		Username:      sess.Username,
 		AAASessionID:  sess.AcctSessionID,
-		ActivatedAt:   sess.BoundAt,
+		ActivatedAt:   sess.ActivatedAt,
 		Attributes:    sess.Attributes,
 	}
 	if sess.IPv6Prefix != nil {
