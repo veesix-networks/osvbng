@@ -18,7 +18,7 @@ Suite Setup         Deploy Linux Client Topology
 Suite Teardown      Destroy Linux Client Topology
 
 *** Variables ***
-${lab-name}         osvbng-ipoe-linux-client
+${lab-name}         osvbng-ipoe-linux-client-cake
 ${lab-file}         ${CURDIR}/19-ipoe-linux-client-cake.clab.yml
 ${bng1}             clab-${lab-name}-bng1
 ${corerouter1}      clab-${lab-name}-corerouter1
@@ -50,6 +50,13 @@ Verify Subscriber Got IPv4 Via DHCP
 Verify Session In BNG API
     Wait Until Keyword Succeeds    30 x    2s
     ...    Check BNG Session Count    ${bng1}    1
+
+Verify CAKE Scheduler Applied To Session
+    [Documentation]    A fresh IPoE session must have the CAKE egress
+    ...    scheduler programmed in the dataplane, not merely the service
+    ...    group resolved.
+    Wait Until Keyword Succeeds    30 x    5s
+    ...    Check CAKE Scheduler Present    ${bng1}
 
 Verify Subscriber Can Ping Gateway
     ${rc}    ${output} =    Run And Return Rc And Output
@@ -101,6 +108,13 @@ Check BNG Session Count
     ...    echo '${output}' | python3 -c "import sys,json; d=json.load(sys.stdin); entries=d.get('data',[]); print(len(entries))"
     Should Be Equal As Integers    ${rc}    0
     Should Be True    ${count} >= ${expected}    Session count ${count} < expected ${expected}
+
+Check CAKE Scheduler Present
+    [Arguments]    ${container}
+    ${output} =    Get osvbng API Response    ${container}    /api/show/qos/scheduler
+    ${rc}    ${count} =    Run And Return Rc And Output
+    ...    echo '${output}' | python3 -c "import sys,json; e=(json.load(sys.stdin).get('data') or []); assert e, 'no schedulers'; assert any(s.get('rate_kbps')==100000 for s in e), 'wrong rate'; print(len(e))"
+    Should Be Equal As Integers    ${rc}    0    CAKE scheduler not programmed for session (show qos.scheduler: ${output})
 
 Ping From Subscriber
     [Arguments]    ${container}    ${target}

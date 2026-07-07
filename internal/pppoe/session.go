@@ -825,6 +825,11 @@ func (s *SessionState) onVPPSessionCreated(swIfIndex uint32, err error) {
 	s.component.setupSessionUnnumbered(s.SessionID, swIfIndex,
 		s.component.resolveUnnumberedLoopback(s))
 
+	if err := s.component.applyServiceGroupBindings(s, swIfIndex); err != nil {
+		s.component.logger.Warn("Failed to apply service group bindings",
+			"session_id", s.SessionID, "sw_if_index", swIfIndex, "error", err)
+	}
+
 	if s.component.echoGen != nil {
 		magic := s.lcp.LocalConfig().Magic
 		s.component.echoGen.AddSession(s.PPPoESessionID, magic, 0)

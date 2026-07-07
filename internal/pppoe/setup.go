@@ -98,6 +98,20 @@ func (c *Component) setupSession(ctx context.Context, sess *SessionState, mode S
 	return nil
 }
 
+// applyServiceGroupBindings programs the QoS / ACL / uRPF bindings for the
+// session's resolved service group onto swIfIndex, resolving QoS policy
+// references against the running config. Shared by fresh bring-up and opdb
+// restore; the underlying southbound calls are idempotent, so re-applying
+// the same configuration is a no-op.
+func (c *Component) applyServiceGroupBindings(sess *SessionState, swIfIndex uint32) error {
+	cfg, _ := c.cfgMgr.GetRunning()
+	var qosPolicies map[string]*qos.Policy
+	if cfg != nil {
+		qosPolicies = cfg.QoSPolicies
+	}
+	return svcgroup.ApplyToSession(c.vpp, swIfIndex, sess.ServiceGroup, qosPolicies)
+}
+
 // setupSessionRestore replays a checkpointed PPPoE session into the
 // dataplane synchronously. Called by restoreSessions for each opdb entry
 // once installInMemoryState has populated the lookup indexes and
@@ -158,12 +172,7 @@ func (c *Component) setupSessionRestore(ctx context.Context, sess *SessionState)
 	}
 	sess.SwIfIndex = swIfIndex
 
-	cfg, _ := c.cfgMgr.GetRunning()
-	var qosPolicies map[string]*qos.Policy
-	if cfg != nil {
-		qosPolicies = cfg.QoSPolicies
-	}
-	if err := svcgroup.ApplyToSession(c.vpp, swIfIndex, sess.ServiceGroup, qosPolicies); err != nil {
+	if err := c.applyServiceGroupBindings(sess, swIfIndex); err != nil {
 		return fmt.Errorf("apply service group bindings: %w", err)
 	}
 
