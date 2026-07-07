@@ -59,6 +59,8 @@ func TestBeginActivation_ConcurrentSameSession(t *testing.T) {
 	c := newActivationComponent()
 
 	var wg sync.WaitGroup
+	var attempted sync.WaitGroup
+	attempted.Add(N)
 	results := make([]bool, N)
 	start := make(chan struct{})
 
@@ -68,10 +70,16 @@ func TestBeginActivation_ConcurrentSameSession(t *testing.T) {
 			defer wg.Done()
 			<-start
 			ok, done := c.beginActivation("s1")
+			results[i] = ok
+			// Hold every outcome until all N have attempted so the winner's
+			// slot is still set when the others call beginActivation.
+			// Releasing immediately lets the calls serialise and each win,
+			// which never exercises the dedup path.
+			attempted.Done()
+			attempted.Wait()
 			if ok {
 				done()
 			}
-			results[i] = ok
 		}(i)
 	}
 	close(start)
@@ -83,10 +91,7 @@ func TestBeginActivation_ConcurrentSameSession(t *testing.T) {
 			count++
 		}
 	}
-	if count == 0 {
-		t.Fatalf("expected at least 1 successful beginActivation among %d, got 0", N)
-	}
-	if count == N {
-		t.Fatalf("expected fewer than %d concurrent winners (most should be no-ops), got %d", N, count)
+	if count != 1 {
+		t.Fatalf("expected exactly 1 winner (others must observe the held slot), got %d", count)
 	}
 }
