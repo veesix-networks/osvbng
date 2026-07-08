@@ -29,6 +29,8 @@ type DataplaneTemplateData struct {
 	Memory       *system.MemoryConfig
 	APITrace     *system.APITraceConfig
 	LCPNetNs     string
+	// PollSleepUsec of 0 omits poll-sleep-usec so workers poll continuously.
+	PollSleepUsec uint32
 }
 
 func NewDataplaneTemplateData(cfg *Config, cpu *ResolvedCPU) (*DataplaneTemplateData, error) {
@@ -74,6 +76,13 @@ func NewDataplaneTemplateData(cfg *Config, cpu *ResolvedCPU) (*DataplaneTemplate
 
 	apiTrace := cfg.Dataplane.APITrace
 
+	// Idle-worker poll sleep: default 100us (dev/test CPU friendliness) unless
+	// the operator overrides it. 0 means poll continuously (lowest latency).
+	pollSleepUsec := uint32(100)
+	if cfg.Dataplane.PollSleepUsec != nil {
+		pollSleepUsec = *cfg.Dataplane.PollSleepUsec
+	}
+
 	return &DataplaneTemplateData{
 		MainCore:     cpu.MainCore,
 		WorkerCores:  cpu.WorkerCores,
@@ -85,8 +94,9 @@ func NewDataplaneTemplateData(cfg *Config, cpu *ResolvedCPU) (*DataplaneTemplate
 		DPDK:         dpdk,
 		StatsSegment: statseg,
 		Memory:       memory,
-		APITrace:     apiTrace,
-		LCPNetNs:     lcpNetNs(cfg),
+		APITrace:      apiTrace,
+		LCPNetNs:      lcpNetNs(cfg),
+		PollSleepUsec: pollSleepUsec,
 	}, nil
 }
 

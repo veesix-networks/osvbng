@@ -20,6 +20,13 @@ type DataplaneConfig struct {
 	Workers         string              `json:"workers,omitempty" yaml:"workers,omitempty"`
 	SkipConfGen     bool                `json:"skip_conf_gen,omitempty" yaml:"skip-conf-gen,omitempty"`
 	LCPNetNs        string              `json:"lcp_netns,omitempty" yaml:"lcp-netns,omitempty"`
+	// PollSleepUsec caps how long an idle worker sleeps between dispatch loops.
+	// Unset defaults to 100us, which keeps the dev/test environment off 100% CPU
+	// but bounds worker-handoff latency to that sleep. Set to 0 in production so
+	// workers poll continuously for lowest latency (DPDK workers spin regardless
+	// under load; this only affects idle workers). Pointer distinguishes unset
+	// from an explicit 0.
+	PollSleepUsec *uint32 `json:"poll_sleep_usec,omitempty" yaml:"poll-sleep-usec,omitempty"`
 	DPDK            *DPDKConfig         `json:"dpdk,omitempty" yaml:"dpdk,omitempty"`
 	StatsSegment    *StatsSegmentConfig `json:"statseg,omitempty" yaml:"statseg,omitempty"`
 	Memory          *MemoryConfig       `json:"memory,omitempty" yaml:"memory,omitempty"`

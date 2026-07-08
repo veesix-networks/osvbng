@@ -5,8 +5,8 @@ unix {
   cli-listen {{ .CLISocket }}
   cli-prompt osvbng#
   cli-no-pager
-  poll-sleep-usec 100
-}
+{{ if .PollSleepUsec }}  poll-sleep-usec {{ .PollSleepUsec }}
+{{ end }}}
 
 socksvr {
   socket-name {{ .APISocket }}
