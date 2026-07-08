@@ -5,6 +5,7 @@ Dataplane and DPDK configuration.
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
 | `rx_mode` | string | Interface RX mode: `polling`, `interrupt`, or `adaptive` | `polling` |
+| `poll-sleep-usec` | int | Microseconds an idle worker sleeps between dispatch loops. Default `100` (low idle CPU); `0` polls continuously for lowest latency | `0` |
 | `dpdk` | [DPDK](#dpdk-configuration) | DPDK-specific configuration | |
 | `statseg` | [StatsSegment](#stats-segment) | Stats segment configuration | |
 
@@ -23,6 +24,20 @@ This setting does not affect DPDK interfaces, which manage their own RX mode ind
 ```yaml
 dataplane:
   rx_mode: polling
+```
+
+## Worker Poll Sleep
+
+`poll-sleep-usec` caps how long an idle worker sleeps between dispatch loops, in microseconds. It trades idle CPU against latency.
+
+- **`100`** (default): idle workers sleep up to 100µs between polls, keeping CPU low when there is no traffic. Best for dev, test, and shared hosts.
+- **`0`**: workers never sleep when idle and poll continuously, giving the lowest latency at the cost of pinning each worker core at 100% CPU.
+
+Set `poll-sleep-usec: 0` on production deployments. Under load workers are always busy, so the sleep only affects idle workers, but with several workers a low-rate flow (for example ICMP) landing on a worker that is momentarily idle can otherwise wait up to the sleep interval before that worker wakes to handle it. `0` removes that tail. DPDK workers are unaffected under load; this only changes idle-worker behaviour.
+
+```yaml
+dataplane:
+  poll-sleep-usec: 0
 ```
 
 ## Stats Segment
