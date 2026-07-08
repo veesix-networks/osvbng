@@ -151,6 +151,10 @@ sudo virsh console osvbng
 # Default login: root / osvbng
 ```
 
+!!! warning "Change the default password"
+
+    The image ships with a well-known default login (`root` / `osvbng`). Change it on first boot with `passwd`, and do not expose the management interface to an untrusted network until you have.
+
 **Access the CLI:**
 
 ```bash
