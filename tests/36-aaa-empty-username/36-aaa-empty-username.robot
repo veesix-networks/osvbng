@@ -67,7 +67,7 @@ Teardown Empty Username Test
 Drop Counter Positive
     [Arguments]    ${container}
     ${metrics} =    Get osvbng Metrics    ${container}
-    Assert Counter Positive    ${metrics}    osvbng_aaa_policy_username_empty_drops    ${group}
+    Assert Counter Positive    ${metrics}    osvbng_aaa_policy_username_fallbacks    ${group}
 
 Get osvbng Metrics
     [Arguments]    ${container}
