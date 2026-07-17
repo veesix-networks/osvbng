@@ -14,15 +14,21 @@ import (
 type RPCService interface {
 	SnortClientDisconnect(ctx context.Context, in *SnortClientDisconnect) (*SnortClientDisconnectReply, error)
 	SnortClientGet(ctx context.Context, in *SnortClientGet) (RPCService_SnortClientGetClient, error)
+	SnortClientV2Get(ctx context.Context, in *SnortClientV2Get) (RPCService_SnortClientV2GetClient, error)
 	SnortInputModeGet(ctx context.Context, in *SnortInputModeGet) (*SnortInputModeGetReply, error)
 	SnortInputModeSet(ctx context.Context, in *SnortInputModeSet) (*SnortInputModeSetReply, error)
 	SnortInstanceCreate(ctx context.Context, in *SnortInstanceCreate) (*SnortInstanceCreateReply, error)
+	SnortInstanceCreateV2(ctx context.Context, in *SnortInstanceCreateV2) (*SnortInstanceCreateV2Reply, error)
 	SnortInstanceDelete(ctx context.Context, in *SnortInstanceDelete) (*SnortInstanceDeleteReply, error)
 	SnortInstanceDisconnect(ctx context.Context, in *SnortInstanceDisconnect) (*SnortInstanceDisconnectReply, error)
 	SnortInstanceGet(ctx context.Context, in *SnortInstanceGet) (RPCService_SnortInstanceGetClient, error)
+	SnortInstanceV2Get(ctx context.Context, in *SnortInstanceV2Get) (RPCService_SnortInstanceV2GetClient, error)
 	SnortInterfaceAttach(ctx context.Context, in *SnortInterfaceAttach) (*SnortInterfaceAttachReply, error)
 	SnortInterfaceDetach(ctx context.Context, in *SnortInterfaceDetach) (*SnortInterfaceDetachReply, error)
+	SnortInterfaceDetachV2(ctx context.Context, in *SnortInterfaceDetachV2) (*SnortInterfaceDetachV2Reply, error)
 	SnortInterfaceGet(ctx context.Context, in *SnortInterfaceGet) (RPCService_SnortInterfaceGetClient, error)
+	SnortInterfaceV2Get(ctx context.Context, in *SnortInterfaceV2Get) (RPCService_SnortInterfaceV2GetClient, error)
+	SnortSetDropBitmap(ctx context.Context, in *SnortSetDropBitmap) (*SnortSetDropBitmapReply, error)
 }
 
 type serviceClient struct {
@@ -86,6 +92,50 @@ func (c *serviceClient_SnortClientGetClient) Recv() (*SnortClientDetails, *Snort
 	}
 }
 
+func (c *serviceClient) SnortClientV2Get(ctx context.Context, in *SnortClientV2Get) (RPCService_SnortClientV2GetClient, error) {
+	stream, err := c.conn.NewStream(ctx)
+	if err != nil {
+		return nil, err
+	}
+	x := &serviceClient_SnortClientV2GetClient{stream}
+	if err := x.Stream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type RPCService_SnortClientV2GetClient interface {
+	Recv() (*SnortClientV2Details, *SnortClientV2GetReply, error)
+	api.Stream
+}
+
+type serviceClient_SnortClientV2GetClient struct {
+	api.Stream
+}
+
+func (c *serviceClient_SnortClientV2GetClient) Recv() (*SnortClientV2Details, *SnortClientV2GetReply, error) {
+	msg, err := c.Stream.RecvMsg()
+	if err != nil {
+		return nil, nil, err
+	}
+	switch m := msg.(type) {
+	case *SnortClientV2Details:
+		return m, nil, nil
+	case *SnortClientV2GetReply:
+		if err := api.RetvalToVPPApiError(m.Retval); err != nil {
+			c.Stream.Close()
+			return nil, m, err
+		}
+		err = c.Stream.Close()
+		if err != nil {
+			return nil, m, err
+		}
+		return nil, m, io.EOF
+	default:
+		return nil, nil, fmt.Errorf("unexpected message: %T %v", m, m)
+	}
+}
+
 func (c *serviceClient) SnortInputModeGet(ctx context.Context, in *SnortInputModeGet) (*SnortInputModeGetReply, error) {
 	out := new(SnortInputModeGetReply)
 	err := c.conn.Invoke(ctx, in, out)
@@ -106,6 +156,15 @@ func (c *serviceClient) SnortInputModeSet(ctx context.Context, in *SnortInputMod
 
 func (c *serviceClient) SnortInstanceCreate(ctx context.Context, in *SnortInstanceCreate) (*SnortInstanceCreateReply, error) {
 	out := new(SnortInstanceCreateReply)
+	err := c.conn.Invoke(ctx, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, api.RetvalToVPPApiError(out.Retval)
+}
+
+func (c *serviceClient) SnortInstanceCreateV2(ctx context.Context, in *SnortInstanceCreateV2) (*SnortInstanceCreateV2Reply, error) {
+	out := new(SnortInstanceCreateV2Reply)
 	err := c.conn.Invoke(ctx, in, out)
 	if err != nil {
 		return nil, err
@@ -175,6 +234,50 @@ func (c *serviceClient_SnortInstanceGetClient) Recv() (*SnortInstanceDetails, *S
 	}
 }
 
+func (c *serviceClient) SnortInstanceV2Get(ctx context.Context, in *SnortInstanceV2Get) (RPCService_SnortInstanceV2GetClient, error) {
+	stream, err := c.conn.NewStream(ctx)
+	if err != nil {
+		return nil, err
+	}
+	x := &serviceClient_SnortInstanceV2GetClient{stream}
+	if err := x.Stream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type RPCService_SnortInstanceV2GetClient interface {
+	Recv() (*SnortInstanceV2Details, *SnortInstanceV2GetReply, error)
+	api.Stream
+}
+
+type serviceClient_SnortInstanceV2GetClient struct {
+	api.Stream
+}
+
+func (c *serviceClient_SnortInstanceV2GetClient) Recv() (*SnortInstanceV2Details, *SnortInstanceV2GetReply, error) {
+	msg, err := c.Stream.RecvMsg()
+	if err != nil {
+		return nil, nil, err
+	}
+	switch m := msg.(type) {
+	case *SnortInstanceV2Details:
+		return m, nil, nil
+	case *SnortInstanceV2GetReply:
+		if err := api.RetvalToVPPApiError(m.Retval); err != nil {
+			c.Stream.Close()
+			return nil, m, err
+		}
+		err = c.Stream.Close()
+		if err != nil {
+			return nil, m, err
+		}
+		return nil, m, io.EOF
+	default:
+		return nil, nil, fmt.Errorf("unexpected message: %T %v", m, m)
+	}
+}
+
 func (c *serviceClient) SnortInterfaceAttach(ctx context.Context, in *SnortInterfaceAttach) (*SnortInterfaceAttachReply, error) {
 	out := new(SnortInterfaceAttachReply)
 	err := c.conn.Invoke(ctx, in, out)
@@ -186,6 +289,15 @@ func (c *serviceClient) SnortInterfaceAttach(ctx context.Context, in *SnortInter
 
 func (c *serviceClient) SnortInterfaceDetach(ctx context.Context, in *SnortInterfaceDetach) (*SnortInterfaceDetachReply, error) {
 	out := new(SnortInterfaceDetachReply)
+	err := c.conn.Invoke(ctx, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, api.RetvalToVPPApiError(out.Retval)
+}
+
+func (c *serviceClient) SnortInterfaceDetachV2(ctx context.Context, in *SnortInterfaceDetachV2) (*SnortInterfaceDetachV2Reply, error) {
+	out := new(SnortInterfaceDetachV2Reply)
 	err := c.conn.Invoke(ctx, in, out)
 	if err != nil {
 		return nil, err
@@ -235,4 +347,57 @@ func (c *serviceClient_SnortInterfaceGetClient) Recv() (*SnortInterfaceDetails, 
 	default:
 		return nil, nil, fmt.Errorf("unexpected message: %T %v", m, m)
 	}
+}
+
+func (c *serviceClient) SnortInterfaceV2Get(ctx context.Context, in *SnortInterfaceV2Get) (RPCService_SnortInterfaceV2GetClient, error) {
+	stream, err := c.conn.NewStream(ctx)
+	if err != nil {
+		return nil, err
+	}
+	x := &serviceClient_SnortInterfaceV2GetClient{stream}
+	if err := x.Stream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type RPCService_SnortInterfaceV2GetClient interface {
+	Recv() (*SnortInterfaceV2Details, *SnortInterfaceV2GetReply, error)
+	api.Stream
+}
+
+type serviceClient_SnortInterfaceV2GetClient struct {
+	api.Stream
+}
+
+func (c *serviceClient_SnortInterfaceV2GetClient) Recv() (*SnortInterfaceV2Details, *SnortInterfaceV2GetReply, error) {
+	msg, err := c.Stream.RecvMsg()
+	if err != nil {
+		return nil, nil, err
+	}
+	switch m := msg.(type) {
+	case *SnortInterfaceV2Details:
+		return m, nil, nil
+	case *SnortInterfaceV2GetReply:
+		if err := api.RetvalToVPPApiError(m.Retval); err != nil {
+			c.Stream.Close()
+			return nil, m, err
+		}
+		err = c.Stream.Close()
+		if err != nil {
+			return nil, m, err
+		}
+		return nil, m, io.EOF
+	default:
+		return nil, nil, fmt.Errorf("unexpected message: %T %v", m, m)
+	}
+}
+
+func (c *serviceClient) SnortSetDropBitmap(ctx context.Context, in *SnortSetDropBitmap) (*SnortSetDropBitmapReply, error) {
+	out := new(SnortSetDropBitmapReply)
+	err := c.conn.Invoke(ctx, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, api.RetvalToVPPApiError(out.Retval)
 }
