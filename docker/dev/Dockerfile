@@ -41,11 +41,11 @@ ARG VPP_INSTALL_SKIP_SYSCTL=true
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     numactl \
-    vpp=25.10-release \
-    vpp-plugin-core=25.10-release \
-    libvppinfra=25.10-release \
-    libvppinfra-dev=25.10-release \
-    vpp-dev=25.10-release \
+    vpp=26.06-release \
+    vpp-plugin-core=26.06-release \
+    libvppinfra=26.06-release \
+    libvppinfra-dev=26.06-release \
+    vpp-dev=26.06-release \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -s https://deb.frrouting.org/frr/keys.gpg | tee /usr/share/keyrings/frrouting.gpg > /dev/null \
