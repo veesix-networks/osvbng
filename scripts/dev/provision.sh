@@ -12,7 +12,7 @@ set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 GOLANG_VERSION="${GOLANG_VERSION:-1.24}"
-DATAPLANE_VERSION="${DATAPLANE_VERSION:-25.10-release}"
+DATAPLANE_VERSION="${DATAPLANE_VERSION:-26.06-release}"
 
 # --- Base packages ---
 

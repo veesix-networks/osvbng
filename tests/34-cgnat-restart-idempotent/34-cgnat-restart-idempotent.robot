@@ -67,8 +67,10 @@ Teardown Restart Suite
 
 Edit Live Config Inline
     [Arguments]    ${sed_expr}
-    ${result} =    Run Process    sed    -i    ${sed_expr}    ${cfg-live}
-    Should Be Equal As Integers    ${result.rc}    0    sed failed: ${result.stderr}
+    # sed -i swaps the file inode; a single-file Docker bind mount does not follow that, so rewrite in place to keep the inode the container is bound to
+    ${cmd} =    Set Variable    sed '${sed_expr}' '${cfg-live}' > '${cfg-live}.new' && cat '${cfg-live}.new' > '${cfg-live}' && rm -f '${cfg-live}.new'
+    ${result} =    Run Process    sh    -c    ${cmd}
+    Should Be Equal As Integers    ${result.rc}    0    edit failed: ${result.stderr}
 
 Stop osvbngd Hard
     [Arguments]    ${container}
