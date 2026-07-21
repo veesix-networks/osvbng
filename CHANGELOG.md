@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.16.0](https://github.com/veesix-networks/osvbng/compare/v0.15.0...v0.16.0) (2026-07-21)
+
+
+### Features
+
+* **dataplane:** various CGNAT, QoS and VPP tweaks ([#394](https://github.com/veesix-networks/osvbng/issues/394)) ([07c5017](https://github.com/veesix-networks/osvbng/commit/07c50173494499570897d20db0b47782f86c8c13))
+
+
+### Bug Fixes
+
+* **ipoe,pppoe:** apply service-group qos/acl/urpf bindings on fresh session bring-up ([e6bfb0b](https://github.com/veesix-networks/osvbng/commit/e6bfb0b0d0c30d1fe64759f154584f9600ee7191))
+* **ipoe:** preserve subscriber ActivatedAt across DHCP renewals ([#390](https://github.com/veesix-networks/osvbng/issues/390)) ([c4ba0bf](https://github.com/veesix-networks/osvbng/commit/c4ba0bf724d001fbaf7956913974f379ea56ddbb))
+
 ## [0.15.0](https://github.com/veesix-networks/osvbng/compare/v0.14.0...v0.15.0) (2026-06-28)
 
 
