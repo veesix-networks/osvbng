@@ -616,7 +616,6 @@ func (c *Component) handlePADR(pkt *dataplane.ParsedPacket) error {
 		MAC:            pkt.MAC,
 		OuterVLAN:      pkt.OuterVLAN,
 		InnerVLAN:      pkt.InnerVLAN,
-		SwIfIndex:      pkt.SwIfIndex,
 		EncapIfIndex:   pkt.SwIfIndex,
 		Phase:          ppp.PhaseDead,
 		GroupName:      match.Name,
