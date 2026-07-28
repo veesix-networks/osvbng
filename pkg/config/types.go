@@ -51,7 +51,9 @@ type Config struct {
 }
 
 type SystemConfig struct {
-	CPPM *system.CPPMConfig `json:"cppm,omitempty" yaml:"cppm,omitempty"`
+	CPPM                *system.CPPMConfig `json:"cppm,omitempty" yaml:"cppm,omitempty"`
+	ACName              string             `json:"ac-name,omitempty" yaml:"ac-name,omitempty"`
+	ManagementInterface string             `json:"management-interface,omitempty" yaml:"management-interface,omitempty"`
 }
 
 type DiffResult struct {

@@ -427,6 +427,11 @@ func (c *Component) resolveTerminateTargetLocked(ev *events.SubscriberTerminateE
 
 func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
+
+	if cfg, err := c.cfgMgr.GetRunning(); err == nil && cfg.System != nil && cfg.System.ACName != "" {
+		c.acName = cfg.System.ACName
+	}
+
 	c.logger.Info("Starting PPPoE component", "ac_name", c.acName)
 
 	c.SetReadyState(component.StateRestoring)
@@ -1304,6 +1309,8 @@ func (c *Component) restoreSessionToCache(ctx context.Context, sess *SessionStat
 		VRF:              sess.VRF,
 		ServiceGroup:     sess.ServiceGroup.Name,
 		SRGName:          sess.SRGName,
+			IngressPolicy:     sess.ServiceGroup.QoSIngress,
+			EgressPolicy:      sess.ServiceGroup.QoSEgress,
 		IPv4Address:      sess.IPv4Address,
 		IPv6Address:      sess.IPv6Address,
 		AAASessionID:     sess.AcctSessionID,
@@ -1628,6 +1635,8 @@ func (c *Component) ForEachSession(fn func(models.SubscriberSession) bool) {
 			VRF:              sess.VRF,
 			ServiceGroup:     sess.ServiceGroup.Name,
 			SRGName:          sess.SRGName,
+			IngressPolicy:     sess.ServiceGroup.QoSIngress,
+			EgressPolicy:      sess.ServiceGroup.QoSEgress,
 			IPv4Address:      sess.IPv4Address,
 			IPv6Address:      sess.IPv6Address,
 			Username:         sess.Username,
@@ -1726,6 +1735,8 @@ func (c *Component) buildModelSnapshot(sess *SessionState) *models.PPPSession {
 		VRF:              sess.VRF,
 		ServiceGroup:     sess.ServiceGroup.Name,
 		SRGName:          sess.SRGName,
+			IngressPolicy:     sess.ServiceGroup.QoSIngress,
+			EgressPolicy:      sess.ServiceGroup.QoSEgress,
 		IPv4Address:      sess.IPv4Address,
 		IPv6Address:      sess.IPv6Address,
 		Username:         sess.Username,
