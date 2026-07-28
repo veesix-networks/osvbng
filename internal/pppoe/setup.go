@@ -222,6 +222,8 @@ func (c *Component) setupSessionRestore(ctx context.Context, sess *SessionState)
 		VRF:              sess.VRF,
 		ServiceGroup:     sess.ServiceGroup.Name,
 		SRGName:          sess.SRGName,
+		IngressPolicy:     sess.ServiceGroup.QoSIngress,
+		EgressPolicy:      sess.ServiceGroup.QoSEgress,
 		IPv4Address:      sess.IPv4Address,
 		IPv6Address:      sess.IPv6Address,
 		Username:         sess.Username,

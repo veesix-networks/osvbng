@@ -2,6 +2,7 @@ package subscriber
 
 import (
 	"context"
+	"fmt"
 
 	subscriberComp "github.com/veesix-networks/osvbng/internal/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/deps"
@@ -25,7 +26,24 @@ func NewSessionHandler(deps *deps.ShowDeps) show.ShowHandler {
 
 func (h *SessionHandler) Collect(ctx context.Context, req *show.Request) (interface{}, error) {
 	sessionID := req.Options["session_id"]
-	return h.subscriber.GetSession(ctx, sessionID)
+	username := req.Options["username"]
+
+	if sessionID != "" {
+		return h.subscriber.GetSession(ctx, sessionID)
+	}
+
+	if username != "" {
+		sessions, err := h.subscriber.GetSessions(ctx, "", "", 0, username)
+		if err != nil {
+			return nil, err
+		}
+		if len(sessions) == 0 {
+			return nil, fmt.Errorf("session not found for username: %s", username)
+		}
+		return sessions[0], nil
+	}
+
+	return nil, fmt.Errorf("either --session-id or --username must be specified")
 }
 
 func (h *SessionHandler) PathPattern() paths.Path {
@@ -41,11 +59,12 @@ func (h *SessionHandler) Summary() string {
 }
 
 func (h *SessionHandler) Description() string {
-	return "Retrieve a specific subscriber session by its session ID."
+	return "Retrieve a specific subscriber session by session ID or username."
 }
 
 type SessionOptions struct {
 	SessionID string `query:"session_id" description:"Subscriber session identifier"`
+	Username  string `query:"username" description:"Filter by username"`
 }
 
 func (h *SessionHandler) OptionsType() interface{} {
