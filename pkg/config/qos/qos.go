@@ -70,7 +70,7 @@ func (p *Policy) Defaults() {
 		p.EIR = p.CIR
 	}
 	if p.CBS == 0 {
-		p.CBS = uint64(p.CIR) * 1000 / 8
+		p.CBS = uint64(p.CIR) * 1000 * 25 / 8 / 10
 	}
 	if p.EBS == 0 {
 		p.EBS = p.CBS

@@ -1109,6 +1109,14 @@ func (s *SessionState) terminate() {
 
 	if s.component.vpp != nil && s.SwIfIndex != 0 {
 		sessionID := s.SessionID
+		if err := s.component.vpp.RemoveQoS(s.SwIfIndex); err != nil {
+			s.component.logger.Debug("Failed to remove QoS policers during teardown",
+				"session_id", sessionID, "sw_if_index", s.SwIfIndex, "error", err)
+		}
+		if err := s.component.vpp.RemoveScheduler(s.SwIfIndex); err != nil {
+			s.component.logger.Debug("Failed to remove CAKE scheduler during teardown",
+				"session_id", sessionID, "sw_if_index", s.SwIfIndex, "error", err)
+		}
 		s.component.vpp.DeletePPPoESessionAsync(s.PPPoESessionID, s.IPv4Address, s.MAC, func(err error) {
 			if err != nil {
 				s.component.logger.Warn("Failed to delete PPPoE session from VPP",
