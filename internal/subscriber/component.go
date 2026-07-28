@@ -517,9 +517,9 @@ func (c *Component) activateSession(sess models.SubscriberSession) error {
 			}
 		}
 
-		if ingress != nil {
-			if err := c.vpp.ApplyQoS(swIfIndex, ingress, nil); err != nil {
-				c.logger.Warn("Failed to apply ingress policer", "error", err, "sw_if_index", swIfIndex)
+		if ingress != nil || egress != nil {
+			if err := c.vpp.ApplyQoS(swIfIndex, ingress, egress); err != nil {
+				c.logger.Warn("Failed to apply QoS", "error", err, "sw_if_index", swIfIndex, "service_group", sgName)
 			}
 		}
 	} else {

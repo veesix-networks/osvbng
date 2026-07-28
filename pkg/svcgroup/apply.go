@@ -87,30 +87,30 @@ func ApplyToSession(sb PolicyApplier, swIfIndex uint32, sg ServiceGroup, qosPoli
 	}
 
 	if egress != nil && egress.Scheduler != nil {
-		downloadRate := egress.CIR
-		if sg.DownloadRate > 0 {
-			downloadRate = uint32(sg.DownloadRate)
-		}
-		if downloadRate > 0 {
-			if err := sb.ApplyScheduler(swIfIndex, downloadRate, egress.Scheduler); err != nil {
-				log.Warn("Failed to apply scheduler",
-					"error", err, "sw_if_index", swIfIndex, "service_group", sg.Name)
-			} else {
-				log.Debug("Applied CAKE scheduler",
-					"sw_if_index", swIfIndex,
-					"service_group", sg.Name,
-					"rate_kbps", downloadRate,
-					"tin_mode", egress.Scheduler.TinMode)
+			downloadRate := egress.CIR
+			if sg.DownloadRate > 0 {
+				downloadRate = uint32(sg.DownloadRate)
 			}
-		}
-		if ingress != nil {
-			if err := sb.ApplyQoS(swIfIndex, ingress, nil); err != nil {
-				log.Warn("Failed to apply ingress policer",
-					"error", err, "sw_if_index", swIfIndex, "service_group", sg.Name)
+			if downloadRate > 0 {
+				if err := sb.ApplyScheduler(swIfIndex, downloadRate, egress.Scheduler); err != nil {
+					log.Warn("Failed to apply scheduler",
+						"error", err, "sw_if_index", swIfIndex, "service_group", sg.Name)
+				} else {
+					log.Debug("Applied CAKE scheduler",
+						"sw_if_index", swIfIndex,
+						"service_group", sg.Name,
+						"rate_kbps", downloadRate,
+						"tin_mode", egress.Scheduler.TinMode)
+				}
 			}
+			if ingress != nil || egress != nil {
+				if err := sb.ApplyQoS(swIfIndex, ingress, egress); err != nil {
+					log.Warn("Failed to apply QoS",
+						"error", err, "sw_if_index", swIfIndex, "service_group", sg.Name)
+				}
+			}
+			return nil
 		}
-		return nil
-	}
 
 	if err := sb.ApplyQoS(swIfIndex, ingress, egress); err != nil {
 		log.Warn("Failed to apply QoS",
