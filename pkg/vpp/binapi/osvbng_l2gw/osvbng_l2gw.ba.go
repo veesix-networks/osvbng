@@ -24,8 +24,8 @@ const _ = api.GoVppAPIPackageIsVersion2
 
 const (
 	APIFile    = "osvbng_l2gw"
-	APIVersion = "1.1.0"
-	VersionCrc = 0x17af67e0
+	APIVersion = "1.2.0"
+	VersionCrc = 0x80ff427c
 )
 
 // Add or delete a bidirectional L2GW circuit
@@ -469,29 +469,33 @@ func (m *OsvbngL2gwEnableDisableReply) Unmarshal(b []byte) error {
 	return nil
 }
 
-// Arm/disarm the DHCP trigger snoop for an S-VLAN range on a port
+// Arm/disarm the circuit trigger snoop for an S-VLAN range on a port
 //
-//	On circuit miss, frames whose outer VLAN is armed and that carry a
-//	DHCPv4 (udp dst 67) or DHCPv6 (udp dst 547) payload are punted to the
+//	On circuit miss, frames whose outer VLAN is armed are punted to the
 //	control plane via the punt SHM service instead of continuing down the
-//	feature arc. This is the wholesale circuit trigger path; the port must
-//	also be armed with osvbng_l2gw_enable_disable.
+//	feature arc. In DHCP mode (any_protocol = 0) only DHCPv4 (udp dst 67)
+//	and DHCPv6 (udp dst 547) payloads punt; in any-protocol mode
+//	(any_protocol = 1) the first frame of any ethertype punts, gated by a
+//	per-tuple dampener. This is the wholesale circuit trigger path; the
+//	port must also be armed with osvbng_l2gw_enable_disable.
 //	- sw_if_index - access port
 //	- svlan_lo - first S-VLAN of the range (1-4094)
 //	- svlan_hi - last S-VLAN of the range (inclusive)
+//	- any_protocol - any-protocol (packet) mode instead of DHCP-only
 //	- is_add - arm if non-zero, else disarm
 //
 // OsvbngL2gwTriggerSvlanRange defines message 'osvbng_l2gw_trigger_svlan_range'.
 type OsvbngL2gwTriggerSvlanRange struct {
-	SwIfIndex interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
-	SvlanLo   uint16                         `binapi:"u16,name=svlan_lo" json:"svlan_lo,omitempty"`
-	SvlanHi   uint16                         `binapi:"u16,name=svlan_hi" json:"svlan_hi,omitempty"`
-	IsAdd     bool                           `binapi:"bool,name=is_add" json:"is_add,omitempty"`
+	SwIfIndex   interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
+	SvlanLo     uint16                         `binapi:"u16,name=svlan_lo" json:"svlan_lo,omitempty"`
+	SvlanHi     uint16                         `binapi:"u16,name=svlan_hi" json:"svlan_hi,omitempty"`
+	AnyProtocol bool                           `binapi:"bool,name=any_protocol" json:"any_protocol,omitempty"`
+	IsAdd       bool                           `binapi:"bool,name=is_add" json:"is_add,omitempty"`
 }
 
 func (m *OsvbngL2gwTriggerSvlanRange) Reset()               { *m = OsvbngL2gwTriggerSvlanRange{} }
 func (*OsvbngL2gwTriggerSvlanRange) GetMessageName() string { return "osvbng_l2gw_trigger_svlan_range" }
-func (*OsvbngL2gwTriggerSvlanRange) GetCrcString() string   { return "27e1c44c" }
+func (*OsvbngL2gwTriggerSvlanRange) GetCrcString() string   { return "9c2f75d7" }
 func (*OsvbngL2gwTriggerSvlanRange) GetMessageType() api.MessageType {
 	return api.RequestMessage
 }
@@ -503,6 +507,7 @@ func (m *OsvbngL2gwTriggerSvlanRange) Size() (size int) {
 	size += 4 // m.SwIfIndex
 	size += 2 // m.SvlanLo
 	size += 2 // m.SvlanHi
+	size += 1 // m.AnyProtocol
 	size += 1 // m.IsAdd
 	return size
 }
@@ -514,6 +519,7 @@ func (m *OsvbngL2gwTriggerSvlanRange) Marshal(b []byte) ([]byte, error) {
 	buf.EncodeUint32(uint32(m.SwIfIndex))
 	buf.EncodeUint16(m.SvlanLo)
 	buf.EncodeUint16(m.SvlanHi)
+	buf.EncodeBool(m.AnyProtocol)
 	buf.EncodeBool(m.IsAdd)
 	return buf.Bytes(), nil
 }
@@ -522,6 +528,7 @@ func (m *OsvbngL2gwTriggerSvlanRange) Unmarshal(b []byte) error {
 	m.SwIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
 	m.SvlanLo = buf.DecodeUint16()
 	m.SvlanHi = buf.DecodeUint16()
+	m.AnyProtocol = buf.DecodeBool()
 	m.IsAdd = buf.DecodeBool()
 	return nil
 }
@@ -571,7 +578,7 @@ func file_osvbng_l2gw_binapi_init() {
 	api.RegisterMessage((*OsvbngL2gwCircuitSetStateReply)(nil), "osvbng_l2gw_circuit_set_state_reply_e8d4e804")
 	api.RegisterMessage((*OsvbngL2gwEnableDisable)(nil), "osvbng_l2gw_enable_disable_ae6cfcfb")
 	api.RegisterMessage((*OsvbngL2gwEnableDisableReply)(nil), "osvbng_l2gw_enable_disable_reply_e8d4e804")
-	api.RegisterMessage((*OsvbngL2gwTriggerSvlanRange)(nil), "osvbng_l2gw_trigger_svlan_range_27e1c44c")
+	api.RegisterMessage((*OsvbngL2gwTriggerSvlanRange)(nil), "osvbng_l2gw_trigger_svlan_range_9c2f75d7")
 	api.RegisterMessage((*OsvbngL2gwTriggerSvlanRangeReply)(nil), "osvbng_l2gw_trigger_svlan_range_reply_e8d4e804")
 }
 
