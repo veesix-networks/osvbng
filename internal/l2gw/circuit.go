@@ -70,6 +70,8 @@ type Circuit struct {
 	// runtime only
 	pendingTrigger *pendingTrigger
 	rejectedAt     time.Time
+	lastPackets    uint64
+	lastActivity   time.Time
 }
 
 type pendingTrigger struct {

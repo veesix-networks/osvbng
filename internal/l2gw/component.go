@@ -121,6 +121,7 @@ func (c *Component) Start(ctx context.Context) error {
 		c.Go(c.consumePacketTriggers)
 	}
 	c.Go(c.janitor)
+	c.Go(c.idleJanitor)
 
 	c.SetReadyState(component.StateReady)
 	c.eventBus.Publish(events.TopicComponentReady, events.Event{
