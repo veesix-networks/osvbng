@@ -28,11 +28,13 @@ type L2GWCircuit struct {
 
 type L2GW interface {
 	L2GWEnableInput(ifaceName string, enable bool) error
-	// L2GWTriggerSVLANRange arms (or disarms) the dataplane DHCP trigger
+	// L2GWTriggerSVLANRange arms (or disarms) the dataplane trigger
 	// snoop for an S-VLAN range on an access port: on circuit miss,
-	// DHCPv4/DHCPv6 frames in armed S-VLANs are punted to the control
-	// plane.
-	L2GWTriggerSVLANRange(ifaceName string, svlanLo, svlanHi uint16, add bool) error
+	// frames in armed S-VLANs are punted to the control plane. With
+	// anyProtocol false only DHCPv4/DHCPv6 punt; with anyProtocol true
+	// the first frame of any ethertype punts, gated by the plugin's
+	// per-tuple dampener.
+	L2GWTriggerSVLANRange(ifaceName string, svlanLo, svlanHi uint16, anyProtocol, add bool) error
 	// AddL2GWCircuit returns (circuit id == access-direction counter
 	// index, handoff-direction counter index) in the /osvbng/l2gw stats
 	// segment.

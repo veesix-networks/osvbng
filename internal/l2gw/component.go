@@ -51,7 +51,8 @@ type Component struct {
 	armedMu    sync.Mutex
 	armedPorts map[uint32]bool
 
-	triggerChan chan *dataplane.ParsedPacket
+	triggerChan       chan *dataplane.ParsedPacket
+	packetTriggerChan <-chan *dataplane.ParsedPacket
 
 	aaaSub       events.Subscription
 	terminateSub events.Subscription
@@ -82,6 +83,13 @@ func (c *Component) TriggerChan() chan<- *dataplane.ParsedPacket {
 	return c.triggerChan
 }
 
+// SetPacketTriggerChan wires the dataplane component's dedicated
+// packet-mode trigger channel (any-protocol first-frame punts). Must be
+// called before Start.
+func (c *Component) SetPacketTriggerChan(ch <-chan *dataplane.ParsedPacket) {
+	c.packetTriggerChan = ch
+}
+
 func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
 	c.logger.Info("Starting L2GW component")
@@ -109,6 +117,9 @@ func (c *Component) Start(ctx context.Context) error {
 	c.haStateSub = c.eventBus.Subscribe(events.TopicHAStateChange, c.handleHAStateChange)
 
 	c.Go(c.consumeTriggers)
+	if c.packetTriggerChan != nil {
+		c.Go(c.consumePacketTriggers)
+	}
 	c.Go(c.janitor)
 
 	c.SetReadyState(component.StateReady)
@@ -170,14 +181,16 @@ func (c *Component) armTriggers() error {
 			if err != nil {
 				return fmt.Errorf("group %s svlan range: %w", name, err)
 			}
+			anyProtocol := vr.GetTriggerMode() == subscriber.TriggerModePacket
 			for _, r := range contiguousRanges(svlans) {
-				if err := c.vpp.L2GWTriggerSVLANRange(vr.ParentInterface, r[0], r[1], true); err != nil {
+				if err := c.vpp.L2GWTriggerSVLANRange(vr.ParentInterface, r[0], r[1], anyProtocol, true); err != nil {
 					return fmt.Errorf("arm trigger svlans %d-%d on %s: %w",
 						r[0], r[1], vr.ParentInterface, err)
 				}
 			}
 			c.logger.Info("Armed l2gw trigger ranges",
-				"group", name, "interface", vr.ParentInterface, "svlans", vr.SVLAN)
+				"group", name, "interface", vr.ParentInterface,
+				"svlans", vr.SVLAN, "trigger", string(vr.GetTriggerMode()))
 		}
 	}
 	return nil

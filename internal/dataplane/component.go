@@ -35,6 +35,12 @@ type Component struct {
 	IPv6NDChan chan *dataplane.ParsedPacket
 	L2TPChan   chan *dataplane.ParsedPacket
 
+	// L2GWTriggerChan carries packet-mode l2gw trigger punts straight
+	// to the l2gw component, bypassing the IPoE DHCP path entirely.
+	// Rate is bounded in the dataplane (per-tuple dampener + punt
+	// policer), so no CPPM gate here.
+	L2GWTriggerChan chan *dataplane.ParsedPacket
+
 	CPPM *cppm.Manager
 
 	egressSub     events.Subscription
@@ -54,17 +60,18 @@ func New(deps component.Dependencies) (*Component, error) {
 	log := logger.Get(logger.Dataplane)
 
 	c := &Component{
-		Base:       component.NewBase("dataplane"),
-		logger:     log,
-		eventBus:   deps.EventBus,
-		vpp:        deps.Southbound,
-		DHCPChan:   make(chan *dataplane.ParsedPacket, 1000),
-		DHCPv6Chan: make(chan *dataplane.ParsedPacket, 1000),
-		ARPChan:    make(chan *dataplane.ParsedPacket, 1000),
-		PPPoEChan:  make(chan *dataplane.ParsedPacket, 1000),
-		IPv6NDChan: make(chan *dataplane.ParsedPacket, 1000),
-		L2TPChan:   make(chan *dataplane.ParsedPacket, 1000),
-		CPPM:       deps.CPPM,
+		Base:            component.NewBase("dataplane"),
+		logger:          log,
+		eventBus:        deps.EventBus,
+		vpp:             deps.Southbound,
+		DHCPChan:        make(chan *dataplane.ParsedPacket, 1000),
+		DHCPv6Chan:      make(chan *dataplane.ParsedPacket, 1000),
+		ARPChan:         make(chan *dataplane.ParsedPacket, 1000),
+		PPPoEChan:       make(chan *dataplane.ParsedPacket, 1000),
+		IPv6NDChan:      make(chan *dataplane.ParsedPacket, 1000),
+		L2TPChan:        make(chan *dataplane.ParsedPacket, 1000),
+		L2GWTriggerChan: make(chan *dataplane.ParsedPacket, 1024),
+		CPPM:            deps.CPPM,
 	}
 
 	ingress := shm.NewIngress()
@@ -195,6 +202,12 @@ func (c *Component) readLoop() {
 				default:
 					c.logger.Warn("IPv6 ND channel full, dropping packet")
 				}
+			case models.ProtocolL2:
+				select {
+				case c.L2GWTriggerChan <- pkt:
+				default:
+					c.logger.Warn("L2GW trigger channel full, dropping packet")
+				}
 			case models.ProtocolL2TP:
 				if !c.CPPM.Allow(cppm.ProtocolL2TP) {
 					continue
@@ -261,6 +274,7 @@ func (c *Component) drainChannels() {
 		case <-c.ARPChan:
 		case <-c.PPPoEChan:
 		case <-c.IPv6NDChan:
+		case <-c.L2GWTriggerChan:
 		default:
 			return
 		}

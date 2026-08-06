@@ -21,14 +21,15 @@ const (
 type Protocol uint8
 
 const (
-	ProtoDHCPv4    Protocol = 0
-	ProtoDHCPv6    Protocol = 1
-	ProtoARP       Protocol = 2
-	ProtoPPPoEDisc Protocol = 3
-	ProtoPPPoESess Protocol = 4
-	ProtoIPv6ND    Protocol = 5
-	ProtoL2TP      Protocol = 6
-	ProtoCount     Protocol = 7
+	ProtoDHCPv4      Protocol = 0
+	ProtoDHCPv6      Protocol = 1
+	ProtoARP         Protocol = 2
+	ProtoPPPoEDisc   Protocol = 3
+	ProtoPPPoESess   Protocol = 4
+	ProtoIPv6ND      Protocol = 5
+	ProtoL2TP        Protocol = 6
+	ProtoL2GWTrigger Protocol = 7
+	ProtoCount       Protocol = 8
 )
 
 type ShmHeader struct {

@@ -180,6 +180,8 @@ func (i *Ingress) parsePacket(pkt *PuntPacket) (*dataplane.ParsedPacket, error) 
 		if udpLayer := packet.Layer(layers.LayerTypeUDP); udpLayer != nil {
 			parsed.UDP = udpLayer.(*layers.UDP)
 		}
+	case ProtoL2GWTrigger:
+		parsed.Protocol = models.ProtocolL2
 	default:
 		return nil, fmt.Errorf("unsupported protocol: %d", pkt.Protocol)
 	}

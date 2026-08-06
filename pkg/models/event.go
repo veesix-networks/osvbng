@@ -59,7 +59,12 @@ const (
 	ProtocolIPv6ND         Protocol = "ipv6_nd"
 	ProtocolPPP            Protocol = "ppp"
 	ProtocolL2TP           Protocol = "l2tp"
-	ProtocolUnknown        Protocol = "unknown"
+
+	// ProtocolL2 marks a packet-triggered l2gw punt: any-ethertype
+	// first frame, only ethernet + VLANs + source MAC are meaningful.
+	ProtocolL2 Protocol = "l2"
+
+	ProtocolUnknown Protocol = "unknown"
 )
 
 type SessionState string

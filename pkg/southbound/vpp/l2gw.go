@@ -40,7 +40,7 @@ func (v *VPP) L2GWEnableInput(ifaceName string, enable bool) error {
 	return nil
 }
 
-func (v *VPP) L2GWTriggerSVLANRange(ifaceName string, svlanLo, svlanHi uint16, add bool) error {
+func (v *VPP) L2GWTriggerSVLANRange(ifaceName string, svlanLo, svlanHi uint16, anyProtocol, add bool) error {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
 		return fmt.Errorf("create API channel: %w", err)
@@ -53,10 +53,11 @@ func (v *VPP) L2GWTriggerSVLANRange(ifaceName string, svlanLo, svlanHi uint16, a
 	}
 
 	req := &osvbng_l2gw.OsvbngL2gwTriggerSvlanRange{
-		SwIfIndex: interface_types.InterfaceIndex(idx),
-		SvlanLo:   svlanLo,
-		SvlanHi:   svlanHi,
-		IsAdd:     add,
+		SwIfIndex:   interface_types.InterfaceIndex(idx),
+		SvlanLo:     svlanLo,
+		SvlanHi:     svlanHi,
+		AnyProtocol: anyProtocol,
+		IsAdd:       add,
 	}
 
 	reply := &osvbng_l2gw.OsvbngL2gwTriggerSvlanRangeReply{}

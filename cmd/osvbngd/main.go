@@ -368,6 +368,7 @@ func main() {
 			log.Fatalf("Failed to create l2gw component: %v", err)
 		}
 		ipoeComp.SetL2GWChannel(l2gwComp.TriggerChan())
+		l2gwComp.SetPacketTriggerChan(dataplaneComp.L2GWTriggerChan)
 		mainLog.Info("L2GW component created")
 	}
 

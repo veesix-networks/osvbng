@@ -40,13 +40,31 @@ func (c *Component) consumeTriggers() {
 	}
 }
 
-// handleTrigger processes a punted DHCP packet from an l2gw access-type
-// subscriber group. Only session-initiating messages trigger circuit
-// creation; everything else on an unestablished circuit is dropped (the
-// client retransmits, and established circuits never punt).
+// consumePacketTriggers drains the dedicated packet-mode channel: any
+// protocol first-frame punts from ranges armed with trigger: packet.
+func (c *Component) consumePacketTriggers() {
+	for {
+		select {
+		case <-c.Ctx.Done():
+			return
+		case pkt := <-c.packetTriggerChan:
+			if err := c.handleTrigger(pkt); err != nil {
+				c.logger.Debug("l2gw packet trigger dropped", "error", err)
+			}
+		}
+	}
+}
+
+// handleTrigger processes a punted trigger packet from an l2gw
+// access-type subscriber group: a DHCP session-initiating message in
+// dhcp mode, or the first frame of any protocol in packet mode.
+// Everything else on an unestablished circuit is dropped (the client
+// retransmits, and established circuits never punt).
 func (c *Component) handleTrigger(pkt *dataplane.ParsedPacket) error {
 	var proto models.Protocol
 	switch {
+	case pkt.Protocol == models.ProtocolL2:
+		proto = models.ProtocolL2
 	case pkt.DHCPv4 != nil:
 		msgType := dhcpv4MessageType(pkt.DHCPv4.Options)
 		if msgType != layers.DHCPMsgTypeDiscover && msgType != layers.DHCPMsgTypeRequest {
@@ -141,7 +159,12 @@ func (c *Component) handleTrigger(pkt *dataplane.ParsedPacket) error {
 // buildPendingTrigger snapshots the trigger frame's L3 payload for
 // replay out the handoff once the circuit installs. The client's own
 // MAC is preserved so the retail BNG learns the subscriber, not us.
+// Packet-mode triggers are never replayed: whatever protocol the frame
+// was, it retransmits on its own once the circuit forwards.
 func buildPendingTrigger(pkt *dataplane.ParsedPacket, proto models.Protocol) *pendingTrigger {
+	if proto == models.ProtocolL2 {
+		return nil
+	}
 	l3Offset := 14 + 4*len(pkt.Dot1Q)
 	if len(pkt.RawPacket) <= l3Offset {
 		return nil
@@ -175,7 +198,10 @@ func (c *Component) publishAAARequest(ct *Circuit, pkt *dataplane.ParsedPacket, 
 		}
 	}
 
-	username := ct.MAC
+	// The line identity for wholesale is the group-qualified VLAN
+	// tuple, not the client MAC: a CPE swap must not change the
+	// subscriber. MAC is recorded on the circuit for show/accounting.
+	username := fmt.Sprintf("%s.%d.%d", match.Name, ct.AccessSVLAN, ct.AccessCVLAN)
 	policyName := match.Group.GetPolicyName(pkt.OuterVLAN)
 	aaaAttrs := make(map[string]string)
 	var usernameFallback bool
@@ -189,13 +215,14 @@ func (c *Component) publishAAARequest(ct *Circuit, pkt *dataplane.ParsedPacket, 
 				RemoteID:   remoteID,
 				CircuitID:  circuitID,
 				Hostname:   hostname,
+				GroupName:  match.Name,
 			}
 			if expanded, ok := policy.ExpandFormatChecked(ctx); ok {
 				username = expanded
 			} else if policy.Format != "" {
 				usernameFallback = true
-				c.logger.WithGroup(logger.L2GW).Warn("AAA policy username unresolved; using MAC fallback",
-					"policy", policyName, "group", match.Name, "mac", ct.MAC)
+				c.logger.WithGroup(logger.L2GW).Warn("AAA policy username unresolved; using group.svlan.cvlan fallback",
+					"policy", policyName, "group", match.Name, "username", username)
 			}
 			if policy.Password != "" {
 				aaaAttrs[aaa.AttrPassword] = policy.ExpandPassword(ctx)
