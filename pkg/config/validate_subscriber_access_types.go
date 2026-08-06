@@ -119,5 +119,14 @@ func validateVLANRangeAccessTypes(groupName string, idx int, vr *subscriber.VLAN
 	if len(vr.AccessTypes) > 1 && (!hasIPoE || !hasPPPoE || hasLAC || hasLNS) {
 		return fmt.Errorf("subscriber group %q vlans[%d]: the only valid multi-element access-types combination is [ipoe, pppoe] (got %v)", groupName, idx, vr.AccessTypes)
 	}
+
+	switch vr.Trigger {
+	case "", subscriber.TriggerModeDHCP, subscriber.TriggerModePacket:
+	default:
+		return fmt.Errorf("subscriber group %q vlans[%d]: trigger must be dhcp or packet (got %q)", groupName, idx, vr.Trigger)
+	}
+	if vr.Trigger != "" && !hasL2GW {
+		return fmt.Errorf("subscriber group %q vlans[%d]: trigger is only valid on l2gw ranges", groupName, idx)
+	}
 	return nil
 }

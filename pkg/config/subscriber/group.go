@@ -78,6 +78,12 @@ type SubscriberGroup struct {
 // override per subscriber via the l2gw.handoff-group attribute.
 type SubscriberL2GWConfig struct {
 	HandoffGroup string `json:"handoff-group,omitempty" yaml:"handoff-group,omitempty"`
+
+	// IdleTimeout tears down a dynamic circuit after this many seconds
+	// without traffic in either direction (0 = never). The
+	// lease-substitute for packet-triggered circuits, which have no
+	// DHCP lifecycle to expire them.
+	IdleTimeout uint32 `json:"idle-timeout,omitempty" yaml:"idle-timeout,omitempty"`
 }
 
 // SubscriberL2TPConfig is the per-subscriber-group L2TP binding. It
@@ -207,12 +213,31 @@ type VLANRange struct {
 	Interface       string       `json:"interface,omitempty" yaml:"interface,omitempty"`
 	ParentInterface string       `json:"parent-interface,omitempty" yaml:"parent-interface,omitempty"`
 	AccessTypes     []AccessType `json:"access-types,omitempty" yaml:"access-types,omitempty"`
-	VRF             string    `json:"vrf,omitempty" yaml:"vrf,omitempty"`
-	IPv4            []string  `json:"ipv4,omitempty" yaml:"ipv4,omitempty"`
-	IPv6            []string  `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`
-	DHCP            string    `json:"dhcp,omitempty" yaml:"dhcp,omitempty"`
-	AAA             *VLANAAAs `json:"aaa,omitempty" yaml:"aaa,omitempty"`
-	Template        string    `json:"template,omitempty" yaml:"template,omitempty"`
+	VRF             string       `json:"vrf,omitempty" yaml:"vrf,omitempty"`
+	IPv4            []string     `json:"ipv4,omitempty" yaml:"ipv4,omitempty"`
+	IPv6            []string     `json:"ipv6,omitempty" yaml:"ipv6,omitempty"`
+	DHCP            string       `json:"dhcp,omitempty" yaml:"dhcp,omitempty"`
+	AAA             *VLANAAAs    `json:"aaa,omitempty" yaml:"aaa,omitempty"`
+	Template        string       `json:"template,omitempty" yaml:"template,omitempty"`
+
+	// Trigger selects how l2gw circuits are created on this range:
+	// "dhcp" (default) punts only DHCPv4/DHCPv6 on circuit miss;
+	// "packet" punts the first frame of any protocol. l2gw ranges only.
+	Trigger TriggerMode `json:"trigger,omitempty" yaml:"trigger,omitempty"`
+}
+
+type TriggerMode string
+
+const (
+	TriggerModeDHCP   TriggerMode = "dhcp"
+	TriggerModePacket TriggerMode = "packet"
+)
+
+func (v *VLANRange) GetTriggerMode() TriggerMode {
+	if v == nil || v.Trigger == "" {
+		return TriggerModeDHCP
+	}
+	return v.Trigger
 }
 
 func (v *VLANRange) GetSVLANs() ([]uint16, error) {
