@@ -16,6 +16,7 @@ type PolicyContext struct {
 	AgentRemoteID  string
 	AgentRelayID   string
 	Hostname       string
+	GroupName      string
 }
 
 func (p *AAAPolicy) ExpandFormat(ctx *PolicyContext) string {
@@ -56,6 +57,7 @@ func (p *AAAPolicy) expand(template string, ctx *PolicyContext) string {
 	result = strings.ReplaceAll(result, "$agent-remote-id$", ctx.AgentRemoteID)
 	result = strings.ReplaceAll(result, "$agent-relay-id$", ctx.AgentRelayID)
 	result = strings.ReplaceAll(result, "$hostname$", ctx.Hostname)
+	result = strings.ReplaceAll(result, "$subscriber-group$", ctx.GroupName)
 
 	return result
 }

@@ -336,6 +336,7 @@ func (c *Component) handleDiscover(pkt *dataplane.ParsedPacket) error {
 				RemoteID:   string(remoteID),
 				CircuitID:  string(circuitID),
 				Hostname:   hostname,
+				GroupName:  groupName,
 			}
 			expanded, ok := policy.ExpandFormatChecked(ctx)
 			if ok {
@@ -580,6 +581,7 @@ func (c *Component) handleRequest(pkt *dataplane.ParsedPacket) error {
 				RemoteID:   string(remoteID),
 				CircuitID:  string(circuitID),
 				Hostname:   hostname,
+				GroupName:  groupName,
 			}
 			expanded, ok := policy.ExpandFormatChecked(ctx)
 			if ok {

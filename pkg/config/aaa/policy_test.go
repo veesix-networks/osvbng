@@ -93,6 +93,20 @@ func TestExpandFormatStillWorks(t *testing.T) {
 	}
 }
 
+func TestExpandFormatSubscriberGroupToken(t *testing.T) {
+	p := &AAAPolicy{Format: "$subscriber-group$.$svlan$.$cvlan$"}
+	ctx := &PolicyContext{
+		MACAddress: mustMAC(t, "aa:bb:cc:dd:ee:ff"),
+		SVLAN:      100,
+		CVLAN:      618,
+		GroupName:  "an1",
+	}
+	want := "an1.100.618"
+	if got := p.ExpandFormat(ctx); got != want {
+		t.Fatalf("$subscriber-group$ expansion: want %q, got %q", want, got)
+	}
+}
+
 func TestExpandFormatChecked(t *testing.T) {
 	mac := mustMAC(t, "aa:bb:cc:dd:ee:ff")
 

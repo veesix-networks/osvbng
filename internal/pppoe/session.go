@@ -183,6 +183,7 @@ func (s *SessionState) publishAAARequest(attrs map[string]string) {
 				CVLAN:          s.InnerVLAN,
 				AgentCircuitID: s.AgentCircuitID,
 				AgentRemoteID:  s.AgentRemoteID,
+				GroupName:      groupName,
 			}
 			expanded, ok := policy.ExpandFormatChecked(ctx)
 			if ok {

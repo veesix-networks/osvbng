@@ -293,6 +293,7 @@ func (c *Component) handleDHCPv6Solicit(pkt *dataplane.ParsedPacket, msg *dhcp6.
 				CVLAN:      pkt.InnerVLAN,
 				RemoteID:   string(remoteID),
 				CircuitID:  string(circuitID),
+				GroupName:  groupName,
 			}
 			expanded, ok := policy.ExpandFormatChecked(ctx)
 			if ok {
