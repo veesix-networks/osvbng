@@ -43,6 +43,18 @@ func (h *InterfaceHandler) Apply(ctx context.Context, hctx *conf.HandlerContext)
 		return nil
 	}
 
+	// PWTransport is derived state (json:"-") that does not survive the
+	// config deep copy between load and apply; re-derive it so the
+	// tunnel is created with the pseudowire decap next.
+	if cfg.Vxlan != nil && !cfg.Vxlan.PWTransport && hctx.Config != nil {
+		for _, other := range hctx.Config.Interfaces {
+			if other != nil && other.Pseudowire != nil && other.Pseudowire.Transport == cfg.Name {
+				cfg.Vxlan.PWTransport = true
+				break
+			}
+		}
+	}
+
 	if err := h.southbound.CreateInterface(cfg); err != nil {
 		return err
 	}
