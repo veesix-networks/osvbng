@@ -1,0 +1,10 @@
+# Copyright 2026 The osvbng Authors
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# The osvbng VSA definitions come from the shipped contrib dictionary
+# (bind-mounted from contrib/freeradius/), so this suite exercises the
+# exact file operators deploy.
+
+$INCLUDE	/usr/share/freeradius/dictionary
+$INCLUDE	/etc/freeradius/dictionary.osvbng

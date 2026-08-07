@@ -1,0 +1,3 @@
+DEFAULT Cleartext-Password := "secret"
+        OSVBNG-L2GW-Handoff-Group := "isp-blue",
+        Session-Timeout := 86400

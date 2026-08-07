@@ -1,0 +1,87 @@
+# Copyright 2026 The osvbng Authors
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# L2GW over EVPN-discovered VXLAN NNIs: neither tunnel has a configured
+# remote VTEP. The leaf container is an independent EVPN VTEP (FRR +
+# kernel vxlan dataplane) advertising both service VNIs; osvbng learns
+# the leaf's VTEP from the type-3 routes and programs its VPP tunnels
+# dynamically. One routed underlay link carries both VNIs; the blaster
+# attaches to the leaf's bridges over veths, as an access operator and
+# ISP handoff would attach to a leaf pair in a real fabric.
+
+name: osvbng-l2gw-evpn
+
+mgmt:
+  ipv4-subnet: 172.20.26.0/24
+
+topology:
+  nodes:
+    bng1:
+      kind: linux
+      image: veesixnetworks/osvbng:local
+      image-pull-policy: Never
+      mgmt-ipv4: 172.20.26.2
+      cap-add:
+        - SYS_ADMIN
+        - NET_ADMIN
+        - IPC_LOCK
+        - SYS_NICE
+      env:
+        OSVBNG_WAIT_FOR_INTERFACES: "true"
+        OSVBNG_NUM_INTERFACES: "2"
+        OSVBNG_RESPAWN: "true"
+      binds:
+        - config/bng1/osvbng.yaml:/etc/osvbng/osvbng.yaml:ro
+
+    leaf:
+      kind: linux
+      image: quay.io/frrouting/frr:10.7.0
+      binds:
+        - config/leaf/daemons:/etc/frr/daemons
+        - config/leaf/frr.conf:/etc/frr/frr.conf
+      exec:
+        - ip addr add 10.99.1.2/24 dev eth1
+        - ip addr add 10.255.2.1/32 dev lo
+        - ip link add br-acc type bridge
+        - ip link add br-isp type bridge
+        - ip link add vxlan-acc type vxlan id 10101 local 10.255.2.1 dstport 4789 nolearning dev eth1
+        - ip link add vxlan-isp type vxlan id 10201 local 10.255.2.1 dstport 4789 nolearning dev eth1
+        - ip link set vxlan-acc master br-acc
+        - ip link set vxlan-isp master br-isp
+        - ip link set acc0b master br-acc
+        - ip link set isp0b master br-isp
+        - ip link set vxlan-acc up
+        - ip link set vxlan-isp up
+        - ip link set acc0b up
+        - ip link set isp0b up
+        - ip link set br-acc up
+        - ip link set br-isp up
+
+    subscribers:
+      kind: linux
+      image: veesixnetworks/bngblaster:0.9.30
+      cap-add:
+        - NET_ADMIN
+      binds:
+        - config/subscribers/config.json:/config/config.json:ro
+
+    freeradius:
+      kind: linux
+      image: freeradius/freeradius-server:3.2.7
+      mgmt-ipv4: 172.20.26.10
+      binds:
+        - config/freeradius/clients.conf:/etc/freeradius/clients.conf:ro
+        - config/freeradius/authorize:/etc/freeradius/mods-config/files/authorize:ro
+        - config/freeradius/dictionary:/etc/freeradius/dictionary:ro
+        - ../../contrib/freeradius/dictionary.osvbng:/etc/freeradius/dictionary.osvbng:ro
+      exec:
+        - bash -c "freeradius -X &"
+
+  links:
+    - endpoints: [bng1:eth1, leaf:eth1]
+      mtu: 9000
+    - endpoints: [leaf:acc0b, subscribers:acc0]
+      mtu: 8900
+    - endpoints: [leaf:isp0b, subscribers:isp0]
+      mtu: 8900

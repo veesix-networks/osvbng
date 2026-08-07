@@ -1,0 +1,43 @@
+{
+  "interfaces": {
+    "a10nsp": [
+      {
+        "interface": "isp0",
+        "qinq": false
+      }
+    ],
+    "access": [
+      {
+        "interface": "acc0",
+        "a10nsp-interface": "isp0",
+        "type": "ipoe",
+        "vlan-mode": "1:1",
+        "outer-vlan-min": 100,
+        "outer-vlan-max": 101,
+        "inner-vlan-min": 10,
+        "inner-vlan-max": 10
+      }
+    ]
+  },
+  "sessions": {
+    "count": 2
+  },
+  "dhcp": {
+    "enable": true,
+    "retry": 30
+  },
+  "dhcpv6": {
+    "enable": false
+  },
+  "ipoe": {
+    "ipv4": true,
+    "ipv6": false
+  },
+  "session-traffic": {
+    "ipv4-pps": 10
+  },
+  "access-line": {
+    "agent-circuit-id": "access-a 0/1/{session-global}:{outer-vlan}.{inner-vlan}",
+    "agent-remote-id": "SUB-{session-global}"
+  }
+}
