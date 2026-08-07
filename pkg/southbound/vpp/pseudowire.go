@@ -187,6 +187,39 @@ func (v *VPP) BindPseudowire(name, transport string) error {
 	return nil
 }
 
+func (v *VPP) UnbindPseudowire(name string) error {
+	v.pwMu.Lock()
+	binding, bound := v.pwBindings[name]
+	delete(v.pwBindings, name)
+	v.pwMu.Unlock()
+
+	if !bound {
+		return nil
+	}
+
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return fmt.Errorf("create API channel: %w", err)
+	}
+	defer ch.Close()
+
+	req := &osvbng_tunnel.OsvbngPwBind{
+		TunnelSwIfIndex:  binding.tunnelSwIfIndex,
+		HeadendSwIfIndex: binding.headendSwIfIndex,
+		IsBind:           false,
+	}
+	reply := &osvbng_tunnel.OsvbngPwBindReply{}
+	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+		return fmt.Errorf("pw unbind: %w", err)
+	}
+	if reply.Retval != 0 {
+		return fmt.Errorf("pw unbind failed: retval=%d", reply.Retval)
+	}
+
+	v.logger.Info("Unbound pseudowire from transport", "interface", name, "transport", binding.transport)
+	return nil
+}
+
 func (v *VPP) deletePseudowire(iface *ifmgr.Interface) error {
 	v.pwMu.Lock()
 	binding, bound := v.pwBindings[iface.Name]

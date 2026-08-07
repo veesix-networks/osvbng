@@ -150,9 +150,10 @@ func (m *Manager) programLocked(vni uint32) {
 		Enabled: true,
 		MTU:     spec.MTU,
 		Vxlan: &interfaces.VxlanConfig{
-			Src: spec.Src,
-			Dst: dst,
-			VNI: spec.VNI,
+			Src:         spec.Src,
+			Dst:         dst,
+			VNI:         spec.VNI,
+			PWTransport: spec.Pseudowire != "",
 		},
 	}
 	if err := m.southbound.CreateInterface(cfg); err != nil {
@@ -166,6 +167,11 @@ func (m *Manager) programLocked(vni uint32) {
 	if err := m.southbound.SetInterfaceMTU(spec.Interface, mtu); err != nil {
 		m.logger.Warn("Failed to set EVPN tunnel MTU", "interface", spec.Interface, "error", err)
 	}
+	if spec.Pseudowire != "" {
+		if err := m.southbound.BindPseudowire(spec.Pseudowire, spec.Interface); err != nil {
+			m.logger.Error("Failed to bind pseudowire to EVPN tunnel", "interface", spec.Pseudowire, "transport", spec.Interface, "error", err)
+		}
+	}
 	m.programmed[vni] = dst
 	m.logger.Info("Programmed EVPN tunnel", "interface", spec.Interface, "vni", vni, "dst", dst)
 }
@@ -177,6 +183,11 @@ func (m *Manager) unprogramLocked(vni uint32) {
 	}
 	spec, hasSpec := m.specs[vni]
 	if hasSpec && m.southbound != nil {
+		if spec.Pseudowire != "" {
+			if err := m.southbound.UnbindPseudowire(spec.Pseudowire); err != nil {
+				m.logger.Warn("Failed to unbind pseudowire from EVPN tunnel", "interface", spec.Pseudowire, "transport", spec.Interface, "error", err)
+			}
+		}
 		if err := m.southbound.DeleteInterface(spec.Interface); err != nil {
 			m.logger.Error("Failed to remove EVPN tunnel", "interface", spec.Interface, "vni", vni, "dst", dst, "error", err)
 		} else {

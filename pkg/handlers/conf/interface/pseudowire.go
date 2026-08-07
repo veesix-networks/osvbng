@@ -45,6 +45,14 @@ func (h *PseudowireHandler) Apply(ctx context.Context, hctx *conf.HandlerContext
 		return fmt.Errorf("extract interface name: %w", err)
 	}
 
+	// An evpn-signaled transport may not exist in VPP yet; the EVPN
+	// manager binds the headend when it programs the tunnel.
+	if isEVPNTunnel(hctx, cfg.Transport) {
+		if _, err := h.southbound.GetInterfaceIndex(cfg.Transport); err != nil {
+			return nil
+		}
+	}
+
 	return h.southbound.BindPseudowire(values[0], cfg.Transport)
 }
 

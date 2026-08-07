@@ -28,15 +28,20 @@ type TunnelProgrammer interface {
 	CreateInterface(cfg *interfaces.InterfaceConfig) error
 	DeleteInterface(name string) error
 	SetInterfaceMTU(name string, mtu int) error
+	BindPseudowire(name, transport string) error
+	UnbindPseudowire(name string) error
 }
 
 // TunnelSpec is the configured identity of an EVPN-signaled tunnel:
-// everything except the remote VTEP, which is learned.
+// everything except the remote VTEP, which is learned. Pseudowire
+// names the headend riding this transport, if any; its bind can only
+// happen once the tunnel exists, so the manager owns it.
 type TunnelSpec struct {
-	Interface string
-	VNI       uint32
-	Src       string
-	MTU       int
+	Interface  string
+	VNI        uint32
+	Src        string
+	MTU        int
+	Pseudowire string
 }
 
 // Manager maintains non-forwarding kernel vxlan mirror devices for

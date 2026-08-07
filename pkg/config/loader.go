@@ -106,9 +106,6 @@ func (c *Config) validatePseudowires() error {
 		if tIface.Vxlan == nil {
 			return fmt.Errorf("interfaces.%s.pseudowire: transport %q is not a tunnel interface", ifName, transport)
 		}
-		if tIface.Vxlan.EVPNSignaled() {
-			return fmt.Errorf("interfaces.%s.pseudowire: transport %q is evpn-signaled (not yet supported)", ifName, transport)
-		}
 		if prev, used := transportUsers[transport]; used {
 			return fmt.Errorf("interfaces.%s.pseudowire: transport %q already used by pseudowire %q", ifName, transport, prev)
 		}

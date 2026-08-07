@@ -39,6 +39,18 @@ func isEVPNTunnel(hctx *conf.HandlerContext, name string) bool {
 	return ok && iface != nil && iface.Vxlan != nil && iface.Vxlan.EVPNSignaled()
 }
 
+func pseudowireOnTransport(hctx *conf.HandlerContext, transport string) string {
+	if hctx.Config == nil {
+		return ""
+	}
+	for name, iface := range hctx.Config.Interfaces {
+		if iface != nil && iface.Pseudowire != nil && iface.Pseudowire.Transport == transport {
+			return name
+		}
+	}
+	return ""
+}
+
 func (h *InterfaceHandler) Validate(ctx context.Context, hctx *conf.HandlerContext) error {
 	_, ok := hctx.NewValue.(*interfaces.InterfaceConfig)
 	if !ok {
@@ -58,10 +70,11 @@ func (h *InterfaceHandler) Apply(ctx context.Context, hctx *conf.HandlerContext)
 			return nil
 		}
 		return h.evpnMirror.EnsureMirror(evpnmgr.TunnelSpec{
-			Interface: cfg.Name,
-			VNI:       cfg.Vxlan.VNI,
-			Src:       cfg.Vxlan.Src,
-			MTU:       cfg.MTU,
+			Interface:  cfg.Name,
+			VNI:        cfg.Vxlan.VNI,
+			Src:        cfg.Vxlan.Src,
+			MTU:        cfg.MTU,
+			Pseudowire: pseudowireOnTransport(hctx, cfg.Name),
 		})
 	}
 

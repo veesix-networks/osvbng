@@ -852,14 +852,22 @@ func bootstrapDataplane(
 
 	desiredMirrors := make(map[uint32]evpnmgr.TunnelSpec)
 	for name, iface := range cfg.Interfaces {
-		if iface != nil && iface.Vxlan != nil && iface.Vxlan.EVPNSignaled() {
-			desiredMirrors[iface.Vxlan.VNI] = evpnmgr.TunnelSpec{
-				Interface: name,
-				VNI:       iface.Vxlan.VNI,
-				Src:       iface.Vxlan.Src,
-				MTU:       iface.MTU,
+		if iface == nil || iface.Vxlan == nil || !iface.Vxlan.EVPNSignaled() {
+			continue
+		}
+		spec := evpnmgr.TunnelSpec{
+			Interface: name,
+			VNI:       iface.Vxlan.VNI,
+			Src:       iface.Vxlan.Src,
+			MTU:       iface.MTU,
+		}
+		for pwName, pwIface := range cfg.Interfaces {
+			if pwIface != nil && pwIface.Pseudowire != nil && pwIface.Pseudowire.Transport == name {
+				spec.Pseudowire = pwName
+				break
 			}
 		}
+		desiredMirrors[iface.Vxlan.VNI] = spec
 	}
 	if err := evpnMgr.Reconcile(desiredMirrors); err != nil {
 		log.Warn("Failed to reconcile EVPN mirror devices", "error", err)
