@@ -10,6 +10,8 @@ import (
 
 // RPCService defines RPC service osvbng_tunnel.
 type RPCService interface {
+	OsvbngPwBind(ctx context.Context, in *OsvbngPwBind) (*OsvbngPwBindReply, error)
+	OsvbngPwDecapNextGet(ctx context.Context, in *OsvbngPwDecapNextGet) (*OsvbngPwDecapNextGetReply, error)
 	OsvbngTunnelDecapNextGet(ctx context.Context, in *OsvbngTunnelDecapNextGet) (*OsvbngTunnelDecapNextGetReply, error)
 }
 
@@ -19,6 +21,24 @@ type serviceClient struct {
 
 func NewServiceClient(conn api.Connection) RPCService {
 	return &serviceClient{conn}
+}
+
+func (c *serviceClient) OsvbngPwBind(ctx context.Context, in *OsvbngPwBind) (*OsvbngPwBindReply, error) {
+	out := new(OsvbngPwBindReply)
+	err := c.conn.Invoke(ctx, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, api.RetvalToVPPApiError(out.Retval)
+}
+
+func (c *serviceClient) OsvbngPwDecapNextGet(ctx context.Context, in *OsvbngPwDecapNextGet) (*OsvbngPwDecapNextGetReply, error) {
+	out := new(OsvbngPwDecapNextGetReply)
+	err := c.conn.Invoke(ctx, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, api.RetvalToVPPApiError(out.Retval)
 }
 
 func (c *serviceClient) OsvbngTunnelDecapNextGet(ctx context.Context, in *OsvbngTunnelDecapNextGet) (*OsvbngTunnelDecapNextGetReply, error) {

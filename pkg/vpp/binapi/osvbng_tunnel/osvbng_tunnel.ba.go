@@ -7,7 +7,7 @@
 // Package osvbng_tunnel contains generated bindings for API file osvbng_tunnel.api.
 //
 // Contents:
-// -  2 messages
+// -  6 messages
 package osvbng_tunnel
 
 import (
@@ -23,9 +23,175 @@ const _ = api.GoVppAPIPackageIsVersion2
 
 const (
 	APIFile    = "osvbng_tunnel"
-	APIVersion = "1.0.0"
-	VersionCrc = 0x8efc2ab1
+	APIVersion = "1.1.0"
+	VersionCrc = 0xa7e2b9b
 )
+
+// Bind or unbind a pseudowire headend to a transport tunnel
+//
+//	Binding installs the tunnel -> headend RX mapping and replaces the
+//	headend's hw output node so all TX (including subinterface TX)
+//	rides the transport tunnel; unbinding restores the original output
+//	node. One headend per tunnel and one tunnel per headend.
+//	- tunnel_sw_if_index - transport tunnel interface
+//	- headend_sw_if_index - headend (loopback) interface
+//	- is_bind - bind if non-zero, else unbind
+//
+// OsvbngPwBind defines message 'osvbng_pw_bind'.
+type OsvbngPwBind struct {
+	TunnelSwIfIndex  uint32 `binapi:"u32,name=tunnel_sw_if_index" json:"tunnel_sw_if_index,omitempty"`
+	HeadendSwIfIndex uint32 `binapi:"u32,name=headend_sw_if_index" json:"headend_sw_if_index,omitempty"`
+	IsBind           bool   `binapi:"bool,name=is_bind" json:"is_bind,omitempty"`
+}
+
+func (m *OsvbngPwBind) Reset()               { *m = OsvbngPwBind{} }
+func (*OsvbngPwBind) GetMessageName() string { return "osvbng_pw_bind" }
+func (*OsvbngPwBind) GetCrcString() string   { return "64c9e041" }
+func (*OsvbngPwBind) GetMessageType() api.MessageType {
+	return api.RequestMessage
+}
+
+func (m *OsvbngPwBind) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.TunnelSwIfIndex
+	size += 4 // m.HeadendSwIfIndex
+	size += 1 // m.IsBind
+	return size
+}
+func (m *OsvbngPwBind) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeUint32(m.TunnelSwIfIndex)
+	buf.EncodeUint32(m.HeadendSwIfIndex)
+	buf.EncodeBool(m.IsBind)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngPwBind) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.TunnelSwIfIndex = buf.DecodeUint32()
+	m.HeadendSwIfIndex = buf.DecodeUint32()
+	m.IsBind = buf.DecodeBool()
+	return nil
+}
+
+// OsvbngPwBindReply defines message 'osvbng_pw_bind_reply'.
+type OsvbngPwBindReply struct {
+	Retval int32 `binapi:"i32,name=retval" json:"retval,omitempty"`
+}
+
+func (m *OsvbngPwBindReply) Reset()               { *m = OsvbngPwBindReply{} }
+func (*OsvbngPwBindReply) GetMessageName() string { return "osvbng_pw_bind_reply" }
+func (*OsvbngPwBindReply) GetCrcString() string   { return "e8d4e804" }
+func (*OsvbngPwBindReply) GetMessageType() api.MessageType {
+	return api.ReplyMessage
+}
+
+func (m *OsvbngPwBindReply) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.Retval
+	return size
+}
+func (m *OsvbngPwBindReply) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeInt32(m.Retval)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngPwBindReply) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.Retval = buf.DecodeInt32()
+	return nil
+}
+
+// Get the pseudowire decap next indices for osvbng-pw-input
+//
+//	osvbng-pw-input is the decap next for transport tunnels bound to a
+//	pseudowire headend: decapsulated frames are re-attributed to the
+//	headend interface and enter ethernet-input, so VLAN subinterfaces
+//	on the headend classify exactly as on a physical port.
+//
+// OsvbngPwDecapNextGet defines message 'osvbng_pw_decap_next_get'.
+type OsvbngPwDecapNextGet struct{}
+
+func (m *OsvbngPwDecapNextGet) Reset()               { *m = OsvbngPwDecapNextGet{} }
+func (*OsvbngPwDecapNextGet) GetMessageName() string { return "osvbng_pw_decap_next_get" }
+func (*OsvbngPwDecapNextGet) GetCrcString() string   { return "51077d14" }
+func (*OsvbngPwDecapNextGet) GetMessageType() api.MessageType {
+	return api.RequestMessage
+}
+
+func (m *OsvbngPwDecapNextGet) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	return size
+}
+func (m *OsvbngPwDecapNextGet) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngPwDecapNextGet) Unmarshal(b []byte) error {
+	return nil
+}
+
+// Reply with the pseudowire decap next indices
+//   - retval - return code
+//   - vxlan4_next - next index on vxlan4-input (~0 = vxlan plugin
+//     not loaded)
+//   - vxlan6_next - next index on vxlan6-input (~0 = vxlan plugin
+//     not loaded)
+//
+// OsvbngPwDecapNextGetReply defines message 'osvbng_pw_decap_next_get_reply'.
+type OsvbngPwDecapNextGetReply struct {
+	Retval     int32  `binapi:"i32,name=retval" json:"retval,omitempty"`
+	Vxlan4Next uint32 `binapi:"u32,name=vxlan4_next" json:"vxlan4_next,omitempty"`
+	Vxlan6Next uint32 `binapi:"u32,name=vxlan6_next" json:"vxlan6_next,omitempty"`
+}
+
+func (m *OsvbngPwDecapNextGetReply) Reset()               { *m = OsvbngPwDecapNextGetReply{} }
+func (*OsvbngPwDecapNextGetReply) GetMessageName() string { return "osvbng_pw_decap_next_get_reply" }
+func (*OsvbngPwDecapNextGetReply) GetCrcString() string   { return "ab860359" }
+func (*OsvbngPwDecapNextGetReply) GetMessageType() api.MessageType {
+	return api.ReplyMessage
+}
+
+func (m *OsvbngPwDecapNextGetReply) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.Retval
+	size += 4 // m.Vxlan4Next
+	size += 4 // m.Vxlan6Next
+	return size
+}
+func (m *OsvbngPwDecapNextGetReply) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeInt32(m.Retval)
+	buf.EncodeUint32(m.Vxlan4Next)
+	buf.EncodeUint32(m.Vxlan6Next)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngPwDecapNextGetReply) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.Retval = buf.DecodeInt32()
+	m.Vxlan4Next = buf.DecodeUint32()
+	m.Vxlan6Next = buf.DecodeUint32()
+	return nil
+}
 
 // Get the tunnel decap next indices for osvbng-tunnel-input
 //
@@ -115,6 +281,10 @@ func (m *OsvbngTunnelDecapNextGetReply) Unmarshal(b []byte) error {
 
 func init() { file_osvbng_tunnel_binapi_init() }
 func file_osvbng_tunnel_binapi_init() {
+	api.RegisterMessage((*OsvbngPwBind)(nil), "osvbng_pw_bind_64c9e041")
+	api.RegisterMessage((*OsvbngPwBindReply)(nil), "osvbng_pw_bind_reply_e8d4e804")
+	api.RegisterMessage((*OsvbngPwDecapNextGet)(nil), "osvbng_pw_decap_next_get_51077d14")
+	api.RegisterMessage((*OsvbngPwDecapNextGetReply)(nil), "osvbng_pw_decap_next_get_reply_ab860359")
 	api.RegisterMessage((*OsvbngTunnelDecapNextGet)(nil), "osvbng_tunnel_decap_next_get_51077d14")
 	api.RegisterMessage((*OsvbngTunnelDecapNextGetReply)(nil), "osvbng_tunnel_decap_next_get_reply_ab860359")
 }
@@ -122,6 +292,10 @@ func file_osvbng_tunnel_binapi_init() {
 // Messages returns list of all messages in this module.
 func AllMessages() []api.Message {
 	return []api.Message{
+		(*OsvbngPwBind)(nil),
+		(*OsvbngPwBindReply)(nil),
+		(*OsvbngPwDecapNextGet)(nil),
+		(*OsvbngPwDecapNextGetReply)(nil),
 		(*OsvbngTunnelDecapNextGet)(nil),
 		(*OsvbngTunnelDecapNextGetReply)(nil),
 	}
