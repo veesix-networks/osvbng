@@ -180,6 +180,14 @@ func (m *Manager) replaceTunnelLocked(vni uint32, dst string) {
 			m.logger.Warn("Failed to unbind pseudowire before tunnel replace", "interface", spec.Pseudowire, "transport", spec.Interface, "error", err)
 		}
 	}
+	// Per-interface dataplane features must be disarmed while the old
+	// interface still exists: VPP wipes feature configs at delete but
+	// plugin-side enabled bitmaps survive, and a recreated tunnel often
+	// reuses the same sw_if_index, turning a later re-enable into a
+	// silent no-op. Disabling while valid clears both sides.
+	if err := m.southbound.L2GWEnableInput(spec.Interface, false); err != nil {
+		m.logger.Debug("l2gw disarm before tunnel replace", "interface", spec.Interface, "error", err)
+	}
 	if err := m.southbound.DeleteInterface(spec.Interface); err != nil {
 		m.logger.Error("Failed to delete EVPN tunnel for replace", "interface", spec.Interface, "vni", vni, "error", err)
 	}

@@ -275,6 +275,16 @@ func (c *Component) handleEVPNTunnelProgrammed(evt events.Event) {
 		return
 	}
 
+	// The event means the tunnel interface was recreated: its dataplane
+	// arming is gone even though VPP may have reissued the same
+	// sw_if_index, so the armed marker must not short-circuit the
+	// re-arm.
+	if portIdx, ok := c.ifMgr.GetSwIfIndex(data.Interface); ok {
+		c.armedMu.Lock()
+		delete(c.armedPorts, portIdx)
+		c.armedMu.Unlock()
+	}
+
 	if err := c.armInterfaceTriggers(data.Interface); err != nil {
 		c.logger.Error("Failed to arm triggers on programmed evpn tunnel", "interface", data.Interface, "error", err)
 	}

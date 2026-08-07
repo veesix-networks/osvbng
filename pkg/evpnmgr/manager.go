@@ -32,6 +32,7 @@ type TunnelProgrammer interface {
 	BindPseudowire(name, transport string) error
 	UnbindPseudowire(name string) error
 	VxlanTunnelDst(name string) (string, bool)
+	L2GWEnableInput(ifaceName string, enable bool) error
 }
 
 // TunnelSpec is the configured identity of an EVPN-signaled tunnel:
