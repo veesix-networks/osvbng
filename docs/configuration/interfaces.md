@@ -209,7 +209,9 @@ subscriber-groups:
           access-types: [ipoe]
 ```
 
-The subscriber-facing MAC is the headend's own MAC; S/C-VLAN matching, NAS-Port-Id, unnumbered gateways, and HA session restore behave identically to physical parents. The transport underlay must be jumbo (VXLAN ~50B overhead on QinQ frames). Size the headend MTU exactly like a physical access port: QinQ PPPoE at full 1492 MRU needs `mtu: 1508` on the parent (IP + 8 PPPoE/PPP + 8 QinQ), otherwise full-size subscriber packets get inner-fragmented.
+The subscriber-facing MAC is the headend's own MAC; S/C-VLAN matching, NAS-Port-Id, unnumbered gateways, and HA session restore behave identically to physical parents.
+
+For HA pairs, give both nodes identical tunnel and headend configuration, pin `pseudowire.mac-address` to the SRG `virtual_mac` on both nodes (so the subscriber gateway MAC never changes across switchover), present one anycast VTEP address toward the access network, and list the underlay interface in `ha.srgs.<srg>.interfaces` - the SRG virtual MAC then gates which node accepts and decapsulates tunnel traffic. Sessions restore onto the peer's own headend sub-interfaces on promotion by name. The transport underlay must be jumbo (VXLAN ~50B overhead on QinQ frames). Size the headend MTU exactly like a physical access port: QinQ PPPoE at full 1492 MRU needs `mtu: 1508` on the parent (IP + 8 PPPoE/PPP + 8 QinQ), otherwise full-size subscriber packets get inner-fragmented.
 
 ## Example
 
