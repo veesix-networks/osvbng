@@ -206,7 +206,7 @@ subscriber-groups:
           access-types: [ipoe]
 ```
 
-The subscriber-facing MAC is the headend's own MAC; S/C-VLAN matching, NAS-Port-Id, unnumbered gateways, and HA session restore behave identically to physical parents. The transport underlay must be jumbo (VXLAN ~50B overhead on QinQ frames).
+The subscriber-facing MAC is the headend's own MAC; S/C-VLAN matching, NAS-Port-Id, unnumbered gateways, and HA session restore behave identically to physical parents. The transport underlay must be jumbo (VXLAN ~50B overhead on QinQ frames). Size the headend MTU exactly like a physical access port: QinQ PPPoE at full 1492 MRU needs `mtu: 1508` on the parent (IP + 8 PPPoE/PPP + 8 QinQ), otherwise full-size subscriber packets get inner-fragmented.
 
 ## Example
 

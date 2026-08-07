@@ -46,6 +46,7 @@ interfaces:
     pw-an1:
         description: Access operator pseudowire headend
         enabled: true
+        mtu: 1508
         pseudowire:
             transport: vxlan-an1
     loop100:
