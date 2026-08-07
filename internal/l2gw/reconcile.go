@@ -9,6 +9,7 @@ import (
 
 	"github.com/veesix-networks/osvbng/pkg/config"
 	l2gwcfg "github.com/veesix-networks/osvbng/pkg/config/l2gw"
+	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
 
@@ -28,6 +29,24 @@ func (c *Component) ReconcileConfig(cfg *config.Config) error {
 
 	if err := c.reconcileStaticMaps(cfg.L2GW); err != nil {
 		return err
+	}
+
+	if cfg.SubscriberGroups != nil {
+		seen := make(map[string]bool)
+		for _, group := range cfg.SubscriberGroups.Groups {
+			if group == nil {
+				continue
+			}
+			for _, vr := range group.VLANs {
+				if !vr.HasAccessType(subscriber.AccessTypeL2GW) || seen[vr.ParentInterface] {
+					continue
+				}
+				seen[vr.ParentInterface] = true
+				if err := c.armInterfaceTriggers(vr.ParentInterface); err != nil {
+					c.logger.Error("Failed to arm l2gw triggers during reconcile", "interface", vr.ParentInterface, "error", err)
+				}
+			}
+		}
 	}
 
 	c.logger.Info("Reconciled l2gw configuration")
