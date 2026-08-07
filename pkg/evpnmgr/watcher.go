@@ -133,18 +133,56 @@ func (m *Manager) delLearnedLocked(vni uint32, vtep string) {
 }
 
 func (m *Manager) programLocked(vni uint32) {
-	if _, ok := m.programmed[vni]; ok {
-		return
-	}
 	list := m.learned[vni]
 	if len(list) == 0 {
 		return
 	}
+	dst := list[0]
+	if m.programmed[vni] == dst {
+		return
+	}
+
+	// After an osvbngd restart the programmed map is empty but the VPP
+	// tunnel survives; if it already carries the learned dst, adopt it
+	// instead of churning the interface under installed sessions.
+	spec, ok := m.specs[vni]
+	if ok && m.southbound != nil {
+		if cur, found := m.southbound.VxlanTunnelDst(spec.Interface); found && cur == dst {
+			m.programmed[vni] = dst
+			m.logger.Info("Adopted existing EVPN tunnel", "interface", spec.Interface, "vni", vni, "dst", dst)
+			return
+		}
+	}
+
+	m.replaceTunnelLocked(vni, dst)
+}
+
+func (m *Manager) unprogramLocked(vni uint32) {
+	if _, ok := m.programmed[vni]; !ok {
+		return
+	}
+	m.replaceTunnelLocked(vni, "")
+}
+
+// replaceTunnelLocked swaps the tunnel's dst: empty dst reverts to the
+// boot-time placeholder (blackhole, transport effectively down). The
+// tunnel is recreated because vxlan has no dst-update API; the
+// pseudowire mapping is refreshed around it, while the headend's
+// output redirect and everything stacked on the headend stay intact.
+func (m *Manager) replaceTunnelLocked(vni uint32, dst string) {
 	spec, ok := m.specs[vni]
 	if !ok || m.southbound == nil {
 		return
 	}
-	dst := list[0]
+
+	if spec.Pseudowire != "" {
+		if err := m.southbound.UnbindPseudowire(spec.Pseudowire); err != nil {
+			m.logger.Warn("Failed to unbind pseudowire before tunnel replace", "interface", spec.Pseudowire, "transport", spec.Interface, "error", err)
+		}
+	}
+	if err := m.southbound.DeleteInterface(spec.Interface); err != nil {
+		m.logger.Error("Failed to delete EVPN tunnel for replace", "interface", spec.Interface, "vni", vni, "error", err)
+	}
 
 	cfg := &interfaces.InterfaceConfig{
 		Name:    spec.Interface,
@@ -154,11 +192,13 @@ func (m *Manager) programLocked(vni uint32) {
 			Src:         spec.Src,
 			Dst:         dst,
 			VNI:         spec.VNI,
+			Signaling:   interfaces.VxlanSignalingEVPN,
 			PWTransport: spec.Pseudowire != "",
 		},
 	}
 	if err := m.southbound.CreateInterface(cfg); err != nil {
-		m.logger.Error("Failed to program EVPN tunnel", "interface", spec.Interface, "vni", vni, "dst", dst, "error", err)
+		m.logger.Error("Failed to recreate EVPN tunnel", "interface", spec.Interface, "vni", vni, "dst", dst, "error", err)
+		delete(m.programmed, vni)
 		return
 	}
 	mtu := spec.MTU
@@ -170,8 +210,14 @@ func (m *Manager) programLocked(vni uint32) {
 	}
 	if spec.Pseudowire != "" {
 		if err := m.southbound.BindPseudowire(spec.Pseudowire, spec.Interface); err != nil {
-			m.logger.Error("Failed to bind pseudowire to EVPN tunnel", "interface", spec.Pseudowire, "transport", spec.Interface, "error", err)
+			m.logger.Error("Failed to rebind pseudowire after tunnel replace", "interface", spec.Pseudowire, "transport", spec.Interface, "error", err)
 		}
+	}
+
+	if dst == "" {
+		delete(m.programmed, vni)
+		m.logger.Info("Reverted EVPN tunnel to placeholder", "interface", spec.Interface, "vni", vni)
+		return
 	}
 	m.programmed[vni] = dst
 	m.logger.Info("Programmed EVPN tunnel", "interface", spec.Interface, "vni", vni, "dst", dst)
@@ -185,25 +231,4 @@ func (m *Manager) programLocked(vni uint32) {
 			},
 		})
 	}
-}
-
-func (m *Manager) unprogramLocked(vni uint32) {
-	dst, ok := m.programmed[vni]
-	if !ok {
-		return
-	}
-	spec, hasSpec := m.specs[vni]
-	if hasSpec && m.southbound != nil {
-		if spec.Pseudowire != "" {
-			if err := m.southbound.UnbindPseudowire(spec.Pseudowire); err != nil {
-				m.logger.Warn("Failed to unbind pseudowire from EVPN tunnel", "interface", spec.Pseudowire, "transport", spec.Interface, "error", err)
-			}
-		}
-		if err := m.southbound.DeleteInterface(spec.Interface); err != nil {
-			m.logger.Error("Failed to remove EVPN tunnel", "interface", spec.Interface, "vni", vni, "dst", dst, "error", err)
-		} else {
-			m.logger.Info("Removed EVPN tunnel", "interface", spec.Interface, "vni", vni, "dst", dst)
-		}
-	}
-	delete(m.programmed, vni)
 }

@@ -88,10 +88,6 @@ func (h *MTUHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error
 		mtu = int(v)
 	}
 
-	if isEVPNTunnel(hctx, ifName) {
-		return nil
-	}
-
 	if h.dataplaneState != nil {
 		currentMTU := h.dataplaneState.GetInterfaceMTU(ifName)
 		if currentMTU == uint32(mtu) {
@@ -108,7 +104,7 @@ func (h *MTUHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) er
 		return fmt.Errorf("extract interface name: %w", err)
 	}
 
-	if hctx.OldValue == nil || isEVPNTunnel(hctx, ifName) {
+	if hctx.OldValue == nil {
 		return nil
 	}
 

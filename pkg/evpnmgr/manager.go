@@ -31,6 +31,7 @@ type TunnelProgrammer interface {
 	SetInterfaceMTU(name string, mtu int) error
 	BindPseudowire(name, transport string) error
 	UnbindPseudowire(name string) error
+	VxlanTunnelDst(name string) (string, bool)
 }
 
 // TunnelSpec is the configured identity of an EVPN-signaled tunnel:
@@ -111,12 +112,14 @@ func (m *Manager) EnsureMirror(spec TunnelSpec) error {
 	return m.createMirrorLocked(spec.VNI, ip)
 }
 
+// RemoveMirror clears a tunnel's EVPN state on config removal. The VPP
+// tunnel itself is torn down by the interface lifecycle, not here.
 func (m *Manager) RemoveMirror(vni uint32) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.unprogramLocked(vni)
 	delete(m.specs, vni)
 	delete(m.learned, vni)
+	delete(m.programmed, vni)
 	m.removeMirrorLocked(vni)
 }
 

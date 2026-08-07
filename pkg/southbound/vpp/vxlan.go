@@ -17,7 +17,18 @@ import (
 	"go.fd.io/govpp/api"
 )
 
-const vxlanDefaultPort = 4789
+const (
+	vxlanDefaultPort   = 4789
+	evpnPlaceholderDst = "169.254.0.1"
+)
+
+func cloneWithDst(cfg *interfaces.InterfaceConfig, dst string) *interfaces.InterfaceConfig {
+	c := *cfg
+	vx := *cfg.Vxlan
+	vx.Dst = dst
+	c.Vxlan = &vx
+	return &c
+}
 
 func (v *VPP) tunnelDecapNext(isIPv6 bool) (uint32, error) {
 	v.tunnelDecapMu.Lock()
@@ -64,8 +75,18 @@ func (v *VPP) createVxlanTunnel(cfg *interfaces.InterfaceConfig) error {
 	if cfg.Vxlan.Src == "" {
 		return fmt.Errorf("vxlan src for %s not resolved from src-interface %q", cfg.Name, cfg.Vxlan.SrcInterface)
 	}
+	// EVPN-signaled tunnels have no configured dst until the remote
+	// VTEP is learned. They are still created at commit time against a
+	// link-local placeholder so everything stacked on the tunnel
+	// (pseudowire bind, headend subinterfaces, feature arming) wires up
+	// in the same order as a static tunnel; discovery replaces the
+	// tunnel with the learned dst. Encap toward the placeholder is
+	// routeless and blackholes, equivalent to a down transport.
 	if cfg.Vxlan.Dst == "" {
-		return fmt.Errorf("vxlan tunnel %s has no dst (evpn-signaled tunnels are programmed on discovery)", cfg.Name)
+		if !cfg.Vxlan.EVPNSignaled() {
+			return fmt.Errorf("vxlan tunnel %s has no dst", cfg.Name)
+		}
+		cfg = cloneWithDst(cfg, evpnPlaceholderDst)
 	}
 
 	if existing := v.ifMgr.GetByName(cfg.Name); existing != nil {
@@ -223,4 +244,33 @@ func (v *VPP) deleteVxlanTunnel(ch api.Channel, iface *ifmgr.Interface) error {
 	v.ifMgr.Remove(iface.SwIfIndex)
 	v.logger.Debug("Deleted VXLAN tunnel", "interface", iface.Name)
 	return nil
+}
+
+func (v *VPP) VxlanTunnelDst(name string) (string, bool) {
+	iface := v.ifMgr.GetByName(name)
+	if iface == nil {
+		return "", false
+	}
+
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		return "", false
+	}
+	defer ch.Close()
+
+	req := &vxlan.VxlanTunnelV2Dump{
+		SwIfIndex: interface_types.InterfaceIndex(iface.SwIfIndex),
+	}
+	stream := ch.SendMultiRequest(req)
+	for {
+		details := &vxlan.VxlanTunnelV2Details{}
+		stop, err := stream.ReceiveReply(details)
+		if err != nil || stop {
+			break
+		}
+		if uint32(details.SwIfIndex) == iface.SwIfIndex {
+			return details.DstAddress.ToIP().String(), true
+		}
+	}
+	return "", false
 }

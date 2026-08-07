@@ -42,6 +42,7 @@ type Interfaces interface {
 	CreateInterface(cfg *interfaces.InterfaceConfig) error
 	BindPseudowire(name, transport string) error
 	UnbindPseudowire(name string) error
+	VxlanTunnelDst(name string) (string, bool)
 	SetInterfaceDescription(name, description string) error
 	SetInterfaceMTU(name string, mtu int) error
 	SetInterfaceEnabled(name string, enabled bool) error

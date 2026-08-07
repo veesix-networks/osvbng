@@ -67,10 +67,6 @@ func (h *EnabledHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) e
 	}
 	enabled := hctx.NewValue.(bool)
 
-	if isEVPNTunnel(hctx, ifName) {
-		return nil
-	}
-
 	if h.dataplaneState != nil {
 		currentEnabled := h.dataplaneState.IsInterfaceEnabled(ifName)
 		if currentEnabled == enabled {
@@ -87,7 +83,7 @@ func (h *EnabledHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext
 		return fmt.Errorf("extract interface name: %w", err)
 	}
 
-	if hctx.OldValue == nil || isEVPNTunnel(hctx, ifName) {
+	if hctx.OldValue == nil {
 		return nil
 	}
 

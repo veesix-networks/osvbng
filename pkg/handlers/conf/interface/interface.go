@@ -62,20 +62,22 @@ func (h *InterfaceHandler) Validate(ctx context.Context, hctx *conf.HandlerConte
 func (h *InterfaceHandler) Apply(ctx context.Context, hctx *conf.HandlerContext) error {
 	cfg := hctx.NewValue.(*interfaces.InterfaceConfig)
 
-	// EVPN-signaled tunnels have no static dst: the VPP tunnel is
-	// programmed once the remote VTEP is learned. Only the kernel
-	// mirror device (which FRR advertises the VNI from) exists now.
-	if cfg.Vxlan != nil && cfg.Vxlan.EVPNSignaled() {
-		if h.evpnMirror == nil {
-			return nil
-		}
-		return h.evpnMirror.EnsureMirror(evpnmgr.TunnelSpec{
+	// EVPN-signaled tunnels get a kernel mirror device (FRR derives
+	// the VNI advertisement from it) and then fall through to normal
+	// creation: the VPP tunnel is created against a placeholder dst so
+	// pseudowire binds and subinterfaces wire up in static-tunnel
+	// order, and discovery later replaces the dst with the learned
+	// remote VTEP.
+	if cfg.Vxlan != nil && cfg.Vxlan.EVPNSignaled() && h.evpnMirror != nil {
+		if err := h.evpnMirror.EnsureMirror(evpnmgr.TunnelSpec{
 			Interface:  cfg.Name,
 			VNI:        cfg.Vxlan.VNI,
 			Src:        cfg.Vxlan.Src,
 			MTU:        cfg.MTU,
 			Pseudowire: pseudowireOnTransport(hctx, cfg.Name),
-		})
+		}); err != nil {
+			return err
+		}
 	}
 
 	if h.dataplaneState != nil && h.dataplaneState.IsInterfaceConfigured(cfg.Name) {
@@ -106,11 +108,8 @@ func (h *InterfaceHandler) Apply(ctx context.Context, hctx *conf.HandlerContext)
 
 func (h *InterfaceHandler) Rollback(ctx context.Context, hctx *conf.HandlerContext) error {
 	cfg := hctx.NewValue.(*interfaces.InterfaceConfig)
-	if cfg.Vxlan != nil && cfg.Vxlan.EVPNSignaled() {
-		if h.evpnMirror != nil {
-			h.evpnMirror.RemoveMirror(cfg.Vxlan.VNI)
-		}
-		return nil
+	if cfg.Vxlan != nil && cfg.Vxlan.EVPNSignaled() && h.evpnMirror != nil {
+		h.evpnMirror.RemoveMirror(cfg.Vxlan.VNI)
 	}
 	return h.southbound.DeleteInterface(cfg.Name)
 }
