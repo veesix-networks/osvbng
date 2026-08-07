@@ -6,8 +6,10 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
 
+	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
 	"github.com/veesix-networks/osvbng/pkg/config/system"
 	"gopkg.in/yaml.v3"
 )
@@ -62,6 +64,28 @@ func (c *Config) applyDefaults() {
 	}
 }
 
+func (c *Config) resolveVxlanSrc(ifName string, iface *interfaces.InterfaceConfig) error {
+	if iface.Vxlan.SrcInterface == "" {
+		return nil
+	}
+
+	srcIface, ok := c.Interfaces[iface.Vxlan.SrcInterface]
+	if !ok || srcIface == nil {
+		return fmt.Errorf("src-interface references unknown interface %q", iface.Vxlan.SrcInterface)
+	}
+	if srcIface.Address == nil || len(srcIface.Address.IPv4) == 0 {
+		return fmt.Errorf("src-interface %q has no ipv4 address", iface.Vxlan.SrcInterface)
+	}
+
+	ip, _, err := net.ParseCIDR(srcIface.Address.IPv4[0])
+	if err != nil {
+		return fmt.Errorf("src-interface %q address %q: %w", iface.Vxlan.SrcInterface, srcIface.Address.IPv4[0], err)
+	}
+
+	iface.Vxlan.Src = ip.String()
+	return nil
+}
+
 func validateVLANTpid(value string) error {
 	switch value {
 	case "", "dot1q", "dot1ad":
@@ -95,6 +119,14 @@ func (c *Config) Validate() error {
 			}
 			if err := validateVLANTpid(sub.VLANTpid); err != nil {
 				return fmt.Errorf("interfaces.%s.subinterfaces.%s: %w", ifName, subID, err)
+			}
+		}
+		if iface.Vxlan != nil {
+			if err := iface.Vxlan.Validate(); err != nil {
+				return fmt.Errorf("interfaces.%s.vxlan: %w", ifName, err)
+			}
+			if err := c.resolveVxlanSrc(ifName, iface); err != nil {
+				return fmt.Errorf("interfaces.%s.vxlan: %w", ifName, err)
 			}
 		}
 	}

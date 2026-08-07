@@ -15,10 +15,11 @@ type InterfaceConfig struct {
 	MTU         int            `json:"mtu,omitempty" yaml:"mtu,omitempty"`
 	Address     *AddressConfig `json:"address,omitempty" yaml:"address,omitempty"`
 
-	Type    string      `json:"type,omitempty" yaml:"type,omitempty"`
-	Parent  string      `json:"parent,omitempty" yaml:"parent,omitempty"`
-	VLANID  int         `json:"vlan-id,omitempty" yaml:"vlan-id,omitempty"`
-	Bond    *BondConfig `json:"bond,omitempty" yaml:"bond,omitempty"`
+	Type    string       `json:"type,omitempty" yaml:"type,omitempty"`
+	Parent  string       `json:"parent,omitempty" yaml:"parent,omitempty"`
+	VLANID  int          `json:"vlan-id,omitempty" yaml:"vlan-id,omitempty"`
+	Bond    *BondConfig  `json:"bond,omitempty" yaml:"bond,omitempty"`
+	Vxlan   *VxlanConfig `json:"vxlan,omitempty" yaml:"vxlan,omitempty"`
 	LCP     bool        `json:"-" yaml:"-"`
 	VRF     string      `json:"vrf,omitempty" yaml:"vrf,omitempty"`
 	CGNAT   string      `json:"cgnat,omitempty" yaml:"cgnat,omitempty"`
@@ -149,6 +150,43 @@ func (c *BondConfig) Validate() error {
 	if c.MACAddress != "" {
 		if _, err := net.ParseMAC(c.MACAddress); err != nil {
 			return fmt.Errorf("invalid mac-address %q: %w", c.MACAddress, err)
+		}
+	}
+
+	return nil
+}
+
+type VxlanConfig struct {
+	Src          string `json:"src,omitempty" yaml:"src,omitempty"`
+	SrcInterface string `json:"src-interface,omitempty" yaml:"src-interface,omitempty"`
+	Dst          string `json:"dst" yaml:"dst"`
+	VNI          uint32 `json:"vni" yaml:"vni"`
+}
+
+func (c *VxlanConfig) Validate() error {
+	if c.VNI == 0 || c.VNI > 16777215 {
+		return fmt.Errorf("invalid vni %d (must be 1-16777215)", c.VNI)
+	}
+
+	if c.Dst == "" {
+		return fmt.Errorf("vxlan requires dst")
+	}
+	dst := net.ParseIP(c.Dst)
+	if dst == nil {
+		return fmt.Errorf("invalid dst %q", c.Dst)
+	}
+
+	if (c.Src == "") == (c.SrcInterface == "") {
+		return fmt.Errorf("vxlan requires exactly one of src or src-interface")
+	}
+
+	if c.Src != "" {
+		src := net.ParseIP(c.Src)
+		if src == nil {
+			return fmt.Errorf("invalid src %q", c.Src)
+		}
+		if (src.To4() == nil) != (dst.To4() == nil) {
+			return fmt.Errorf("src and dst must be the same address family")
 		}
 	}
 

@@ -34,6 +34,11 @@ type VPP struct {
 	schedulerMu  sync.Mutex
 	aclReg       *aclRegistry
 	numRxQueues  int
+
+	tunnelDecapMu     sync.Mutex
+	tunnelDecapLoaded bool
+	tunnelDecap4      uint32
+	tunnelDecap6      uint32
 }
 
 type VPPConfig struct {
@@ -190,6 +195,10 @@ func (v *VPP) Reconnect(apiSocket string) error {
 	if err := v.statsClient.Connect(); err != nil {
 		v.logger.Warn("Failed to reconnect stats client", "error", err)
 	}
+
+	v.tunnelDecapMu.Lock()
+	v.tunnelDecapLoaded = false
+	v.tunnelDecapMu.Unlock()
 
 	v.ifMgr.Clear()
 	if err := v.LoadInterfaces(); err != nil {
