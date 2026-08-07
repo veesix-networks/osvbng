@@ -15,11 +15,12 @@ type InterfaceConfig struct {
 	MTU         int            `json:"mtu,omitempty" yaml:"mtu,omitempty"`
 	Address     *AddressConfig `json:"address,omitempty" yaml:"address,omitempty"`
 
-	Type    string       `json:"type,omitempty" yaml:"type,omitempty"`
-	Parent  string       `json:"parent,omitempty" yaml:"parent,omitempty"`
-	VLANID  int          `json:"vlan-id,omitempty" yaml:"vlan-id,omitempty"`
-	Bond    *BondConfig  `json:"bond,omitempty" yaml:"bond,omitempty"`
-	Vxlan   *VxlanConfig `json:"vxlan,omitempty" yaml:"vxlan,omitempty"`
+	Type       string            `json:"type,omitempty" yaml:"type,omitempty"`
+	Parent     string            `json:"parent,omitempty" yaml:"parent,omitempty"`
+	VLANID     int               `json:"vlan-id,omitempty" yaml:"vlan-id,omitempty"`
+	Bond       *BondConfig       `json:"bond,omitempty" yaml:"bond,omitempty"`
+	Vxlan      *VxlanConfig      `json:"vxlan,omitempty" yaml:"vxlan,omitempty"`
+	Pseudowire *PseudowireConfig `json:"pseudowire,omitempty" yaml:"pseudowire,omitempty"`
 	LCP     bool        `json:"-" yaml:"-"`
 	VRF     string      `json:"vrf,omitempty" yaml:"vrf,omitempty"`
 	CGNAT   string      `json:"cgnat,omitempty" yaml:"cgnat,omitempty"`
@@ -161,6 +162,25 @@ type VxlanConfig struct {
 	SrcInterface string `json:"src-interface,omitempty" yaml:"src-interface,omitempty"`
 	Dst          string `json:"dst" yaml:"dst"`
 	VNI          uint32 `json:"vni" yaml:"vni"`
+
+	PWTransport bool `json:"-" yaml:"-"`
+}
+
+type PseudowireConfig struct {
+	Transport  string `json:"transport" yaml:"transport"`
+	MACAddress string `json:"mac-address,omitempty" yaml:"mac-address,omitempty"`
+}
+
+func (c *PseudowireConfig) Validate() error {
+	if c.Transport == "" {
+		return fmt.Errorf("pseudowire requires transport")
+	}
+	if c.MACAddress != "" {
+		if _, err := net.ParseMAC(c.MACAddress); err != nil {
+			return fmt.Errorf("invalid mac-address %q: %w", c.MACAddress, err)
+		}
+	}
+	return nil
 }
 
 func (c *VxlanConfig) Validate() error {

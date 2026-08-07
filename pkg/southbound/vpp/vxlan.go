@@ -87,7 +87,12 @@ func (v *VPP) createVxlanTunnel(cfg *interfaces.InterfaceConfig) error {
 		return fmt.Errorf("parse vxlan dst %q: %w", cfg.Vxlan.Dst, err)
 	}
 
-	decapNext, err := v.tunnelDecapNext(dst.Af == ip_types.ADDRESS_IP6)
+	var decapNext uint32
+	if cfg.Vxlan.PWTransport {
+		decapNext, err = v.pwDecapNext(dst.Af == ip_types.ADDRESS_IP6)
+	} else {
+		decapNext, err = v.tunnelDecapNext(dst.Af == ip_types.ADDRESS_IP6)
+	}
 	if err != nil {
 		return fmt.Errorf("resolve tunnel decap next: %w", err)
 	}

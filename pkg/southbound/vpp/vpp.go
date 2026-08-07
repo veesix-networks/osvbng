@@ -39,6 +39,12 @@ type VPP struct {
 	tunnelDecapLoaded bool
 	tunnelDecap4      uint32
 	tunnelDecap6      uint32
+	pwDecapLoaded     bool
+	pwDecap4          uint32
+	pwDecap6          uint32
+
+	pwMu       sync.Mutex
+	pwBindings map[string]pwBinding
 }
 
 type VPPConfig struct {
@@ -90,6 +96,7 @@ func NewVPP(cfg VPPConfig) (*VPP, error) {
 		schedulerIfs: make(map[uint32]bool),
 		aclReg:       newACLRegistry(),
 		numRxQueues:  cfg.NumRxQueues,
+		pwBindings:   make(map[string]pwBinding),
 	}
 
 	if err := v.LoadInterfaces(); err != nil {
@@ -198,6 +205,7 @@ func (v *VPP) Reconnect(apiSocket string) error {
 
 	v.tunnelDecapMu.Lock()
 	v.tunnelDecapLoaded = false
+	v.pwDecapLoaded = false
 	v.tunnelDecapMu.Unlock()
 
 	v.ifMgr.Clear()

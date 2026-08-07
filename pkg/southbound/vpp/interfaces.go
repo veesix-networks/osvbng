@@ -253,6 +253,10 @@ func (v *VPP) DeleteInterface(name string) error {
 		return v.deleteVxlanTunnel(ch, iface)
 	}
 
+	if strings.EqualFold(iface.DevType, "loopback") {
+		return v.deletePseudowire(iface)
+	}
+
 	if iface.DevType == "bond" {
 		req := &bond.BondDelete{
 			SwIfIndex: interface_types.InterfaceIndex(iface.SwIfIndex),
@@ -844,6 +848,8 @@ func (v *VPP) CreateInterface(cfg *interfaces.InterfaceConfig) error {
 		return v.createLoopback(cfg)
 	case "vxlan":
 		return v.createVxlanTunnel(cfg)
+	case "pseudowire":
+		return v.createPseudowire(cfg)
 	case "physical":
 		return v.createPhysicalInterface(cfg)
 	}
@@ -1786,6 +1792,10 @@ func inferInterfaceType(cfg *interfaces.InterfaceConfig) string {
 
 	if cfg.Vxlan != nil {
 		return "vxlan"
+	}
+
+	if cfg.Pseudowire != nil {
+		return "pseudowire"
 	}
 
 	if len(cfg.Name) >= 4 && cfg.Name[:4] == "loop" {

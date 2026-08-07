@@ -40,6 +40,7 @@ type Interfaces interface {
 
 	// Dataplane interface configuration
 	CreateInterface(cfg *interfaces.InterfaceConfig) error
+	BindPseudowire(name, transport string) error
 	SetInterfaceDescription(name, description string) error
 	SetInterfaceMTU(name string, mtu int) error
 	SetInterfaceEnabled(name string, enabled bool) error

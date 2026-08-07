@@ -86,6 +86,54 @@ func (c *Config) resolveVxlanSrc(ifName string, iface *interfaces.InterfaceConfi
 	return nil
 }
 
+func (c *Config) validatePseudowires() error {
+	transportUsers := make(map[string]string)
+
+	for ifName, iface := range c.Interfaces {
+		if iface == nil || iface.Pseudowire == nil {
+			continue
+		}
+
+		if err := iface.Pseudowire.Validate(); err != nil {
+			return fmt.Errorf("interfaces.%s.pseudowire: %w", ifName, err)
+		}
+
+		transport := iface.Pseudowire.Transport
+		tIface, ok := c.Interfaces[transport]
+		if !ok || tIface == nil {
+			return fmt.Errorf("interfaces.%s.pseudowire: transport references unknown interface %q", ifName, transport)
+		}
+		if tIface.Vxlan == nil {
+			return fmt.Errorf("interfaces.%s.pseudowire: transport %q is not a tunnel interface", ifName, transport)
+		}
+		if prev, used := transportUsers[transport]; used {
+			return fmt.Errorf("interfaces.%s.pseudowire: transport %q already used by pseudowire %q", ifName, transport, prev)
+		}
+		transportUsers[transport] = ifName
+
+		if c.L2GW != nil && c.L2GW.HandoffGroups != nil {
+			for hgName, hg := range c.L2GW.HandoffGroups {
+				if hg != nil && hg.Interface == transport {
+					return fmt.Errorf("interfaces.%s.pseudowire: transport %q is an l2gw handoff interface (handoff-group %s)", ifName, transport, hgName)
+				}
+			}
+		}
+		if c.SubscriberGroups != nil {
+			for groupName, group := range c.SubscriberGroups.Groups {
+				for i, vr := range group.VLANs {
+					if vr.ParentInterface == transport {
+						return fmt.Errorf("interfaces.%s.pseudowire: transport %q is a subscriber-group parent interface (subscriber_groups.%s.vlans[%d])", ifName, transport, groupName, i)
+					}
+				}
+			}
+		}
+
+		tIface.Vxlan.PWTransport = true
+	}
+
+	return nil
+}
+
 func validateVLANTpid(value string) error {
 	switch value {
 	case "", "dot1q", "dot1ad":
@@ -120,6 +168,9 @@ func (c *Config) Validate() error {
 			if err := validateVLANTpid(sub.VLANTpid); err != nil {
 				return fmt.Errorf("interfaces.%s.subinterfaces.%s: %w", ifName, subID, err)
 			}
+		}
+		if iface.Vxlan != nil && iface.Pseudowire != nil {
+			return fmt.Errorf("interfaces.%s: vxlan and pseudowire are mutually exclusive", ifName)
 		}
 		if iface.Vxlan != nil {
 			if err := iface.Vxlan.Validate(); err != nil {
@@ -166,6 +217,10 @@ func (c *Config) Validate() error {
 				}
 			}
 		}
+	}
+
+	if err := c.validatePseudowires(); err != nil {
+		return err
 	}
 
 	if err := c.ValidateBindings(); err != nil {

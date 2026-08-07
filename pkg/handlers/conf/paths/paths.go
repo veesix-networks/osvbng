@@ -40,6 +40,7 @@ const (
 	InterfaceIPv6Multicast Path = "interfaces.<*>.ipv6.multicast"
 	InterfaceARP           Path = "interfaces.<*>.arp"
 	InterfaceUnnumbered    Path = "interfaces.<*>.unnumbered"
+	InterfacePseudowire    Path = "interfaces.<*>.pseudowire"
 
 	BFDEnabled Path = "protocols.bfd.enabled"
 
