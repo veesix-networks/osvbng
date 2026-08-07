@@ -644,6 +644,14 @@ func (v *VPP) LoadInterfaces() error {
 	}
 
 	v.logger.Debug("Loaded interfaces into ifMgr", "count", len(v.ifMgr.List()))
+
+	// Clear() above wiped the per-interface address state that HasIPv4
+	// and friends serve; reload it from VPP so a runtime interface
+	// reload (e.g. tunnel replacement on EVPN discovery) does not leave
+	// address ownership empty until the next full recovery.
+	if err := v.LoadIPState(); err != nil {
+		v.logger.Warn("Failed to reload IP state after interface reload", "error", err)
+	}
 	return nil
 }
 
