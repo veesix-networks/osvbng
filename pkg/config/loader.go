@@ -106,6 +106,9 @@ func (c *Config) validatePseudowires() error {
 		if tIface.Vxlan == nil {
 			return fmt.Errorf("interfaces.%s.pseudowire: transport %q is not a tunnel interface", ifName, transport)
 		}
+		if tIface.Vxlan.EVPNSignaled() {
+			return fmt.Errorf("interfaces.%s.pseudowire: transport %q is evpn-signaled (not yet supported)", ifName, transport)
+		}
 		if prev, used := transportUsers[transport]; used {
 			return fmt.Errorf("interfaces.%s.pseudowire: transport %q already used by pseudowire %q", ifName, transport, prev)
 		}
@@ -180,6 +183,17 @@ func (c *Config) Validate() error {
 				return fmt.Errorf("interfaces.%s.vxlan: %w", ifName, err)
 			}
 		}
+	}
+
+	evpnVNIs := make(map[uint32]string)
+	for ifName, iface := range c.Interfaces {
+		if iface == nil || iface.Vxlan == nil || !iface.Vxlan.EVPNSignaled() {
+			continue
+		}
+		if prev, ok := evpnVNIs[iface.Vxlan.VNI]; ok {
+			return fmt.Errorf("interfaces.%s.vxlan: vni %d already used by evpn-signaled interface %q", ifName, iface.Vxlan.VNI, prev)
+		}
+		evpnVNIs[iface.Vxlan.VNI] = ifName
 	}
 
 	if c.SubscriberGroups != nil {

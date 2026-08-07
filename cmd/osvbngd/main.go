@@ -42,6 +42,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/dhcp4"
 	"github.com/veesix-networks/osvbng/pkg/dhcp6"
 	"github.com/veesix-networks/osvbng/pkg/events/local"
+	"github.com/veesix-networks/osvbng/pkg/evpnmgr"
 	"github.com/veesix-networks/osvbng/pkg/ha"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/conf/all"
 	"github.com/veesix-networks/osvbng/pkg/handlers/oper"
@@ -187,6 +188,8 @@ func main() {
 	vrfmgr.Set(vrfMgr)
 	vpp.SetVRFResolver(vrfMgr.ResolveVRF)
 
+	evpnMgr := evpnmgr.New()
+
 	if err := vpp.SetLCPNetNs(config.LCPNetNs); err != nil {
 		mainLog.Warn("LCP netns not available, LCP interfaces will use default namespace", "ns", config.LCPNetNs, "error", err)
 	}
@@ -200,6 +203,7 @@ func main() {
 			mainLog.Warn("Failed to create netlink handle for VRF manager", "ns", config.LCPNetNs, "error", err)
 		} else {
 			vrfMgr.SetNetlinkHandle(nlHandle)
+			evpnMgr.SetNetlinkHandle(nlHandle)
 			netbind.SetLCPNetNs(config.LCPNetNs)
 			mainLog.Info("VRF manager configured for LCP namespace", "ns", config.LCPNetNs)
 		}
@@ -220,11 +224,12 @@ func main() {
 		CPPM:             cppmManager,
 		Routing:          nil,
 		VRFManager:       vrfMgr,
+		EVPNMirror:       evpnMgr,
 		SvcGroupResolver: svcGroupResolver,
 		PluginComponents: nil,
 	})
 
-	if err := bootstrapDataplane(mainLog, configd, vpp, vrfMgr, svcGroupResolver, cppmManager, cfg, accessInterface); err != nil {
+	if err := bootstrapDataplane(mainLog, configd, vpp, vrfMgr, evpnMgr, svcGroupResolver, cppmManager, cfg, accessInterface); err != nil {
 		log.Fatalf("Failed to bootstrap dataplane: %v", err)
 	}
 
@@ -500,7 +505,7 @@ func main() {
 
 					if ifCount <= 1 {
 						mainLog.Info("VPP recovery: dataplane state lost, bootstrapping")
-						if err := bootstrapDataplane(mainLog, configd, vpp, vrfMgr, svcGroupResolver, cppmManager, cfg, accessInterface); err != nil {
+						if err := bootstrapDataplane(mainLog, configd, vpp, vrfMgr, evpnMgr, svcGroupResolver, cppmManager, cfg, accessInterface); err != nil {
 							return fmt.Errorf("bootstrap dataplane: %w", err)
 						}
 
@@ -782,6 +787,7 @@ func bootstrapDataplane(
 	configd *configmgr.ConfigManager,
 	sb *vpp.VPP,
 	vrfMgr *vrfmgr.Manager,
+	evpnMgr *evpnmgr.Manager,
 	svcGroupResolver *svcgroup.Resolver,
 	cppmManager *cppm.Manager,
 	cfg *config.Config,
@@ -813,6 +819,7 @@ func bootstrapDataplane(
 		Southbound:       sb,
 		CPPM:             cppmManager,
 		VRFManager:       vrfMgr,
+		EVPNMirror:       evpnMgr,
 		SvcGroupResolver: svcGroupResolver,
 	})
 
@@ -836,6 +843,16 @@ func bootstrapDataplane(
 		}
 	}
 	configd.CloseCandidateSession(infraSess)
+
+	desiredMirrors := make(map[uint32]string)
+	for _, iface := range cfg.Interfaces {
+		if iface != nil && iface.Vxlan != nil && iface.Vxlan.EVPNSignaled() {
+			desiredMirrors[iface.Vxlan.VNI] = iface.Vxlan.Src
+		}
+	}
+	if err := evpnMgr.Reconcile(desiredMirrors); err != nil {
+		log.Warn("Failed to reconcile EVPN mirror devices", "error", err)
+	}
 
 	log.Info("Dataplane bootstrap complete")
 	return nil

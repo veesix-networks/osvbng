@@ -68,6 +68,10 @@ func (h *DescriptionHandler) Apply(ctx context.Context, hctx *conf.HandlerContex
 	}
 	desc := hctx.NewValue.(string)
 
+	if isEVPNTunnel(hctx, ifName) {
+		return nil
+	}
+
 	return h.southbound.SetInterfaceDescription(ifName, desc)
 }
 
@@ -75,6 +79,9 @@ func (h *DescriptionHandler) Rollback(ctx context.Context, hctx *conf.HandlerCon
 	ifName, err := h.extractInterfaceName(hctx.Path)
 	if err != nil {
 		return fmt.Errorf("extract interface name: %w", err)
+	}
+	if isEVPNTunnel(hctx, ifName) {
+		return nil
 	}
 	oldDesc := ""
 	if hctx.OldValue != nil {

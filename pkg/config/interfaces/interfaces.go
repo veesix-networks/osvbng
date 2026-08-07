@@ -157,13 +157,20 @@ func (c *BondConfig) Validate() error {
 	return nil
 }
 
+const VxlanSignalingEVPN = "evpn"
+
 type VxlanConfig struct {
 	Src          string `json:"src,omitempty" yaml:"src,omitempty"`
 	SrcInterface string `json:"src-interface,omitempty" yaml:"src-interface,omitempty"`
-	Dst          string `json:"dst" yaml:"dst"`
+	Dst          string `json:"dst,omitempty" yaml:"dst,omitempty"`
 	VNI          uint32 `json:"vni" yaml:"vni"`
+	Signaling    string `json:"signaling,omitempty" yaml:"signaling,omitempty"`
 
 	PWTransport bool `json:"-" yaml:"-"`
+}
+
+func (c *VxlanConfig) EVPNSignaled() bool {
+	return c.Signaling == VxlanSignalingEVPN
 }
 
 type PseudowireConfig struct {
@@ -188,12 +195,24 @@ func (c *VxlanConfig) Validate() error {
 		return fmt.Errorf("invalid vni %d (must be 1-16777215)", c.VNI)
 	}
 
-	if c.Dst == "" {
+	if c.Signaling != "" && c.Signaling != VxlanSignalingEVPN {
+		return fmt.Errorf("invalid signaling %q (must be %q)", c.Signaling, VxlanSignalingEVPN)
+	}
+
+	if c.EVPNSignaled() {
+		if c.Dst != "" {
+			return fmt.Errorf("dst and signaling evpn are mutually exclusive (dst is learned)")
+		}
+	} else if c.Dst == "" {
 		return fmt.Errorf("vxlan requires dst")
 	}
-	dst := net.ParseIP(c.Dst)
-	if dst == nil {
-		return fmt.Errorf("invalid dst %q", c.Dst)
+
+	var dst net.IP
+	if c.Dst != "" {
+		dst = net.ParseIP(c.Dst)
+		if dst == nil {
+			return fmt.Errorf("invalid dst %q", c.Dst)
+		}
 	}
 
 	if (c.Src == "") == (c.SrcInterface == "") {
@@ -205,7 +224,7 @@ func (c *VxlanConfig) Validate() error {
 		if src == nil {
 			return fmt.Errorf("invalid src %q", c.Src)
 		}
-		if (src.To4() == nil) != (dst.To4() == nil) {
+		if dst != nil && (src.To4() == nil) != (dst.To4() == nil) {
 			return fmt.Errorf("src and dst must be the same address family")
 		}
 	}

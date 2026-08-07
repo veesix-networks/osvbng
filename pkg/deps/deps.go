@@ -19,6 +19,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/dhcp4"
 	"github.com/veesix-networks/osvbng/pkg/dhcp6"
 	"github.com/veesix-networks/osvbng/pkg/events"
+	"github.com/veesix-networks/osvbng/pkg/evpnmgr"
 	"github.com/veesix-networks/osvbng/pkg/ha"
 	"github.com/veesix-networks/osvbng/pkg/opdb"
 	"github.com/veesix-networks/osvbng/pkg/operations"
@@ -75,6 +76,7 @@ type ConfDeps struct {
 	AAA              *aaacomp.Component
 	Routing          *routingcomp.Component
 	VRFManager       *vrfmgr.Manager
+	EVPNMirror       *evpnmgr.Manager
 	SvcGroupResolver *svcgroup.Resolver
 	CPPM             *cppm.Manager
 	L2GW             *l2gwcomp.Component

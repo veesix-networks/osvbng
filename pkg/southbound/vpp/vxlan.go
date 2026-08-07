@@ -64,6 +64,9 @@ func (v *VPP) createVxlanTunnel(cfg *interfaces.InterfaceConfig) error {
 	if cfg.Vxlan.Src == "" {
 		return fmt.Errorf("vxlan src for %s not resolved from src-interface %q", cfg.Name, cfg.Vxlan.SrcInterface)
 	}
+	if cfg.Vxlan.Dst == "" {
+		return fmt.Errorf("vxlan tunnel %s has no dst (evpn-signaled tunnels are programmed on discovery)", cfg.Name)
+	}
 
 	if existing := v.ifMgr.GetByName(cfg.Name); existing != nil {
 		if !strings.EqualFold(existing.DevType, "vxlan") {
