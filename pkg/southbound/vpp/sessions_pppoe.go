@@ -94,7 +94,7 @@ func (v *VPP) AddPPPoESession(sessionID uint16, clientIP net.IP, clientMAC net.H
 		Type:         ifmgr.IfTypeP2P,
 		AdminUp:      true,
 		FIBTableID:   decapVrfID,
-		MTU:          uint32(pppMTU),
+		MTU:          uint32(pppMTU) + 8,
 	})
 
 	v.logger.Debug("Added PPPoE session to VPP",
@@ -127,9 +127,17 @@ func (v *VPP) programPPPoESessionMTUAndClamp(ch api.Channel, sessionID uint16, s
 		pppMTU = 1492
 	}
 
+	// The dataplane charges the PPPoE encapsulation (6-byte PPPoE header
+	// + 2-byte PPP protocol) against the session interface MTU, so the
+	// interface must be sized MRU + 8 for a full-MRU IP packet to leave
+	// unfragmented. Usable IP payload then equals the negotiated MRU
+	// exactly: 1492 MRU -> 1500 interface MTU -> 1492-byte IP fits,
+	// 1493+ fragments per normal IP rules.
+	sessionMTU := uint32(pppMTU) + 8
+
 	mtuReq := &vppinterfaces.SwInterfaceSetMtu{
 		SwIfIndex: interface_types.InterfaceIndex(swIdx),
-		Mtu:       []uint32{uint32(pppMTU), 0, 0, 0},
+		Mtu:       []uint32{sessionMTU, 0, 0, 0},
 	}
 	mtuReply := &vppinterfaces.SwInterfaceSetMtuReply{}
 	if err := ch.SendRequest(mtuReq).ReceiveReply(mtuReply); err != nil {
@@ -313,7 +321,7 @@ func (v *VPP) AddPPPoESessionAsync(sessionID uint16, clientIP net.IP, clientMAC 
 			Type:         ifmgr.IfTypeP2P,
 			AdminUp:      true,
 			FIBTableID:   decapVrfID,
-			MTU:          uint32(pppMTU),
+			MTU:          uint32(pppMTU) + 8,
 		})
 		v.logger.Debug("Added PPPoE session to VPP (async)",
 			"session_id", sessionID,
