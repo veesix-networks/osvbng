@@ -1,0 +1,85 @@
+# Copyright 2026 The osvbng Authors
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# HA graceful switchover with IPoE subscribers arriving over a VXLAN
+# pseudowire headend. Both BNGs carry an identical anycast VTEP
+# (10.99.1.1 on eth1) and identical vxlan-an1 / pw-an1 config; the
+# blaster's leaf stitch pins the VTEP to the SRG virtual MAC, so the
+# access bridge delivers encapsulated frames to whichever node holds
+# the vMAC (SRG plugin adds/removes it on eth1 per ACTIVE/STANDBY).
+# The headend MAC is pinned to the same vMAC on both nodes so the
+# subscriber-facing gateway MAC never changes across switchover.
+
+name: osvbng-ha-pwhe-ipoe
+
+mgmt:
+  ipv4-subnet: 172.20.25.0/24
+
+topology:
+  nodes:
+    bng1:
+      kind: linux
+      image: veesixnetworks/osvbng:local
+      image-pull-policy: Never
+      mgmt-ipv4: 172.20.25.2
+      cap-add:
+        - SYS_ADMIN
+        - NET_ADMIN
+        - IPC_LOCK
+        - SYS_NICE
+      env:
+        OSVBNG_WAIT_FOR_INTERFACES: "true"
+        OSVBNG_NUM_INTERFACES: "2"
+        OSVBNG_RESPAWN: "true"
+      binds:
+        - config/bng1/osvbng.yaml:/etc/osvbng/osvbng.yaml:ro
+
+    bng2:
+      kind: linux
+      image: veesixnetworks/osvbng:local
+      image-pull-policy: Never
+      mgmt-ipv4: 172.20.25.3
+      cap-add:
+        - SYS_ADMIN
+        - NET_ADMIN
+        - IPC_LOCK
+        - SYS_NICE
+      env:
+        OSVBNG_WAIT_FOR_INTERFACES: "true"
+        OSVBNG_NUM_INTERFACES: "2"
+        OSVBNG_RESPAWN: "true"
+      binds:
+        - config/bng2/osvbng.yaml:/etc/osvbng/osvbng.yaml:ro
+
+    access-sw-pwhe:
+      kind: bridge
+
+    subscribers:
+      kind: linux
+      image: veesixnetworks/bngblaster:0.9.30
+      mgmt-ipv4: 172.20.25.10
+      cap-add:
+        - NET_ADMIN
+      binds:
+        - config/subscribers/config.json:/config/config.json:ro
+      exec:
+        - ip addr add 10.99.1.2/24 dev eth1
+        - ip neigh replace 10.99.1.1 lladdr 02:00:5e:00:01:01 dev eth1 nud permanent
+        - ip link add vxlan-acc type vxlan id 10101 local 10.99.1.2 remote 10.99.1.1 dstport 4789 dev eth1
+        - ip link add br-acc type bridge
+        - ip link add acc0 mtu 8900 type veth peer name acc0b mtu 8900
+        - ip link set vxlan-acc master br-acc
+        - ip link set acc0b master br-acc
+        - ip link set vxlan-acc up
+        - ip link set acc0b up
+        - ip link set acc0 up
+        - ip link set br-acc up
+
+  links:
+    - endpoints: [bng1:eth1, access-sw-pwhe:bng1]
+      mtu: 9000
+    - endpoints: [bng2:eth1, access-sw-pwhe:bng2]
+      mtu: 9000
+    - endpoints: [subscribers:eth1, access-sw-pwhe:sub1]
+      mtu: 9000
