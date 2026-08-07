@@ -75,6 +75,16 @@ Verify Forwarding Over Pseudowire
         Should Match Regexp    ${output}    [1-5] received    no ping replies from ${ip}
     END
 
+Verify Full MTU Frames Traverse The Pseudowire
+    [Documentation]    MTU guard: a full-size inner IP packet (1500 bytes,
+    ...    1522-byte QinQ frame, ~1572 encapsulated) must cross the
+    ...    pseudowire in both directions without fragmentation.
+    ${ips} =    Get Session IPv4 Addresses    ${bng1}
+    FOR    ${ip}    IN    @{ips}
+        ${output} =    Execute VPP Command    ${bng1}    ping ${ip} source loop100 repeat 3 size 1472
+        Should Match Regexp    ${output}    [1-3] received    full-mtu ping to ${ip} failed
+    END
+
 Verify Traffic Rides The Tunnel
     [Documentation]    Leak guard: the ping exchange must move the tunnel
     ...    counters in both directions inside VPP.
@@ -110,8 +120,11 @@ Teardown PWHE Test
 Get Session IPv4 Addresses
     [Arguments]    ${container}
     ${output} =    Get osvbng API Response    ${container}    /api/show/subscriber/sessions
-    ${result} =    Run Process    python3    -c
-    ...    import json,os; s=json.loads(os.environ['JSON']).get('data') or []; print('\\n'.join(sorted(x['IPv4Address'] for x in s if x.get('IPv4Address') and x['IPv4Address']!='<nil>')))
+    ${script} =    Catenate    SEPARATOR=${SPACE}
+    ...    import json,os;
+    ...    s=json.loads(os.environ['JSON']).get('data') or [];
+    ...    print('\\n'.join(sorted(x['IPv4Address'] for x in s if x.get('IPv4Address') and x['IPv4Address']!='<nil>')))
+    ${result} =    Run Process    python3    -c    ${script}
     ...    env:JSON=${output}    stderr=STDOUT
     Should Be Equal As Integers    ${result.rc}    0
     @{ips} =    Split To Lines    ${result.stdout}
