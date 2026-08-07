@@ -14,7 +14,9 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/ppp"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"github.com/veesix-networks/osvbng/pkg/svcgroup"
+	"go.fd.io/govpp/api"
 )
 
 // SetupMode selects between fresh post-NCP bring-up and synchronous opdb
@@ -125,6 +127,43 @@ func (c *Component) applyServiceGroupBindings(sess *SessionState, swIfIndex uint
 // the opdb entry. Publishes TopicSessionRestored (not Lifecycle /
 // Programmed) on success so AAA does not emit a duplicate
 // Accounting-Start and HA does not re-replicate to the standby.
+
+// restoreAddNeedsRefresh reports whether an AddPPPoESession error means
+// the session lookup key exists in the dataplane but with drifted or
+// unknown-vintage state (ENTRY_NEEDS_REFRESH from the idempotency
+// contract, or TUNNEL_EXIST from plugins predating it). Restore
+// converges by delete-and-recreate; only the restore paths use this.
+func restoreAddNeedsRefresh(err error) bool {
+	if err == nil {
+		return false
+	}
+	var apiErr api.VPPApiError
+	if errors.As(err, &apiErr) {
+		return int32(apiErr) == -500 || int32(apiErr) == -75
+	}
+	return false
+}
+
+func (c *Component) restoreAddSession(sess *SessionState, clientIP net.IP, localMAC net.HardwareAddr, encapIfIndex uint32, decapVrfID uint32, pppMTU uint16, policy southbound.MSSClampPolicy) (uint32, error) {
+	swIfIndex, err := c.vpp.AddPPPoESession(
+		sess.PPPoESessionID, clientIP, sess.MAC, localMAC, encapIfIndex,
+		sess.OuterVLAN, sess.InnerVLAN, decapVrfID, pppMTU, policy,
+	)
+	if !restoreAddNeedsRefresh(err) {
+		return swIfIndex, err
+	}
+
+	c.logger.Info("Restore found drifted dataplane session, recreating",
+		"session_id", sess.SessionID, "pppoe_session_id", sess.PPPoESessionID)
+	if delErr := c.vpp.DeletePPPoESession(sess.PPPoESessionID, clientIP, sess.MAC); delErr != nil {
+		return 0, fmt.Errorf("delete drifted session: %w (after %v)", delErr, err)
+	}
+	return c.vpp.AddPPPoESession(
+		sess.PPPoESessionID, clientIP, sess.MAC, localMAC, encapIfIndex,
+		sess.OuterVLAN, sess.InnerVLAN, decapVrfID, pppMTU, policy,
+	)
+}
+
 func (c *Component) setupSessionRestore(ctx context.Context, sess *SessionState) error {
 	if sess.Phase == ppp.PhaseLACTunneled {
 		return c.setupSessionRestoreLAC(ctx, sess)
@@ -155,18 +194,7 @@ func (c *Component) setupSessionRestore(ctx context.Context, sess *SessionState)
 
 	pppMTU, policy := c.resolveMSSClampPolicy(sess)
 
-	swIfIndex, err := c.vpp.AddPPPoESession(
-		sess.PPPoESessionID,
-		sess.IPv4Address,
-		sess.MAC,
-		localMAC,
-		encapIfIndex,
-		sess.OuterVLAN,
-		sess.InnerVLAN,
-		decapVrfID,
-		pppMTU,
-		policy,
-	)
+	swIfIndex, err := c.restoreAddSession(sess, sess.IPv4Address, localMAC, encapIfIndex, decapVrfID, pppMTU, policy)
 	if err != nil {
 		return fmt.Errorf("add pppoe session: %w", err)
 	}
@@ -430,18 +458,7 @@ func (c *Component) setupSessionRestoreLAC(ctx context.Context, sess *SessionSta
 	}
 	pppMTU, policy := c.resolveMSSClampPolicy(sess)
 
-	swIfIndex, err := c.vpp.AddPPPoESession(
-		sess.PPPoESessionID,
-		clientIP,
-		sess.MAC,
-		localMAC,
-		encapIfIndex,
-		sess.OuterVLAN,
-		sess.InnerVLAN,
-		decapVrfID,
-		pppMTU,
-		policy,
-	)
+	swIfIndex, err := c.restoreAddSession(sess, clientIP, localMAC, encapIfIndex, decapVrfID, pppMTU, policy)
 	if err != nil {
 		return fmt.Errorf("add pppoe session for LAC restore: %w", err)
 	}
