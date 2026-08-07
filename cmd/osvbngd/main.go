@@ -188,7 +188,7 @@ func main() {
 	vrfmgr.Set(vrfMgr)
 	vpp.SetVRFResolver(vrfMgr.ResolveVRF)
 
-	evpnMgr := evpnmgr.New()
+	evpnMgr := evpnmgr.New(vpp)
 
 	if err := vpp.SetLCPNetNs(config.LCPNetNs); err != nil {
 		mainLog.Warn("LCP netns not available, LCP interfaces will use default namespace", "ns", config.LCPNetNs, "error", err)
@@ -231,6 +231,12 @@ func main() {
 
 	if err := bootstrapDataplane(mainLog, configd, vpp, vrfMgr, evpnMgr, svcGroupResolver, cppmManager, cfg, accessInterface); err != nil {
 		log.Fatalf("Failed to bootstrap dataplane: %v", err)
+	}
+
+	evpnStop := make(chan struct{})
+	defer close(evpnStop)
+	if err := evpnMgr.Start(nsHandle, evpnStop); err != nil {
+		mainLog.Warn("Failed to start EVPN remote VTEP watcher", "error", err)
 	}
 
 	eventBus := local.NewBus()
@@ -844,10 +850,15 @@ func bootstrapDataplane(
 	}
 	configd.CloseCandidateSession(infraSess)
 
-	desiredMirrors := make(map[uint32]string)
-	for _, iface := range cfg.Interfaces {
+	desiredMirrors := make(map[uint32]evpnmgr.TunnelSpec)
+	for name, iface := range cfg.Interfaces {
 		if iface != nil && iface.Vxlan != nil && iface.Vxlan.EVPNSignaled() {
-			desiredMirrors[iface.Vxlan.VNI] = iface.Vxlan.Src
+			desiredMirrors[iface.Vxlan.VNI] = evpnmgr.TunnelSpec{
+				Interface: name,
+				VNI:       iface.Vxlan.VNI,
+				Src:       iface.Vxlan.Src,
+				MTU:       iface.MTU,
+			}
 		}
 	}
 	if err := evpnMgr.Reconcile(desiredMirrors); err != nil {

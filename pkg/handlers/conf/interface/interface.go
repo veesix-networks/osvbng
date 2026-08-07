@@ -57,7 +57,12 @@ func (h *InterfaceHandler) Apply(ctx context.Context, hctx *conf.HandlerContext)
 		if h.evpnMirror == nil {
 			return nil
 		}
-		return h.evpnMirror.EnsureMirror(cfg.Vxlan.VNI, cfg.Vxlan.Src)
+		return h.evpnMirror.EnsureMirror(evpnmgr.TunnelSpec{
+			Interface: cfg.Name,
+			VNI:       cfg.Vxlan.VNI,
+			Src:       cfg.Vxlan.Src,
+			MTU:       cfg.MTU,
+		})
 	}
 
 	if h.dataplaneState != nil && h.dataplaneState.IsInterfaceConfigured(cfg.Name) {

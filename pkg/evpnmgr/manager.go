@@ -12,6 +12,7 @@ import (
 
 	"github.com/vishvananda/netlink"
 
+	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 )
 
@@ -21,21 +22,48 @@ const (
 	vxlanPort    = 4789
 )
 
+// TunnelProgrammer is the slice of the southbound needed to program
+// discovered tunnels into the dataplane.
+type TunnelProgrammer interface {
+	CreateInterface(cfg *interfaces.InterfaceConfig) error
+	DeleteInterface(name string) error
+	SetInterfaceMTU(name string, mtu int) error
+}
+
+// TunnelSpec is the configured identity of an EVPN-signaled tunnel:
+// everything except the remote VTEP, which is learned.
+type TunnelSpec struct {
+	Interface string
+	VNI       uint32
+	Src       string
+	MTU       int
+}
+
 // Manager maintains non-forwarding kernel vxlan mirror devices for
 // EVPN-signaled tunnels. FRR derives its local VNI state from these
 // devices via netlink; the real dataplane tunnels live in VPP and are
-// programmed separately. Each mirror is a vxlan device enslaved to a
+// programmed from the remote VTEPs zebra installs as fdb flood
+// entries on the mirrors. Each mirror is a vxlan device enslaved to a
 // dedicated empty bridge so zebra detects the VNI while any stray
 // kernel-decapped frame is blackholed.
 type Manager struct {
 	mu            sync.Mutex
 	logger        *logger.Logger
 	netlinkHandle *netlink.Handle
+	southbound    TunnelProgrammer
+
+	specs      map[uint32]TunnelSpec
+	learned    map[uint32][]string
+	programmed map[uint32]string
 }
 
-func New() *Manager {
+func New(sb TunnelProgrammer) *Manager {
 	return &Manager{
-		logger: logger.Get(logger.Routing),
+		logger:     logger.Get(logger.Routing),
+		southbound: sb,
+		specs:      make(map[uint32]TunnelSpec),
+		learned:    make(map[uint32][]string),
+		programmed: make(map[uint32]string),
 	}
 }
 
@@ -51,32 +79,37 @@ func bridgeName(vni uint32) string {
 	return fmt.Sprintf("%s%d", bridgePrefix, vni)
 }
 
-func (m *Manager) EnsureMirror(vni uint32, vtepIP string) error {
+func (m *Manager) EnsureMirror(spec TunnelSpec) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	ip := net.ParseIP(vtepIP)
+	ip := net.ParseIP(spec.Src)
 	if ip == nil {
-		return fmt.Errorf("invalid vtep ip %q for vni %d", vtepIP, vni)
+		return fmt.Errorf("invalid vtep ip %q for vni %d", spec.Src, spec.VNI)
 	}
 
-	if link, err := m.nlLinkByName(vxlanName(vni)); err == nil {
-		if vx, ok := link.(*netlink.Vxlan); ok && uint32(vx.VxlanId) == vni && vx.SrcAddr.Equal(ip) {
+	m.specs[spec.VNI] = spec
+
+	if link, err := m.nlLinkByName(vxlanName(spec.VNI)); err == nil {
+		if vx, ok := link.(*netlink.Vxlan); ok && uint32(vx.VxlanId) == spec.VNI && vx.SrcAddr.Equal(ip) {
 			return nil
 		}
-		m.removeMirrorLocked(vni)
+		m.removeMirrorLocked(spec.VNI)
 	}
 
-	return m.createMirrorLocked(vni, ip)
+	return m.createMirrorLocked(spec.VNI, ip)
 }
 
 func (m *Manager) RemoveMirror(vni uint32) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.unprogramLocked(vni)
+	delete(m.specs, vni)
+	delete(m.learned, vni)
 	m.removeMirrorLocked(vni)
 }
 
-func (m *Manager) Reconcile(desired map[uint32]string) error {
+func (m *Manager) Reconcile(desired map[uint32]TunnelSpec) error {
 	links, err := m.nlLinkList()
 	if err != nil {
 		return fmt.Errorf("netlink link list: %w", err)
@@ -98,9 +131,9 @@ func (m *Manager) Reconcile(desired map[uint32]string) error {
 		}
 	}
 
-	for vni, vtepIP := range desired {
-		if err := m.EnsureMirror(vni, vtepIP); err != nil {
-			m.logger.Error("Failed to ensure EVPN mirror device", "vni", vni, "error", err)
+	for _, spec := range desired {
+		if err := m.EnsureMirror(spec); err != nil {
+			m.logger.Error("Failed to ensure EVPN mirror device", "vni", spec.VNI, "error", err)
 		}
 	}
 
@@ -195,6 +228,13 @@ func (m *Manager) nlLinkByName(name string) (netlink.Link, error) {
 		return m.netlinkHandle.LinkByName(name)
 	}
 	return netlink.LinkByName(name)
+}
+
+func (m *Manager) nlLinkByIndex(index int) (netlink.Link, error) {
+	if m.netlinkHandle != nil {
+		return m.netlinkHandle.LinkByIndex(index)
+	}
+	return netlink.LinkByIndex(index)
 }
 
 func (m *Manager) nlLinkList() ([]netlink.Link, error) {
