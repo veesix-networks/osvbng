@@ -28,6 +28,7 @@ type CircuitSummary struct {
 	HandoffCVLAN    uint16    `json:"handoff_cvlan,omitempty"`
 	Transparent     bool      `json:"transparent,omitempty"`
 	Static          bool      `json:"static,omitempty"`
+	Protocol        string    `json:"protocol,omitempty"`
 	State           string    `json:"state"`
 	CircuitID       uint32    `json:"circuit_id"`
 	CreatedAt       time.Time `json:"created_at,omitempty"`
@@ -63,6 +64,7 @@ func (c *Component) SnapshotCircuits() []CircuitSummary {
 			HandoffCVLAN:    ct.HandoffCVLAN,
 			Transparent:     ct.Transparent,
 			Static:          ct.Static,
+			Protocol:        ct.Protocol,
 			State:           ct.State,
 			CircuitID:       ct.CircuitID,
 			CreatedAt:       ct.CreatedAt,

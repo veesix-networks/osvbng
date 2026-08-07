@@ -55,6 +55,8 @@ plugins:
         enabled: true
         listeners:
             - address: :8080
+    subscriber.auth.local:
+        allow_all: true
 
 monitoring:
   collect_interval: 30s

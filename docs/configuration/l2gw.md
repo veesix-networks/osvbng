@@ -164,7 +164,15 @@ aaa:
   policy:
     - name: line-policy
       format: "$subscriber-group$.$svlan$.$cvlan$"
+
+plugins:
+  subscriber.auth.local:
+    allow_all: true
 ```
+
+Without `allow_all` the local provider only accepts usernames present in
+its user database, which is the per-line override mechanism when you
+want an explicit allowlist instead.
 
 ## Idle timeout
 
