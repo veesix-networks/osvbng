@@ -341,6 +341,14 @@ func (v *VPP) GetInterfaceIndex(name string) (int, error) {
 }
 
 func (v *VPP) SetInterfacePromiscuous(ifaceName string, on bool) error {
+	// Loopback-backed interfaces (pseudowire headends) have no NIC
+	// filter to open up: every frame already reaches ethernet-input via
+	// the tunnel decap path, and VPP rejects promisc on loopbacks.
+	if iface := v.ifMgr.GetByName(ifaceName); iface != nil && strings.EqualFold(iface.DevType, "loopback") {
+		v.logger.Debug("Skipping promiscuous on loopback-backed interface", "interface", ifaceName)
+		return nil
+	}
+
 	link, h, err := v.findLink(ifaceName)
 	if err != nil {
 		if vppErr := v.setInterfacePromiscVPP(ifaceName, on); vppErr != nil {
