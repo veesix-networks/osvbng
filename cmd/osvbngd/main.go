@@ -237,11 +237,6 @@ func main() {
 	cache := memory.New()
 
 	evpnMgr.SetEventBus(eventBus)
-	evpnStop := make(chan struct{})
-	defer close(evpnStop)
-	if err := evpnMgr.Start(nsHandle, evpnStop); err != nil {
-		mainLog.Warn("Failed to start EVPN remote VTEP watcher", "error", err)
-	}
 
 	opdbStore, err := sqlite.Open("/var/lib/osvbng/opdb.db")
 	if err != nil {
@@ -672,6 +667,15 @@ func main() {
 
 	if err := orch.Start(ctx); err != nil {
 		log.Fatalf("Failed to start components: %v", err)
+	}
+
+	// Started after the components so that consumers of
+	// TopicEVPNTunnelProgrammed (l2gw trigger re-arming) are subscribed
+	// before the first discovery can replace a tunnel.
+	evpnStop := make(chan struct{})
+	defer close(evpnStop)
+	if err := evpnMgr.Start(nsHandle, evpnStop); err != nil {
+		mainLog.Warn("Failed to start EVPN remote VTEP watcher", "error", err)
 	}
 
 	telemetry.StartShowPollers(ctx, showRegistry, mainLog)
