@@ -4,9 +4,11 @@ osvbng as a wholesale exchange between independent access network
 operators and retail ISPs: each access network delivers its subscribers
 as a QinQ NNI on its own port, each ISP takes a handoff on its own port,
 and osvbng cross-connects subscriber circuits between the two sides at
-layer 2. Circuits are DHCP-triggered and RADIUS-driven; the retail ISP's
-own BNG terminates DHCP, addressing, and policy. The exchange operator
-may own none of the access infrastructure.
+layer 2. Circuits are triggered by the line's first frame (DHCP-only or
+any-protocol, per range) and RADIUS-driven; the retail ISP's own BNG
+terminates the subscriber with its own addressing and policy, whether
+that session is DHCP, PPPoE, or static. The exchange operator may own
+none of the access infrastructure.
 
 ```
  Access Network 1 -----+ eth1                     bond1 +------ ISP X NNI
@@ -27,8 +29,11 @@ may own none of the access infrastructure.
   their VLAN plans **overlap completely**: line `200.10` exists on both
   footprints as different physical subscribers. That is fine: circuits
   key on the NNI port as well as the tags, and the RADIUS username
-  carries the network, so `an1:200.10` and `an2:200.10` are distinct
+  carries the network, so `an1.200.10` and `an2.200.10` are distinct
   lines that can belong to different ISPs.
+- **Access Network 2** runs `trigger: packet`: its retail ISPs sell
+  PPPoE and static-IP products, so circuits come up on the first frame
+  of any protocol instead of requiring DHCP.
 - **ISP X** and **ISP Y** both sell on both networks. Their handoffs use
   allocator ranges: each circuit gets its own S/C pair on the NNI.
 - **ISP Z** requires a **single fixed S-VLAN (400)** on its core-facing
@@ -75,29 +80,29 @@ l2gw:
 
 subscriber-groups:
   groups:
-    access-network-1:
+    an1:
       vlans:
         - svlan: "100-499"
           cvlan: any
           parent-interface: eth1
           access-types: [l2gw]
-      aaa-policy: an1-line
-    access-network-2:
+      aaa-policy: line
+    an2:
       vlans:
         - svlan: "100-499"
           cvlan: any
           parent-interface: eth2
           access-types: [l2gw]
-      aaa-policy: an2-line
+          trigger: packet
+      l2gw:
+        idle-timeout: 3600
+      aaa-policy: line
 
 aaa:
   auth_provider: radius
   policy:
-    - name: an1-line
-      format: "an1:$svlan$.$cvlan$"
-      password: wholesale
-    - name: an2-line
-      format: "an2:$svlan$.$cvlan$"
+    - name: line
+      format: "$subscriber-group$.$svlan$.$cvlan$"
       password: wholesale
 
 plugins:
@@ -108,10 +113,11 @@ plugins:
 ```
 
 The username is the line identity: the access network plus the S/C VLAN
-tuple its provisioning assigned. Nothing here names a subscriber, and
-the overlapping VLAN plans cannot collide because the network prefix in
-the username (and the NNI port in the dataplane circuit key)
-disambiguates.
+tuple its provisioning assigned. `$subscriber-group$` expands to the
+group name, so one policy serves every access network. Nothing here
+names a subscriber, and the overlapping VLAN plans cannot collide
+because the group prefix in the username (and the NNI port in the
+dataplane circuit key) disambiguates.
 
 ## RADIUS integration
 
@@ -120,10 +126,10 @@ ISP places an order. The same access tuple on the two networks, sold to
 two different ISPs:
 
 ```
-an1:200.10  Cleartext-Password := "wholesale"
+an1.200.10  Cleartext-Password := "wholesale"
             OSVBNG-L2GW-Handoff-Group := "isp-x"
 
-an2:200.10  Cleartext-Password := "wholesale"
+an2.200.10  Cleartext-Password := "wholesale"
             OSVBNG-L2GW-Handoff-Group := "isp-y"
 ```
 
@@ -135,15 +141,16 @@ A line on Access Network 1 sold to ISP Z: the handoff group's fixed
 pinned by the BSS if ISP Z pre-provisions their BNG side):
 
 ```
-an1:301.42  Cleartext-Password := "wholesale"
+an1.301.42  Cleartext-Password := "wholesale"
             OSVBNG-L2GW-Handoff-Group := "isp-z",
             OSVBNG-L2GW-CVLAN := "1042"
 ```
 
 Moving a line between ISPs is a one-attribute change plus a
-Disconnect-Message with the line's Acct-Session-Id; the next DHCP
-exchange re-triggers and splices to the new handoff. Ceasing the line is
-deleting the entry plus the same Disconnect.
+Disconnect-Message with the line's Acct-Session-Id; the line's next
+trigger frame re-triggers and splices to the new handoff. Ceasing the
+line is deleting the entry plus the same Disconnect. On packet-trigger
+ranges an idle line also ages out on its own via `idle-timeout`.
 
 The VSA definitions ship in `contrib/freeradius/dictionary.osvbng`.
 
@@ -158,7 +165,8 @@ when, and how much it moved. The same counters are exported as
 
 ## What each party sees
 
-- **The subscriber**: an ordinary DHCP lease from their ISP.
+- **The subscriber**: an ordinary session from their ISP, whether that
+  is a DHCP lease, a PPPoE login, or a static assignment.
 - **The ISP**: plain QinQ subscribers appearing on one NNI (for ISP Z,
   all inside S-VLAN 400), terminated on their own BNG with their own
   addressing and policy.
