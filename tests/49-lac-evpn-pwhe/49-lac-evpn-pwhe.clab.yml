@@ -1,0 +1,67 @@
+# Copyright 2026 The osvbng Authors
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# LAC over an EVPN-discovered VXLAN access network via a pseudowire
+# headend: PPPoE subscribers arrive through the discovered vxlan-an1 /
+# pw-an1 stitch, osvbng-LAC tunnels them over L2TPv2 to bngblaster's
+# LNS side on the physical backbone link. The leaf is an independent
+# EVPN VTEP (FRR + kernel vxlan); the subscribers container plays both
+# the PPPoE subscriber (behind the leaf) and the LNS.
+
+name: osvbng-lac-evpn-pwhe
+
+mgmt:
+  ipv4-subnet: 172.20.29.0/24
+
+topology:
+  nodes:
+    bng1:
+      kind: linux
+      image: veesixnetworks/osvbng:local
+      image-pull-policy: Never
+      mgmt-ipv4: 172.20.29.2
+      cap-add:
+        - SYS_ADMIN
+        - NET_ADMIN
+        - IPC_LOCK
+        - SYS_NICE
+      env:
+        OSVBNG_WAIT_FOR_INTERFACES: "true"
+        OSVBNG_NUM_INTERFACES: "3"
+        OSVBNG_RESPAWN: "true"
+      binds:
+        - config/bng1/osvbng.yaml:/etc/osvbng/osvbng.yaml:ro
+
+    leaf:
+      kind: linux
+      image: quay.io/frrouting/frr:10.7.0
+      binds:
+        - config/leaf/daemons:/etc/frr/daemons
+        - config/leaf/frr.conf:/etc/frr/frr.conf
+      exec:
+        - ip addr add 10.99.1.2/24 dev eth1
+        - ip addr add 10.254.2.1/32 dev lo
+        - ip link add br-acc type bridge
+        - ip link add vxlan-acc type vxlan id 10101 local 10.254.2.1 dstport 4789 nolearning dev eth1
+        - ip link set vxlan-acc master br-acc
+        - ip link set acc0b master br-acc
+        - ip link set vxlan-acc up
+        - ip link set acc0b up
+        - ip link set br-acc up
+
+    subscribers:
+      kind: linux
+      image: veesixnetworks/bngblaster:0.9.30
+      cap-add:
+        - NET_ADMIN
+      binds:
+        - config/subscribers/config.json:/config/config.json:ro
+
+  links:
+    - endpoints: [bng1:eth1, leaf:eth1]
+      mtu: 9000
+    - endpoints: [leaf:acc0b, subscribers:acc0]
+      mtu: 8900
+    - endpoints: [bng1:eth2, subscribers:eth2]
+      mtu: 1500

@@ -1,0 +1,65 @@
+# Copyright 2026 The osvbng Authors
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# IPoE termination over an EVPN-discovered VXLAN access network via a
+# pseudowire headend: vxlan-an1 has no configured remote VTEP, osvbng
+# learns the leaf's VTEP from its EVPN type-3 route, programs the VPP
+# tunnel, and binds the pw-an1 headend to it. The leaf is an
+# independent EVPN VTEP (FRR + kernel vxlan) bridging the blaster
+# access interface into the service VNI.
+
+name: osvbng-ipoe-evpn-pwhe
+
+mgmt:
+  ipv4-subnet: 172.20.27.0/24
+
+topology:
+  nodes:
+    bng1:
+      kind: linux
+      image: veesixnetworks/osvbng:local
+      image-pull-policy: Never
+      mgmt-ipv4: 172.20.27.2
+      cap-add:
+        - SYS_ADMIN
+        - NET_ADMIN
+        - IPC_LOCK
+        - SYS_NICE
+      env:
+        OSVBNG_WAIT_FOR_INTERFACES: "true"
+        OSVBNG_NUM_INTERFACES: "2"
+        OSVBNG_RESPAWN: "true"
+      binds:
+        - config/bng1/osvbng.yaml:/etc/osvbng/osvbng.yaml:ro
+
+    leaf:
+      kind: linux
+      image: quay.io/frrouting/frr:10.7.0
+      binds:
+        - config/leaf/daemons:/etc/frr/daemons
+        - config/leaf/frr.conf:/etc/frr/frr.conf
+      exec:
+        - ip addr add 10.99.1.2/24 dev eth1
+        - ip addr add 10.254.2.1/32 dev lo
+        - ip link add br-acc type bridge
+        - ip link add vxlan-acc type vxlan id 10101 local 10.254.2.1 dstport 4789 nolearning dev eth1
+        - ip link set vxlan-acc master br-acc
+        - ip link set acc0b master br-acc
+        - ip link set vxlan-acc up
+        - ip link set acc0b up
+        - ip link set br-acc up
+
+    subscribers:
+      kind: linux
+      image: veesixnetworks/bngblaster:0.9.30
+      cap-add:
+        - NET_ADMIN
+      binds:
+        - config/subscribers/config.json:/config/config.json:ro
+
+  links:
+    - endpoints: [bng1:eth1, leaf:eth1]
+      mtu: 9000
+    - endpoints: [leaf:acc0b, subscribers:acc0]
+      mtu: 8900
