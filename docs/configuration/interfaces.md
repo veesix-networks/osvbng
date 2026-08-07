@@ -12,6 +12,7 @@ Network interface configuration. Each key in the `interfaces` map is an interfac
 | `unnumbered` | string | Borrow address from named interface | `loop100` |
 | `bond` | [Bond](#bond) | Bond interface configuration (DPDK only) | |
 | `vxlan` | [VXLAN](#vxlan) | VXLAN tunnel configuration | |
+| `pseudowire` | [Pseudowire](#pseudowire) | Pseudowire headend configuration | |
 | `address` | [Address](#address) | IP address configuration | |
 | `subinterfaces` | [Subinterface](#sub-interfaces) | Sub-interface configuration | |
 | `ipv6` | [IPv6](#ipv6) | IPv6 configuration | |
@@ -168,6 +169,44 @@ interfaces:
       dst: 10.254.0.101         # leaf / remote VTEP
       vni: 10101
 ```
+
+## Pseudowire
+
+A `pseudowire` section creates a pseudowire headend (pw-ether style): a virtual access port backed by a tunnel transport. Decapsulated frames are re-attributed to the headend, so VLAN sub-interfaces, subscriber-groups, and full IPoE/PPPoE/LAC termination work on it exactly as on a physical port, while all traffic rides the transport tunnel.
+
+| Field | Type | Description | Example |
+|-------|------|-------------|---------|
+| `transport` | string | Tunnel interface carrying this headend | `vxlan-an1` |
+| `mac-address` | string | Pin the headend MAC (set identically on both HA nodes so subscribers keep their resolved gateway MAC across switchover) | `02:00:00:00:a1:01` |
+
+One headend per transport tunnel. A tunnel referenced as a pseudowire transport cannot also be used as an l2gw NNI or subscriber-group parent directly.
+
+```yaml
+interfaces:
+  vxlan-an1:
+    enabled: true
+    vxlan:
+      src-interface: loop0
+      dst: 10.254.0.101
+      vni: 10101
+  pw-an1:
+    description: Access operator 1 headend
+    enabled: true
+    pseudowire:
+      transport: vxlan-an1
+
+subscriber-groups:
+  groups:
+    residential-an1:
+      vlans:
+        - svlan: "100-4094"
+          cvlan: any
+          interface: loop100
+          parent-interface: pw-an1
+          access-types: [ipoe]
+```
+
+The subscriber-facing MAC is the headend's own MAC; S/C-VLAN matching, NAS-Port-Id, unnumbered gateways, and HA session restore behave identically to physical parents. The transport underlay must be jumbo (VXLAN ~50B overhead on QinQ frames).
 
 ## Example
 
