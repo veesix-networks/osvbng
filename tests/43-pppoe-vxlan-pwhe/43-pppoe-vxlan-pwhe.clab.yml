@@ -1,0 +1,56 @@
+# Copyright 2026 The osvbng Authors
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# IPoE termination over a VXLAN access network via a pseudowire headend:
+# the access operator NNI arrives as a VXLAN tunnel, subscribers
+# terminate locally on the pw-an1 headend. The subscribers container
+# emulates the leaf stitch with a linux vxlan endpoint bridged to the
+# blaster access interface.
+
+name: osvbng-pppoe-vxlan-pwhe
+
+mgmt:
+  ipv4-subnet: 172.20.23.0/24
+
+topology:
+  nodes:
+    bng1:
+      kind: linux
+      image: veesixnetworks/osvbng:local
+      image-pull-policy: Never
+      mgmt-ipv4: 172.20.23.2
+      cap-add:
+        - SYS_ADMIN
+        - NET_ADMIN
+        - IPC_LOCK
+        - SYS_NICE
+      env:
+        OSVBNG_WAIT_FOR_INTERFACES: "true"
+        OSVBNG_NUM_INTERFACES: "2"
+        OSVBNG_RESPAWN: "true"
+      binds:
+        - config/bng1/osvbng.yaml:/etc/osvbng/osvbng.yaml:ro
+
+    subscribers:
+      kind: linux
+      image: veesixnetworks/bngblaster:0.9.30
+      cap-add:
+        - NET_ADMIN
+      binds:
+        - config/subscribers/config.json:/config/config.json:ro
+      exec:
+        - ip addr add 10.99.1.2/24 dev eth1
+        - ip link add vxlan-acc type vxlan id 10101 local 10.99.1.2 remote 10.99.1.1 dstport 4789 dev eth1
+        - ip link add br-acc type bridge
+        - ip link add acc0 mtu 8900 type veth peer name acc0b mtu 8900
+        - ip link set vxlan-acc master br-acc
+        - ip link set acc0b master br-acc
+        - ip link set vxlan-acc up
+        - ip link set acc0b up
+        - ip link set acc0 up
+        - ip link set br-acc up
+
+  links:
+    - endpoints: [bng1:eth1, subscribers:eth1]
+      mtu: 9000
