@@ -184,6 +184,13 @@ func (m *Manager) replaceTunnelLocked(vni uint32, dst string) {
 		m.logger.Error("Failed to delete EVPN tunnel for replace", "interface", spec.Interface, "vni", vni, "error", err)
 	}
 
+	// Signaling is only set on the placeholder revert (empty dst), where
+	// it selects the placeholder path in the southbound; a learned dst
+	// recreates as a plain static-shaped tunnel.
+	signaling := ""
+	if dst == "" {
+		signaling = interfaces.VxlanSignalingEVPN
+	}
 	cfg := &interfaces.InterfaceConfig{
 		Name:    spec.Interface,
 		Enabled: true,
@@ -192,7 +199,7 @@ func (m *Manager) replaceTunnelLocked(vni uint32, dst string) {
 			Src:         spec.Src,
 			Dst:         dst,
 			VNI:         spec.VNI,
-			Signaling:   interfaces.VxlanSignalingEVPN,
+			Signaling:   signaling,
 			PWTransport: spec.Pseudowire != "",
 		},
 	}

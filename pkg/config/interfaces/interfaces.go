@@ -215,8 +215,8 @@ func (c *VxlanConfig) Validate() error {
 		}
 	}
 
-	if (c.Src == "") == (c.SrcInterface == "") {
-		return fmt.Errorf("vxlan requires exactly one of src or src-interface")
+	if c.Src == "" && c.SrcInterface == "" {
+		return fmt.Errorf("vxlan requires src or src-interface")
 	}
 
 	if c.Src != "" {

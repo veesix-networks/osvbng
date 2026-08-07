@@ -146,7 +146,7 @@ A `vxlan` section turns the interface into a point-to-point VXLAN tunnel. The tu
 | `vni` | int | VXLAN Network Identifier (1-16777215) | `10101` |
 | `signaling` | string | Set to `evpn` to learn the remote VTEP via BGP EVPN instead of configuring `dst` | `evpn` |
 
-Exactly one of `src` or `src-interface` must be set. IPv4 and IPv6 underlays are supported; `src` and `dst` must be the same address family.
+At least one of `src` or `src-interface` must be set (`src-interface` resolves to `src` at load time). IPv4 and IPv6 underlays are supported; `src` and `dst` must be the same address family.
 
 With `signaling: evpn` the tunnel's VNI is advertised as an EVPN type-3 (IMET) route and the remote VTEP is discovered from the fabric rather than provisioned. This requires the BGP [`l2vpn-evpn` address family](protocols.md#bgp-l2vpn-evpn) to be enabled with `advertise-all-vni`. Each EVPN-signaled tunnel must use a unique VNI.
 
