@@ -19,6 +19,7 @@ type BGPConfig struct {
 	IPv6Unicast *BGPAddressFamily        `json:"ipv6-unicast,omitempty" yaml:"ipv6-unicast,omitempty"`
 	IPv4VPN     *BGPVPNAddressFamily     `json:"ipv4-vpn,omitempty" yaml:"ipv4-vpn,omitempty"`
 	IPv6VPN     *BGPVPNAddressFamily     `json:"ipv6-vpn,omitempty" yaml:"ipv6-vpn,omitempty"`
+	L2VPNEVPN   *BGPEVPNAddressFamily    `json:"l2vpn-evpn,omitempty" yaml:"l2vpn-evpn,omitempty"`
 	VRF         map[string]*BGPVRFConfig `json:"vrf,omitempty" yaml:"vrf,omitempty"`
 }
 
@@ -55,6 +56,11 @@ type BGPVRFConfig struct {
 
 type BGPVPNAddressFamily struct {
 	Neighbors map[string]*BGPNeighborAFIConfig `json:"neighbors,omitempty" yaml:"neighbors,omitempty"`
+}
+
+type BGPEVPNAddressFamily struct {
+	Neighbors       map[string]*BGPNeighborAFIConfig `json:"neighbors,omitempty" yaml:"neighbors,omitempty"`
+	AdvertiseAllVNI bool                             `json:"advertise-all-vni,omitempty" yaml:"advertise-all-vni,omitempty"`
 }
 
 type BGPVRFAFConfig struct {

@@ -203,6 +203,34 @@ router bgp {{ .Protocols.BGP.ASN }}
  exit-address-family
 !
 {{ end }}
+{{ if .Protocols.BGP.L2VPNEVPN }}
+ address-family l2vpn evpn
+{{ range $addr, $neighbor := $.Protocols.BGP.Neighbors }}
+{{ if (index $.Protocols.BGP.L2VPNEVPN.Neighbors $addr) }}
+  neighbor {{ $addr }} activate
+{{ $nCfg := index $.Protocols.BGP.L2VPNEVPN.Neighbors $addr }}
+{{ if $nCfg.NextHopSelf }}
+  neighbor {{ $addr }} next-hop-self
+{{ end }}
+{{ if $nCfg.RoutePolicyIn }}
+  neighbor {{ $addr }} route-map {{ $nCfg.RoutePolicyIn }} in
+{{ end }}
+{{ if $nCfg.RoutePolicyOut }}
+  neighbor {{ $addr }} route-map {{ $nCfg.RoutePolicyOut }} out
+{{ end }}
+{{ end }}
+{{ end }}
+{{ range $name, $peerGroup := $.Protocols.BGP.PeerGroups }}
+{{ if (index $.Protocols.BGP.L2VPNEVPN.Neighbors $name) }}
+  neighbor {{ $name }} activate
+{{ end }}
+{{ end }}
+{{ if .Protocols.BGP.L2VPNEVPN.AdvertiseAllVNI }}
+  advertise-all-vni
+{{ end }}
+ exit-address-family
+!
+{{ end }}
 exit
 !
 {{ range $vrfName, $vrfConfig := .Protocols.BGP.VRF }}

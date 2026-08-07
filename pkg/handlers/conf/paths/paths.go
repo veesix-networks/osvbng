@@ -109,6 +109,9 @@ const (
 	ProtocolsBGPIPv6VPN         Path = "protocols.bgp.ipv6-vpn"
 	ProtocolsBGPIPv6VPNNeighbor Path = "protocols.bgp.ipv6-vpn.neighbors.<*:address>"
 
+	ProtocolsBGPL2VPNEVPN         Path = "protocols.bgp.l2vpn-evpn"
+	ProtocolsBGPL2VPNEVPNNeighbor Path = "protocols.bgp.l2vpn-evpn.neighbors.<*:address>"
+
 	ProtocolsBGPVRFIPv4UnicastLabelVPN  Path = "protocols.bgp.vrf.<*>.ipv4-unicast.label-vpn"
 	ProtocolsBGPVRFIPv4UnicastExportVPN Path = "protocols.bgp.vrf.<*>.ipv4-unicast.export-vpn"
 	ProtocolsBGPVRFIPv4UnicastImportVPN Path = "protocols.bgp.vrf.<*>.ipv4-unicast.import-vpn"
