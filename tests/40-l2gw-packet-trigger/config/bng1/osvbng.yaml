@@ -1,0 +1,75 @@
+# Copyright 2026 The osvbng Authors
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+l2gw:
+    handoff-groups:
+        isp-blue:
+            interface: eth2
+            vlan-tpid: dot1q
+            svlan-range: "200-204"
+            # Pinned to the access C-VLAN: the BNG Blaster a10nsp side
+            # sends downstream session-traffic with the session's access
+            # inner VLAN, so a translated C-VLAN would never match the
+            # reverse circuit.
+            cvlan-range: "10-10"
+
+subscriber-groups:
+    groups:
+        an1:
+            vlan-tpid: dot1q
+            vlans:
+                - svlan: "100-110"
+                  cvlan: any
+                  parent-interface: eth1
+                  access-types: [l2gw]
+                  trigger: packet
+            l2gw:
+                handoff-group: isp-blue
+                idle-timeout: 60
+            aaa-policy: line
+
+interfaces:
+    eth1:
+        description: Access Interface
+        enabled: true
+    eth2:
+        description: Handoff (ISP blue)
+        enabled: true
+
+# Self-contained mode: no RADIUS anywhere in this topology. Local auth
+# allows every line on the armed range; the group default handoff-group
+# and the egress allocator do the rest.
+aaa:
+    auth_provider: local
+    nas_identifier: osvbng
+    policy:
+        - name: line
+          format: $subscriber-group$.$svlan$.$cvlan$
+
+plugins:
+    exporter.prometheus:
+        enabled: true
+        listen_address: :9090
+    northbound.api:
+        enabled: true
+        listeners:
+            - address: :8080
+
+monitoring:
+  collect_interval: 30s
+
+logging:
+    format: text
+    level: info
+    components:
+        aaa: debug
+        l2gw: debug
+        dataplane: debug
+
+dataplane:
+    lcp-netns: dataplane
+    statseg:
+        size: "512m"
+        page-size: "4k"
+        per-node-counters: false

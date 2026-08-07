@@ -1,0 +1,41 @@
+{
+  "interfaces": {
+    "a10nsp": [
+      {
+        "interface": "eth2",
+        "qinq": false
+      }
+    ],
+    "access": [
+      {
+        "interface": "eth1",
+        "a10nsp-interface": "eth2",
+        "type": "pppoe",
+        "vlan-mode": "1:1",
+        "outer-vlan-min": 100,
+        "outer-vlan-max": 101,
+        "inner-vlan-min": 10,
+        "inner-vlan-max": 10
+      }
+    ]
+  },
+  "sessions": {
+    "count": 2
+  },
+  "pppoe": {
+    "reconnect": true
+  },
+  "ppp": {
+    "authentication": {
+      "username": "user{session-global}@osvbng.test",
+      "password": "test",
+      "protocol": "PAP"
+    },
+    "lcp": {
+      "keepalive-interval": 0
+    }
+  },
+  "session-traffic": {
+    "ipv4-pps": 10
+  }
+}
