@@ -142,10 +142,13 @@ A `vxlan` section turns the interface into a point-to-point VXLAN tunnel. The tu
 |-------|------|-------------|---------|
 | `src` | string | Local VTEP address (must be an address VPP owns) | `10.254.0.1` |
 | `src-interface` | string | Take the VTEP address from this interface's first IPv4 address (alternative to `src`) | `loop0` |
-| `dst` | string | Remote VTEP address | `10.254.0.101` |
+| `dst` | string | Remote VTEP address (static tunnels; mutually exclusive with `signaling: evpn`) | `10.254.0.101` |
 | `vni` | int | VXLAN Network Identifier (1-16777215) | `10101` |
+| `signaling` | string | Set to `evpn` to learn the remote VTEP via BGP EVPN instead of configuring `dst` | `evpn` |
 
 Exactly one of `src` or `src-interface` must be set. IPv4 and IPv6 underlays are supported; `src` and `dst` must be the same address family.
+
+With `signaling: evpn` the tunnel's VNI is advertised as an EVPN type-3 (IMET) route and the remote VTEP is discovered from the fabric rather than provisioned. This requires the BGP [`l2vpn-evpn` address family](protocols.md#bgp-l2vpn-evpn) to be enabled with `advertise-all-vni`. Each EVPN-signaled tunnel must use a unique VNI.
 
 Decapsulated frames re-enter the RX feature pipeline as if they arrived on a physical port (via the `osvbng_tunnel` VPP plugin), so l2gw circuit switching and the DHCP trigger snoop work on tunnels unchanged. Encapsulation uses a flow-hash UDP source port, giving the underlay per-flow entropy for ECMP, LAG hashing, and receiver-side RSS.
 

@@ -14,6 +14,7 @@ Most BGP fields follow [FRR BGP conventions](https://docs.frrouting.org/en/lates
 | `neighbors` | [BGPNeighbor](#bgp-neighbors) | BGP neighbors keyed by IP address | |
 | `ipv4-unicast` | [BGPAddressFamily](#bgp-address-family) | IPv4 unicast address family global configuration | |
 | `ipv6-unicast` | [BGPAddressFamily](#bgp-address-family) | IPv6 unicast address family global configuration | |
+| `l2vpn-evpn` | [BGPL2VPNEVPN](#bgp-l2vpn-evpn) | L2VPN EVPN address family for EVPN-signaled VXLAN tunnels | |
 | `vrf` | [BGPVRF](#bgp-vrf) | Per-VRF BGP instances, each with its own neighbors and address families | |
 
 ### BGP Peer Groups
@@ -71,6 +72,31 @@ Applies to top-level `ipv4-unicast` / `ipv6-unicast`.
 | `connected` | bool | Redistribute directly connected routes into BGP | `true` |
 | `static` | bool | Redistribute static routes into BGP | `false` |
 | `route-policy` | string | Apply a route-policy to redistributed routes | `REDIST-FILTER` |
+
+### BGP L2VPN EVPN
+
+Enables the L2VPN EVPN address family. Local VNIs come from [EVPN-signaled VXLAN tunnels](interfaces.md#vxlan); with `advertise-all-vni` each is advertised as a type-3 (IMET) route and remote VTEPs are learned from the received routes.
+
+| Field | Type | Description | Example |
+|-------|------|-------------|---------|
+| `advertise-all-vni` | bool | Advertise every locally configured VNI (required for EVPN-signaled tunnels) | `true` |
+| `neighbors` | [BGPNeighborAFI](#bgp-neighbor-afi-config) | Neighbors or peer groups activated in this address family, keyed by address or group name | |
+
+`send-community` is not applicable in this address family: EVPN routes always carry the extended communities (route targets) they need.
+
+```yaml
+protocols:
+  bgp:
+    asn: 65000
+    router-id: 10.255.0.1
+    neighbors:
+      10.255.0.101:
+        remote-as: 65000
+    l2vpn-evpn:
+      advertise-all-vni: true
+      neighbors:
+        10.255.0.101: {}
+```
 
 ### BGP VRF
 
