@@ -174,6 +174,9 @@ interfaces:
 
 A `pseudowire` section creates a pseudowire headend (pw-ether style): a virtual access port backed by a tunnel transport. Decapsulated frames are re-attributed to the headend, so VLAN sub-interfaces, subscriber-groups, and full IPoE/PPPoE/LAC termination work on it exactly as on a physical port, while all traffic rides the transport tunnel.
 
+!!! note "Terminology"
+    Most vendors use *pseudowire* to mean specifically an MPLS-signaled circuit (LDP-signaled L2VPN or EVPN-VPWS) terminating on a headend interface such as Cisco `PW-Ether`. On osvbng the term is deliberately broader: a pseudowire is any point-to-point L2 service delivered over a tunnel transport and presented as a virtual access interface. Today that transport is a VXLAN tunnel; MPLS-based transports (EVPN-VPWS, SR-MPLS) and SRv6 are planned to slot into the same `transport` field. The headend semantics - VLAN sub-interfaces, subscriber termination, S/C-VLAN matching - are identical regardless of the transport underneath, which keeps the configuration model stable as transports are added.
+
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
 | `transport` | string | Tunnel interface carrying this headend | `vxlan-an1` |
