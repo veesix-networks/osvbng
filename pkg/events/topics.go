@@ -21,6 +21,12 @@ const (
 	TopicEgress            = "osvbng:events:egress"
 	TopicHAStateChange     = "osvbng:events:ha:state_change"
 	TopicInterfaceState    = "osvbng:events:interface:state"
+	// TopicEVPNTunnelProgrammed fires after an EVPN-signaled vxlan
+	// tunnel is programmed into the dataplane with a learned remote
+	// VTEP. Components that arm per-interface dataplane features at
+	// start (which races tunnel discovery) re-arm on it. Carries
+	// EVPNTunnelProgrammedEvent.
+	TopicEVPNTunnelProgrammed = "osvbng:events:evpn:tunnel:programmed"
 	TopicCGNATMapping             = "osvbng:events:cgnat:mapping"
 	TopicSubscriberMutation       = "osvbng:events:subscriber:mutation"
 	TopicSubscriberMutationResult = "osvbng:events:subscriber:mutation:result"

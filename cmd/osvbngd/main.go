@@ -233,14 +233,15 @@ func main() {
 		log.Fatalf("Failed to bootstrap dataplane: %v", err)
 	}
 
+	eventBus := local.NewBus()
+	cache := memory.New()
+
+	evpnMgr.SetEventBus(eventBus)
 	evpnStop := make(chan struct{})
 	defer close(evpnStop)
 	if err := evpnMgr.Start(nsHandle, evpnStop); err != nil {
 		mainLog.Warn("Failed to start EVPN remote VTEP watcher", "error", err)
 	}
-
-	eventBus := local.NewBus()
-	cache := memory.New()
 
 	opdbStore, err := sqlite.Open("/var/lib/osvbng/opdb.db")
 	if err != nil {

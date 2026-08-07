@@ -57,6 +57,7 @@ type Component struct {
 	aaaSub       events.Subscription
 	terminateSub events.Subscription
 	haStateSub   events.Subscription
+	evpnSub      events.Subscription
 }
 
 func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manager) (*Component, error) {
@@ -104,6 +105,8 @@ func (c *Component) Start(ctx context.Context) error {
 		c.logger.Error("Failed to apply l2gw static maps", "error", err)
 	}
 
+	c.evpnSub = c.eventBus.Subscribe(events.TopicEVPNTunnelProgrammed, c.handleEVPNTunnelProgrammed)
+
 	if err := c.armTriggers(); err != nil {
 		c.logger.Error("Failed to arm l2gw trigger ranges", "error", err)
 	}
@@ -145,6 +148,9 @@ func (c *Component) Stop(ctx context.Context) error {
 	if c.haStateSub != nil {
 		c.haStateSub.Unsubscribe()
 	}
+	if c.evpnSub != nil {
+		c.evpnSub.Unsubscribe()
+	}
 
 	c.StopContext()
 	return nil
@@ -161,22 +167,63 @@ func (c *Component) armTriggers() error {
 		return nil
 	}
 
+	seen := make(map[string]bool)
+	for _, group := range cfg.SubscriberGroups.Groups {
+		if group == nil {
+			continue
+		}
+		for _, vr := range group.VLANs {
+			if !vr.HasAccessType(subscriber.AccessTypeL2GW) || seen[vr.ParentInterface] {
+				continue
+			}
+			seen[vr.ParentInterface] = true
+			if err := c.armInterfaceTriggers(vr.ParentInterface); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// armInterfaceTriggers arms the l2gw-input feature and every l2gw VLAN
+// range parented on ifName, atomically per port: the check-and-set on
+// armedPorts makes it safe to invoke from both Start and the EVPN
+// tunnel-programmed event without double-arming ranges.
+func (c *Component) armInterfaceTriggers(ifName string) error {
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+		return nil
+	}
+
+	portIdx, ok := c.ifMgr.GetSwIfIndex(ifName)
+	if !ok {
+		c.logger.Error("l2gw access interface not found", "interface", ifName)
+		return nil
+	}
+
+	c.armedMu.Lock()
+	if c.armedPorts[portIdx] {
+		c.armedMu.Unlock()
+		return nil
+	}
+	c.armedPorts[portIdx] = true
+	c.armedMu.Unlock()
+
+	if err := c.vpp.L2GWEnableInput(ifName, true); err != nil {
+		c.armedMu.Lock()
+		delete(c.armedPorts, portIdx)
+		c.armedMu.Unlock()
+		return fmt.Errorf("arm access port %s: %w", ifName, err)
+	}
+	c.logger.Info("Armed l2gw on port", "interface", ifName, "sw_if_index", portIdx)
+
 	for name, group := range cfg.SubscriberGroups.Groups {
 		if group == nil {
 			continue
 		}
 		for _, vr := range group.VLANs {
-			if !vr.HasAccessType(subscriber.AccessTypeL2GW) {
+			if vr.ParentInterface != ifName || !vr.HasAccessType(subscriber.AccessTypeL2GW) {
 				continue
-			}
-			portIdx, ok := c.ifMgr.GetSwIfIndex(vr.ParentInterface)
-			if !ok {
-				c.logger.Error("l2gw access interface not found",
-					"group", name, "interface", vr.ParentInterface)
-				continue
-			}
-			if err := c.armPort(portIdx, vr.ParentInterface); err != nil {
-				return fmt.Errorf("arm access port %s: %w", vr.ParentInterface, err)
 			}
 			svlans, err := vr.GetSVLANs()
 			if err != nil {
@@ -184,17 +231,53 @@ func (c *Component) armTriggers() error {
 			}
 			anyProtocol := vr.GetTriggerMode() == subscriber.TriggerModePacket
 			for _, r := range contiguousRanges(svlans) {
-				if err := c.vpp.L2GWTriggerSVLANRange(vr.ParentInterface, r[0], r[1], anyProtocol, true); err != nil {
+				if err := c.vpp.L2GWTriggerSVLANRange(ifName, r[0], r[1], anyProtocol, true); err != nil {
 					return fmt.Errorf("arm trigger svlans %d-%d on %s: %w",
-						r[0], r[1], vr.ParentInterface, err)
+						r[0], r[1], ifName, err)
 				}
 			}
 			c.logger.Info("Armed l2gw trigger ranges",
-				"group", name, "interface", vr.ParentInterface,
+				"group", name, "interface", ifName,
 				"svlans", vr.SVLAN, "trigger", string(vr.GetTriggerMode()))
 		}
 	}
 	return nil
+}
+
+// handleEVPNTunnelProgrammed re-arms triggers for VLAN ranges parented
+// on an EVPN-signaled tunnel. Those tunnels do not exist when Start's
+// armTriggers runs (discovery races component start), and reprogramming
+// after a VTEP withdraw recreates the interface with a fresh
+// sw_if_index whose features are unset.
+func (c *Component) handleEVPNTunnelProgrammed(evt events.Event) {
+	data, ok := evt.Data.(*events.EVPNTunnelProgrammedEvent)
+	if !ok {
+		return
+	}
+
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil || cfg.SubscriberGroups == nil {
+		return
+	}
+
+	parented := false
+	for _, group := range cfg.SubscriberGroups.Groups {
+		if group == nil {
+			continue
+		}
+		for _, vr := range group.VLANs {
+			if vr.ParentInterface == data.Interface && vr.HasAccessType(subscriber.AccessTypeL2GW) {
+				parented = true
+			}
+		}
+	}
+	if !parented {
+		return
+	}
+
+	if err := c.armInterfaceTriggers(data.Interface); err != nil {
+		c.logger.Error("Failed to arm triggers on programmed evpn tunnel", "interface", data.Interface, "error", err)
+	}
 }
 
 func contiguousRanges(vlans []uint16) [][2]uint16 {

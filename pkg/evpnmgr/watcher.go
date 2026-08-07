@@ -13,6 +13,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
+	"github.com/veesix-networks/osvbng/pkg/events"
 )
 
 // Start subscribes to AF_BRIDGE neighbor (fdb) events in the given
@@ -174,6 +175,16 @@ func (m *Manager) programLocked(vni uint32) {
 	}
 	m.programmed[vni] = dst
 	m.logger.Info("Programmed EVPN tunnel", "interface", spec.Interface, "vni", vni, "dst", dst)
+
+	if m.eventBus != nil {
+		m.eventBus.Publish(events.TopicEVPNTunnelProgrammed, events.Event{
+			Source: "evpnmgr",
+			Data: &events.EVPNTunnelProgrammedEvent{
+				Interface: spec.Interface,
+				VNI:       vni,
+			},
+		})
+	}
 }
 
 func (m *Manager) unprogramLocked(vni uint32) {

@@ -136,6 +136,14 @@ type ComponentReadyEvent struct {
 	State     string
 }
 
+// EVPNTunnelProgrammedEvent is the TopicEVPNTunnelProgrammed payload.
+// Interface is the configured tunnel interface name; VNI identifies
+// the EVPN service.
+type EVPNTunnelProgrammedEvent struct {
+	Interface string
+	VNI       uint32
+}
+
 // L2TPLACDecisionEvent communicates the LAC bring-up outcome back to
 // the PPPoE component. Published on TopicL2TPLACDecision once the L2TP
 // component has either established the tunneled session or exhausted

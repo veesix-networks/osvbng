@@ -13,6 +13,7 @@ import (
 	"github.com/vishvananda/netlink"
 
 	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
+	"github.com/veesix-networks/osvbng/pkg/events"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 )
 
@@ -56,6 +57,7 @@ type Manager struct {
 	logger        *logger.Logger
 	netlinkHandle *netlink.Handle
 	southbound    TunnelProgrammer
+	eventBus      events.Bus
 
 	specs      map[uint32]TunnelSpec
 	learned    map[uint32][]string
@@ -74,6 +76,10 @@ func New(sb TunnelProgrammer) *Manager {
 
 func (m *Manager) SetNetlinkHandle(h *netlink.Handle) {
 	m.netlinkHandle = h
+}
+
+func (m *Manager) SetEventBus(bus events.Bus) {
+	m.eventBus = bus
 }
 
 func vxlanName(vni uint32) string {
