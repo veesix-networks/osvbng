@@ -182,3 +182,64 @@ subscriber-groups:
         handoff-group: isp-blue
       aaa-policy: line-policy
 ```
+
+## VXLAN overlay NNIs
+
+An NNI does not have to be a physical port: any [VXLAN tunnel interface](interfaces.md#vxlan) works as an l2gw `parent-interface` or `handoff-groups.<name>.interface` with no additional l2gw configuration. This is the building block for fabric-scale aggregation, where each access-operator or ISP E-NNI arrives as a point-to-point E-LINE service (one VNI per NNI) across a spine-leaf underlay. Because every NNI gets its own tunnel, each one carries a full independent S-VLAN namespace: two access operators can both deliver S-VLAN 100 without translation.
+
+```yaml
+interfaces:
+  loop0:
+    enabled: true
+    address:
+      ipv4: [10.254.0.1/32]       # VTEP loopback
+  vxlan-an1:
+    description: Access operator 1 NNI
+    enabled: true
+    vxlan: { src-interface: loop0, dst: 10.254.0.101, vni: 10101 }
+  vxlan-isp-blue:
+    description: ISP blue handoff
+    enabled: true
+    vxlan: { src-interface: loop0, dst: 10.254.0.102, vni: 20101 }
+
+l2gw:
+  handoff-groups:
+    isp-blue:
+      interface: vxlan-isp-blue
+      vlan-tpid: dot1q
+      svlan-range: "200-299"
+      cvlan-range: "1-4000"
+
+subscriber-groups:
+  groups:
+    wholesale:
+      vlans:
+        - svlan: "100-199"
+          cvlan: any
+          parent-interface: vxlan-an1
+          access-types: [l2gw]
+      l2gw:
+        handoff-group: isp-blue
+      aaa-policy: line-policy
+```
+
+The dataplane requires the `osvbng_tunnel` VPP plugin (shipped alongside the l2gw plugin): it re-injects decapsulated frames into the standard RX feature pipeline, so trigger snooping, circuit switching, counters, and restart restore behave identically to physical NNIs.
+
+### HA: VTEP failover by routing
+
+With HA enabled, advertise the VTEP loopback from the active node only by listing it in the SRG's `networks`. On promotion the /32 is advertised into BGP (and withdrawn on demotion), so the fabric steers every tunnel to whichever node is active — no MAC dance, consistent with the existing failover-by-routing design. Standby pre-installed circuits are ready when traffic arrives.
+
+```yaml
+ha:
+  enabled: true
+  srgs:
+    srg1:
+      networks:
+        - prefix: 10.254.0.1/32   # VTEP loopback, advertised while ACTIVE
+```
+
+For active/active, use two VTEP loopbacks with opposite-priority SRGs and split the NNI tunnels between them.
+
+### Underlay MTU
+
+The tunnel adds ~50 bytes on top of QinQ subscriber frames. Run a jumbo underlay (`mtu: 9000` on the underlay interfaces and fabric-wide). Encap uses flow-hash UDP source ports, so ECMP paths, LAG members, and receiver RSS queues all load-balance per subscriber flow.

@@ -11,6 +11,7 @@ Network interface configuration. Each key in the `interfaces` map is an interfac
 | `lcp` | bool | Create Linux Control Plane interface | `true` |
 | `unnumbered` | string | Borrow address from named interface | `loop100` |
 | `bond` | [Bond](#bond) | Bond interface configuration (DPDK only) | |
+| `vxlan` | [VXLAN](#vxlan) | VXLAN tunnel configuration | |
 | `address` | [Address](#address) | IP address configuration | |
 | `subinterfaces` | [Subinterface](#sub-interfaces) | Sub-interface configuration | |
 | `ipv6` | [IPv6](#ipv6) | IPv6 configuration | |
@@ -131,6 +132,42 @@ members:
 
 !!! info "AF_PACKET (Docker) deployments"
     When running osvbng in Docker with AF_PACKET, bond interfaces are managed by the host operating system (e.g., Linux bonding). Simply reference the bond interface by name (e.g., `bond0`) in your configuration without a `bond` section — VPP will attach to it as a regular host interface.
+
+## VXLAN
+
+A `vxlan` section turns the interface into a point-to-point VXLAN tunnel. The tunnel is a normal named interface afterward: it can be referenced as an l2gw `handoff-groups.<name>.interface` and as a subscriber-group `parent-interface` for `l2gw` access types, exactly like a physical port.
+
+| Field | Type | Description | Example |
+|-------|------|-------------|---------|
+| `src` | string | Local VTEP address (must be an address VPP owns) | `10.254.0.1` |
+| `src-interface` | string | Take the VTEP address from this interface's first IPv4 address (alternative to `src`) | `loop0` |
+| `dst` | string | Remote VTEP address | `10.254.0.101` |
+| `vni` | int | VXLAN Network Identifier (1-16777215) | `10101` |
+
+Exactly one of `src` or `src-interface` must be set. IPv4 and IPv6 underlays are supported; `src` and `dst` must be the same address family.
+
+Decapsulated frames re-enter the RX feature pipeline as if they arrived on a physical port (via the `osvbng_tunnel` VPP plugin), so l2gw circuit switching and the DHCP trigger snoop work on tunnels unchanged. Encapsulation uses a flow-hash UDP source port, giving the underlay per-flow entropy for ECMP, LAG hashing, and receiver-side RSS.
+
+!!! note "Underlay MTU"
+    VXLAN adds roughly 50 bytes of encapsulation on top of the inner frame (which itself can carry QinQ tags). Run a jumbo underlay: set `mtu: 9000` on the underlay interfaces end to end.
+
+!!! warning "Current limitations"
+    VXLAN tunnel interfaces currently carry L2 wholesale (l2gw) service only. VLAN sub-interfaces and direct IPoE/PPPoE subscriber termination on tunnels are not yet supported, and the underlay must live in the default VRF.
+
+```yaml
+interfaces:
+  loop0:
+    enabled: true
+    address:
+      ipv4: [10.254.0.1/32]     # VTEP source
+  vxlan-an1:
+    description: Access operator NNI
+    enabled: true
+    vxlan:
+      src-interface: loop0
+      dst: 10.254.0.101         # leaf / remote VTEP
+      vni: 10101
+```
 
 ## Example
 
