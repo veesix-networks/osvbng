@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.17.0](https://github.com/veesix-networks/osvbng/compare/v0.16.0...v0.17.0) (2026-08-08)
+
+
+### Features
+
+* **aaa:** built-in osvbng vendor dictionary for l2gw radius attributes ([43ed1e5](https://github.com/veesix-networks/osvbng/commit/43ed1e55cf80d0cf42539363e0ed08c0b85a4d8d))
+* **ha:** l2gw circuit sync with standby pre-install and promotion enable ([0e92a4b](https://github.com/veesix-networks/osvbng/commit/0e92a4bb43c8d5106c83ae4440b4aea525736d05))
+* **l2gw:** config schema, session model, and AAA attribute plumbing ([167f8f3](https://github.com/veesix-networks/osvbng/commit/167f8f37fd5b30ad10964c09a5d8fdb550a40b31))
+* **l2gw:** dataplane dhcp trigger snoop arming and multi-nni access ([582051e](https://github.com/veesix-networks/osvbng/commit/582051e0e3ec9a4d785e55d5b3b10bd6bacd0591))
+* **l2gw:** dhcpv6 relay identity options for aaa policies ([7444d92](https://github.com/veesix-networks/osvbng/commit/7444d9236e139eb678017c9c5afd87f95945c2c3))
+* **l2gw:** export per-circuit counters via telemetry sdk ([9827251](https://github.com/veesix-networks/osvbng/commit/982725120b78130eb207574b4504069df0753187))
+* **l2gw:** layer 2 wholesale gateway with dhcp-triggered circuits ([#402](https://github.com/veesix-networks/osvbng/issues/402)) ([4d772e1](https://github.com/veesix-networks/osvbng/commit/4d772e1ea7411d982f7931063ba39a86aad8c31f))
+* **l2gw:** packet-triggered circuits with tuple identity and idle-timeout ([#403](https://github.com/veesix-networks/osvbng/issues/403)) ([c7f4bcb](https://github.com/veesix-networks/osvbng/commit/c7f4bcb0f3bf3c540373608d8bb2745921676d6e))
+* **l2gw:** reconcile static maps and allocators on config commit ([5f5a710](https://github.com/veesix-networks/osvbng/commit/5f5a7104f5118e09d19730ba3021d5773e9a2c6d))
+* **l2gw:** vxlan overlay nnis via generic tunnel rx dispatch ([#404](https://github.com/veesix-networks/osvbng/issues/404)) ([d316718](https://github.com/veesix-networks/osvbng/commit/d316718b85e97cc1dd48f121f6348de2b2e3947e))
+* **l2gw:** wholesale circuit control plane ([c6b3801](https://github.com/veesix-networks/osvbng/commit/c6b38018c2250d7d3c12c5a7b9768001c0fb9ecb))
+* **southbound:** evpn-signaled vxlan tunnels with dynamic vtep discovery ([#409](https://github.com/veesix-networks/osvbng/issues/409)) ([6e21c0f](https://github.com/veesix-networks/osvbng/commit/6e21c0fae9c92e1171549ef3bf13e61e191a11b6))
+* **southbound:** generate osvbng_l2gw binapi bindings ([31b7b36](https://github.com/veesix-networks/osvbng/commit/31b7b3617d0cc64d173db164ea94f81cbb60c5b0))
+* **southbound:** l2gw circuit stats and paired counter indices ([dba1065](https://github.com/veesix-networks/osvbng/commit/dba1065a0fc6ec35a64a2591a2d61147043ff3df))
+* **southbound:** l2gw circuit wrappers and interface ([6ffcb53](https://github.com/veesix-networks/osvbng/commit/6ffcb53976d806daeda114aa3d2606634be6f8f2))
+* **southbound:** pseudowire headend termination prep and vxlan transport termination ([#405](https://github.com/veesix-networks/osvbng/issues/405)) ([c668a58](https://github.com/veesix-networks/osvbng/commit/c668a5870397b4238cda977a3a29b2e946a277c0))
+* **southbound:** regenerate osvbng_l2gw binapi for trigger svlan range ([7910fa6](https://github.com/veesix-networks/osvbng/commit/7910fa6240f1f647a214d17f2d72ca9b18cd238c))
+
+
+### Bug Fixes
+
+* **ha:** restore synced sessions on graceful switchover and resolve encap sub-interface ([ed9e3da](https://github.com/veesix-networks/osvbng/commit/ed9e3da6a584f2ff722117f8b0ae5b172b5d7545))
+* **ha:** restore synced sessions on graceful switchover and resolve encap sub-interface ([#400](https://github.com/veesix-networks/osvbng/issues/400)) ([b76ee3d](https://github.com/veesix-networks/osvbng/commit/b76ee3dadaa7de2367bb8b8522049729e6bf3ba4))
+* **pppoe:** size session interface mtu as mru plus pppoe overhead ([#406](https://github.com/veesix-networks/osvbng/issues/406)) ([2066cf5](https://github.com/veesix-networks/osvbng/commit/2066cf55fb2278712e7c489f709def43f721b0f8))
+
 ## [0.16.0](https://github.com/veesix-networks/osvbng/compare/v0.15.0...v0.16.0) (2026-07-21)
 
 
