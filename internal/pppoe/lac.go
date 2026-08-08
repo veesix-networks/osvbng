@@ -253,12 +253,7 @@ func (s *SessionState) startLACVPPSessionAdd() {
 		return
 	}
 
-	var localMAC net.HardwareAddr
-	if s.component.ifMgr != nil {
-		if iface := s.component.ifMgr.Get(s.EncapIfIndex); iface != nil && len(iface.MAC) >= 6 {
-			localMAC = net.HardwareAddr(iface.MAC[:6])
-		}
-	}
+	localMAC := s.component.effectiveLocalMAC(s.SRGName, s.EncapIfIndex)
 	if localMAC == nil {
 		s.component.logger.Error("LAC: cannot resolve local MAC; rejecting subscriber",
 			"session_id", s.SessionID, "sw_if_index", s.EncapIfIndex)
