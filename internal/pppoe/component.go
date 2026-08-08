@@ -427,6 +427,11 @@ func (c *Component) resolveTerminateTargetLocked(ev *events.SubscriberTerminateE
 
 func (c *Component) Start(ctx context.Context) error {
 	c.StartContext(ctx)
+
+	if cfg, err := c.cfgMgr.GetRunning(); err == nil && cfg.System != nil && cfg.System.ACName != "" {
+		c.acName = cfg.System.ACName
+	}
+
 	c.logger.Info("Starting PPPoE component", "ac_name", c.acName)
 
 	c.SetReadyState(component.StateRestoring)
@@ -616,7 +621,6 @@ func (c *Component) handlePADR(pkt *dataplane.ParsedPacket) error {
 		MAC:            pkt.MAC,
 		OuterVLAN:      pkt.OuterVLAN,
 		InnerVLAN:      pkt.InnerVLAN,
-		SwIfIndex:      pkt.SwIfIndex,
 		EncapIfIndex:   pkt.SwIfIndex,
 		Phase:          ppp.PhaseDead,
 		GroupName:      match.Name,
@@ -1305,6 +1309,8 @@ func (c *Component) restoreSessionToCache(ctx context.Context, sess *SessionStat
 		VRF:              sess.VRF,
 		ServiceGroup:     sess.ServiceGroup.Name,
 		SRGName:          sess.SRGName,
+			IngressPolicy:     sess.ServiceGroup.QoSIngress,
+			EgressPolicy:      sess.ServiceGroup.QoSEgress,
 		IPv4Address:      sess.IPv4Address,
 		IPv6Address:      sess.IPv6Address,
 		AAASessionID:     sess.AcctSessionID,
@@ -1654,9 +1660,13 @@ func (c *Component) ForEachSession(fn func(models.SubscriberSession) bool) {
 			OuterVLAN:        sess.OuterVLAN,
 			InnerVLAN:        sess.InnerVLAN,
 			IfIndex:          sess.SwIfIndex,
+		AccessIfIndex:    sess.EncapIfIndex,
+		AccessInterface:  c.accessInterfaceName(sess.EncapIfIndex),
 			VRF:              sess.VRF,
 			ServiceGroup:     sess.ServiceGroup.Name,
 			SRGName:          sess.SRGName,
+			IngressPolicy:     sess.ServiceGroup.QoSIngress,
+			EgressPolicy:      sess.ServiceGroup.QoSEgress,
 			IPv4Address:      sess.IPv4Address,
 			IPv6Address:      sess.IPv6Address,
 			Username:         sess.Username,
@@ -1752,9 +1762,13 @@ func (c *Component) buildModelSnapshot(sess *SessionState) *models.PPPSession {
 		OuterVLAN:        sess.OuterVLAN,
 		InnerVLAN:        sess.InnerVLAN,
 		IfIndex:          sess.SwIfIndex,
+		AccessIfIndex:    sess.EncapIfIndex,
+		AccessInterface:  c.accessInterfaceName(sess.EncapIfIndex),
 		VRF:              sess.VRF,
 		ServiceGroup:     sess.ServiceGroup.Name,
 		SRGName:          sess.SRGName,
+			IngressPolicy:     sess.ServiceGroup.QoSIngress,
+			EgressPolicy:      sess.ServiceGroup.QoSEgress,
 		IPv4Address:      sess.IPv4Address,
 		IPv6Address:      sess.IPv6Address,
 		Username:         sess.Username,

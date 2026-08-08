@@ -31,6 +31,7 @@ func (h *SessionsHandler) Collect(ctx context.Context, req *show.Request) (inter
 	accessType := req.Options["access_type"]
 	protocol := req.Options["protocol"]
 	svlanStr := req.Options["svlan"]
+	username := req.Options["username"]
 
 	var svlan uint32
 	if svlanStr != "" {
@@ -38,7 +39,7 @@ func (h *SessionsHandler) Collect(ctx context.Context, req *show.Request) (inter
 		svlan = uint32(val)
 	}
 
-	return h.subscriber.GetSessions(ctx, accessType, protocol, svlan)
+	return h.subscriber.GetSessions(ctx, accessType, protocol, svlan, username)
 }
 
 func (h *SessionsHandler) PathPattern() paths.Path {
@@ -54,13 +55,14 @@ func (h *SessionsHandler) Summary() string {
 }
 
 func (h *SessionsHandler) Description() string {
-	return "List all active subscriber sessions with optional filtering by access type, protocol, or outer VLAN."
+	return "List all active subscriber sessions with optional filtering by access type, protocol, outer VLAN, or username."
 }
 
 type SessionsOptions struct {
 	AccessType string `query:"access_type" description:"Filter by access type" enum:"ipoe,pppoe"`
 	Protocol   string `query:"protocol" description:"Filter by protocol" enum:"dhcp,dhcpv6,pppoe"`
 	SVLAN      string `query:"svlan" description:"Filter by outer VLAN"`
+	Username   string `query:"username" description:"Filter by username"`
 }
 
 func (h *SessionsHandler) OptionsType() interface{} {

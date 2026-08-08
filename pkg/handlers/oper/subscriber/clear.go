@@ -51,7 +51,7 @@ func (h *ClearSessionHandler) Execute(ctx context.Context, req *oper.Request) (i
 		return nil, fmt.Errorf("at least one filter must be specified")
 	}
 
-	sessions, err := h.deps.Subscriber.GetSessions(ctx, "", "", 0)
+	sessions, err := h.deps.Subscriber.GetSessions(ctx, "", "", 0, "")
 	if err != nil {
 		return nil, fmt.Errorf("get sessions: %w", err)
 	}

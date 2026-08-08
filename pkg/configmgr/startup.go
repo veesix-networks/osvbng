@@ -2,27 +2,34 @@ package configmgr
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/config/interfaces"
 )
 
 func ensureManagementInterface(cfg *config.Config) {
-	const managementInterface = "eth0"
+	ifName := "eth0"
+	if cfg.System != nil && cfg.System.ManagementInterface != "" {
+		ifName = cfg.System.ManagementInterface
+	}
 
 	if cfg.Interfaces == nil {
 		cfg.Interfaces = make(map[string]*interfaces.InterfaceConfig)
 	}
 
-	if existing, ok := cfg.Interfaces[managementInterface]; ok {
-		existing.Name = managementInterface
-		existing.Enabled = true
-	} else {
-		cfg.Interfaces[managementInterface] = &interfaces.InterfaceConfig{
-			Name:        managementInterface,
-			Description: "Management Interface",
-			Enabled:     true,
-		}
+	if _, ok := cfg.Interfaces[ifName]; ok {
+		return
+	}
+
+	if _, err := os.Stat("/sys/class/net/" + ifName); os.IsNotExist(err) {
+		return
+	}
+
+	cfg.Interfaces[ifName] = &interfaces.InterfaceConfig{
+		Name:        ifName,
+		Description: "Management Interface",
+		Enabled:     true,
 	}
 }
 

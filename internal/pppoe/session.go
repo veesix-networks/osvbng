@@ -334,6 +334,15 @@ func (s *SessionState) onAuthResult(allowed bool, attributes map[string]interfac
 		resolved := s.resolveServiceGroup(attributes)
 		s.VRF = resolved.VRF
 		s.ServiceGroup = resolved
+		s.component.restoreSessionToCache(s.component.Ctx, s, time.Now())
+
+		if s.SwIfIndex != 0 {
+			if err := s.component.applyServiceGroupBindings(s, s.SwIfIndex); err != nil {
+				s.component.logger.Warn("Failed to re-apply service group after AAA",
+					"session_id", s.SessionID, "sw_if_index", s.SwIfIndex, "error", err)
+			}
+		}
+
 		s.SRGName = s.component.resolveSRGName(s.OuterVLAN, s.InnerVLAN)
 		s.AllocCtx = s.buildAllocContext(attributes)
 
@@ -704,6 +713,7 @@ func (s *SessionState) checkOpen() {
 			}
 
 			s.component.checkpointSession(s)
+			s.component.restoreSessionToCache(s.component.Ctx, s, time.Now())
 
 			s.component.publishSessionLifecycle(&models.PPPSession{
 				SessionID:        s.SessionID,
@@ -715,9 +725,13 @@ func (s *SessionState) checkOpen() {
 				OuterVLAN:        s.OuterVLAN,
 				InnerVLAN:        s.InnerVLAN,
 				IfIndex:          s.SwIfIndex,
+				AccessIfIndex:    s.EncapIfIndex,
+				AccessInterface:  s.component.accessInterfaceName(s.EncapIfIndex),
 				VRF:              s.VRF,
 				ServiceGroup:     s.ServiceGroup.Name,
 				SRGName:          s.SRGName,
+				IngressPolicy:     s.ServiceGroup.QoSIngress,
+				EgressPolicy:      s.ServiceGroup.QoSEgress,
 				IPv4Address:      s.IPv4Address,
 				IPv6Address:      s.IPv6Address,
 				Username:         s.Username,
@@ -809,9 +823,13 @@ func (s *SessionState) onVPPSessionCreated(swIfIndex uint32, err error) {
 		OuterVLAN:        s.OuterVLAN,
 		InnerVLAN:        s.InnerVLAN,
 		IfIndex:          s.SwIfIndex,
+		AccessIfIndex:    s.EncapIfIndex,
+		AccessInterface:  s.component.accessInterfaceName(s.EncapIfIndex),
 		VRF:              s.VRF,
 		ServiceGroup:     s.ServiceGroup.Name,
 		SRGName:          s.SRGName,
+		IngressPolicy:     s.ServiceGroup.QoSIngress,
+		EgressPolicy:      s.ServiceGroup.QoSEgress,
 		IPv4Address:      s.IPv4Address,
 		IPv6Address:      s.IPv6Address,
 		Username:         s.Username,
@@ -1110,6 +1128,14 @@ func (s *SessionState) terminate() {
 
 	if s.component.vpp != nil && s.SwIfIndex != 0 {
 		sessionID := s.SessionID
+		if err := s.component.vpp.RemoveQoS(s.SwIfIndex); err != nil {
+			s.component.logger.Debug("Failed to remove QoS policers during teardown",
+				"session_id", sessionID, "sw_if_index", s.SwIfIndex, "error", err)
+		}
+		if err := s.component.vpp.RemoveScheduler(s.SwIfIndex); err != nil {
+			s.component.logger.Debug("Failed to remove CAKE scheduler during teardown",
+				"session_id", sessionID, "sw_if_index", s.SwIfIndex, "error", err)
+		}
 		s.component.vpp.DeletePPPoESessionAsync(s.PPPoESessionID, s.IPv4Address, s.MAC, func(err error) {
 			if err != nil {
 				s.component.logger.Warn("Failed to delete PPPoE session from VPP",
@@ -1131,6 +1157,8 @@ func (s *SessionState) terminate() {
 		OuterVLAN:    s.OuterVLAN,
 		InnerVLAN:    s.InnerVLAN,
 		SRGName:      s.SRGName,
+		IngressPolicy:     s.ServiceGroup.QoSIngress,
+		EgressPolicy:      s.ServiceGroup.QoSEgress,
 		Username:     s.Username,
 		AAASessionID: s.AcctSessionID,
 	})

@@ -25,6 +25,8 @@ type SubscriberSession interface {
 	GetServiceGroup() string
 	GetSRGName() string
 	GetActivatedAt() time.Time
+	GetIngressPolicy() string
+	GetEgressPolicy() string
 }
 
 type IPoESession struct {
@@ -44,6 +46,8 @@ type IPoESession struct {
 	VRF             string
 	ServiceGroup    string
 	SRGName         string
+	IngressPolicy   string
+	EgressPolicy    string
 
 	IPv4Address net.IP
 	LeaseTime   uint32
@@ -86,6 +90,8 @@ func (s *IPoESession) GetVLANCount() int         { return s.VLANCount }
 func (s *IPoESession) GetUsername() string       { return s.Username }
 func (s *IPoESession) GetServiceGroup() string   { return s.ServiceGroup }
 func (s *IPoESession) GetSRGName() string        { return s.SRGName }
+func (s *IPoESession) GetIngressPolicy() string  { return s.IngressPolicy }
+func (s *IPoESession) GetEgressPolicy() string   { return s.EgressPolicy }
 func (s *IPoESession) GetActivatedAt() time.Time { return s.ActivatedAt }
 
 func (s *IPoESession) IsDualStack() bool {
@@ -161,6 +167,8 @@ type PPPSession struct {
 	VRF             string
 	ServiceGroup    string
 	SRGName         string
+	IngressPolicy   string
+	EgressPolicy    string
 
 	IPv4Address net.IP
 	IPv6Address net.IP
@@ -242,6 +250,8 @@ func (s *PPPSession) GetVLANCount() int         { return s.VLANCount }
 func (s *PPPSession) GetUsername() string       { return s.Username }
 func (s *PPPSession) GetServiceGroup() string   { return s.ServiceGroup }
 func (s *PPPSession) GetSRGName() string        { return s.SRGName }
+func (s *PPPSession) GetIngressPolicy() string  { return s.IngressPolicy }
+func (s *PPPSession) GetEgressPolicy() string   { return s.EgressPolicy }
 func (s *PPPSession) GetActivatedAt() time.Time { return s.ActivatedAt }
 
 func (s *PPPSession) RedisKey() string {
@@ -279,6 +289,8 @@ type PPPoL2TPSession struct {
 	VRF          string
 	ServiceGroup string
 	SRGName      string
+	IngressPolicy string
+	EgressPolicy  string
 
 	IPv4Address net.IP
 	IPv6Address net.IP
@@ -317,6 +329,8 @@ func (s *PPPoL2TPSession) GetVLANCount() int         { return 0 }
 func (s *PPPoL2TPSession) GetUsername() string       { return s.Username }
 func (s *PPPoL2TPSession) GetServiceGroup() string   { return s.ServiceGroup }
 func (s *PPPoL2TPSession) GetSRGName() string        { return s.SRGName }
+func (s *PPPoL2TPSession) GetIngressPolicy() string  { return s.IngressPolicy }
+func (s *PPPoL2TPSession) GetEgressPolicy() string   { return s.EgressPolicy }
 func (s *PPPoL2TPSession) GetActivatedAt() time.Time { return s.ActivatedAt }
 
 type SessionStats struct {

@@ -989,7 +989,7 @@ func (c *Component) RecoverDataplane(ctx context.Context) error {
 }
 
 func (c *Component) scanNonPBASessionsForRecover(ctx context.Context) {
-	sessions, err := c.sessionProvider.GetSessions(ctx, "", "", 0)
+	sessions, err := c.sessionProvider.GetSessions(ctx, "", "", 0, "")
 	if err != nil {
 		c.logger.Warn("CGNAT recover: session scan failed", "error", err)
 		return
@@ -1202,7 +1202,7 @@ func (c *Component) deleteOrphan(ctx context.Context, mapping *models.CGNATMappi
 // whose lifecycle event was dropped past the event-queue bound during
 // restore.
 func (c *Component) scanNonPBASessions(ctx context.Context, alreadyKnown map[string]struct{}) {
-	sessions, err := c.sessionProvider.GetSessions(ctx, "", "", 0)
+	sessions, err := c.sessionProvider.GetSessions(ctx, "", "", 0, "")
 	if err != nil {
 		c.logger.Warn("CGNAT restore: subscriber session scan failed; deterministic/bypass recovery may be incomplete",
 			"error", err)
