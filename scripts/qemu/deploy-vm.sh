@@ -195,10 +195,16 @@ build_topology() {
                 if [[ $s == *-* ]]; then
                     local a=${s%-*} b=${s#*-} i
                     for ((i=a; i<=b; i++)); do
-                        [ "$i" != "$cpu" ] && CPU_SIBLING[$cpu]=$i && break
+                        if [ "$i" != "$cpu" ]; then
+                            CPU_SIBLING[$cpu]=$i
+                            break
+                        fi
                     done
                 else
-                    [ "$s" != "$cpu" ] && CPU_SIBLING[$cpu]=$s && break
+                    if [ "$s" != "$cpu" ]; then
+                        CPU_SIBLING[$cpu]=$s
+                        break
+                    fi
                 fi
             done
         fi
@@ -283,7 +289,9 @@ auto_pick_host_cores() {
                 taken[$sib]=1
             fi
             taken_count=$((taken_count + 1))
-            [ $taken_count -ge 2 ] && break
+            if [ $taken_count -ge 2 ]; then
+                break
+            fi
         done
     done
 
