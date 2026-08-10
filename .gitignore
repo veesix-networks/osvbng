@@ -278,3 +278,9 @@ __marimo__/
 # Private signing keys — never commit. release-keys/cosign.pub IS
 # committed (that's the trust anchor); only *.key files are blocked.
 *.key
+
+# LLM session config, installed from the context submodule by
+# context/scripts/setup-claude.sh; versioned there, not here, so this
+# repo's history stays free of session churn.
+/.claude/
+/CLAUDE.md
