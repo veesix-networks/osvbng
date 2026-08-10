@@ -9,32 +9,39 @@ type PuntPacket struct {
 	Data      []byte
 }
 
+// PuntReader drains one punt ring per VPP thread. Each ring is SPSC
+// (its owning worker is the only producer), so the reader keeps a tail
+// per ring and clears each ring's interrupt flag on commit. `cur`
+// round-robins the starting ring so no ring is starved under load.
 type PuntReader struct {
 	client *Client
-	tail   uint64
+	tails  []uint64
 	mask   uint64
+	cur    int
 }
 
 func NewPuntReader(client *Client) *PuntReader {
+	tails := make([]uint64, len(client.puntRings))
+	for i, ring := range client.puntRings {
+		tails[i] = ring.LoadTail()
+	}
 	return &PuntReader{
 		client: client,
-		tail:   client.puntRing.LoadTail(),
+		tails:  tails,
 		mask:   RingMask(client.header.PuntRingSize),
 	}
 }
 
 func (r *PuntReader) Available() uint64 {
-	head := r.client.puntRing.LoadHead()
-	return head - r.tail
+	var total uint64
+	for i, ring := range r.client.puntRings {
+		total += ring.LoadHead() - r.tails[i]
+	}
+	return total
 }
 
-func (r *PuntReader) Read() (*PuntPacket, bool) {
-	head := r.client.puntRing.LoadHead()
-	if r.tail == head {
-		return nil, false
-	}
-
-	desc := &r.client.puntDescs[r.tail&r.mask]
+func (r *PuntReader) readDesc(ring int) *PuntPacket {
+	desc := &r.client.puntDescs[ring][r.tails[ring]&r.mask]
 
 	pkt := &PuntPacket{
 		SwIfIndex: desc.SwIfIndex,
@@ -46,46 +53,49 @@ func (r *PuntReader) Read() (*PuntPacket, bool) {
 	}
 	copy(pkt.Data, r.client.GetPuntData(desc.DataOffset, desc.DataLength))
 
-	r.tail++
+	r.tails[ring]++
+	return pkt
+}
 
-	return pkt, true
+func (r *PuntReader) Read() (*PuntPacket, bool) {
+	n := len(r.client.puntRings)
+	for i := 0; i < n; i++ {
+		ring := (r.cur + i) % n
+		if r.tails[ring] == r.client.puntRings[ring].LoadHead() {
+			continue
+		}
+		pkt := r.readDesc(ring)
+		// Resume from the next ring so a busy ring can't monopolise.
+		r.cur = (ring + 1) % n
+		return pkt, true
+	}
+	return nil, false
 }
 
 func (r *PuntReader) ReadBatch(max int) []*PuntPacket {
-	head := r.client.puntRing.LoadHead()
-	available := head - r.tail
-	if available == 0 {
+	n := len(r.client.puntRings)
+	packets := make([]*PuntPacket, 0, max)
+
+	for i := 0; i < n && len(packets) < max; i++ {
+		ring := (r.cur + i) % n
+		head := r.client.puntRings[ring].LoadHead()
+		for r.tails[ring] != head && len(packets) < max {
+			packets = append(packets, r.readDesc(ring))
+		}
+	}
+
+	if len(packets) == 0 {
 		return nil
 	}
-
-	count := int(available)
-	if count > max {
-		count = max
-	}
-
-	packets := make([]*PuntPacket, count)
-	for i := 0; i < count; i++ {
-		desc := &r.client.puntDescs[r.tail&r.mask]
-
-		packets[i] = &PuntPacket{
-			SwIfIndex: desc.SwIfIndex,
-			Protocol:  Protocol(desc.Protocol),
-			OuterVLAN: desc.OuterVLAN,
-			InnerVLAN: desc.InnerVLAN,
-			Timestamp: desc.Timestamp,
-			Data:      make([]byte, desc.DataLength),
-		}
-		copy(packets[i].Data, r.client.GetPuntData(desc.DataOffset, desc.DataLength))
-
-		r.tail++
-	}
-
+	r.cur = (r.cur + 1) % n
 	return packets
 }
 
 func (r *PuntReader) Commit() {
-	r.client.puntRing.StoreTail(r.tail)
-	r.client.puntRing.StoreInterruptPending(0)
+	for i, ring := range r.client.puntRings {
+		ring.StoreTail(r.tails[i])
+		ring.StoreInterruptPending(0)
+	}
 }
 
 func (r *PuntReader) Wait() error {

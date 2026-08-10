@@ -48,6 +48,7 @@ func (i *Ingress) Init(_ string) error {
 		i.reader = NewPuntReader(i.client)
 
 		i.logger.Info("Connected to VPP shared memory",
+			"punt_rings", i.client.header.NPuntRings,
 			"punt_ring_size", i.client.header.PuntRingSize,
 			"egress_ring_size", i.client.header.EgressRingSize,
 			"slot_size", i.client.header.SlotSize,
@@ -206,6 +207,7 @@ func (i *Ingress) Reconnect() error {
 	i.reader = NewPuntReader(i.client)
 
 	i.logger.Info("SHM ingress reconnected",
+		"punt_rings", i.client.header.NPuntRings,
 		"punt_ring_size", i.client.header.PuntRingSize,
 		"egress_ring_size", i.client.header.EgressRingSize,
 	)

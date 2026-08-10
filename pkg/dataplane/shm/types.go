@@ -6,8 +6,11 @@ import (
 )
 
 const (
-	ShmMagic   = 0x4F53564E47424E47
-	ShmVersion = 1
+	ShmMagic = 0x4F53564E47424E47
+	// Version 2: one punt ring per VPP thread (was a single ring shared
+	// by every worker, a publish race). The egress ring stays single.
+	// This reader refuses a v1 region rather than misread its header.
+	ShmVersion = 2
 
 	DefaultPuntRingSize   = 4096
 	DefaultEgressRingSize = 4096
@@ -32,19 +35,23 @@ const (
 	ProtoCount       Protocol = 8
 )
 
+// ShmHeader mirrors osvbng_shm_header_t (v2) byte for byte. One punt
+// ring per VPP thread laid out at PuntRingOffset with PuntRingStride
+// between them; a single egress ring; punt data slots for every ring
+// then the egress data slots.
 type ShmHeader struct {
 	Magic            uint64
 	Version          uint32
 	Flags            uint32
-	PuntRingOffset   uint32
+	NPuntRings       uint32
 	PuntRingSize     uint32
+	PuntRingStride   uint32
+	PuntRingOffset   uint32
 	EgressRingOffset uint32
 	EgressRingSize   uint32
-	DataRegionOffset uint32
-	DataRegionSize   uint32
+	PuntDataOffset   uint32
+	EgressDataOffset uint32
 	SlotSize         uint32
-	PuntDataSlots    uint32
-	EgressDataSlots  uint32
 	Reserved         [12]byte
 }
 

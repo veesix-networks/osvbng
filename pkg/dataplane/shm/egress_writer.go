@@ -23,7 +23,8 @@ func NewEgressWriter(client *Client) *EgressWriter {
 		head:      client.egressRing.LoadHead(),
 		mask:      RingMask(client.header.EgressRingSize),
 		slotIndex: 0,
-		slotCount: client.header.EgressDataSlots,
+		// v2 lays out exactly one data slot per egress descriptor.
+		slotCount: client.header.EgressRingSize,
 	}
 }
 

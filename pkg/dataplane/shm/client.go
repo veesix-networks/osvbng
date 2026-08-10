@@ -17,13 +17,14 @@ type Client struct {
 	puntEventfd   int
 	egressEventfd int
 
-	header      *ShmHeader
-	puntRing    *AtomicRingHeader
-	puntDescs   []PuntDesc
+	header *ShmHeader
+	// One punt ring per VPP thread; puntRings[t] and puntDescs[t]
+	// belong to thread t. The egress ring stays single.
+	puntRings   []*AtomicRingHeader
+	puntDescs   [][]PuntDesc
 	egressRing  *AtomicRingHeader
 	egressDescs []EgressDesc
 
-	puntDataOffset   uint32
 	egressDataOffset uint32
 }
 
@@ -134,14 +135,23 @@ func (c *Client) mapStructures() error {
 		return fmt.Errorf("version mismatch: %d", c.header.Version)
 	}
 
-	puntRingHdr := (*RingHeader)(unsafe.Pointer(&c.shmData[c.header.PuntRingOffset]))
-	c.puntRing = NewAtomicRingHeader(puntRingHdr)
-
-	puntDescsOffset := c.header.PuntRingOffset + uint32(unsafe.Sizeof(RingHeader{}))
-	c.puntDescs = unsafe.Slice(
-		(*PuntDesc)(unsafe.Pointer(&c.shmData[puntDescsOffset])),
-		c.header.PuntRingSize,
-	)
+	n := c.header.NPuntRings
+	if n == 0 {
+		return fmt.Errorf("shm reports zero punt rings")
+	}
+	c.puntRings = make([]*AtomicRingHeader, n)
+	c.puntDescs = make([][]PuntDesc, n)
+	for t := uint32(0); t < n; t++ {
+		ringOff := c.header.PuntRingOffset + t*c.header.PuntRingStride
+		c.puntRings[t] = NewAtomicRingHeader(
+			(*RingHeader)(unsafe.Pointer(&c.shmData[ringOff])),
+		)
+		descsOff := ringOff + uint32(unsafe.Sizeof(RingHeader{}))
+		c.puntDescs[t] = unsafe.Slice(
+			(*PuntDesc)(unsafe.Pointer(&c.shmData[descsOff])),
+			c.header.PuntRingSize,
+		)
+	}
 
 	egressRingHdr := (*RingHeader)(unsafe.Pointer(&c.shmData[c.header.EgressRingOffset]))
 	c.egressRing = NewAtomicRingHeader(egressRingHdr)
@@ -152,8 +162,10 @@ func (c *Client) mapStructures() error {
 		c.header.EgressRingSize,
 	)
 
-	c.puntDataOffset = c.header.DataRegionOffset
-	c.egressDataOffset = c.header.DataRegionOffset + c.header.PuntDataSlots*c.header.SlotSize
+	// Descriptors carry an absolute data_offset from the shm base, so
+	// punt reads need no base of their own; egress writes still index
+	// slots relative to the egress data region.
+	c.egressDataOffset = c.header.EgressDataOffset
 
 	return nil
 }
