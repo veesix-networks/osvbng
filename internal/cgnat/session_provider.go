@@ -21,5 +21,5 @@ import (
 // subscribers (which have no per-subscriber opdb record).
 type SessionProvider interface {
 	SessionSnapshot(ctx context.Context, sessionID string) (models.SubscriberSession, bool)
-	GetSessions(ctx context.Context, accessType, protocol string, svlan uint32) ([]models.SubscriberSession, error)
+		GetSessions(ctx context.Context, accessType, protocol string, svlan uint32, username string) ([]models.SubscriberSession, error)
 }

@@ -1,14 +1,5 @@
 package vpp
 
-// NOTE: We use the v1 name-based policer APIs (PolicerInput/PolicerOutput) instead of v2
-// index-based (PolicerInputV2/PolicerOutputV2) due to an upstream VPP bug in v25.10.
-// The v2 handlers send the v1 reply message ID, causing GoVPP to fail with a message
-// type mismatch (expects policer_input_v2_reply but receives policer_input_reply).
-// Fix in src/vnet/policer/policer_api.c:
-//   line 259: REPLY_MACRO(VL_API_POLICER_INPUT_REPLY)  should be VL_API_POLICER_INPUT_V2_REPLY
-//   line 293: rmp type vl_api_policer_output_reply_t    should be vl_api_policer_output_v2_reply_t
-//   line 308: REPLY_MACRO(VL_API_POLICER_OUTPUT_REPLY)  should be VL_API_POLICER_OUTPUT_V2_REPLY
-
 import (
 	"fmt"
 
@@ -24,41 +15,47 @@ func (v *VPP) ApplyQoS(swIfIndex uint32, ingress, egress *qos.Policy) error {
 		return nil
 	}
 
-	v.policerMu.Lock()
-	_, exists := v.policerNames[swIfIndex]
-	v.policerMu.Unlock()
-	if exists {
-		return nil
-	}
-
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
 		return fmt.Errorf("create API channel: %w", err)
 	}
 	defer ch.Close()
 
+	cleanState := func(name string) {
+		detachIn := &policer.PolicerInput{
+			Name:      name,
+			SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+			Apply:     false,
+		}
+		if err := ch.SendRequest(detachIn).ReceiveReply(&policer.PolicerInputReply{}); err != nil {
+			v.logger.Warn("Failed to detach ingress policer", "name", name, "error", err)
+		}
+		detachOut := &policer.PolicerOutput{
+			Name:      name,
+			SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+			Apply:     false,
+		}
+		if err := ch.SendRequest(detachOut).ReceiveReply(&policer.PolicerOutputReply{}); err != nil {
+			v.logger.Warn("Failed to detach egress policer", "name", name, "error", err)
+		}
+		delReq := &policer.PolicerAddDel{Name: name, IsAdd: false}
+		if err := ch.SendRequest(delReq).ReceiveReply(&policer.PolicerAddDelReply{}); err != nil {
+			v.logger.Warn("Failed to delete policer", "name", name, "error", err)
+		}
+	}
+
 	var names [2]string
 
 	if ingress != nil {
 		name := fmt.Sprintf("sub_%d_in", swIfIndex)
-		cfg := ingress.ToPolicerConfig()
+		v.logger.Debug("Applying ingress policer", "name", name, "cir", ingress.CIR)
+		cleanState(name)
 
-		addReq := &policer.PolicerAddDel{
-			IsAdd:         true,
-			Name:          name,
-			Cir:           cfg.Cir,
-			Eir:           cfg.Eir,
-			Cb:            cfg.Cb,
-			Eb:            cfg.Eb,
-			RateType:      cfg.RateType,
-			RoundType:     cfg.RoundType,
-			Type:          cfg.Type,
-			ColorAware:    cfg.ColorAware,
-			ConformAction: cfg.ConformAction,
-			ExceedAction:  cfg.ExceedAction,
-			ViolateAction: cfg.ViolateAction,
+		addReq := &policer.PolicerAdd{
+			Name:  name,
+			Infos: ingress.ToPolicerConfig(),
 		}
-		addReply := &policer.PolicerAddDelReply{}
+		addReply := &policer.PolicerAddReply{}
 		if err := ch.SendRequest(addReq).ReceiveReply(addReply); err != nil {
 			return fmt.Errorf("policer add ingress: %w", err)
 		}
@@ -67,42 +64,31 @@ func (v *VPP) ApplyQoS(swIfIndex uint32, ingress, egress *qos.Policy) error {
 		}
 		names[0] = name
 
-		inputReq := &policer.PolicerInput{
+		inReq := &policer.PolicerInput{
 			Name:      name,
 			SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
 			Apply:     true,
 		}
-		inputReply := &policer.PolicerInputReply{}
-		if err := ch.SendRequest(inputReq).ReceiveReply(inputReply); err != nil {
-			return fmt.Errorf("policer input attach: %w", err)
+		inReply := &policer.PolicerInputReply{}
+		if err := ch.SendRequest(inReq).ReceiveReply(inReply); err != nil {
+			return fmt.Errorf("policer input: %w", err)
 		}
-		if inputReply.Retval != 0 {
-			return fmt.Errorf("policer input attach failed: retval=%d", inputReply.Retval)
+		if inReply.Retval != 0 {
+			return fmt.Errorf("policer input failed: retval=%d", inReply.Retval)
 		}
-
 		v.logger.Debug("Applied ingress policer", "sw_if_index", swIfIndex, "name", name, "cir", ingress.CIR)
 	}
 
 	if egress != nil {
 		name := fmt.Sprintf("sub_%d_out", swIfIndex)
-		cfg := egress.ToPolicerConfig()
+		v.logger.Debug("Applying egress policer", "name", name, "cir", egress.CIR)
+		cleanState(name)
 
-		addReq := &policer.PolicerAddDel{
-			IsAdd:         true,
-			Name:          name,
-			Cir:           cfg.Cir,
-			Eir:           cfg.Eir,
-			Cb:            cfg.Cb,
-			Eb:            cfg.Eb,
-			RateType:      cfg.RateType,
-			RoundType:     cfg.RoundType,
-			Type:          cfg.Type,
-			ColorAware:    cfg.ColorAware,
-			ConformAction: cfg.ConformAction,
-			ExceedAction:  cfg.ExceedAction,
-			ViolateAction: cfg.ViolateAction,
+		addReq := &policer.PolicerAdd{
+			Name:  name,
+			Infos: egress.ToPolicerConfig(),
 		}
-		addReply := &policer.PolicerAddDelReply{}
+		addReply := &policer.PolicerAddReply{}
 		if err := ch.SendRequest(addReq).ReceiveReply(addReply); err != nil {
 			return fmt.Errorf("policer add egress: %w", err)
 		}
@@ -123,14 +109,12 @@ func (v *VPP) ApplyQoS(swIfIndex uint32, ingress, egress *qos.Policy) error {
 		if outputReply.Retval != 0 {
 			return fmt.Errorf("policer output attach failed: retval=%d", outputReply.Retval)
 		}
-
 		v.logger.Debug("Applied egress policer", "sw_if_index", swIfIndex, "name", name, "cir", egress.CIR)
 	}
 
 	v.policerMu.Lock()
 	v.policerNames[swIfIndex] = names
 	v.policerMu.Unlock()
-
 	return nil
 }
 
@@ -195,18 +179,19 @@ func (v *VPP) ApplyScheduler(swIfIndex uint32, rateKbps uint32, cfg *qos.Schedul
 		return nil
 	}
 
-	v.schedulerMu.Lock()
-	if v.schedulerIfs[swIfIndex] {
-		v.schedulerMu.Unlock()
-		return nil
-	}
-	v.schedulerMu.Unlock()
-
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
 		return fmt.Errorf("create API channel: %w", err)
 	}
 	defer ch.Close()
+
+	disableReq := &cake.OsvbngCakeSchedEnableDisable{
+		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
+		IsEnable:  false,
+	}
+	if err := ch.SendRequest(disableReq).ReceiveReply(&cake.OsvbngCakeSchedEnableDisableReply{}); err != nil {
+		v.logger.Debug("No existing scheduler to disable before reapply", "sw_if_index", swIfIndex, "error", err)
+	}
 
 	rateBytesPerSec := uint64(rateKbps) * 1000 / 8
 

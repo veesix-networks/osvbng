@@ -87,10 +87,10 @@ func (c *Component) Stop(ctx context.Context) error {
 }
 
 func (c *Component) GetSessionsForAPI(ctx context.Context, accessType, protocol string, svlan uint32) ([]models.SubscriberSession, error) {
-	return c.GetSessions(ctx, accessType, protocol, svlan)
+	return c.GetSessions(ctx, accessType, protocol, svlan, "")
 }
 
-func (c *Component) GetSessions(ctx context.Context, accessType, protocol string, svlan uint32) ([]models.SubscriberSession, error) {
+func (c *Component) GetSessions(ctx context.Context, accessType, protocol string, svlan uint32, username string) ([]models.SubscriberSession, error) {
 	pattern := "osvbng:sessions:*"
 
 	var cursor uint64
@@ -114,6 +114,7 @@ func (c *Component) GetSessions(ctx context.Context, accessType, protocol string
 				AccessType string `json:"AccessType"`
 				Protocol   string `json:"Protocol"`
 				OuterVLAN  uint16 `json:"OuterVLAN"`
+				Username   string `json:"Username"`
 			}
 			if err := json.Unmarshal(data, &meta); err != nil {
 				c.logger.Debug("Failed to unmarshal metadata", "key", key, "error", err)
@@ -134,6 +135,10 @@ func (c *Component) GetSessions(ctx context.Context, accessType, protocol string
 			}
 
 			if svlan > 0 && uint32(meta.OuterVLAN) != svlan {
+				continue
+			}
+
+			if username != "" && meta.Username != username {
 				continue
 			}
 
@@ -517,9 +522,9 @@ func (c *Component) activateSession(sess models.SubscriberSession) error {
 			}
 		}
 
-		if ingress != nil {
-			if err := c.vpp.ApplyQoS(swIfIndex, ingress, nil); err != nil {
-				c.logger.Warn("Failed to apply ingress policer", "error", err, "sw_if_index", swIfIndex)
+		if ingress != nil || egress != nil {
+			if err := c.vpp.ApplyQoS(swIfIndex, ingress, egress); err != nil {
+				c.logger.Warn("Failed to apply QoS", "error", err, "sw_if_index", swIfIndex, "service_group", sgName)
 			}
 		}
 	} else {
