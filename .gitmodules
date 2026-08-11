@@ -1,6 +1,8 @@
 [submodule "vpp"]
 	path = vpp
 	url = git@github.com:veesix-networks/osvbng-vpp.git
+	branch = main
 [submodule "context"]
 	path = context
 	url = git@github.com:veesix-networks/osvbng-context.git
+	branch = main

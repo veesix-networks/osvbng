@@ -2,7 +2,7 @@
 # Licensed under the GNU General Public License v3.0 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-.PHONY: all build generate generate-proto clean run test cli build-cli docker-local docker-kea-local lint fmt robot-test clean-branches dev-vm dev-vm-sync validate-artifacts tarball-smoke
+.PHONY: all build generate generate-proto clean run test cli build-cli docker-local docker-kea-local lint fmt robot-test clean-branches dev-vm dev-vm-sync validate-artifacts tarball-smoke bump-submodules
 
 all: generate build
 
@@ -78,6 +78,17 @@ clean-branches:
 	git branch --format='%(refname:short)' | grep -v '^main$$' | while read branch; do \
 		git show-ref --verify --quiet "refs/remotes/origin/$$branch" || git branch -D "$$branch"; \
 	done
+
+# osvbng pins vpp and context at exact commits so a checkout builds
+# reproducibly. Pushing to those repos does not move the pin; this moves
+# it to the latest main of each (branch set in .gitmodules) and stages
+# the bump. Adopt deliberately: commit the result on a branch and PR it,
+# and keep the vpp and context bumps together when a change spans both.
+bump-submodules:
+	git submodule update --remote --init vpp context
+	@git add vpp context
+	@git submodule status vpp context
+	@echo "pins staged; commit on a branch and open a PR to adopt them"
 
 dev-vm:
 	@scripts/dev/dev-vm.sh
