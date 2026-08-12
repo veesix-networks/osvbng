@@ -21,10 +21,14 @@ const (
 // The dataplane grew a second shaping tier and a weight multiplier behind new
 // messages, leaving the v1 ones working and CRC-stable. A control plane can
 // therefore be newer than the dataplane it is talking to, so capabilities are
-// asked for once rather than assumed, and the v1 path stays reachable.
+// asked for rather than assumed, and the v1 path stays reachable.
+//
+// Deliberately not a sync.Once: the first ask can race dataplane startup, and
+// caching that failure would refuse S-VLAN config until process restart. Only
+// an answer latches - a reply, or a dataplane without the message.
 var (
-	capsOnce sync.Once
-	caps     cakeCapabilities
+	capsMu sync.Mutex
+	caps   cakeCapabilities
 )
 
 type cakeCapabilities struct {
@@ -34,31 +38,37 @@ type cakeCapabilities struct {
 }
 
 func (v *VPP) capabilities() cakeCapabilities {
-	capsOnce.Do(func() {
-		ch, err := v.conn.NewAPIChannel()
-		if err != nil {
-			v.logger.Warn("CAKE capabilities unavailable, assuming v1 dataplane", "error", err)
-			return
-		}
-		defer ch.Close()
+	capsMu.Lock()
+	defer capsMu.Unlock()
 
-		reply := &cake.OsvbngCakeCapabilitiesReply{}
-		if err := ch.SendRequest(&cake.OsvbngCakeCapabilities{}).ReceiveReply(reply); err != nil {
-			// An older dataplane does not carry the message at all; that is
-			// an answer, not a failure.
-			v.logger.Info("CAKE capabilities not supported, using v1 messages", "error", err)
-			return
-		}
+	if caps.known {
+		return caps
+	}
 
-		caps = cakeCapabilities{
-			known:    true,
-			svlan:    reply.Features&cake.OSVBNG_CAKE_FEATURE_SVLAN_TIER != 0,
-			weighted: reply.Features&cake.OSVBNG_CAKE_FEATURE_WEIGHTED_DRR != 0,
-		}
-		v.logger.Info("CAKE dataplane capabilities",
-			"version", reply.Version, "max_levels", reply.MaxLevels,
-			"svlan_tier", caps.svlan, "weighted_drr", caps.weighted)
-	})
+	ch, err := v.conn.NewAPIChannel()
+	if err != nil {
+		v.logger.Warn("CAKE capabilities unavailable, will retry on next use", "error", err)
+		return caps
+	}
+	defer ch.Close()
+
+	reply := &cake.OsvbngCakeCapabilitiesReply{}
+	if err := ch.SendRequest(&cake.OsvbngCakeCapabilities{}).ReceiveReply(reply); err != nil {
+		// An older dataplane does not carry the message at all; that is
+		// an answer, not a failure.
+		caps = cakeCapabilities{known: true}
+		v.logger.Info("CAKE capabilities not supported, using v1 messages", "error", err)
+		return caps
+	}
+
+	caps = cakeCapabilities{
+		known:    true,
+		svlan:    reply.Features&cake.OSVBNG_CAKE_FEATURE_SVLAN_TIER != 0,
+		weighted: reply.Features&cake.OSVBNG_CAKE_FEATURE_WEIGHTED_DRR != 0,
+	}
+	v.logger.Info("CAKE dataplane capabilities",
+		"version", reply.Version, "max_levels", reply.MaxLevels,
+		"svlan_tier", caps.svlan, "weighted_drr", caps.weighted)
 	return caps
 }
 

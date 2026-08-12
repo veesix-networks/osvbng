@@ -97,8 +97,16 @@ func (h *AggregateHandler) Apply(ctx context.Context, hctx *conf.HandlerContext)
 	// update, never a delete and recreate: recreating drops it out of its
 	// parent's active weight and takes every member's attachment and
 	// outstanding buffer charge with it.
-	if old, ok := hctx.OldValue.(*qoscfg.Aggregate); ok && old != nil && sameShape(old, cfg) {
-		return h.southbound.UpdateAggregate(iface.SwIfIndex, cfg)
+	if old, ok := hctx.OldValue.(*qoscfg.Aggregate); ok && old != nil {
+		if sameShape(old, cfg) {
+			return h.southbound.UpdateAggregate(iface.SwIfIndex, cfg)
+		}
+		// A shape change is a different set of dataplane objects: without
+		// this teardown a dropped tag keeps shaping, and a widened range
+		// reads the old object's already-exists as benign replay.
+		if err := h.remove(old, name); err != nil {
+			return err
+		}
 	}
 
 	return h.southbound.ApplyAggregate(iface.SwIfIndex, cfg)
