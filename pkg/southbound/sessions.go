@@ -38,6 +38,14 @@ type Sessions interface {
 	RemoveScheduler(swIfIndex uint32) error
 	DumpSchedulers() ([]SchedulerState, error)
 
+	// Aggregate shapers. A port aggregate and the S-VLAN aggregates beneath
+	// it are both addressed by the port's sw_if_index; svlanID selects
+	// between them, and is ignored at the port level.
+	ApplyAggregate(swIfIndex uint32, cfg *qos.Aggregate) error
+	UpdateAggregate(swIfIndex uint32, cfg *qos.Aggregate) error
+	RemoveAggregate(swIfIndex uint32, level uint8, svlanID uint16) error
+	DumpAggregates() ([]AggregateState, error)
+
 	// L2TPv2 tunnels (the transport protocol). IDs are passed in HOST
 	// byte order.
 	AddL2TPTunnel(local, peer net.IP, localID, peerID, localPort, peerPort uint16, dfBit bool) (uint32, error)
@@ -77,4 +85,34 @@ type SchedulerState struct {
 	BufferUsage uint32              `json:"buffer_usage"    metric:"name=qos.scheduler.buffer_usage,type=gauge,help=Current scheduler buffer usage."`
 	BufferLimit uint32              `json:"buffer_limit"    metric:"name=qos.scheduler.buffer_limit,type=gauge,help=Scheduler buffer limit."`
 	Tins        []SchedulerTinState `json:"tins,omitempty"  metric:"flatten"`
+}
+
+// AggregateState is one tier of the shaping hierarchy. A port and its
+// S-VLANs both report against the port's sw_if_index, so Level and SVLANID
+// are what distinguish them.
+type AggregateState struct {
+	SwIfIndex   uint32 `json:"sw_if_index"       metric:"label"`
+	Level       string `json:"level"             metric:"label"`
+	SVLANID     uint16 `json:"svlan_id"          metric:"label"`
+	SVLANIDEnd  uint16 `json:"svlan_id_end"      metric:"label"`
+	RateKbps    uint64 `json:"rate_kbps"         metric:"name=qos.aggregate.rate_kbps,type=gauge,help=Aggregate shaping rate in kbps."`
+	Weight      uint32 `json:"weight"            metric:"name=qos.aggregate.weight,type=gauge,help=Operator weight multiplier on this aggregate."`
+	BurstMs     uint32 `json:"burst_ms"          metric:"name=qos.aggregate.burst_ms,type=gauge,help=Idle credit ceiling in milliseconds."`
+	BufferUsage uint32 `json:"buffer_usage"      metric:"name=qos.aggregate.buffer_usage,type=gauge,help=Current aggregate bytes queued."`
+	BufferLimit uint32 `json:"buffer_limit"      metric:"name=qos.aggregate.buffer_limit,type=gauge,help=Aggregate buffer limit in bytes."`
+
+	// ActiveWeight is the sum of the effective weights of the children
+	// currently competing for this tier, and is the denominator every child's
+	// share is computed against. It moves with traffic, not configuration.
+	ActiveWeight     uint64 `json:"active_weight"     metric:"name=qos.aggregate.active_weight,type=gauge,help=Sum of effective weights of active children."`
+	ActiveChildren   uint32 `json:"active_children"   metric:"name=qos.aggregate.active_children,type=gauge,help=Children currently competing for this aggregate."`
+	ShapedPkts       uint64 `json:"shaped_pkts"       metric:"name=qos.aggregate.shaped_packets,type=counter,help=Packets shaped through this aggregate."`
+	ShapedBytes      uint64 `json:"shaped_bytes"      metric:"name=qos.aggregate.shaped_bytes,type=counter,help=Bytes shaped through this aggregate."`
+	BackpressureEvts uint64 `json:"backpressure"      metric:"name=qos.aggregate.backpressure,type=counter,help=Packets dropped by aggregate buffer overflow."`
+
+	// DRRBlocked and ParentBlocked mean different things to an operator:
+	// the first is "your siblings are using the capacity", the second is
+	// "this tier is at its own configured rate".
+	DRRBlocked    uint64 `json:"drr_blocked"    metric:"name=qos.aggregate.drr_blocked,type=counter,help=Dispatches deferred because this tier had spent its share of the tier above."`
+	ParentBlocked uint64 `json:"parent_blocked" metric:"name=qos.aggregate.parent_blocked,type=counter,help=Dispatches deferred because this tier was at its configured rate."`
 }

@@ -40,13 +40,14 @@ type Config struct {
 
 	// Walked in struct order, dependency order matters
 	System          *SystemConfig                          `json:"system,omitempty" yaml:"system,omitempty"`
-	RoutingPolicies *routing_policy.RoutingPolicyConfig     `json:"routing-policies,omitempty" yaml:"routing-policies,omitempty"`
-	VRFS            map[string]*ip.VRFSConfig               `json:"vrfs,omitempty" yaml:"vrfs,omitempty"`
-	QoSPolicies     map[string]*qos.Policy                  `json:"qos-policies,omitempty" yaml:"qos-policies,omitempty"`
-	ServiceGroups   map[string]*servicegroup.Config          `json:"service-groups,omitempty" yaml:"service-groups,omitempty"`
-	Interfaces      map[string]*interfaces.InterfaceConfig   `json:"interfaces,omitempty" yaml:"interfaces,omitempty"`
-	Protocols       protocols.ProtocolConfig                 `json:"protocols,omitempty" yaml:"protocols,omitempty"`
-	AAA             aaa.AAAConfig                            `json:"aaa,omitempty" yaml:"aaa,omitempty"`
+	RoutingPolicies *routing_policy.RoutingPolicyConfig    `json:"routing-policies,omitempty" yaml:"routing-policies,omitempty"`
+	VRFS            map[string]*ip.VRFSConfig              `json:"vrfs,omitempty" yaml:"vrfs,omitempty"`
+	QoSPolicies     map[string]*qos.Policy                 `json:"qos-policies,omitempty" yaml:"qos-policies,omitempty"`
+	QoSAggregates   map[string]*qos.Aggregate              `json:"qos-aggregates,omitempty" yaml:"qos-aggregates,omitempty"`
+	ServiceGroups   map[string]*servicegroup.Config        `json:"service-groups,omitempty" yaml:"service-groups,omitempty"`
+	Interfaces      map[string]*interfaces.InterfaceConfig `json:"interfaces,omitempty" yaml:"interfaces,omitempty"`
+	Protocols       protocols.ProtocolConfig               `json:"protocols,omitempty" yaml:"protocols,omitempty"`
+	AAA             aaa.AAAConfig                          `json:"aaa,omitempty" yaml:"aaa,omitempty"`
 
 	// Plugin configs (handled separately)
 	Plugins map[string]interface{} `json:"plugins,omitempty" yaml:"plugins,omitempty"`
@@ -122,4 +123,3 @@ func (c *Config) GetAccessInterface() (string, error) {
 	}
 	return "", fmt.Errorf("multiple parent-interfaces configured across subscriber groups (only 1 allowed): %v", names)
 }
-

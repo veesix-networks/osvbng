@@ -39,6 +39,12 @@ type ActionConfig struct {
 
 type SchedulerConfig struct {
 	TinMode string `json:"tin-mode,omitempty" yaml:"tin-mode,omitempty"`
+
+	// Weight multiplies the share this subscriber's rate already earns it,
+	// rather than replacing it. Replacing would make mixed configuration
+	// meaningless: a subscriber set to weight 2 beside subscribers defaulting
+	// to their rate would be crushed. Zero means the default of 1.
+	Weight uint32 `json:"weight,omitempty" yaml:"weight,omitempty"`
 }
 
 func (s *SchedulerConfig) TinModeEnum() uint8 {

@@ -16,9 +16,15 @@ type RPCService interface {
 	OsvbngCakeAggregateCreate(ctx context.Context, in *OsvbngCakeAggregateCreate) (*OsvbngCakeAggregateCreateReply, error)
 	OsvbngCakeAggregateDelete(ctx context.Context, in *OsvbngCakeAggregateDelete) (*OsvbngCakeAggregateDeleteReply, error)
 	OsvbngCakeAggregateDump(ctx context.Context, in *OsvbngCakeAggregateDump) (RPCService_OsvbngCakeAggregateDumpClient, error)
+	OsvbngCakeAggregateV2Create(ctx context.Context, in *OsvbngCakeAggregateV2Create) (*OsvbngCakeAggregateV2CreateReply, error)
+	OsvbngCakeAggregateV2Delete(ctx context.Context, in *OsvbngCakeAggregateV2Delete) (*OsvbngCakeAggregateV2DeleteReply, error)
+	OsvbngCakeAggregateV2Dump(ctx context.Context, in *OsvbngCakeAggregateV2Dump) (RPCService_OsvbngCakeAggregateV2DumpClient, error)
+	OsvbngCakeAggregateV2Update(ctx context.Context, in *OsvbngCakeAggregateV2Update) (*OsvbngCakeAggregateV2UpdateReply, error)
+	OsvbngCakeCapabilities(ctx context.Context, in *OsvbngCakeCapabilities) (*OsvbngCakeCapabilitiesReply, error)
 	OsvbngCakeSchedDump(ctx context.Context, in *OsvbngCakeSchedDump) (RPCService_OsvbngCakeSchedDumpClient, error)
 	OsvbngCakeSchedEnableDisable(ctx context.Context, in *OsvbngCakeSchedEnableDisable) (*OsvbngCakeSchedEnableDisableReply, error)
 	OsvbngCakeSchedResetStats(ctx context.Context, in *OsvbngCakeSchedResetStats) (*OsvbngCakeSchedResetStatsReply, error)
+	OsvbngCakeSchedV2EnableDisable(ctx context.Context, in *OsvbngCakeSchedV2EnableDisable) (*OsvbngCakeSchedV2EnableDisableReply, error)
 }
 
 type serviceClient struct {
@@ -90,6 +96,85 @@ func (c *serviceClient_OsvbngCakeAggregateDumpClient) Recv() (*OsvbngCakeAggrega
 	}
 }
 
+func (c *serviceClient) OsvbngCakeAggregateV2Create(ctx context.Context, in *OsvbngCakeAggregateV2Create) (*OsvbngCakeAggregateV2CreateReply, error) {
+	out := new(OsvbngCakeAggregateV2CreateReply)
+	err := c.conn.Invoke(ctx, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, api.RetvalToVPPApiError(out.Retval)
+}
+
+func (c *serviceClient) OsvbngCakeAggregateV2Delete(ctx context.Context, in *OsvbngCakeAggregateV2Delete) (*OsvbngCakeAggregateV2DeleteReply, error) {
+	out := new(OsvbngCakeAggregateV2DeleteReply)
+	err := c.conn.Invoke(ctx, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, api.RetvalToVPPApiError(out.Retval)
+}
+
+func (c *serviceClient) OsvbngCakeAggregateV2Dump(ctx context.Context, in *OsvbngCakeAggregateV2Dump) (RPCService_OsvbngCakeAggregateV2DumpClient, error) {
+	stream, err := c.conn.NewStream(ctx)
+	if err != nil {
+		return nil, err
+	}
+	x := &serviceClient_OsvbngCakeAggregateV2DumpClient{stream}
+	if err := x.Stream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err = x.Stream.SendMsg(&memclnt.ControlPing{}); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type RPCService_OsvbngCakeAggregateV2DumpClient interface {
+	Recv() (*OsvbngCakeAggregateV2Details, error)
+	api.Stream
+}
+
+type serviceClient_OsvbngCakeAggregateV2DumpClient struct {
+	api.Stream
+}
+
+func (c *serviceClient_OsvbngCakeAggregateV2DumpClient) Recv() (*OsvbngCakeAggregateV2Details, error) {
+	msg, err := c.Stream.RecvMsg()
+	if err != nil {
+		return nil, err
+	}
+	switch m := msg.(type) {
+	case *OsvbngCakeAggregateV2Details:
+		return m, nil
+	case *memclnt.ControlPingReply:
+		err = c.Stream.Close()
+		if err != nil {
+			return nil, err
+		}
+		return nil, io.EOF
+	default:
+		return nil, fmt.Errorf("unexpected message: %T %v", m, m)
+	}
+}
+
+func (c *serviceClient) OsvbngCakeAggregateV2Update(ctx context.Context, in *OsvbngCakeAggregateV2Update) (*OsvbngCakeAggregateV2UpdateReply, error) {
+	out := new(OsvbngCakeAggregateV2UpdateReply)
+	err := c.conn.Invoke(ctx, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, api.RetvalToVPPApiError(out.Retval)
+}
+
+func (c *serviceClient) OsvbngCakeCapabilities(ctx context.Context, in *OsvbngCakeCapabilities) (*OsvbngCakeCapabilitiesReply, error) {
+	out := new(OsvbngCakeCapabilitiesReply)
+	err := c.conn.Invoke(ctx, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, api.RetvalToVPPApiError(out.Retval)
+}
+
 func (c *serviceClient) OsvbngCakeSchedDump(ctx context.Context, in *OsvbngCakeSchedDump) (RPCService_OsvbngCakeSchedDumpClient, error) {
 	stream, err := c.conn.NewStream(ctx)
 	if err != nil {
@@ -144,6 +229,15 @@ func (c *serviceClient) OsvbngCakeSchedEnableDisable(ctx context.Context, in *Os
 
 func (c *serviceClient) OsvbngCakeSchedResetStats(ctx context.Context, in *OsvbngCakeSchedResetStats) (*OsvbngCakeSchedResetStatsReply, error) {
 	out := new(OsvbngCakeSchedResetStatsReply)
+	err := c.conn.Invoke(ctx, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, api.RetvalToVPPApiError(out.Retval)
+}
+
+func (c *serviceClient) OsvbngCakeSchedV2EnableDisable(ctx context.Context, in *OsvbngCakeSchedV2EnableDisable) (*OsvbngCakeSchedV2EnableDisableReply, error) {
+	out := new(OsvbngCakeSchedV2EnableDisableReply)
 	err := c.conn.Invoke(ctx, in, out)
 	if err != nil {
 		return nil, err
