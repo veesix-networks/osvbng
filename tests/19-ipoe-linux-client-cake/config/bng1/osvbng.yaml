@@ -5,7 +5,7 @@
 subscriber-groups:
     groups:
         default:
-            vlan-tpid: dot1q
+            vlan-tpid: dot1ad
             ipv4-profile: default
             ipv6-profile: default-v6
             vlans:
