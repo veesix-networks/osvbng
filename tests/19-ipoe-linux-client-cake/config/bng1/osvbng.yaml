@@ -6,6 +6,7 @@ subscriber-groups:
     groups:
         default:
             vlan-tpid: dot1ad
+            default-service-group: default
             ipv4-profile: default
             ipv6-profile: default-v6
             vlans:
@@ -120,7 +121,6 @@ aaa:
         - name: default-policy
           format: $mac-address$
           max_concurrent_sessions: 1
-          service-group: default
 
 plugins:
     northbound.api:
