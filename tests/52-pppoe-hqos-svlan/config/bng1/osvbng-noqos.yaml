@@ -103,7 +103,6 @@ aaa:
     type: ppp
     format: $agent-remote-id$
     authenticate: true
-    max_concurrent_sessions: 1
 plugins:
   northbound.api:
     enabled: true
