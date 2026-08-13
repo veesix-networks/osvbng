@@ -94,6 +94,22 @@ func (h *AggregateHandler) Apply(ctx context.Context, hctx *conf.HandlerContext)
 		return fmt.Errorf("qos-aggregate %q: interface %s not found in the dataplane", name, cfg.Interface)
 	}
 
+	// Entries of one section commit in map order, so an S-VLAN can arrive
+	// before the port it hangs off. Applying the port here first is
+	// idempotent - already-exists is checkpoint-replay tolerated - and turns
+	// the port's own later change into a no-op.
+	if cfg.Level() == qoscfg.AggregateLevelSVLAN && hctx.Config != nil {
+		for portName, port := range hctx.Config.QoSAggregates {
+			if port.Interface == cfg.Interface && port.Level() == qoscfg.AggregateLevelPort {
+				port.Name = portName
+				if err := h.southbound.ApplyAggregate(iface.SwIfIndex, port); err != nil {
+					return fmt.Errorf("qos-aggregate %q: port %q: %w", name, portName, err)
+				}
+				break
+			}
+		}
+	}
+
 	// A rate or weight change on an aggregate that already exists is an
 	// update, never a delete and recreate: recreating drops it out of its
 	// parent's active weight and takes every member's attachment and
