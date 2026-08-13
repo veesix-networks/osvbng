@@ -157,6 +157,14 @@ start_osvbngd() {
     fi
 }
 
+# The console pty ships with XON/XOFF flow control enabled: one stray XOFF
+# byte (a ctrl-S into an attached console) silently freezes every daemon's
+# log output while the processes run on, and test gates that grep the logs
+# hang on a healthy node. Nothing legitimate flow-controls a log sink.
+if [ -t 1 ]; then
+    stty -ixon -ixoff || true
+fi
+
 # OSVBNG_RESPAWN: test-only opt-in. When unset (prod default) the entrypoint
 # exec's osvbngd as PID 1 so signals and exit codes propagate normally. When
 # set to "true", osvbngd is supervised by this shell and respawned if it dies,
