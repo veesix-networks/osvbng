@@ -3,14 +3,14 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 *** Comments ***
-Hierarchical QoS: per-S-VLAN aggregates under a shaped port, weighted DRR
-at both tiers. Six IPoE sessions across three S-VLANs saturate the port
-with bngblaster downstream streams; shares are asserted from the plugin's
-dequeue-side counters. The rate plan puts every arbitration relationship
-under test at once: an oversubscribed port (6000+3000+3000 asking 8000),
-an unequal S-VLAN pair (100 vs 200), an equal S-VLAN pair (200 vs 300),
-unequal subscribers inside svlan 100 (2M vs 8M), and equal subscribers
-inside svlans 200 and 300.
+Hierarchical QoS over PPPoE: the same three-S-VLAN shaped-port topology and
+rate plan as suite 51, with the six subscribers arriving as authenticated
+PPPoE sessions instead of IPoE. Exercises scheduler attachment through the
+PPPoE session interface's encap parenting, then asserts the same share
+matrix from the plugin's dequeue-side counters: an oversubscribed port
+(6000+3000+3000 asking 8000), an unequal S-VLAN pair (100 vs 200), an
+equal S-VLAN pair (200 vs 300), unequal subscribers inside svlan 100
+(2M vs 8M), and equal subscribers inside svlans 200 and 300.
 
 *** Settings ***
 Library             OperatingSystem
@@ -19,13 +19,14 @@ Library             Process
 Resource            ../common.robot
 Resource            ../bngblaster.robot
 Resource            ../sessions.robot
+Resource            ../localauth.robot
 
 Suite Setup         Deploy Topology    ${lab-file}
 Suite Teardown      Teardown HQoS Test
 
 *** Variables ***
-${lab-name}         osvbng-ipoe-hqos-svlan
-${lab-file}         ${CURDIR}/51-ipoe-hqos-svlan.clab.yml
+${lab-name}         osvbng-pppoe-hqos-svlan
+${lab-file}         ${CURDIR}/52-pppoe-hqos-svlan.clab.yml
 ${bng1}             clab-${lab-name}-bng1
 ${subscribers}      clab-${lab-name}-subscribers
 ${session-count}    6
@@ -51,7 +52,9 @@ Verify HQoS Aggregates Programmed
     Should Be Equal As Integers    ${rc}    0    Aggregates not programmed as configured: ${output}
 
 Establish Subscriber Sessions
-    [Documentation]    Six QinQ IPoE sessions, two per S-VLAN, via bngblaster.
+    [Documentation]    Six QinQ PPPoE sessions, two per S-VLAN, authenticated
+    ...    against pre-created local users.
+    Create PPPoE Users    ${bng1}    ${session-count}
     Start BNG Blaster In Background    ${subscribers}
     Wait For Sessions Established    ${bng1}    ${subscribers}    ${session-count}
 
@@ -64,7 +67,7 @@ Verify Schedulers Programmed With Configured Rates
 Verify Schedulers Attached To S-VLAN Aggregates
     [Documentation]    Each S-VLAN aggregate lists exactly its own two
     ...    sessions as members - the sup_sw_if_index walk resolved every
-    ...    session through its encap sub-interface to the right tier.
+    ...    PPPoE session through its encap sub-interface to the right tier.
     ${rc}    ${output} =    Run And Return Rc And Output
     ...    python3 ${CURDIR}/../hqos_check.py attach ${bng1}
     Log    \n${output}    console=yes
