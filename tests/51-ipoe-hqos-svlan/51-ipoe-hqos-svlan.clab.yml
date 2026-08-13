@@ -1,0 +1,39 @@
+# Copyright 2026 The osvbng Authors
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: osvbng-ipoe-hqos-svlan
+
+topology:
+  nodes:
+    bng1:
+      kind: linux
+      image: veesixnetworks/osvbng:local
+      image-pull-policy: Never
+      cap-add:
+        - SYS_ADMIN
+        - NET_ADMIN
+        - IPC_LOCK
+        - SYS_NICE
+      env:
+        OSVBNG_WAIT_FOR_INTERFACES: "true"
+        OSVBNG_NUM_INTERFACES: "3"
+      binds:
+        - config/bng1/osvbng.yaml:/etc/osvbng/osvbng.yaml:ro
+
+    # bngblaster holds both ends: eth1 emulates the QinQ subscribers,
+    # eth2 is the network side sourcing the downstream streams, so
+    # per-session shares are measured against real forwarded traffic.
+    subscribers:
+      kind: linux
+      image: veesixnetworks/bngblaster:0.9.30
+      cap-add:
+        - NET_ADMIN
+      binds:
+        - config/subscribers/config.json:/config/config.json:ro
+
+  links:
+    - endpoints: [bng1:eth1, subscribers:eth1]
+      mtu: 1500
+    - endpoints: [bng1:eth2, subscribers:eth2]
+      mtu: 1500
