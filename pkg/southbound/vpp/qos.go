@@ -213,7 +213,6 @@ func (v *VPP) ApplyScheduler(swIfIndex uint32, rateKbps uint32, cfg *qos.Schedul
 	// The weight multiplier only exists on the v2 message. Against an older
 	// dataplane the subscriber still gets a share proportional to its rate,
 	// which is the default the weight multiplies.
-	var retval int32
 	if v.capabilities().weighted {
 		req := &cake.OsvbngCakeSchedV2EnableDisable{
 			SwIfIndex:       interface_types.InterfaceIndex(swIfIndex),
@@ -222,11 +221,7 @@ func (v *VPP) ApplyScheduler(swIfIndex uint32, rateKbps uint32, cfg *qos.Schedul
 			TinMode:         cake.OsvbngCakeTinMode(cfg.TinModeEnum()),
 			Weight:          cfg.Weight,
 		}
-		reply := &cake.OsvbngCakeSchedV2EnableDisableReply{}
-		if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
-			return fmt.Errorf("cake scheduler enable: %w", err)
-		}
-		retval = reply.Retval
+		err = ch.SendRequest(req).ReceiveReply(&cake.OsvbngCakeSchedV2EnableDisableReply{})
 	} else {
 		req := &cake.OsvbngCakeSchedEnableDisable{
 			SwIfIndex:       interface_types.InterfaceIndex(swIfIndex),
@@ -234,15 +229,11 @@ func (v *VPP) ApplyScheduler(swIfIndex uint32, rateKbps uint32, cfg *qos.Schedul
 			RateBytesPerSec: rateBytesPerSec,
 			TinMode:         cake.OsvbngCakeTinMode(cfg.TinModeEnum()),
 		}
-		reply := &cake.OsvbngCakeSchedEnableDisableReply{}
-		if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
-			return fmt.Errorf("cake scheduler enable: %w", err)
-		}
-		retval = reply.Retval
+		err = ch.SendRequest(req).ReceiveReply(&cake.OsvbngCakeSchedEnableDisableReply{})
 	}
 	// Replay of an opdb checkpoint re-asserts what is already programmed.
-	if retval != 0 && retval != vppAPIEntryAlreadyExists {
-		return fmt.Errorf("cake scheduler enable failed: retval=%d", retval)
+	if err != nil && !isRetval(err, vppAPIEntryAlreadyExists) {
+		return fmt.Errorf("cake scheduler enable: %w", err)
 	}
 
 	v.schedulerMu.Lock()

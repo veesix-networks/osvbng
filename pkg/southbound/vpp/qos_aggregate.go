@@ -1,8 +1,11 @@
 package vpp
 
 import (
+	"errors"
 	"fmt"
 	"sync"
+
+	"go.fd.io/govpp/api"
 
 	"github.com/veesix-networks/osvbng/pkg/config/qos"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
@@ -17,6 +20,14 @@ const (
 	vppAPIEntryAlreadyExists int32 = -116
 	vppAPIInstanceInUse      int32 = -147
 )
+
+// isRetval reports whether a ReceiveReply error carries this API return code.
+// GoVPP turns a non-zero retval into a VPPApiError and returns it, so the
+// reply's own Retval field is never reached on the paths that tolerate one.
+func isRetval(err error, code int32) bool {
+	var apiErr api.VPPApiError
+	return errors.As(err, &apiErr) && int32(apiErr) == code
+}
 
 // The dataplane grew a second shaping tier and a weight multiplier behind new
 // messages, leaving the v1 ones working and CRC-stable. A control plane can
@@ -120,17 +131,14 @@ func (v *VPP) ApplyAggregate(swIfIndex uint32, cfg *qos.Aggregate) error {
 		}
 		reply := &cake.OsvbngCakeAggregateV2CreateReply{}
 		if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+			// Re-asserting what is already there is what makes checkpoint
+			// replay, and applying a port before its S-VLANs, safe to repeat.
+			if isRetval(err, vppAPIEntryAlreadyExists) {
+				v.logger.Debug("CAKE aggregate already present",
+					"sw_if_index", swIfIndex, "svlan", r.First)
+				continue
+			}
 			return fmt.Errorf("cake aggregate create: %w", err)
-		}
-		// Replaying a checkpoint re-asserts what is already there, which is
-		// what makes restore safe to repeat.
-		if reply.Retval == vppAPIEntryAlreadyExists {
-			v.logger.Debug("CAKE aggregate already present",
-				"sw_if_index", swIfIndex, "svlan", r.First)
-			continue
-		}
-		if reply.Retval != 0 {
-			return fmt.Errorf("cake aggregate create failed: retval=%d", reply.Retval)
 		}
 	}
 
@@ -178,9 +186,6 @@ func (v *VPP) UpdateAggregate(swIfIndex uint32, cfg *qos.Aggregate) error {
 		if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
 			return fmt.Errorf("cake aggregate update: %w", err)
 		}
-		if reply.Retval != 0 {
-			return fmt.Errorf("cake aggregate update failed: retval=%d", reply.Retval)
-		}
 	}
 
 	v.logger.Debug("Updated CAKE aggregate",
@@ -209,15 +214,14 @@ func (v *VPP) RemoveAggregate(swIfIndex uint32, level uint8, svlanID uint16) err
 	}
 	reply := &cake.OsvbngCakeAggregateV2DeleteReply{}
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
-		return fmt.Errorf("cake aggregate delete: %w", err)
-	}
-	switch reply.Retval {
-	case 0, vppAPINoSuchEntry:
-		// Already gone is the outcome the caller wanted.
-	case vppAPIInstanceInUse:
-		return fmt.Errorf("cake aggregate delete refused: S-VLANs still attached to this port")
-	default:
-		return fmt.Errorf("cake aggregate delete failed: retval=%d", reply.Retval)
+		switch {
+		case isRetval(err, vppAPINoSuchEntry):
+			// Already gone is the outcome the caller wanted.
+		case isRetval(err, vppAPIInstanceInUse):
+			return fmt.Errorf("cake aggregate delete refused: S-VLANs still attached to this port")
+		default:
+			return fmt.Errorf("cake aggregate delete: %w", err)
+		}
 	}
 
 	v.logger.Debug("Removed CAKE aggregate",
