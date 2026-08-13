@@ -36,6 +36,9 @@ ${subscribers}      clab-${lab-name}-subscribers
 ${session-count}    5
 ${srg-vmac}         02:00:5e:00:01:01
 ${garp-pcap}        /tmp/osvbng-ha-graceful-garp.pcap
+# Marker source MAC, injected via the probe veth to prove the capture is
+# armed before the switchover. The GARP assertions match only ${srg-vmac}.
+${marker-mac}       02:6f:73:76:00:99
 
 *** Test Cases ***
 # --- Phase 1: Bootstrap ---
@@ -137,8 +140,14 @@ Verify GARP Not Dropped Via local0 On bng2
     ...    local0-output drops grew during switchover, GARP frames were misrouted (issue 417 regression)
 
 Verify GARP Frames On Access Network
+    # Read the live pcap (tcpdump -U flushes per packet) and stop the
+    # capture only after the flood is found: killing tcpdump right after
+    # the counter check races the last hop, the counters flip when VPP
+    # queues the frames, milliseconds before a loaded host lets tcpdump
+    # drain them from the kernel ring.
+    Wait Until Keyword Succeeds    15 x    2s
+    ...    Check GARP In Capture
     Stop Packet Capture    access-sw-gr
-    Check GARP In Capture
 
 Reset Stream Flow Verification
     Reset Stream Verification    ${subscribers}
@@ -164,8 +173,15 @@ Destroy Graceful Topology
 Create Access Bridge
     ${rc} =    Run And Return Rc    sudo ip link add access-sw-gr type bridge
     ${rc} =    Run And Return Rc    sudo ip link set access-sw-gr up
+    # Probe veth: garp-probe-br is a bridge port, marker frames injected
+    # on garp-probe flood the bridge like any subscriber-facing frame.
+    Run And Return Rc    sudo ip link add garp-probe type veth peer name garp-probe-br
+    Run And Return Rc    sudo ip link set garp-probe-br master access-sw-gr
+    Run And Return Rc    sudo ip link set garp-probe-br up
+    Run And Return Rc    sudo ip link set garp-probe up
 
 Destroy Access Bridge
+    Run And Return Rc    sudo ip link del garp-probe
     Run And Return Rc    sudo ip link del access-sw-gr
 
 Check HA Status
@@ -216,8 +232,29 @@ Start Packet Capture
     [Arguments]    ${iface}    ${pcap}
     Run Keyword And Ignore Error    Stop Packet Capture    ${iface}
     ${rc} =    Run And Return Rc    sudo rm -f ${pcap}
-    Start Process    sudo tcpdump -i ${iface} -U -w ${pcap} 'arp or (vlan and arp)'    shell=True
-    Sleep    2s    let tcpdump attach before the switchover
+    # MAC-level filter: source MAC and dst broadcast/multicast sit before
+    # any VLAN tags, so this matches the GARP/NA flood under any encap.
+    # A BPF "vlan and arp" cannot match QinQ ARP (one vlan shift only).
+    Start Process    sudo tcpdump -i ${iface} -U -w ${pcap} '(ether broadcast or ether multicast) and (ether src ${srg-vmac} or ether src ${marker-mac})'    shell=True
+    # The graceful switchover completes in well under a second, so a
+    # fixed sleep loses the race to tcpdump's startup on a loaded host.
+    # Inject marker broadcasts through the probe veth and wait until one
+    # lands in the pcap: the capture is then provably armed.
+    Wait Until Keyword Succeeds    20 x    1s
+    ...    Capture Is Armed    ${pcap}
+
+Capture Is Armed
+    [Arguments]    ${pcap}
+    Inject Marker Frame
+    ${rc}    ${count} =    Run And Return Rc And Output
+    ...    sudo tcpdump -nn -e -r ${pcap} 2>/dev/null | grep -c "${marker-mac}"
+    Should Be True    ${count} > 0    capture not armed yet
+
+Inject Marker Frame
+    ${mac-hex} =    Replace String    ${marker-mac}    :    ${EMPTY}
+    ${rc} =    Run And Return Rc
+    ...    sudo python3 -c "import socket; s=socket.socket(socket.AF_PACKET, socket.SOCK_RAW); s.bind(('garp-probe',0)); s.send(bytes.fromhex('ffffffffffff${mac-hex}88b5')+b'osvbng-garp-capture-probe'); s.close()"
+    Should Be Equal As Integers    ${rc}    0
 
 Stop Packet Capture
     [Arguments]    ${iface}
