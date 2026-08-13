@@ -183,10 +183,13 @@ func (h *AggregateHandler) PathPattern() paths.Path {
 	return paths.QoSAggregate
 }
 
-// Dependencies orders this after the interface it is programmed against: the
-// aggregate needs a sw_if_index, which does not exist until the interface does.
+// Dependencies is nil like every other cross-section handler: the resolver
+// substitutes this entry's wildcard into a declared dependency's pattern, so
+// paths.Interface would demand interfaces.<aggregate-name> - there is no way
+// to express "after any interface". Ordering after Interfaces comes from the
+// Config struct walk order instead.
 func (h *AggregateHandler) Dependencies() []paths.Path {
-	return []paths.Path{paths.Interface}
+	return nil
 }
 
 func (h *AggregateHandler) Callbacks() *conf.Callbacks {

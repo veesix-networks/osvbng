@@ -43,9 +43,9 @@ type Config struct {
 	RoutingPolicies *routing_policy.RoutingPolicyConfig    `json:"routing-policies,omitempty" yaml:"routing-policies,omitempty"`
 	VRFS            map[string]*ip.VRFSConfig              `json:"vrfs,omitempty" yaml:"vrfs,omitempty"`
 	QoSPolicies     map[string]*qos.Policy                 `json:"qos-policies,omitempty" yaml:"qos-policies,omitempty"`
-	QoSAggregates   map[string]*qos.Aggregate              `json:"qos-aggregates,omitempty" yaml:"qos-aggregates,omitempty"`
 	ServiceGroups   map[string]*servicegroup.Config        `json:"service-groups,omitempty" yaml:"service-groups,omitempty"`
 	Interfaces      map[string]*interfaces.InterfaceConfig `json:"interfaces,omitempty" yaml:"interfaces,omitempty"`
+	QoSAggregates   map[string]*qos.Aggregate              `json:"qos-aggregates,omitempty" yaml:"qos-aggregates,omitempty"`
 	Protocols       protocols.ProtocolConfig               `json:"protocols,omitempty" yaml:"protocols,omitempty"`
 	AAA             aaa.AAAConfig                          `json:"aaa,omitempty" yaml:"aaa,omitempty"`
 
