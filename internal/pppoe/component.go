@@ -739,6 +739,7 @@ func defaultMSSClampPolicyForMTU(mtu uint16) southbound.MSSClampPolicy {
 // for the final release sequence.
 type sessionTeardownSnapshot struct {
 	SessionID    string
+	SwIfIndex    uint32
 	PPPSessionID uint16
 	MAC          net.HardwareAddr
 	OuterVLAN    uint16
@@ -772,6 +773,7 @@ func (c *Component) tearDownSessionAfterVPPFailure(sess *SessionState, snap sess
 
 	c.publishSessionLifecycle(&models.PPPSession{
 		SessionID:    snap.SessionID,
+		IfIndex:      snap.SwIfIndex,
 		State:        models.SessionStateReleased,
 		AccessType:   string(models.AccessTypePPPoE),
 		Protocol:     string(models.ProtocolPPPoESession),

@@ -746,6 +746,7 @@ func (s *SessionState) checkOpen() {
 func (s *SessionState) snapshotForTeardown() sessionTeardownSnapshot {
 	snap := sessionTeardownSnapshot{
 		SessionID:    s.SessionID,
+		SwIfIndex:    s.SwIfIndex,
 		PPPSessionID: s.PPPoESessionID,
 		OuterVLAN:    s.OuterVLAN,
 		InnerVLAN:    s.InnerVLAN,
@@ -1123,6 +1124,7 @@ func (s *SessionState) terminate() {
 
 	s.component.publishSessionLifecycle(&models.PPPSession{
 		SessionID:    s.SessionID,
+		IfIndex:      s.SwIfIndex,
 		State:        models.SessionStateReleased,
 		AccessType:   string(models.AccessTypePPPoE),
 		Protocol:     string(models.ProtocolPPPoESession),
