@@ -64,8 +64,9 @@ func (h *AggregateHandler) Validate(ctx context.Context, hctx *conf.HandlerConte
 	// Cross-entry constraints - disjoint S-VLAN sets, a child not shaped above
 	// its port - need the whole set and are checked by ValidateAggregates at
 	// commit time. What is checkable here is that the interface exists, since
-	// an aggregate is programmed against a sw_if_index.
-	if !h.dataplaneState.IsInterfaceConfigured(cfg.Interface) {
+	// an aggregate is programmed against a sw_if_index. Nil during startup
+	// config load, before the dataplane state is assembled.
+	if h.dataplaneState != nil && !h.dataplaneState.IsInterfaceConfigured(cfg.Interface) {
 		return fmt.Errorf("qos-aggregate %q: interface %s is not configured", name, cfg.Interface)
 	}
 
@@ -88,7 +89,7 @@ func (h *AggregateHandler) Apply(ctx context.Context, hctx *conf.HandlerContext)
 	}
 	cfg.Name = name
 
-	iface := h.dataplaneState.GetInterfaceByName(cfg.Interface)
+	iface := h.southbound.GetIfMgr().GetByName(cfg.Interface)
 	if iface == nil {
 		return fmt.Errorf("qos-aggregate %q: interface %s not found in the dataplane", name, cfg.Interface)
 	}
@@ -133,7 +134,7 @@ func (h *AggregateHandler) remove(oldValue any, name string) error {
 		return nil
 	}
 
-	iface := h.dataplaneState.GetInterfaceByName(old.Interface)
+	iface := h.southbound.GetIfMgr().GetByName(old.Interface)
 	if iface == nil {
 		// The interface went away and took its aggregates with it.
 		return nil
@@ -171,7 +172,7 @@ func (h *AggregateHandler) Rollback(ctx context.Context, hctx *conf.HandlerConte
 	}
 	old.Name = name
 
-	iface := h.dataplaneState.GetInterfaceByName(old.Interface)
+	iface := h.southbound.GetIfMgr().GetByName(old.Interface)
 	if iface == nil {
 		return nil
 	}
