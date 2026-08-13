@@ -20,6 +20,12 @@ type SubscriberSession interface {
 	GetIPv6Address() net.IP
 	GetIPv6Prefix() string
 	GetIfIndex() uint32
+	// GetAccessIfIndex is the access-facing encap interface (the
+	// sub-interface subscriber frames ingress on), not the per-session
+	// virtual interface. Session interfaces are midchain-stacked and
+	// cannot transmit via interface-output; anything that injects
+	// frames toward the subscriber (SRG GARP/NA) must use this index.
+	GetAccessIfIndex() uint32
 	GetVLANCount() int
 	GetUsername() string
 	GetServiceGroup() string
@@ -82,6 +88,7 @@ func (s *IPoESession) GetIPv4Address() net.IP    { return s.IPv4Address }
 func (s *IPoESession) GetIPv6Address() net.IP    { return s.IPv6Address }
 func (s *IPoESession) GetIPv6Prefix() string     { return s.IPv6Prefix }
 func (s *IPoESession) GetIfIndex() uint32        { return s.IfIndex }
+func (s *IPoESession) GetAccessIfIndex() uint32  { return s.AccessIfIndex }
 func (s *IPoESession) GetVLANCount() int         { return s.VLANCount }
 func (s *IPoESession) GetUsername() string       { return s.Username }
 func (s *IPoESession) GetServiceGroup() string   { return s.ServiceGroup }
@@ -238,6 +245,7 @@ func (s *PPPSession) GetIPv4Address() net.IP    { return s.IPv4Address }
 func (s *PPPSession) GetIPv6Address() net.IP    { return s.IPv6Address }
 func (s *PPPSession) GetIPv6Prefix() string     { return s.IPv6Prefix }
 func (s *PPPSession) GetIfIndex() uint32        { return s.IfIndex }
+func (s *PPPSession) GetAccessIfIndex() uint32  { return s.AccessIfIndex }
 func (s *PPPSession) GetVLANCount() int         { return s.VLANCount }
 func (s *PPPSession) GetUsername() string       { return s.Username }
 func (s *PPPSession) GetServiceGroup() string   { return s.ServiceGroup }
@@ -313,6 +321,9 @@ func (s *PPPoL2TPSession) GetIPv4Address() net.IP    { return s.IPv4Address }
 func (s *PPPoL2TPSession) GetIPv6Address() net.IP    { return s.IPv6Address }
 func (s *PPPoL2TPSession) GetIPv6Prefix() string     { return s.IPv6Prefix }
 func (s *PPPoL2TPSession) GetIfIndex() uint32        { return s.IfIndex }
+
+// LNS-terminated sessions have no local access L2.
+func (s *PPPoL2TPSession) GetAccessIfIndex() uint32  { return 0 }
 func (s *PPPoL2TPSession) GetVLANCount() int         { return 0 }
 func (s *PPPoL2TPSession) GetUsername() string       { return s.Username }
 func (s *PPPoL2TPSession) GetServiceGroup() string   { return s.ServiceGroup }
@@ -382,6 +393,7 @@ func (s *L2GWSession) GetIPv4Address() net.IP    { return nil }
 func (s *L2GWSession) GetIPv6Address() net.IP    { return nil }
 func (s *L2GWSession) GetIPv6Prefix() string     { return "" }
 func (s *L2GWSession) GetIfIndex() uint32        { return s.AccessEntryIndex }
+func (s *L2GWSession) GetAccessIfIndex() uint32  { return s.AccessIfIndex }
 func (s *L2GWSession) GetVLANCount() int {
 	n := 0
 	if s.OuterVLAN != 0 {

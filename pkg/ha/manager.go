@@ -767,15 +767,26 @@ func (m *Manager) collectGarpEntries(srgName string) []southbound.SRGGarpEntry {
 			if sess.GetState() != models.SessionStateActive {
 				return true
 			}
-			ifIdx := sess.GetIfIndex()
+			// GARP/NA must egress the access encap interface with the
+			// session's own VLAN tags. The per-session interface is
+			// midchain-stacked with no output node; frames injected
+			// there via interface-output die on local0 (issue 417).
+			ifIdx := sess.GetAccessIfIndex()
 			if ifIdx == 0 {
 				return true
 			}
+			entry := southbound.SRGGarpEntry{
+				SwIfIndex: ifIdx,
+				OuterVLAN: sess.GetOuterVLAN(),
+				InnerVLAN: sess.GetInnerVLAN(),
+			}
 			if ip := sess.GetIPv4Address(); ip != nil {
-				entries = append(entries, southbound.SRGGarpEntry{SwIfIndex: ifIdx, IP: ip})
+				entry.IP = ip
+				entries = append(entries, entry)
 			}
 			if ip := sess.GetIPv6Address(); ip != nil {
-				entries = append(entries, southbound.SRGGarpEntry{SwIfIndex: ifIdx, IP: ip})
+				entry.IP = ip
+				entries = append(entries, entry)
 			}
 			return true
 		})

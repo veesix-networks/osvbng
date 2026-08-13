@@ -6,8 +6,15 @@ package southbound
 
 import "net"
 
+// SRGGarpEntry names one GARP/NA to emit. SwIfIndex is the access
+// encap interface; the dataplane transmits on its wire parent and
+// builds the VLAN tags from the entry, because catch-all vlan-any
+// sub-interfaces carry no rewrite of their own.
 type SRGGarpEntry struct {
 	SwIfIndex uint32
+	OuterVLAN uint16
+	InnerVLAN uint16
+	OuterTPID uint16
 	IP        net.IP
 }
 

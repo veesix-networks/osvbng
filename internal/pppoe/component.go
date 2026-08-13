@@ -1654,6 +1654,8 @@ func (c *Component) ForEachSession(fn func(models.SubscriberSession) bool) {
 			OuterVLAN:        sess.OuterVLAN,
 			InnerVLAN:        sess.InnerVLAN,
 			IfIndex:          sess.SwIfIndex,
+			AccessIfIndex:    sess.EncapIfIndex,
+			AccessInterface:  c.accessInterfaceName(sess.EncapIfIndex),
 			VRF:              sess.VRF,
 			ServiceGroup:     sess.ServiceGroup.Name,
 			SRGName:          sess.SRGName,

@@ -27,8 +27,8 @@ const _ = api.GoVppAPIPackageIsVersion2
 
 const (
 	APIFile    = "osvbng_srg"
-	APIVersion = "1.0.0"
-	VersionCrc = 0xf23daeb0
+	APIVersion = "2.0.0"
+	VersionCrc = 0x1bde47d5
 )
 
 // OsvbngSrgCounters defines type 'osvbng_srg_counters'.
@@ -43,6 +43,9 @@ type OsvbngSrgCounters struct {
 // OsvbngSrgGarpEntry defines type 'osvbng_srg_garp_entry'.
 type OsvbngSrgGarpEntry struct {
 	SwIfIndex interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
+	OuterVlan uint16                         `binapi:"u16,name=outer_vlan" json:"outer_vlan,omitempty"`
+	InnerVlan uint16                         `binapi:"u16,name=inner_vlan" json:"inner_vlan,omitempty"`
+	OuterTpid uint16                         `binapi:"u16,name=outer_tpid" json:"outer_tpid,omitempty"`
 	IPAddress ip_types.Address               `binapi:"address,name=ip_address" json:"ip_address,omitempty"`
 }
 
@@ -249,7 +252,7 @@ type OsvbngSrgSendGarp struct {
 
 func (m *OsvbngSrgSendGarp) Reset()               { *m = OsvbngSrgSendGarp{} }
 func (*OsvbngSrgSendGarp) GetMessageName() string { return "osvbng_srg_send_garp" }
-func (*OsvbngSrgSendGarp) GetCrcString() string   { return "421869a0" }
+func (*OsvbngSrgSendGarp) GetCrcString() string   { return "553904d3" }
 func (*OsvbngSrgSendGarp) GetMessageType() api.MessageType {
 	return api.RequestMessage
 }
@@ -267,6 +270,9 @@ func (m *OsvbngSrgSendGarp) Size() (size int) {
 			s1 = m.Entries[j1]
 		}
 		size += 4      // s1.SwIfIndex
+		size += 2      // s1.OuterVlan
+		size += 2      // s1.InnerVlan
+		size += 2      // s1.OuterTpid
 		size += 1      // s1.IPAddress.Af
 		size += 1 * 16 // s1.IPAddress.Un
 	}
@@ -285,6 +291,9 @@ func (m *OsvbngSrgSendGarp) Marshal(b []byte) ([]byte, error) {
 			v0 = m.Entries[j0]
 		}
 		buf.EncodeUint32(uint32(v0.SwIfIndex))
+		buf.EncodeUint16(v0.OuterVlan)
+		buf.EncodeUint16(v0.InnerVlan)
+		buf.EncodeUint16(v0.OuterTpid)
 		buf.EncodeUint8(uint8(v0.IPAddress.Af))
 		buf.EncodeBytes(v0.IPAddress.Un.XXX_UnionData[:], 16)
 	}
@@ -297,6 +306,9 @@ func (m *OsvbngSrgSendGarp) Unmarshal(b []byte) error {
 	m.Entries = make([]OsvbngSrgGarpEntry, m.Count)
 	for j0 := 0; j0 < len(m.Entries); j0++ {
 		m.Entries[j0].SwIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
+		m.Entries[j0].OuterVlan = buf.DecodeUint16()
+		m.Entries[j0].InnerVlan = buf.DecodeUint16()
+		m.Entries[j0].OuterTpid = buf.DecodeUint16()
 		m.Entries[j0].IPAddress.Af = ip_types.AddressFamily(buf.DecodeUint8())
 		copy(m.Entries[j0].IPAddress.Un.XXX_UnionData[:], buf.DecodeBytes(16))
 	}
@@ -416,7 +428,7 @@ func file_osvbng_srg_binapi_init() {
 	api.RegisterMessage((*OsvbngSrgAddDelReply)(nil), "osvbng_srg_add_del_reply_e8d4e804")
 	api.RegisterMessage((*OsvbngSrgCounterDetails)(nil), "osvbng_srg_counter_details_a2ecbc3a")
 	api.RegisterMessage((*OsvbngSrgCounterDump)(nil), "osvbng_srg_counter_dump_d58aa7b4")
-	api.RegisterMessage((*OsvbngSrgSendGarp)(nil), "osvbng_srg_send_garp_421869a0")
+	api.RegisterMessage((*OsvbngSrgSendGarp)(nil), "osvbng_srg_send_garp_553904d3")
 	api.RegisterMessage((*OsvbngSrgSendGarpReply)(nil), "osvbng_srg_send_garp_reply_e8d4e804")
 	api.RegisterMessage((*OsvbngSrgSetState)(nil), "osvbng_srg_set_state_7cb41e5f")
 	api.RegisterMessage((*OsvbngSrgSetStateReply)(nil), "osvbng_srg_set_state_reply_e8d4e804")

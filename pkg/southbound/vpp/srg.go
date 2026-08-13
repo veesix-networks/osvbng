@@ -110,6 +110,9 @@ func (v *VPP) SendSRGGarp(srgName string, entries []southbound.SRGGarpEntry) err
 	apiEntries := make([]osvbng_srg.OsvbngSrgGarpEntry, len(entries))
 	for i, e := range entries {
 		apiEntries[i].SwIfIndex = interface_types.InterfaceIndex(e.SwIfIndex)
+		apiEntries[i].OuterVlan = e.OuterVLAN
+		apiEntries[i].InnerVlan = e.InnerVLAN
+		apiEntries[i].OuterTpid = e.OuterTPID
 
 		if ip4 := e.IP.To4(); ip4 != nil {
 			var addr ip_types.IP4Address
