@@ -89,6 +89,15 @@ Churn Sessions With Monkey
     Churn Sessions    ${subscribers}    ${churn-secs}
     Verify Sessions Flapped    ${subscribers}
 
+Verify Dataplane Survived Churn
+    [Documentation]    A dataplane crash during churn makes every later check
+    ...    fail against a dead API socket, which reads as a cascade of QoS
+    ...    failures. Name it here instead.
+    ${rc}    ${output} =    Run And Return Rc And Output
+    ...    sudo docker exec ${bng1} vppctl -s /run/osvbng/cli.sock show version
+    Should Be Equal As Integers    ${rc}    0    Dataplane not responding after churn - crashed? Check docker logs ${bng1} for SIGSEGV: ${output}
+    Should Contain    ${output}    vpp
+
 Verify Sessions Re-Established After Churn
     [Documentation]    All ${session-count} sessions come back after the churn.
     Wait For Sessions Established    ${bng1}    ${subscribers}    ${session-count}

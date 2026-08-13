@@ -193,7 +193,11 @@ def cmd_measure(container, seconds):
         )
         want = sorted(plan["members"])
         if len(got) != len(want):
-            print(f"  svlan {svlan}: FAIL: {len(got)} measurable members, expected {len(want)}")
+            # Most often a session flapped inside the window, leaving the old
+            # scheduler and its replacement both attached at the sample point.
+            seen = ", ".join(f"{k}k" for k, _ in got)
+            print(f"  svlan {svlan}: FAIL: {len(got)} measurable members [{seen}], "
+                  f"expected {len(want)} - did a session flap during the window?")
             failures += 1
             continue
         for (kbps, share), (want_kbps, want_share) in zip(got, want):

@@ -46,7 +46,8 @@
   "sessions": {
     "count": 6,
     "max-outstanding": 6,
-    "reconnect": true
+    "reconnect": true,
+    "monkey-autostart": false
   },
   "pppoe": {
     "reconnect": true,
