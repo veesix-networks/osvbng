@@ -16,6 +16,7 @@ import (
 // VPP API return codes this file reacts to, from vnet/error.h. Named rather
 // than inlined because -116 in a conditional says nothing about intent.
 const (
+	vppAPIInvalidSwIfIndex   int32 = -2
 	vppAPINoSuchEntry        int32 = -6
 	vppAPIEntryAlreadyExists int32 = -116
 	vppAPIInstanceInUse      int32 = -147
@@ -215,8 +216,9 @@ func (v *VPP) RemoveAggregate(swIfIndex uint32, level uint8, svlanID uint16) err
 	reply := &cake.OsvbngCakeAggregateV2DeleteReply{}
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
 		switch {
-		case isRetval(err, vppAPINoSuchEntry):
-			// Already gone is the outcome the caller wanted.
+		case isRetval(err, vppAPINoSuchEntry), isRetval(err, vppAPIInvalidSwIfIndex):
+			// Already gone is the outcome the caller wanted, whether the
+			// aggregate went first or its interface took it along.
 		case isRetval(err, vppAPIInstanceInUse):
 			return fmt.Errorf("cake aggregate delete refused: S-VLANs still attached to this port")
 		default:

@@ -266,7 +266,17 @@ func (v *VPP) RemoveScheduler(swIfIndex uint32) error {
 	}
 	reply := &cake.OsvbngCakeSchedEnableDisableReply{}
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
-		v.logger.Warn("Failed to disable CAKE scheduler", "sw_if_index", swIfIndex, "error", err)
+		// Session teardown usually deletes the session interface before this
+		// unwind runs, and the dataplane's own interface-delete hook removes
+		// the scheduler with it. Both codes mean it is already gone, which is
+		// the ordinary path on every disconnect - only a real failure should
+		// look like one.
+		if isRetval(err, vppAPIInvalidSwIfIndex) || isRetval(err, vppAPINoSuchEntry) {
+			v.logger.Debug("CAKE scheduler already removed with its interface",
+				"sw_if_index", swIfIndex)
+		} else {
+			v.logger.Warn("Failed to disable CAKE scheduler", "sw_if_index", swIfIndex, "error", err)
+		}
 	}
 
 	v.logger.Debug("Removed CAKE scheduler", "sw_if_index", swIfIndex)
