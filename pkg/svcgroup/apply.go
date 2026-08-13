@@ -100,7 +100,8 @@ func ApplyToSession(sb PolicyApplier, swIfIndex uint32, sg ServiceGroup, qosPoli
 					"sw_if_index", swIfIndex,
 					"service_group", sg.Name,
 					"rate_kbps", downloadRate,
-					"tin_mode", egress.Scheduler.TinMode)
+					"tin_mode", egress.Scheduler.TinMode,
+					"weight", egress.Scheduler.Weight)
 			}
 		}
 		if ingress != nil {

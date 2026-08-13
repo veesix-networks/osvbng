@@ -1,0 +1,124 @@
+# Copyright 2026 The osvbng Authors
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# dot1q twin of osvbng-noqos.yaml: no QoS AND no 802.1ad, so the
+# af_packet TPID patch is a no-op (it only changes the reconstructed
+# ethertype when the kernel reports a TPID other than 0x8100). Pair it
+# with config/subscribers/config-dot1q.json, which drops qinq from the
+# access interfaces so both tags are 0x8100.
+#
+# Diagnostic variant of this suite's config with all QoS removed: no
+# schedulers, no aggregates, no service groups. Not used by the suite - the
+# topology binds osvbng.yaml - it is swapped in by hand to answer one
+# question when session churn destabilises the dataplane:
+#
+#   cp config/bng1/osvbng.yaml /tmp/keep.yaml
+#   cp config/bng1/osvbng-noqos.yaml config/bng1/osvbng.yaml
+#   sudo make robot-test suite=52-pppoe-hqos-svlan   # QoS tests fail by design
+#   cp /tmp/keep.yaml config/bng1/osvbng.yaml
+#
+# The QoS assertions fail because there is nothing to program; the only
+# thing being read is whether the dataplane survives the churn. If it does
+# not, the fault is not in the CAKE plugin.
+#
+# service-groups is removed entirely rather than emptied: a service group
+# with a nil body panics osvbngd at startup in Resolver.Set.
+subscriber-groups:
+  groups:
+    hqos-100-slow:
+      vlan-tpid: dot1q
+      ipv4-profile: default
+      vlans:
+      - svlan: '100'
+        cvlan: '10'
+        interface: loop100
+        parent-interface: eth1
+        access-types:
+        - pppoe
+      aaa-policy: pppoe-policy
+    hqos-100-fast:
+      vlan-tpid: dot1q
+      ipv4-profile: default
+      vlans:
+      - svlan: '100'
+        cvlan: '11'
+        interface: loop100
+        parent-interface: eth1
+        access-types:
+        - pppoe
+      aaa-policy: pppoe-policy
+    hqos-200:
+      vlan-tpid: dot1q
+      ipv4-profile: default
+      vlans:
+      - svlan: '200'
+        cvlan: any
+        interface: loop100
+        parent-interface: eth1
+        access-types:
+        - pppoe
+      aaa-policy: pppoe-policy
+    hqos-300:
+      vlan-tpid: dot1q
+      ipv4-profile: default
+      vlans:
+      - svlan: '300'
+        cvlan: any
+        interface: loop100
+        parent-interface: eth1
+        access-types:
+        - pppoe
+      aaa-policy: pppoe-policy
+ipv4-profiles:
+  default:
+    gateway: 10.255.0.1
+    dns:
+    - 8.8.8.8
+    pools:
+    - name: subscriber-pool
+      network: 10.255.0.0/16
+      priority: 1
+interfaces:
+  loop0:
+    description: Control Plane Loopback
+    enabled: true
+    address:
+      ipv4:
+      - 10.254.0.1/32
+  eth1:
+    description: Access Interface
+    enabled: true
+  eth2:
+    description: Core Link (bngblaster network side)
+    enabled: true
+    address:
+      ipv4:
+      - 10.0.0.1/30
+  loop100:
+    description: Subscriber Gateway Loopback
+    enabled: true
+    address:
+      ipv4:
+      - 10.255.0.1/32
+aaa:
+  auth_provider: local
+  nas_identifier: osvbng
+  policy:
+  - name: pppoe-policy
+    type: ppp
+    format: $agent-remote-id$
+    authenticate: true
+plugins:
+  northbound.api:
+    enabled: true
+    listeners:
+    - address: :8080
+  subscriber.auth.local:
+    allow_all: false
+    database_path: /tmp/osvbng.db
+logging:
+  format: text
+  level: info
+dataplane:
+  lcp-netns: dataplane

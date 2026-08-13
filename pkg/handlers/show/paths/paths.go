@@ -199,6 +199,7 @@ const (
 	CGNATLookup     Path = "cgnat.lookup"
 
 	QoSScheduler Path = "qos.scheduler"
+	QoSAggregate Path = "qos.aggregate"
 
 	RoutingPolicyPrefixSets         Path = "routing-policies.prefix-sets"
 	RoutingPolicyPrefixSet          Path = "routing-policies.prefix-sets.<*>"

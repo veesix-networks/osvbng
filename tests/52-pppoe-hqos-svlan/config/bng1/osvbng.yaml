@@ -1,0 +1,162 @@
+# Copyright 2026 The osvbng Authors
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# PPPoE twin of suite 51: three S-VLANs under one shaped port, two
+# subscribers each, with the same rate plan so every relationship the HQoS
+# tier arbitrates is present at once:
+#
+#   port 8000 kbps, S-VLANs ask 6000+3000+3000  -> contended, splits 50/25/25
+#   svlan 100: subscribers at 2000 vs 8000      -> unequal subs, 1:4
+#   svlan 200: subscribers at 4000 + 4000       -> equal subs
+#   svlan 300: same as 200                      -> equal S-VLAN pair (200 vs 300)
+#
+# Expected share of the port per subscriber under saturation:
+#   100.10=10%  100.11=40%  200.10=200.11=300.10=300.11=12.5%
+
+subscriber-groups:
+    groups:
+        hqos-100-slow:
+            vlan-tpid: dot1ad
+            default-service-group: sg-slow
+            ipv4-profile: default
+            vlans:
+                - svlan: "100"
+                  cvlan: "10"
+                  interface: loop100
+                  parent-interface: eth1
+                  access-types: [pppoe]
+            aaa-policy: pppoe-policy
+        hqos-100-fast:
+            vlan-tpid: dot1ad
+            default-service-group: sg-fast
+            ipv4-profile: default
+            vlans:
+                - svlan: "100"
+                  cvlan: "11"
+                  interface: loop100
+                  parent-interface: eth1
+                  access-types: [pppoe]
+            aaa-policy: pppoe-policy
+        hqos-200:
+            vlan-tpid: dot1ad
+            default-service-group: sg-mid
+            ipv4-profile: default
+            vlans:
+                - svlan: "200"
+                  cvlan: any
+                  interface: loop100
+                  parent-interface: eth1
+                  access-types: [pppoe]
+            aaa-policy: pppoe-policy
+        hqos-300:
+            vlan-tpid: dot1ad
+            default-service-group: sg-mid
+            ipv4-profile: default
+            vlans:
+                - svlan: "300"
+                  cvlan: any
+                  interface: loop100
+                  parent-interface: eth1
+                  access-types: [pppoe]
+            aaa-policy: pppoe-policy
+
+ipv4-profiles:
+    default:
+        gateway: 10.255.0.1
+        dns:
+            - 8.8.8.8
+        pools:
+            - name: subscriber-pool
+              network: 10.255.0.0/16
+              priority: 1
+
+interfaces:
+    loop0:
+        description: Control Plane Loopback
+        enabled: true
+        address:
+            ipv4:
+                - 10.254.0.1/32
+    eth1:
+        description: Access Interface
+        enabled: true
+    eth2:
+        description: Core Link (bngblaster network side)
+        enabled: true
+        address:
+            ipv4:
+                - 10.0.0.1/30
+    loop100:
+        description: Subscriber Gateway Loopback
+        enabled: true
+        address:
+            ipv4:
+                - 10.255.0.1/32
+
+qos-policies:
+    cake-2m:
+        cir: 2000
+        scheduler:
+            tin-mode: besteffort
+    cake-8m:
+        cir: 8000
+        scheduler:
+            tin-mode: besteffort
+    cake-4m:
+        cir: 4000
+        scheduler:
+            tin-mode: besteffort
+
+qos-aggregates:
+    port:
+        interface: eth1
+        rate: 8000
+    svlan-100:
+        interface: eth1
+        svlans: ["100"]
+        rate: 6000
+    svlan-200:
+        interface: eth1
+        svlans: ["200"]
+        rate: 3000
+    svlan-300:
+        interface: eth1
+        svlans: ["300"]
+        rate: 3000
+
+service-groups:
+    sg-slow:
+        qos:
+            egress-policy: cake-2m
+    sg-fast:
+        qos:
+            egress-policy: cake-8m
+    sg-mid:
+        qos:
+            egress-policy: cake-4m
+
+aaa:
+    auth_provider: local
+    nas_identifier: osvbng
+    policy:
+        - name: pppoe-policy
+          type: ppp
+          format: $agent-remote-id$
+          authenticate: true
+
+plugins:
+    northbound.api:
+        enabled: true
+        listeners:
+            - address: :8080
+    subscriber.auth.local:
+        allow_all: false
+        database_path: /tmp/osvbng.db
+
+logging:
+    format: text
+    level: info
+
+dataplane:
+    lcp-netns: dataplane

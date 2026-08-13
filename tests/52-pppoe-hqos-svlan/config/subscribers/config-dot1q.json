@@ -1,0 +1,82 @@
+{
+  "interfaces": {
+    "network": [
+      {
+        "interface": "eth2",
+        "address": "10.0.0.2/30",
+        "gateway": "10.0.0.1"
+      }
+    ],
+    "access": [
+      {
+        "interface": "eth1",
+        "type": "pppoe",
+        "vlan-mode": "1:1",
+        "outer-vlan": 100,
+        "inner-vlan-min": 10,
+        "inner-vlan-max": 11,
+        "stream-group-id": 1
+      },
+      {
+        "interface": "eth1",
+        "type": "pppoe",
+        "vlan-mode": "1:1",
+        "outer-vlan": 200,
+        "inner-vlan-min": 10,
+        "inner-vlan-max": 11,
+        "stream-group-id": 1
+      },
+      {
+        "interface": "eth1",
+        "type": "pppoe",
+        "vlan-mode": "1:1",
+        "outer-vlan": 300,
+        "inner-vlan-min": 10,
+        "inner-vlan-max": 11,
+        "stream-group-id": 1
+      }
+    ]
+  },
+  "sessions": {
+    "count": 6,
+    "max-outstanding": 6
+  },
+  "pppoe": {
+    "reconnect": false,
+    "discovery-timeout": 5,
+    "discovery-retry": 10,
+    "host-uniq": true
+  },
+  "ppp": {
+    "authentication": {
+      "username": "user{session-global}",
+      "password": "test",
+      "timeout": 10,
+      "retry": 10
+    },
+    "lcp": {
+      "conf-request-timeout": 5,
+      "conf-request-retry": 10,
+      "keepalive-retry": 5
+    },
+    "ipcp": {
+      "enable": true
+    },
+    "ip6cp": {
+      "enable": false
+    }
+  },
+  "access-line": {
+    "agent-remote-id": "user{session-global}"
+  },
+  "streams": [
+    {
+      "name": "down",
+      "stream-group-id": 1,
+      "type": "ipv4",
+      "direction": "downstream",
+      "pps": 500,
+      "length": 1400
+    }
+  ]
+}

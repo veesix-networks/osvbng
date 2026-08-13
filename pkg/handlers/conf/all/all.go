@@ -12,8 +12,9 @@ import (
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/conf/protocols/ospf"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/conf/protocols/ospf6"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/conf/protocols/static"
+	_ "github.com/veesix-networks/osvbng/pkg/handlers/conf/qos"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/conf/routing_policy"
-	_ "github.com/veesix-networks/osvbng/pkg/handlers/conf/system"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/conf/servicegroups"
+	_ "github.com/veesix-networks/osvbng/pkg/handlers/conf/system"
 	_ "github.com/veesix-networks/osvbng/pkg/handlers/conf/vrfs"
 )
