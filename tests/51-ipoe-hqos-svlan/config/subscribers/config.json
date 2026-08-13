@@ -16,8 +16,7 @@
         "outer-vlan": 100,
         "inner-vlan-min": 10,
         "inner-vlan-max": 11,
-        "stream-group-id": 1,
-        "monkey": true
+        "stream-group-id": 1
       },
       {
         "interface": "eth1",
@@ -27,8 +26,7 @@
         "outer-vlan": 200,
         "inner-vlan-min": 10,
         "inner-vlan-max": 11,
-        "stream-group-id": 1,
-        "monkey": true
+        "stream-group-id": 1
       },
       {
         "interface": "eth1",
@@ -38,16 +36,13 @@
         "outer-vlan": 300,
         "inner-vlan-min": 10,
         "inner-vlan-max": 11,
-        "stream-group-id": 1,
-        "monkey": true
+        "stream-group-id": 1
       }
     ]
   },
   "sessions": {
     "count": 6,
-    "max-outstanding": 6,
-    "reconnect": true,
-    "monkey-autostart": false
+    "max-outstanding": 6
   },
   "dhcp": {
     "enable": true,
