@@ -61,11 +61,17 @@ func (h *AggregateHandler) Validate(ctx context.Context, hctx *conf.HandlerConte
 		return err
 	}
 
-	// Cross-entry constraints - disjoint S-VLAN sets, a child not shaped above
-	// its port - need the whole set and are checked by ValidateAggregates at
-	// commit time. What is checkable here is that the interface exists, since
-	// an aggregate is programmed against a sw_if_index. Nil during startup
-	// config load, before the dataplane state is assembled.
+	// Cross-entry constraints - disjoint S-VLAN sets, an S-VLAN with no port,
+	// a child shaped above its port - need the whole set.
+	if hctx.Config != nil {
+		if err := qoscfg.ValidateAggregates(hctx.Config.QoSAggregates); err != nil {
+			return err
+		}
+	}
+
+	// An aggregate is programmed against a sw_if_index, so the interface has
+	// to exist. Nil during startup config load, before the dataplane state is
+	// assembled.
 	if h.dataplaneState != nil && !h.dataplaneState.IsInterfaceConfigured(cfg.Interface) {
 		return fmt.Errorf("qos-aggregate %q: interface %s is not configured", name, cfg.Interface)
 	}
@@ -161,6 +167,24 @@ func (h *AggregateHandler) remove(oldValue any, name string) error {
 		return err
 	}
 	if len(ranges) == 0 {
+		// The mirror of the ordering problem on create: the dataplane refuses
+		// to delete a port while S-VLANs hang off it, and entries of one
+		// section commit in map order. The dataplane is the authority on which
+		// children exist, and config validation guarantees no S-VLAN outlives
+		// its port, so take them down first. RemoveAggregate tolerates
+		// already-gone, making the children's own changes no-ops.
+		states, err := h.southbound.DumpAggregates()
+		if err != nil {
+			return fmt.Errorf("qos-aggregate %q: dump aggregates: %w", name, err)
+		}
+		for _, s := range states {
+			if s.Level != "svlan" || s.SwIfIndex != iface.SwIfIndex {
+				continue
+			}
+			if err := h.southbound.RemoveAggregate(iface.SwIfIndex, qoscfg.AggregateLevelSVLAN, s.SVLANID); err != nil {
+				return fmt.Errorf("qos-aggregate %q: svlan %d: %w", name, s.SVLANID, err)
+			}
+		}
 		return h.southbound.RemoveAggregate(iface.SwIfIndex, qoscfg.AggregateLevelPort, 0)
 	}
 

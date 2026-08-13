@@ -109,3 +109,27 @@ Verify Stream Traffic Flowing
     @{parts} =    Split String    ${result}
     Should Be True    ${parts}[0] >= ${expected_total}    Expected at least ${expected_total} stream flows but got ${parts}[0]
     Should Be True    ${parts}[1] >= ${expected_total}    Only ${parts}[1]/${expected_total} stream flows verified — NAT traffic not flowing bidirectionally
+
+Churn Sessions
+    [Arguments]    ${container}    ${seconds}
+    [Documentation]    Run BNG Blaster's monkey for ${seconds}s, randomly killing
+    ...    sessions by several methods (restart without terminate, graceful
+    ...    terminate, protocol flap), then stop it. Requires monkey on the access
+    ...    interfaces and sessions.reconnect in the blaster config.
+    ${rc}    ${output} =    BNG Blaster CLI Command    ${container}    monkey-start
+    Should Be Equal As Integers    ${rc}    0    monkey-start failed: ${output}
+    Sleep    ${seconds}
+    ${rc}    ${output} =    BNG Blaster CLI Command    ${container}    monkey-stop
+    Should Be Equal As Integers    ${rc}    0    monkey-stop failed: ${output}
+
+Verify Sessions Flapped
+    [Arguments]    ${container}    ${minimum}=1
+    [Documentation]    Prove the churn actually churned - a monkey that did
+    ...    nothing would let every post-churn assertion pass vacuously.
+    ${rc}    ${output} =    BNG Blaster CLI Command    ${container}    session-counters
+    Should Be Equal As Integers    ${rc}    0    session-counters CLI failed
+    ${rc}    ${flapped} =    Run And Return Rc And Output
+    ...    echo '${output}' | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('session-counters',{}).get('sessions-flapped',0))"
+    Should Be Equal As Integers    ${rc}    0
+    Log    Sessions flapped during churn: ${flapped}    console=yes
+    Should Be True    ${flapped} >= ${minimum}    Monkey ran but only ${flapped} session(s) flapped
