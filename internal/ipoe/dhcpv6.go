@@ -747,7 +747,12 @@ func (c *Component) sendDHCPv6Response(sess *SessionState, rawDHCPv6 []byte) err
 		return fmt.Errorf("no client link-local address for session %s", sess.SessionID)
 	}
 
-	frame := dhcp.BuildIPv6UDPFrame(srcIP, dstIP, 547, 546, rawDHCPv6)
+	dstPort := uint16(546)
+	if len(rawDHCPv6) > 0 && dhcp6.MessageType(rawDHCPv6[0]) == dhcp6.MsgTypeRelayReply {
+		dstPort = 547
+	}
+
+	frame := dhcp.BuildIPv6UDPFrame(srcIP, dstIP, 547, dstPort, rawDHCPv6)
 	if frame == nil {
 		return fmt.Errorf("failed to build IPv6/UDP frame")
 	}
