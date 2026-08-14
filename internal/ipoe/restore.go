@@ -62,7 +62,6 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 	defer func() { c.currentRestoreCause = "" }()
 
 	var count, expired, failed, halfEstablished int
-	sessionCounts := make(map[string]int)
 	now := time.Now()
 
 	err := c.opdb.Load(ctx, opdb.NamespaceIPoESessions, func(key string, value []byte) error {
@@ -109,12 +108,6 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 			return nil
 		}
 
-		if sess.State == "bound" && sess.MAC != nil {
-			counterKey := fmt.Sprintf("osvbng:session_count:%s:%d:%d",
-				sess.MAC.String(), sess.OuterVLAN, sess.InnerVLAN)
-			sessionCounts[counterKey]++
-		}
-
 		if sess.State == "bound" {
 			c.restoreSessionToCache(ctx, &sess, now)
 		}
@@ -124,12 +117,6 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 	})
 	if err != nil {
 		return fmt.Errorf("restore ipoe sessions: %w", err)
-	}
-
-	for counterKey, cnt := range sessionCounts {
-		for i := 0; i < cnt; i++ {
-			c.cache.Incr(ctx, counterKey)
-		}
 	}
 
 	c.logger.Info("Restored IPoE sessions from OpDB",

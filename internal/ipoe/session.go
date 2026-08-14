@@ -5,6 +5,7 @@
 package ipoe
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"sync"
@@ -174,11 +175,7 @@ func (c *Component) checkSessionLimit(mac net.HardwareAddr, svlan, cvlan uint16)
 		return nil
 	}
 
-	count, err := c.countExistingSessions(mac, svlan, cvlan)
-	if err != nil {
-		c.logger.Warn("Failed to count sessions", "error", err)
-		return nil
-	}
+	count := c.countExistingSessions(mac, svlan, cvlan)
 
 	if count >= maxSessions {
 		return fmt.Errorf("session limit reached (%d/%d) for %s on VLAN %d:%d",
@@ -190,20 +187,44 @@ func (c *Component) checkSessionLimit(mac net.HardwareAddr, svlan, cvlan uint16)
 	return nil
 }
 
-func (c *Component) countExistingSessions(mac net.HardwareAddr, svlan, cvlan uint16) (int, error) {
-	counterKey := fmt.Sprintf("osvbng:session_count:%s:%d:%d", mac.String(), svlan, cvlan)
+// countExistingSessions reports how many IPv4 leases this subscriber tuple
+// currently holds, derived from the live session map.
+//
+// This was once an explicit counter in the cache, incremented on bind and
+// decremented only by the two DHCP RELEASE handlers. Every other teardown
+// path (the stale-session reaper, a CoA terminate) removed the session and
+// left the count behind, so the subscriber was locked out until the key's
+// TTL expired. Deriving it removes the class of bug: the session map is
+// already the authoritative record every teardown path must update.
+//
+// In independent session mode a dual-stack subscriber holds two
+// SessionStates. Only the one carrying the IPv4 binding is counted, which
+// matches what the old counter tracked.
+func (c *Component) countExistingSessions(mac net.HardwareAddr, svlan, cvlan uint16) int {
+	count := 0
 
-	val, err := c.cache.Get(c.Ctx, counterKey)
-	if err != nil {
-		return 0, nil
-	}
+	c.sessions.Range(func(_, v any) bool {
+		sess, ok := v.(*SessionState)
+		if !ok {
+			return true
+		}
 
-	var count int64
-	if _, err := fmt.Sscanf(string(val), "%d", &count); err != nil {
-		return 0, nil
-	}
+		sess.mu.Lock()
+		// Closing is set before the session leaves the map; a DISCOVER
+		// landing in that window is the re-establishment, not a second
+		// session.
+		match := !sess.Closing && sess.IPv4 != nil &&
+			sess.OuterVLAN == svlan && sess.InnerVLAN == cvlan &&
+			bytes.Equal(sess.MAC, mac)
+		sess.mu.Unlock()
 
-	return int(count), nil
+		if match {
+			count++
+		}
+		return true
+	})
+
+	return count
 }
 
 const (
