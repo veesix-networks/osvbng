@@ -89,7 +89,9 @@ func ApplyToSession(sb PolicyApplier, swIfIndex uint32, sg ServiceGroup, qosPoli
 	if egress != nil && egress.Scheduler != nil {
 		downloadRate := egress.CIR
 		if sg.DownloadRate > 0 {
-			downloadRate = uint32(sg.DownloadRate)
+			// DownloadRate is bps (docs/configuration/service-groups.md);
+			// the scheduler takes kbps.
+			downloadRate = uint32(sg.DownloadRate / 1000)
 		}
 		if downloadRate > 0 {
 			if err := sb.ApplyScheduler(swIfIndex, downloadRate, egress.Scheduler); err != nil {

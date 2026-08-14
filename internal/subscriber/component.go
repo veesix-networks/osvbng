@@ -502,7 +502,9 @@ func (c *Component) activateSession(sess models.SubscriberSession) error {
 	if egress != nil && egress.Scheduler != nil {
 		downloadRate := egress.CIR
 		if sg.QoS.DownloadRate > 0 {
-			downloadRate = uint32(sg.QoS.DownloadRate)
+			// DownloadRate is bps (docs/configuration/service-groups.md);
+			// the scheduler takes kbps.
+			downloadRate = uint32(sg.QoS.DownloadRate / 1000)
 		}
 
 		if downloadRate > 0 {
