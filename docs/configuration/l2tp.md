@@ -1,12 +1,16 @@
 # L2TP
 
-L2TPv2 (RFC 2661) configuration. osvbng supports the **LAC** role — terminating
-PPPoE locally and tunnelling the subscriber's PPP frames over L2TP to a remote
-LNS. The LNS role is on the roadmap.
+L2TPv2 (RFC 2661) configuration. osvbng supports both roles:
 
-The block configures three things: per-LNS endpoint pools (`tunnel-pools`),
-behavioural profiles (`profiles`), and authorization for inbound LAC peers
-(`peer-policies`, LNS-only).
+- **LAC**: terminate PPPoE locally and tunnel the subscriber's PPP frames over
+  L2TP to a remote LNS.
+- **LNS**: accept tunnels from remote LACs, terminate the PPP session, and
+  address the subscriber from local pools.
+
+The block configures three things: per-LNS endpoint pools (`tunnel-pools`,
+LAC-only), behavioural profiles (`profiles`), and authorization for inbound LAC
+peers (`peer-policies`, LNS-only). A subscriber group selects the role through
+its `access-types` and binds a profile through `l2tp.profile`.
 
 ## `l2tp.tunnel-pools`
 
@@ -91,12 +95,18 @@ Binds a subscriber group to an L2TP profile.
 |-------|------|-------------|
 | `profile` | string | Name of the `l2tp.profiles` entry. |
 
-For `access-types: [lac]` the AAA policy attached to the group maps the
+A LAC group declares `access-types: [lac]` on each `vlans` entry, like any
+other subscriber-facing protocol. The AAA policy attached to the group maps the
 subscriber to Tunnel-* attributes (local DB by `agent-remote-id` /
-username, or RADIUS Access-Accept). For `access-types: [lns]` the
-subscriber-group's `default-service-group` selects the loopback used as
-unnumbered for per-session vnet interfaces (must point at a configured
-service group with an `unnumbered` field).
+username, or RADIUS Access-Accept).
+
+An LNS group is the one case that declares `access-types: [lns]` at group level
+and must not declare `vlans` at all: LNS subscribers arrive inside an L2TP
+tunnel, not over an SVLAN. The group's `default-service-group` selects the
+loopback used as unnumbered for per-session vnet interfaces, so it must point at
+a service group carrying an `unnumbered` field. Any other placement is rejected
+at load: group-level `access-types` is valid only for LNS-only groups, and every
+other protocol declares `access-types` per VLAN range.
 
 ## AAA contract (RFC 2868)
 
@@ -117,18 +127,19 @@ Attributes can be tagged (e.g. `tunnel.server-endpoint:1`,
 Access-Accept; the LAC tries them in `Tunnel-Preference` order and
 denylists failures per the profile's `denylist` block.
 
-## Example
+## LAC example
 
 ```yaml
 subscriber-groups:
   groups:
     pppoe-lac:
-      access-types: [lac]
       vlan-tpid: dot1q
       vlans:
         - svlan: "200-210"
           cvlan: any
+          access-types: [lac]
           interface: loop100
+          parent-interface: eth1
       aaa-policy: pppoe-policy
       l2tp:
         profile: L2TP_LAC_DEFAULT
@@ -165,6 +176,53 @@ aaa:
       max_concurrent_sessions: 1
 ```
 
+## LNS example
+
+No `tunnel-pools` block: the LNS does not originate tunnels. The group carries
+group-level `access-types` and no `vlans`, and `default-service-group` supplies
+the unnumbered loopback for per-session interfaces.
+
+```yaml
+service-groups:
+  lns-default:
+    unnumbered: loop100
+
+subscriber-groups:
+  groups:
+    lns:
+      access-types: [lns]
+      ipv4-profile: default
+      ipv6-profile: default-v6
+      aaa-policy: lns-policy
+      default-service-group: lns-default
+      l2tp:
+        profile: LNS_DEFAULT
+
+l2tp:
+  profiles:
+    LNS_DEFAULT:
+      receive-window-size: 16
+      hello-interval: 60s
+      challenge-required: false
+      proxy-lcp-mode: forward
+  peer-policies:
+    xl2tpd:
+      hostname: "lac"
+      secret: "shared"
+      profile: LNS_DEFAULT
+
+aaa:
+  auth_provider: local
+  nas_identifier: osvbng
+  policy:
+    # LNS mode: osvbng terminates PPP, so it authenticates the subscriber
+    # itself unless the LAC forwarded proxy-auth AVPs.
+    - name: lns-policy
+      type: ppp
+      authenticate: true
+      max_concurrent_sessions: 1
+```
+
 ## Show commands
 
 ```
@@ -181,6 +239,7 @@ alongside the existing PPPoE fields rather than as a separate listing.
 ## See also
 
 - [LAC deployment example](../examples/l2tp-lac.md)
+- [LNS deployment example](../examples/l2tp-lns.md)
 - [AAA configuration](aaa.md)
 - [Subscriber groups](subscriber-groups.md)
 - RFC 2661, RFC 2868, RFC 3437

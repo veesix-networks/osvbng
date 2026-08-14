@@ -1,5 +1,5 @@
 site_name: osvbng
-site_url: https://osvbng.veesix-networks.co.uk
+site_url: https://docs.osvbng.v6n.io/
 repo_url: https://github.com/veesix-networks/osvbng
 repo_name: veesix-networks/osvbng
 theme:
@@ -36,7 +36,6 @@ nav:
     - Intro: index.md
     - API: getting-started/api.md
     - Upgrades: operations/upgrade.md
-    - Testing & QA: qa/testing-methodology.md
   - Configuration:
     - Overview: configuration/index.md
     - Logging: configuration/logging.md
@@ -97,6 +96,7 @@ nav:
       - DHCP Relay & Proxy: architecture/DHCP_RELAY_PROXY.md
       - DHCPv6 LDRA: architecture/DHCPV6_LDRA.md
       - QoS: architecture/QOS.md
+      - VRF: architecture/VRF.md
       - Telemetry: architecture/TELEMETRY.md
   - Reference:
     - Overview: reference/index.md

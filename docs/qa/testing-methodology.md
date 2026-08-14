@@ -8,7 +8,7 @@ This page describes what we test, how we test it, and what we plan to improve. I
 
 ### Automated Integration Tests
 
-Every pull request and merge to main triggers a full integration test suite focused on control plane correctness using:
+The integration suites focus on control plane correctness. They run on a self-hosted runner when changes are merged to main, not on pull requests; a pull request is gated on build and unit tests only. The suites are built from:
 
 - **[Robot Framework](https://robotframework.org/)** for test orchestration
 - **[BNG Blaster](https://github.com/rtbrick/bngblaster)** (by RtBrick) for subscriber session simulation and basic traffic verification
@@ -16,6 +16,9 @@ Every pull request and merge to main triggers a full integration test suite focu
 - **[FRRouting](https://frrouting.org/)** for core router simulation (BGP, OSPF)
 - **[FreeRADIUS](https://freeradius.org/)** for AAA authentication testing
 - **[ISC Kea](https://www.isc.org/kea/)** for DHCP relay/proxy testing
+- **[xl2tpd](https://github.com/xelerance/xl2tpd)** for an external L2TPv2 LAC that dials the LNS suite, built from `test-infra/xl2tpd/`
+
+The dataplane the tests run against is the stock VPP image plus the twelve prebuilt osvbng plugins checked in under `test-infra/vpp-plugins/`, which the Docker build copies into `vpp_plugins/`.
 
 containerlab and BNG Blaster are primarily control plane testing tools. They verify session establishment, protocol negotiation, HA failover, and basic traffic forwarding. They are not used for dataplane throughput or performance benchmarking (see [Dataplane Performance Testing](#dataplane-performance-testing) below for that).
 
@@ -43,17 +46,47 @@ Each test deploys a complete network: BNG nodes, core routers, subscriber simula
 | 16 | HA Failover RADIUS | RADIUS-assigned pool attribute preserved across failover |
 | 17 | HA Tracker Promotion IPoE | Tracker-driven automatic promotion from STANDBY_ALONE to ACTIVE_SOLO on access interface failure |
 | 18 | IPoE Linux Client | Real Linux subscriber with QinQ VLANs, DHCP, ping, and iperf3 throughput |
+| 19 | IPoE Linux Client CAKE | Same topology with the CAKE scheduler applied to the session |
 | 20 | Routing Policy | Prefix-sets, community-sets, AS-path-sets, and route-policy application to BGP/OSPF |
 | 21 | CLI / OpenAPI | Northbound REST API generated from CLI handler registry; schema parity |
 | 22 | MSS Clamp | TCP MSS clamping with PPP MRU configuration (RFC 4638) |
 | 23 | RADIUS CoA | RADIUS Change-of-Authorization and Disconnect-Message per RFC 5176 |
 | 24 | VRF-Lite | End-to-end VRF-lite with subscriber-group VRF cascade onto access sub-interfaces |
+| 25 | L3VPN | MPLS L3VPN over LDP and VPNv4: per-VRF pool isolation, RD/RT advertisement, two-label stack |
 | 26 | DHCPv6 LDRA | Local DHCPv6 provider terminating RFC 6221 LDRA Relay-Forward from access |
 | 27 | API Pagination | Pagination across list-returning northbound show endpoints |
 | 28 | Northbound API TLS | Northbound API + Prometheus over TLS with HTTP auth; CGNAT exporter dialer |
 | 29 | RADIUS VRF | RADIUS auth/acct sockets pinned to MGMT-VRF with `SO_BINDTODEVICE` proof |
+| 30 | L2TP LNS | L2TPv2 LNS terminating an external xl2tpd LAC, PPP negotiated locally |
+| 31 | L2TP LAC | L2TPv2 LAC driven by AAA tunnel attributes, PPP bridged to a BNG Blaster LNS |
+| 32 | IPoE OpDB Restore | IPoE sessions restored from the operational database across osvbngd, VPP, and container restarts |
+| 33 | PPPoE OpDB Restore | Same restart matrix for PPPoE sessions |
+| 34 | CGNAT Restart Idempotent | CGNAT mappings preserved across restart with identical and with drifted config |
+| 35 | IPoE Family Disabled | Per-group address family gating: v4-only and v6-only groups reject the other family, drop counters increment |
+| 36 | AAA Empty Username | Sessions with an empty username are rejected and none establish |
+| 37 | HA Graceful Switchover IPoE | Operator-triggered switchover with CGNAT: session restore, GARP flood on access, hitless traffic |
+| 38 | L2GW Static | Layer 2 wholesale cross-connects from static circuit config, no local termination |
+| 39 | L2GW Dynamic | RADIUS-driven circuits with accounting, Prometheus metrics, restart survival, and CoA teardown |
+| 40 | L2GW Packet Trigger | Circuits created on the first PPPoE packet, with restart survival and idle timeout |
+| 40 | L2GW VXLAN | Wholesale circuits over static VXLAN tunnel interfaces |
+| 41 | Upgrade Tier A v2 | Tier A v2 upgrade pipeline on a QEMU image: apply, rollback, partial-apply guard, stepwise, session survival |
+| 42 | IPoE VXLAN PWHE | IPoE sessions terminated on a pseudowire headend over a static VXLAN transport |
+| 43 | PPPoE VXLAN PWHE | PPPoE sessions on a pseudowire headend over a static VXLAN transport |
+| 44 | LAC VXLAN PWHE | L2TP LAC subscriber arriving over a static VXLAN pseudowire |
+| 45 | HA PWHE IPoE | Graceful switchover with IPoE sessions on a pseudowire headend |
+| 46 | L2GW EVPN | Wholesale circuits over VXLAN tunnels programmed from EVPN VTEP discovery |
+| 47 | IPoE EVPN PWHE | IPoE sessions on a pseudowire headend bound by EVPN-discovered transport |
+| 48 | PPPoE EVPN PWHE | PPPoE sessions on a pseudowire headend bound by EVPN-discovered transport |
+| 49 | LAC EVPN PWHE | L2TP LAC subscriber arriving over an EVPN-discovered pseudowire |
+| 50 | HA EVPN PWHE | Anycast VTEP across both nodes, leaf reroutes on switchover, sessions restored hitless |
+| 51 | IPoE HQoS S-VLAN | Hierarchical QoS: per-session schedulers attached to S-VLAN aggregates, share distribution, drain on teardown |
+| 52 | PPPoE HQoS S-VLAN | Same hierarchical QoS checks for PPPoE sessions |
 
-1000+ tests across 27 integration suites.
+Number 40 is currently used by two directories on disk, `tests/40-l2gw-packet-trigger` and `tests/40-l2gw-vxlan`; both are listed above.
+
+That is 53 suite directories under `tests/`: 52 Robot suites holding 668 test cases, plus suite 41, which drives five shell scenarios against a QEMU image instead of Robot Framework.
+
+CI does not run all of them. 20 suites are wired into the workflows under `.github/workflows/`, so "all suites pass" is not an automated gate. The rest are run locally with `scripts/run-qa-tests.sh`, which picks up every suite directory that has a matching `.robot` file.
 
 ### What Gets Verified
 
@@ -152,7 +185,7 @@ This is not done yet. Today the performance testing is manual and results are ca
 |------|-------------|------------|
 | Build | Binary and Docker image build successfully | Yes (CI) |
 | Unit tests | All unit tests pass | Yes (CI) |
-| Integration tests | All 18 suites pass | Yes (CI) |
+| Integration tests | The 20 suites wired into CI pass on merge to main | Partly (CI) |
 | HA failover | Sessions survive hard BNG failure | Yes (CI) |
 | Changelog | Auto-generated via conventional commits | Yes (release-please) |
 | Docker image | Published to Docker Hub | Yes (CI) |

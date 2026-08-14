@@ -24,6 +24,23 @@ vrfs:
     address-families:
       ipv4-unicast: {}
 
+ipv4-profiles:
+  default:
+    gateway: 10.255.0.1
+    pools:
+      - name: subscriber-pool
+        network: 10.255.0.0/16
+        priority: 1
+      - name: customer-a-pool
+        network: 192.168.123.0/24
+        range_start: 192.168.123.2
+        range_end: 192.168.123.254
+        gateway: 192.168.123.1
+        vrf: CUSTOMER-A
+        priority: 10
+    dhcp:
+      lease-time: 3600
+
 service-groups:
   customer-a:
     vrf: CUSTOMER-A
@@ -33,26 +50,28 @@ service-groups:
 subscriber-groups:
   groups:
     customer-a-ipoe:
-      access-types: [ipoe]
       vlan-tpid: dot1q
       ipv4-profile: default
       default-service-group: customer-a
       vlans:
         - svlan: "200-299"
           cvlan: any
+          access-types: [ipoe]
           interface: loop101
-          parent-interface: interfaces
+          parent-interface: eth1
       aaa-policy: default-policy
 
 interfaces:
-  loop0:   {address: {ipv4: [10.254.0.1/32]}}
-  loop100: {address: {ipv4: [10.255.0.1/32]}}
+  loop0:   {enabled: true, address: {ipv4: [10.254.0.1/32]}}
+  loop100: {enabled: true, address: {ipv4: [10.255.0.1/32]}}
   loop101:
+    enabled: true
     address: {ipv4: [192.168.123.1/32]}
     vrf: CUSTOMER-A
-  eth1: {}
+  eth1: {enabled: true}
   eth2:
     description: Core Link (p1)
+    enabled: true
     address: {ipv4: [10.0.0.1/30]}
 
 protocols:
@@ -89,6 +108,14 @@ protocols:
     address-families:
       ipv4:
         transport-address: 10.254.0.1
+
+aaa:
+  auth_provider: local
+  nas_identifier: osvbng
+  policy:
+    - name: default-policy
+      format: $remote-id$
+      max_concurrent_sessions: 1
 ```
 
 ## Key Points

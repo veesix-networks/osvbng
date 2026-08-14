@@ -1,22 +1,47 @@
 # Subscriber Groups
 
-Defines how subscribers are grouped and configured based on VLAN. Each group binds a set of VLANs to one or more access types (IPoE, PPPoE, LAC, LNS), address profiles, service group, and AAA policy. Both IPoE and PPPoE sessions use the same profile and service group resolution.
+Defines how subscribers are grouped and configured based on VLAN. Each group binds a set of VLANs to one or more access types (IPoE, PPPoE, LAC, LNS, L2GW), address profiles, service group, and AAA policy. Both IPoE and PPPoE sessions use the same profile and service group resolution.
+
+## Where access-types is declared
+
+`access-types` belongs on each entry in `vlans`, not on the group. A group that declares `access-types` at the top level is rejected at config load, with one exception: an LNS-only group sets `access-types: [lns]` at the group level and must not declare `vlans`, because L2TP-terminated subscribers do not arrive by S-VLAN demux.
+
+```yaml
+subscriber-groups:
+  groups:
+    residential:
+      vlans:
+        - svlan: "100-199"
+          cvlan: any
+          access-types: [ipoe]      # per VLAN range
+          interface: loop100
+          parent-interface: eth1
+    wholesale-lns:
+      access-types: [lns]           # group level, LNS only, no vlans
+      ipv4-profile: residential
+```
 
 ## Group Settings
 
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
-| `access-types` | []string | One or more of `ipoe`, `pppoe`, `lac`, `lns`. The only valid multi-element combination is `[ipoe, pppoe]` (mixed-access on a shared SVLAN range); `lac` and `lns` are single-element only. | `[ipoe, pppoe]` |
+| `access-types` | []string | LNS-only groups. Must be exactly `[lns]`, and the group must not declare `vlans`. Every other access type declares access-types per VLAN range. | `[lns]` |
 | `vlans` | [VLANRule](#vlan-rules) | VLAN matching rules | |
+| `vlan-tpid` | string | Outer TPID for subscriber traffic: `dot1ad` (0x88A8, default) or `dot1q` (0x8100) | `dot1ad` |
 | `ipv4-profile` | string | [IPv4 profile](ipv4-profiles.md) name | `residential` |
 | `ipv6-profile` | string | [IPv6 profile](ipv6-profiles.md) name | `default-v6` |
 | `session-mode` | string | Session mode: `unified` or `independent` | `unified` |
+| `vrf` | string | VRF for subscribers in this group | `customers` |
 | `default-service-group` | string | Default [service group](service-groups.md) for subscribers | `cgnat-residential` |
 | `aaa-policy` | string | Default AAA policy name | `default-policy` |
 | `ipv6` | [GroupIPv6](#group-ipv6) | IPv6 settings for this group | |
 | `bgp` | [GroupBGP](#group-bgp) | BGP settings for this group | |
 | `pppoe` | [GroupPPPoE](#group-pppoe) | PPPoE settings for this group | |
 | `mss-clamp` | [GroupMSSClamp](#group-mss-clamp) | TCP MSS clamping for this group | |
+| `dhcpv6.allow-relay-forward` | bool | Accept DHCPv6 Relay-Forward messages for this group (LDRA). Default `true`. See [DHCPv6](dhcpv6.md) | `true` |
+| `l2tp.profile` | string | L2TP profile name for `lac` or `lns` ranges. See [L2TP](l2tp.md) | `wholesale` |
+| `l2gw.handoff-group` | string | Default handoff group for `l2gw` ranges. See [L2GW](l2gw.md) | `isp-blue` |
+| `l2gw.idle-timeout` | uint32 | Tear down a dynamic l2gw circuit after this many seconds with no traffic in either direction. `0` disables. | `3600` |
 
 ## VLAN Rules
 
@@ -24,9 +49,17 @@ Defines how subscribers are grouped and configured based on VLAN. Each group bin
 |-------|------|-------------|---------|
 | `svlan` | string | S-VLAN match: single ID or range | `100-199` |
 | `cvlan` | string | C-VLAN match: single, range, or `any` | `any` |
+| `access-types` | []string | Required. One or more of `ipoe`, `pppoe`, `lac`, `lns`, `l2gw`. The only valid multi-element combination is `[ipoe, pppoe]` (mixed access on a shared S-VLAN range); `lac`, `lns` and `l2gw` are single-element only. | `[ipoe]` |
 | `interface` | string | Gateway interface for matched subscribers | `loop100` |
-| `parent-interface` | string | Physical access interface where these subscribers arrive. Required for `ipoe`/`pppoe`/`lac`; optional for `lns`. All VLAN ranges across all groups must reference the same parent-interface (single-access-interface invariant). | `eth1` |
+| `parent-interface` | string | Access interface where these subscribers arrive. May be a physical port, a bond, a VXLAN tunnel (`l2gw`), or a pseudowire headend. Required for every access type except `lns`, and must name an interface defined in `interfaces`. See [Interfaces](interfaces.md) | `eth1` |
+| `vrf` | string | VRF override for this VLAN range | `customers` |
+| `dhcp` | string | Named DHCP server from the top-level `dhcp.servers` list | `upstream-dhcp` |
+| `trigger` | string | `l2gw` ranges only: `dhcp` (default) punts DHCPv4 and DHCPv6 on circuit miss, `packet` punts the first frame of any protocol. See [L2GW](l2gw.md) | `packet` |
 | `aaa.policy` | string | AAA policy override for this VLAN range | `custom-policy` |
+
+### One access interface
+
+All VLAN ranges across all groups must reference the same `parent-interface`, with one exception: `l2gw` ranges are exempt, because each wholesale access operator lands on its own NNI port. A configuration mixing two access interfaces for IPoE, PPPoE or LAC is rejected at load.
 
 ## Group IPv6
 
@@ -59,7 +92,7 @@ Defines how subscribers are grouped and configured based on VLAN. Each group bin
 
 ## Group PPPoE
 
-PPPoE-specific settings. Only consulted when `access-types: [pppoe]`.
+PPPoE-specific settings. Only consulted for VLAN ranges whose `access-types` include `pppoe`.
 
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
@@ -138,7 +171,6 @@ service-groups:
 subscriber-groups:
   groups:
     residential:
-      access-types: [ipoe]
       session-mode: unified
       ipv4-profile: residential
       ipv6-profile: default-v6
@@ -147,6 +179,7 @@ subscriber-groups:
       vlans:
         - svlan: "100-199"
           cvlan: any
+          access-types: [ipoe]
           interface: loop100
           parent-interface: eth1
       bgp:
@@ -154,13 +187,13 @@ subscriber-groups:
         advertise-pools: true
         network-route-policy: POOL-EXPORT
     residential-pppoe:
-      access-types: [pppoe]
       ipv4-profile: residential
       ipv6-profile: default-v6
       aaa-policy: default-policy
       vlans:
         - svlan: "200-299"
           cvlan: any
+          access-types: [pppoe]
           interface: loop100
           parent-interface: eth1
       pppoe:
@@ -170,4 +203,10 @@ interfaces:
   eth1:
     enabled: true
     mtu: 1512
+
+aaa:
+  auth_provider: local
+  policy:
+    - name: default-policy
+      format: $remote-id$
 ```

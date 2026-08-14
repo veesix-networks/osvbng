@@ -3,9 +3,9 @@
 !!! warning
     CGNAT is under active development and not yet feature-complete. PBA mode is functional for IPoE and PPPoE. Deterministic mode, ALG, IPFIX logging, HA sync, and standalone CGNAT mode are not yet available. This documentation may be incomplete. Full CGNAT support is planned for v0.6.0.
 
-Carrier-Grade NAT enables multiple subscribers to share a smaller pool of public IPv4 addresses. osvbng supports two NAT modes: Port Block Allocation (PBA) and Deterministic. Pools can be assigned per subscriber group or per subscriber via AAA, with NAT bypass for public IP customers and configurable session timeouts.
+Carrier-Grade NAT enables multiple subscribers to share a smaller pool of public IPv4 addresses. osvbng supports two NAT modes: Port Block Allocation (PBA) and Deterministic, with NAT bypass for public IP customers and configurable session timeouts.
 
-CGNAT is assigned to subscribers through [subscriber groups](subscriber-groups.md) or [service groups](service-groups.md), and can be overridden per subscriber via AAA.
+A session is bound to a pool either by the [service group](service-groups.md) it resolves to, or by matching the subscriber's inside address against a pool's `inside-prefixes`. See [pool selection](#pool-selection).
 
 ## Outside interfaces
 
@@ -77,7 +77,7 @@ cgnat:
         - 198.51.100.0/24
 ```
 
-The CGNAT plugin keys mappings on `(inside_ip, inside_fib_index)` and stores per-pool outside FIB indices, so sessions from ISP A and ISP B are isolated end-to-end even with overlapping inside addresses. Subscribers map to a specific pool via [subscriber groups](subscriber-groups.md) or [service groups](service-groups.md).
+The CGNAT plugin keys mappings on `(inside_ip, inside_fib_index)` and stores per-pool outside FIB indices, so sessions from ISP A and ISP B are isolated end-to-end even with overlapping inside addresses. With overlapping inside space the pool must be pinned by [service group](service-groups.md) unless each customer sits in its own VRF, since the inside prefixes alone no longer identify the pool.
 
 An outside interface may appear in more than one pool's list, but only if those pools target the same outside VRF.
 
@@ -180,30 +180,26 @@ cgnat:
 !!! note
     Deterministic mode translation is not yet available. Configuration is accepted but translation will not occur until a future release.
 
-## Subscriber Assignment
+## Pool selection
 
-### Via subscriber group
+A session is classified once, at activation, in this order:
 
-Assign a CGNAT pool to all subscribers in a group:
+1. The subscriber's [service group](service-groups.md), if it carries a `cgnat` block. `bypass: true` wins outright; otherwise `policy` names the pool.
+2. The inside address, matched against every pool's `inside-prefixes` in the session's VRF.
 
-```yaml
-subscriber-groups:
-  groups:
-    default:
-      access-types: [ipoe]
-      ipv4-profile: shared-pool
-      vlans:
-        - svlan: "100-110"
-          cvlan: any
-          interface: loop100
-      aaa-policy: default-policy
-      cgnat:
-        policy: residential
-```
+If neither matches, the session is not translated.
+
+!!! note
+    The `cgnat` block on a subscriber group is parsed but never read. Use a service group or inside-prefix matching. There is no AAA attribute for CGNAT policy or bypass either, so AAA cannot set the pool directly; it can only place the subscriber in a different service group via the `service-group` attribute.
 
 ### Via service group
 
-Service groups support both policy assignment and bypass. See [service groups](service-groups.md) for full details on attribute merging and AAA override.
+A service group is the explicit way to pin subscribers to a pool or exempt them from NAT. See [service groups](service-groups.md) for how service groups are selected and merged.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `policy` | string | Name of the `cgnat.pools` entry to use for subscribers in this group |
+| `bypass` | bool | Skip translation for subscribers in this group |
 
 ```yaml
 service-groups:
@@ -216,13 +212,25 @@ service-groups:
       bypass: true
 ```
 
+### Via inside prefix
+
+With no service-group `cgnat` block, the subscriber's inside address selects the pool. This is the usual arrangement when subscriber addressing already separates the NATed ranges from the public ones.
+
+```yaml
+cgnat:
+  pools:
+    residential:
+      inside-prefixes:
+        - prefix: 100.64.0.0/16
+```
+
+A subscriber addressed out of `100.64.0.0/16` lands in the `residential` pool; a subscriber with a public address matches no pool and is forwarded untranslated.
+
+Inside-prefix matching is VRF-aware: a prefix entry with a `vrf` only matches sessions in that VRF.
+
 ### Bypass
 
 When `bypass: true` is set on a service group, the subscriber's address is added to the NAT bypass table. Traffic from bypass subscribers passes through without translation. This is used for business customers with public IP addresses.
-
-### AAA override
-
-AAA can assign a CGNAT policy or enable bypass per subscriber, overriding the subscriber group or service group defaults.
 
 ## Outside address advertisement
 
@@ -259,7 +267,7 @@ curl "http://localhost:8080/api/show/cgnat/sessions?inside-ip=100.64.0.2"
 curl http://localhost:8080/api/show/cgnat/mappings
 curl http://localhost:8080/api/show/cgnat/statistics
 curl "http://localhost:8080/api/show/cgnat/lookup?ip=203.0.113.1&port=2048"
-curl -X POST http://localhost:8080/api/oper/cgnat/test-mapping -d '{"inside_ip": "100.64.0.2"}'
+curl -X POST http://localhost:8080/api/exec/cgnat/test-mapping -d '{"inside_ip": "100.64.0.2"}'
 ```
 
 ## Full example
@@ -289,15 +297,14 @@ cgnat:
 subscriber-groups:
   groups:
     default:
-      access-types: [ipoe]
       ipv4-profile: shared-pool
       vlans:
         - svlan: "100-110"
           cvlan: any
+          access-types: [ipoe]
           interface: loop100
+          parent-interface: eth1
       aaa-policy: default-policy
-      cgnat:
-        policy: residential
 
 service-groups:
   business:

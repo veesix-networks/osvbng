@@ -30,26 +30,26 @@ service-groups:
 subscriber-groups:
   groups:
     default-ipoe:
-      access-types: [ipoe]
       vlan-tpid: dot1q
       ipv4-profile: default
       vlans:
         - svlan: "100-199"
           cvlan: any
+          access-types: [ipoe]
           interface: loop100
-          parent-interface: interfaces
+          parent-interface: eth1
       aaa-policy: default-policy
 
     customer-a-ipoe:
-      access-types: [ipoe]
       vlan-tpid: dot1q
       ipv4-profile: default
       default-service-group: customer-a
       vlans:
         - svlan: "200-299"
           cvlan: any
+          access-types: [ipoe]
           interface: loop101
-          parent-interface: interfaces
+          parent-interface: eth1
       aaa-policy: default-policy
 
 ipv4-profiles:
@@ -65,12 +65,13 @@ ipv4-profiles:
         priority: 10
 
 interfaces:
-  loop0:   {address: {ipv4: [10.254.0.1/32]}}
-  loop100: {address: {ipv4: [10.255.0.1/32]}}
+  loop0:   {enabled: true, address: {ipv4: [10.254.0.1/32]}}
+  loop100: {enabled: true, address: {ipv4: [10.255.0.1/32]}}
   loop101:
+    enabled: true
     address: {ipv4: [192.168.123.1/32]}
     vrf: CUSTOMER-A
-  eth1: {}
+  eth1: {enabled: true}
   eth2:
     enabled: true
     subinterfaces:
@@ -101,6 +102,14 @@ protocols:
           10.0.200.2:
             remote-as: 65000
             ipv4-unicast: {}
+
+aaa:
+  auth_provider: local
+  nas_identifier: osvbng
+  policy:
+    - name: default-policy
+      format: $remote-id$
+      max_concurrent_sessions: 1
 ```
 
 ## Key Points

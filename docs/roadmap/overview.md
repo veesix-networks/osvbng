@@ -8,14 +8,22 @@ The concept of osvbng is simply to build a BNG targeted towards a typical deploy
 - Single Tagged (802.1Q - Not extremely rare, but not common)
 - Double Tagged (QinQ, 802.1AD + 802.1Q or 802.1Q + 802.1Q if you're weird and want more CPU cycles on layer 2 processing)
 
-The goal is not to support every single access network method, eg.
+The goal is still not to support every access network method, but the line has moved since this was first written. What osvbng terminates today:
 
-- VPLS bridges with LDP+BGP MPLS tunnels terminated directly on the BNG as a pseudowire/virtual interface
-- LDP/EVPN based VPWS terminated directly on the BNG
-- VXLAN termination
-- etc...
+- Ethernet handover (untagged, single tagged, QinQ). This is still the primary deployment model and everything else is built on it.
+- VXLAN transport terminated on the BNG, presented as a pseudowire headend so that IPoE, PPPoE and L2TP LAC terminate on it exactly as they do on a physical port.
+- EVPN signalling for those tunnels. FRR originates and consumes type-3 (IMET) routes, so remote VTEPs are discovered rather than provisioned per tunnel.
+- Layer 2 wholesale cross-connects (l2gw), where osvbng switches a subscriber circuit through to a retail ISP handoff instead of terminating it.
 
-BNGs in 2026 need to be dumb. Not have 500 different feature sets with 1000s of ways to configure it. There are pros and cons on both sides to keeping it as simple as an ethernet handover vs bringing in MPLS based tunnel termination directly into the BNG, this is NOT my vision of osvbng.
+What remains out of scope:
+
+- MPLS pseudowires terminated directly on the BNG, whether LDP signalled or EVPN-VPWS
+- VPLS bridging on the BNG
+- Shared bridge domains (E-LAN) and ESI all-active toward the BNG
+
+MPLS is used for core facing transport (LDP, L3VPN) and not as an access encapsulation terminated on a subscriber facing interface.
+
+BNGs in 2026 need to be dumb. Not have 500 different feature sets with 1000s of ways to configure it. There are pros and cons on both sides to keeping it as simple as an ethernet handover vs bringing in MPLS based tunnel termination directly into the BNG, this is NOT my vision of osvbng. VXLAN access does not change that position: the tunnel is presented as an access port and the headend behaves like one, so there is still a single subscriber termination path.
 
 The traditional deployments of bringing complex network overlays into the BNG is typically to solve problems of a network deployment architecture issue, not the actual BNG itself. Therefore a BNG done correctly (AAA, VLAN termination, Subscriber Management, QoS and DHCP/PPP processing) is more valuable in my eyes rather than a BNG that can support every type of network deployment architecture. osvbng could potentially expose the internals of the dataplane (via osvbng itself as an SDK) so that people can introduce new access termination methods, but it's not the core goal, I just simply want to build a fast, reliable, low-cost and dumb BNG.
 
@@ -23,11 +31,16 @@ Separating control and user plane (CUPS) in the BNG world is also not the direct
 
 ---
 
-The 3 main deployment methods are described in the following documents:
+The 3 reference Ethernet handover methods are described in the following documents:
 
-- [Single Tagged - N:1](../../architecture/REFERENCE_DEPLOYMENT_METHODS) 
-- [Double Tagged - N:1](../../architecture/REFERENCE_DEPLOYMENT_METHODS) 
-- [Double Tagged - 1:1](../../architecture/REFERENCE_DEPLOYMENT_METHODS)
+- [Single Tagged - N:1](../architecture/REFERENCE_DEPLOYMENT_METHODS.md)
+- [Double Tagged - N:1](../architecture/REFERENCE_DEPLOYMENT_METHODS.md)
+- [Double Tagged - 1:1](../architecture/REFERENCE_DEPLOYMENT_METHODS.md)
+
+Two further access models sit on top of those and reuse the same S/C-VLAN matching and subscriber groups:
+
+- Tunnel terminated access, where the handover arrives as a VXLAN tunnel instead of a physical port and terminates on a pseudowire headend. Remote VTEPs are either configured or discovered with BGP EVPN. See [VXLAN Access (PWHE)](../examples/pwhe-access.md) and [EVPN-VXLAN Fabric](../examples/evpn-fabric.md).
+- Wholesale layer 2 access, where circuits are cross-connected to a retail ISP handoff rather than terminated. See [L2 Wholesale (L2GW)](../examples/l2gw-wholesale.md).
 
 ---
 
@@ -40,7 +53,7 @@ So what is the plan? Initially I am winging it, however what I have in my head:
 #### Week
 
 - Re-evaluate/Add any top priority features/fixes for the following week
-- Community update (short status post - Slack/GitHub Discussions)
+- Community update (short status post - Discord/GitHub Discussions)
 - Triage new issues and PRs
 
 #### Fortnight

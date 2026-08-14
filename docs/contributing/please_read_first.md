@@ -18,12 +18,23 @@
 ## Clone and Build
 
 ```bash
-git clone https://github.com/veesix-networks/osvbng.git
+git clone --recurse-submodules https://github.com/veesix-networks/osvbng.git
 cd osvbng
 make build
 ```
 
 This produces `bin/osvbngd` and `bin/osvbngcli`.
+
+The repo has two submodules, `vpp/` (the dataplane tree) and `context/`. A clone without `--recurse-submodules` leaves both directories empty. On an existing clone, fetch them with:
+
+```bash
+git submodule update --init --recursive
+```
+
+!!! note "Submodule remotes are SSH URLs"
+    Both entries in `.gitmodules` use `git@github.com:` remotes, so the submodule step fails for contributors without SSH access to those repositories. The control plane still builds without them: `make build` only needs the top-level tree.
+
+To move the pins, run `make bump-submodules`. It updates `vpp` and `context` to the tip of their `main` branches and stages the new commits. Changes inside a submodule are branched and reviewed in that submodule's own repository; once they land there, bump the pin here in a separate commit.
 
 ## Running Locally
 
@@ -160,11 +171,11 @@ make test          # run unit tests
 make test-report   # run tests with JUnit XML report in build/reports/
 ```
 
-**Unit tests** (`make test`) validate individual packages in isolation - parsers, allocators, config handling, protocol logic. They run fast, require no infrastructure, and are the first gate in CI.
+**Unit tests** (`make test`) validate individual packages in isolation - parsers, allocators, config handling, protocol logic. They run fast, require no infrastructure, and are the CI gate on every PR.
 
 **Integration tests** (`tests/`) use containerlab and robot framework to spin up a full osvbng instance with BNGBlaster subscribers, verifying end-to-end functionality across all supported features. They require Docker and take longer to run.
 
-CI runs unit tests first. Integration tests will not run until unit tests pass. Both must pass before a PR can be merged.
+CI runs build and unit tests on every PR using GitHub shared runners, and that is the only automated gate a PR has to clear. Integration tests run on a self-hosted runner only when changes are merged to main, so they never run against a PR. Linting is not in CI either, so run `make lint` yourself. Run the integration suites locally before requesting a merge; see [Contribution Guidelines](guidelines.md#running-integration-tests-locally).
 
 !!! note "Future: Hardware and QEMU testing"
     We plan to build physical and QEMU-based test infrastructure for throughput and subscriber scaling validation on minor and major releases.

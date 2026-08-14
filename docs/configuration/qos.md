@@ -111,18 +111,18 @@ service-groups:
 View active CAKE scheduler state via the show API:
 
 ```bash
-curl http://localhost:8080/api/show/qos.scheduler
+curl http://localhost:8080/api/show/qos/scheduler
 ```
 
 Modify or disable a scheduler at runtime via the operational API:
 
 ```bash
 # Change rate
-curl -X POST http://localhost:8080/api/oper/qos.scheduler.set \
+curl -X POST http://localhost:8080/api/exec/qos/scheduler/set \
   -d '{"sw_if_index": 5, "rate_kbps": 200000, "tin_mode": "diffserv4"}'
 
 # Disable
-curl -X POST http://localhost:8080/api/oper/qos.scheduler.set \
+curl -X POST http://localhost:8080/api/exec/qos/scheduler/set \
   -d '{"sw_if_index": 5, "disable": true}'
 ```
 
