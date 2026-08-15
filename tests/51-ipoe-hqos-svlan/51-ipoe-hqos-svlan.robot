@@ -128,7 +128,7 @@ Check Tin Metric Series
     [Arguments]    ${container}
     ${ip} =    Get Container IPv4    ${container}
     ${rc}    ${result} =    Run And Return Rc And Output
-    ...    curl -sf http://${ip}:9090/metrics | python3 -c "import sys,re; text=sys.stdin.read(); tins=sorted({m.group(1) for m in re.finditer(r'osvbng_qos_scheduler_tin_packets\\{[^}]*tin=\"(\\d+)\"', text)}); assert len(tins) > 1, 'tin labels found: %s' % tins; print('tin labels:', tins)"
+    ...    curl -sf http://${ip}:9090/metrics | python3 -c "import sys,re; text=sys.stdin.read(); tins=sorted({m.group(1) for m in re.finditer(r'osvbng_qos_scheduler_tin_packets\\{[^}]*tin=\\x22(\\d+)\\x22', text)}); assert len(tins) > 1, 'tin labels found: %s' % tins; print('tin labels:', tins)"
     Log    ${result}
     Should Be Equal As Integers    ${rc}    0    Per-tin metric series missing: ${result}
 
