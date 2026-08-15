@@ -108,7 +108,11 @@ func buildSchedulerView(d *deps.ShowDeps, sess models.SubscriberSession, swIfInd
 		view.ServiceGroup = sess.GetServiceGroup()
 		view.OuterVLAN = sess.GetOuterVLAN()
 		view.InnerVLAN = sess.GetInnerVLAN()
-		view.AccessInterface = interfaceName(d, sess.GetAccessIfIndex())
+		// Zero means "not recorded" (L2TP has no access interface at this
+		// layer), and must not render as local0.
+		if accessIfIndex := sess.GetAccessIfIndex(); accessIfIndex != 0 {
+			view.AccessInterface = interfaceName(d, accessIfIndex)
+		}
 	} else if d.Subscriber != nil {
 		if id, ok := d.Subscriber.SessionIDByIfIndex(swIfIndex); ok {
 			view.SessionID = id

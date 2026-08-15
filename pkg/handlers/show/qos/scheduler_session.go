@@ -66,13 +66,16 @@ func (h *SchedulerSessionHandler) Collect(ctx context.Context, req *show.Request
 		Note: fmt.Sprintf("%d sessions match, re-run with --session-id", len(matches)),
 	}
 	for _, sess := range matches {
-		out.Candidates = append(out.Candidates, SessionCandidate{
-			SessionID:       sess.GetSessionID(),
-			UUID:            sess.GetAAASessionID(),
-			AccessInterface: interfaceName(h.deps, sess.GetAccessIfIndex()),
-			OuterVLAN:       sess.GetOuterVLAN(),
-			InnerVLAN:       sess.GetInnerVLAN(),
-		})
+		cand := SessionCandidate{
+			SessionID: sess.GetSessionID(),
+			UUID:      sess.GetAAASessionID(),
+			OuterVLAN: sess.GetOuterVLAN(),
+			InnerVLAN: sess.GetInnerVLAN(),
+		}
+		if accessIfIndex := sess.GetAccessIfIndex(); accessIfIndex != 0 {
+			cand.AccessInterface = interfaceName(h.deps, accessIfIndex)
+		}
+		out.Candidates = append(out.Candidates, cand)
 	}
 	return out, nil
 }
@@ -136,8 +139,12 @@ func (h *SchedulerSessionHandler) matchSessions(ctx context.Context, req *show.R
 // name or the parent it hangs off, so an operator can name the physical port
 // without knowing the per-VLAN sub-interface.
 func (h *SchedulerSessionHandler) matchesAccessInterface(sess models.SubscriberSession, name string) bool {
+	accessIfIndex := sess.GetAccessIfIndex()
+	if accessIfIndex == 0 {
+		return false
+	}
 	mgr := h.deps.Southbound.GetIfMgr()
-	iface := mgr.Get(sess.GetAccessIfIndex())
+	iface := mgr.Get(accessIfIndex)
 	if iface == nil {
 		return false
 	}
