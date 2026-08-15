@@ -73,6 +73,36 @@ Verify Schedulers Attached To S-VLAN Aggregates
     ...    session through its encap sub-interface to the right tier.
     Check HQoS Attachment    ${bng1}
 
+Verify Aggregate Detail Hierarchy Via API
+    [Documentation]    The aggregate detail view renders the whole tree over
+    ...    the API: the port, its three S-VLAN children, and two member
+    ...    schedulers under each child, every member carrying its session id.
+    ${output} =    Get osvbng API Response    ${bng1}    /api/show/qos/aggregate/detail?interface=eth1
+    ${rc}    ${result} =    Run And Return Rc And Output
+    ...    echo '${output}' | python3 -c "import sys,json; d=json.load(sys.stdin)['data']; assert d['aggregate']['level']=='port', d['aggregate']; ch={c['aggregate']['svlan_id']: c for c in d.get('children') or []}; assert sorted(ch)==[100,200,300], sorted(ch); members={sv: len(c.get('schedulers') or []) for sv,c in ch.items()}; assert members=={100:2,200:2,300:2}, members; ids=[s.get('session_id') for c in ch.values() for s in c['schedulers']]; assert all(ids), ids; print('members per svlan:', members)"
+    Log    ${result}    console=yes
+    Should Be Equal As Integers    ${rc}    0    Aggregate detail hierarchy wrong: ${output}
+
+Verify Scheduler Session View Via API
+    [Documentation]    The per-session view resolves a session id to its
+    ...    scheduler and the aggregate tiers above it.
+    ${sessions} =    Get osvbng API Response    ${bng1}    /api/show/subscriber/sessions
+    ${rc}    ${sid} =    Run And Return Rc And Output
+    ...    echo '${sessions}' | python3 -c "import sys,json; print(json.load(sys.stdin)['data'][0]['SessionID'])"
+    Should Be Equal As Integers    ${rc}    0    Could not pick a session id: ${sessions}
+    ${output} =    Get osvbng API Response    ${bng1}    /api/show/qos/scheduler/session?session_id=${sid}
+    ${rc}    ${result} =    Run And Return Rc And Output
+    ...    echo '${output}' | python3 -c "import sys,json; d=json.load(sys.stdin)['data']; assert d.get('session_id'), d; s=d.get('scheduler'); assert s and s['rate_kbps']>0, d; assert d.get('parent_svlan') and d.get('parent_port'), d; print(d['session_id'], '->', s['rate_kbps'], 'kbps under svlan', d['parent_svlan']['svlan_id'])"
+    Log    ${result}    console=yes
+    Should Be Equal As Integers    ${rc}    0    Scheduler session view wrong: ${output}
+
+Verify Per-Tin Metrics Exported
+    [Documentation]    Scheduler tin metrics carry a tin label - one series
+    ...    per tin per scheduler, not eight tins collapsed into one. Waits
+    ...    out the 10s telemetry poll cadence.
+    Wait Until Keyword Succeeds    6 x    5s
+    ...    Check Tin Metric Series    ${bng1}
+
 Verify HQoS Share Distribution
     [Documentation]    Under saturation the port splits 50/25/25 between the
     ...    S-VLANs and each S-VLAN splits by its subscribers' rates:
@@ -94,6 +124,14 @@ Verify Aggregates Drain On Teardown
     ...    Check Aggregates Drained    ${bng1}
 
 *** Keywords ***
+Check Tin Metric Series
+    [Arguments]    ${container}
+    ${ip} =    Get Container IPv4    ${container}
+    ${rc}    ${result} =    Run And Return Rc And Output
+    ...    curl -sf http://${ip}:9090/metrics | python3 -c "import sys,re; text=sys.stdin.read(); tins=sorted({m.group(1) for m in re.finditer(r'osvbng_qos_scheduler_tin_packets\\{[^}]*tin=\"(\\d+)\"', text)}); assert len(tins) > 1, 'tin labels found: %s' % tins; print('tin labels:', tins)"
+    Log    ${result}
+    Should Be Equal As Integers    ${rc}    0    Per-tin metric series missing: ${result}
+
 Check Scheduler Rates
     [Arguments]    ${container}
     ${output} =    Get osvbng API Response    ${container}    /api/show/qos/scheduler

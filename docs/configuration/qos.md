@@ -32,6 +32,7 @@ Adding a `scheduler` block to a policy switches the egress direction from police
 | Field | Type | Description | Default |
 |-------|------|-------------|---------|
 | `tin-mode` | string | DSCP-to-tin classification mode | `besteffort` |
+| `weight` | uint32 | DRR weight multiplier under an aggregate, 1-256. Multiplies the share the subscriber's rate already earns; see [Hierarchical QoS](#hierarchical-qos-aggregates) | `1` |
 
 ### Tin Modes
 
@@ -106,12 +107,97 @@ service-groups:
       download-rate: 500000
 ```
 
+## Hierarchical QoS (Aggregates) <span class="version-badge">v0.9.0</span>
+
+Above the per-subscriber schedulers, the dataplane can shape two aggregate
+tiers: an **S-VLAN aggregate** (one shaper for every subscriber behind an
+outer tag or tag range) under a **port aggregate** (one shaper for the whole
+physical or bond interface). Contention at each tier is arbitrated by
+weighted deficit round robin across the tier's active children. See
+[QoS Architecture](../architecture/QOS.md) for how the hierarchy schedules.
+
+Aggregates are defined under the top-level `qos-aggregates` key, one named
+entry per tier instance:
+
+```yaml
+qos-aggregates:
+  port:
+    interface: eth1        # physical or bond interface
+    rate: 8000             # kbps
+  svlan-100:
+    interface: eth1
+    svlans: ["100"]        # single tag
+    rate: 6000
+  svlan-rest:
+    interface: eth1
+    svlans: ["200-300"]    # tag range: one shaper for every tag in it
+    rate: 3000
+    weight: 4
+    burst-ms: 50
+```
+
+### Aggregate Settings
+
+| Field | Type | Description | Default |
+|-------|------|-------------|---------|
+| `interface` | string | Physical or bond interface, both levels | required |
+| `svlans` | []string | Outer tags this aggregate shapes: a tag (`"100"`) or a range (`"200-300"`). Omit entirely for a port aggregate | port level |
+| `rate` | uint32 | Shaping rate (kbps) | required |
+| `weight` | uint32 | DRR weight multiplier under the parent, 1-256 | `1` |
+| `burst-ms` | uint32 | Idle credit ceiling, 10-150 ms | `10` |
+| `buffer-limit` | uint32 | Max buffered bytes | derived from rate |
+
+### Requirements Per Level
+
+**Port aggregate** — keyed by the physical/bond interface, no `svlans` list.
+At most one per interface. Must exist before (or be committed together with)
+any S-VLAN aggregate on the same interface.
+
+**S-VLAN aggregate** — requires a port aggregate on the same interface. Each
+entry takes a single tag or one `a-b` range (comma lists are rejected — use
+separate entries); tag sets of all S-VLAN aggregates on one port must be
+disjoint; tags run 1-4095. An S-VLAN's `rate` may not exceed its port's.
+
+**Subscriber scheduler** — enabled per session by the egress policy's
+`scheduler` block (see above); there is no per-aggregate member list to
+maintain. Attachment is automatic: the dataplane walks the session
+interface's parent chain to the physical port and, when the session's outer
+tag is covered by an S-VLAN aggregate, attaches it there, otherwise directly
+to the port aggregate. The scheduler's DRR share is derived from its rate,
+multiplied by the policy's `weight`.
+
+Rate and weight changes to an existing aggregate are applied in place; a
+change to `interface` or the tag set recreates the aggregate (dropping and
+re-attaching its members).
+
 ### Monitoring
 
-View active CAKE scheduler state via the show API:
+Show commands (each also available at `/api/show/qos/...` and, with
+`| json`, as raw JSON in the CLI):
 
-```bash
-curl http://localhost:8080/api/show/qos.scheduler
+```text
+show qos scheduler [--interface X]
+    Every subscriber scheduler: rate, weight, DRR state, throughput,
+    drops, buffer usage, session id.
+
+show qos scheduler session --session-id ipoe:<mac>:<vlan>
+show qos scheduler session --uuid <aaa-session-uuid>
+show qos scheduler session --interface <access-if> --outer-vlan N [--inner-vlan M]
+    One subscriber's full shaping chain: session identity, scheduler with
+    per-tin stats, and the S-VLAN / port aggregates above it. An ambiguous
+    interface+VLAN lookup returns the matching candidates instead.
+
+show qos scheduler detail --interface <session-if>
+    The same view addressed by the scheduler's interface (name or
+    sw_if_index) rather than by subscriber identity.
+
+show qos aggregate [--interface X] [--level port|svlan] [--svlan N]
+    Both aggregate tiers; --svlan matches the aggregate whose tag range
+    covers N.
+
+show qos aggregate detail --interface <port> [--svlan N]
+    The whole hierarchy under one port as a tree: the port aggregate, its
+    S-VLAN aggregates, and every member scheduler with stats and session id.
 ```
 
 Modify or disable a scheduler at runtime via the operational API:
@@ -125,6 +211,43 @@ curl -X POST http://localhost:8080/api/oper/qos.scheduler.set \
 curl -X POST http://localhost:8080/api/oper/qos.scheduler.set \
   -d '{"sw_if_index": 5, "disable": true}'
 ```
+
+### Prometheus Metrics
+
+Both QoS show paths are polled by the telemetry SDK every 10 seconds and
+exported by the `exporter.prometheus` plugin. Families and labels:
+
+| Family | Type | Labels |
+|--------|------|--------|
+| `osvbng_qos_scheduler_{rate_kbps,tin_count,weight,effective_weight,buffer_usage,buffer_limit,queued_buffers}` | gauge | `sw_if_index`, `interface`, `tin_mode` |
+| `osvbng_qos_scheduler_{enqueued,dequeued}_{packets,bytes}`, `_dropped_packets`, `_drr_blocked`, `_parent_blocked` | counter | `sw_if_index`, `interface`, `tin_mode` |
+| `osvbng_qos_scheduler_tin_{packets,bytes,drops,ecn_marks}` | counter | scheduler labels + `tin` |
+| `osvbng_qos_scheduler_tin_{sparse_flows,bulk_flows,flow_count,peak_delay_us,avg_delay_us}` | gauge | scheduler labels + `tin` |
+| `osvbng_qos_aggregate_{rate_kbps,weight,effective_weight,burst_ms,buffer_usage,buffer_limit,active_weight,active_children}` | gauge | `sw_if_index`, `interface`, `level`, `svlan_id`, `svlan_id_end` |
+| `osvbng_qos_aggregate_{shaped_packets,shaped_bytes,backpressure,drr_blocked,parent_blocked}` | counter | aggregate labels |
+
+Notes:
+
+- Scheduler metrics are per subscriber (keyed by the session interface).
+  Each metric family is capped at 10,000 series; overflow is dropped and
+  counted in `osvbng_telemetry_cardinality_drops_total`. Session identity is
+  deliberately **not** a label — correlate `sw_if_index`/`interface` through
+  the show API instead.
+- `tin_peak_delay_us` / `tin_avg_delay_us` read zero until the dataplane
+  computes per-tin sojourn delay.
+
+### Dataplane Version Requirements
+
+The control plane probes the dataplane and degrades rather than failing:
+
+| Feature | Needs QoS plugin API |
+|---------|----------------------|
+| Per-subscriber CAKE scheduler, per-tin stats | any |
+| Aggregates (port + S-VLAN), scheduler `weight` | >= 3.0.0 |
+| Scheduler DRR/parent state, throughput counters, `show qos aggregate detail` membership, per-tin `flow_count` | >= 3.1.0 |
+
+Against an older dataplane the affected fields read zero and the aggregate
+detail view notes that membership is unavailable.
 
 ## Actions
 

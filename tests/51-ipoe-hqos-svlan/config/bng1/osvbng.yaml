@@ -152,6 +152,9 @@ plugins:
         enabled: true
         listeners:
             - address: :8080
+    exporter.prometheus:
+        enabled: true
+        listen_address: :9090
     subscriber.auth.local:
         allow_all: true
         database_path: /tmp/osvbng.db

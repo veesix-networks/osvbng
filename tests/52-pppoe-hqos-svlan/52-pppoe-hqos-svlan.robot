@@ -76,6 +76,20 @@ Verify Schedulers Attached To S-VLAN Aggregates
     ...    PPPoE session through its encap sub-interface to the right tier.
     Check HQoS Attachment    ${bng1}
 
+Verify Scheduler Session View Via API
+    [Documentation]    The per-session view resolves a ppp: session id
+    ...    through the typed snapshot decode - the path that once mis-read
+    ...    PPPoE sessions as IPoE - to its scheduler and parent tiers.
+    ${sessions} =    Get osvbng API Response    ${bng1}    /api/show/subscriber/sessions
+    ${rc}    ${sid} =    Run And Return Rc And Output
+    ...    echo '${sessions}' | python3 -c "import sys,json; print(json.load(sys.stdin)['data'][0]['SessionID'])"
+    Should Be Equal As Integers    ${rc}    0    Could not pick a session id: ${sessions}
+    ${output} =    Get osvbng API Response    ${bng1}    /api/show/qos/scheduler/session?session_id=${sid}
+    ${rc}    ${result} =    Run And Return Rc And Output
+    ...    echo '${output}' | python3 -c "import sys,json; d=json.load(sys.stdin)['data']; assert d.get('session_id','').startswith('ppp:'), d; s=d.get('scheduler'); assert s and s['rate_kbps']>0, d; assert d.get('parent_svlan') and d.get('parent_port'), d; print(d['session_id'], '->', s['rate_kbps'], 'kbps under svlan', d['parent_svlan']['svlan_id'])"
+    Log    ${result}    console=yes
+    Should Be Equal As Integers    ${rc}    0    Scheduler session view wrong: ${output}
+
 Verify HQoS Share Distribution
     [Documentation]    Under saturation the port splits 50/25/25 between the
     ...    S-VLANs and each S-VLAN splits by its subscribers' rates:
