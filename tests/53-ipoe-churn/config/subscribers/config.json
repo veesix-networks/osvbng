@@ -1,0 +1,50 @@
+{
+  "interfaces": {
+    "network": [
+      {
+        "interface": "eth2",
+        "address": "10.0.0.2/30",
+        "gateway": "10.0.0.1"
+      }
+    ],
+    "access": [
+      {
+        "interface": "eth1",
+        "type": "ipoe",
+        "qinq": true,
+        "vlan-mode": "1:1",
+        "outer-vlan": 100,
+        "inner-vlan-min": 10,
+        "inner-vlan-max": 13,
+        "monkey": true
+      },
+      {
+        "interface": "eth1",
+        "type": "ipoe",
+        "qinq": true,
+        "vlan-mode": "1:1",
+        "outer-vlan": 200,
+        "inner-vlan-min": 10,
+        "inner-vlan-max": 13,
+        "monkey": true
+      }
+    ]
+  },
+  "sessions": {
+    "count": 8,
+    "max-outstanding": 8,
+    "reconnect": true,
+    "monkey-autostart": false
+  },
+  "dhcp": {
+    "enable": true,
+    "retry": 60
+  },
+  "dhcpv6": {
+    "enable": true,
+    "retry": 60
+  },
+  "ipoe": {
+    "ipv6": true
+  }
+}
