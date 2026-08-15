@@ -8,7 +8,7 @@
 //
 // Contents:
 // -  5 enums
-// - 24 messages
+// - 26 messages
 package osvbng_qos_sched
 
 import (
@@ -27,8 +27,8 @@ const _ = api.GoVppAPIPackageIsVersion2
 
 const (
 	APIFile    = "osvbng_qos_sched"
-	APIVersion = "3.0.0"
-	VersionCrc = 0x1550e064
+	APIVersion = "3.1.0"
+	VersionCrc = 0xb6c54b71
 )
 
 // OsvbngCakeAggLevel defines enum 'osvbng_cake_agg_level'.
@@ -1376,6 +1376,342 @@ func (m *OsvbngCakeSchedResetStatsReply) Unmarshal(b []byte) error {
 	return nil
 }
 
+// Subscriber scheduler details with hierarchy and DRR state
+//   - has_parent - false when no aggregate covers this scheduler; the
+//     parent_* fields are then meaningless
+//   - parent_level - tier of the immediate parent
+//   - parent_sw_if_index - the port the parent hangs off; with
+//     parent_level and parent_svlan_id this is the
+//     same composite key aggregate_v2_details
+//     reports, so the two dumps join without any
+//     dataplane-private index on the wire
+//   - parent_svlan_id - first tag of the parent S-VLAN; 0 for a port
+//   - effective_weight - own rate x weight multiplier
+//   - drr_deficit - bytes sendable this round, two's-complement signed
+//     in a u64 because the API type system has no i64;
+//     negative = bounded debt
+//   - drr_active - weight currently counted in the parent
+//   - drr_blocked - dispatches deferred because siblings held the
+//     capacity
+//   - parent_blocked - dispatches deferred because the parent chain was
+//     at its configured rate
+//   - tin_peak_delay_us - reserved, reads 0 until sojourn accounting
+//     lands in the dequeue path
+//   - tin_avg_delay_us - reserved, reads 0 likewise
+//
+// OsvbngCakeSchedV2Details defines message 'osvbng_cake_sched_v2_details'.
+type OsvbngCakeSchedV2Details struct {
+	SwIfIndex       interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
+	RateBytesPerSec uint64                         `binapi:"u64,name=rate_bytes_per_sec" json:"rate_bytes_per_sec,omitempty"`
+	TinMode         OsvbngCakeTinMode              `binapi:"osvbng_cake_tin_mode,name=tin_mode" json:"tin_mode,omitempty"`
+	TinCnt          uint8                          `binapi:"u8,name=tin_cnt" json:"tin_cnt,omitempty"`
+	Weight          uint32                         `binapi:"u32,name=weight" json:"weight,omitempty"`
+	OverheadBytes   int16                          `binapi:"i16,name=overhead_bytes" json:"overhead_bytes,omitempty"`
+	AtmMode         OsvbngCakeAtmMode              `binapi:"osvbng_cake_atm_mode,name=atm_mode" json:"atm_mode,omitempty"`
+	Mpu             uint8                          `binapi:"u8,name=mpu" json:"mpu,omitempty"`
+	TargetUs        uint32                         `binapi:"u32,name=target_us" json:"target_us,omitempty"`
+	IntervalUs      uint32                         `binapi:"u32,name=interval_us" json:"interval_us,omitempty"`
+	HasParent       bool                           `binapi:"bool,name=has_parent" json:"has_parent,omitempty"`
+	ParentLevel     OsvbngCakeAggLevel             `binapi:"osvbng_cake_agg_level,name=parent_level" json:"parent_level,omitempty"`
+	ParentSwIfIndex interface_types.InterfaceIndex `binapi:"interface_index,name=parent_sw_if_index" json:"parent_sw_if_index,omitempty"`
+	ParentSvlanID   uint16                         `binapi:"u16,name=parent_svlan_id" json:"parent_svlan_id,omitempty"`
+	EffectiveWeight uint64                         `binapi:"u64,name=effective_weight" json:"effective_weight,omitempty"`
+	DrrDeficit      uint64                         `binapi:"u64,name=drr_deficit" json:"drr_deficit,omitempty"`
+	DrrActive       bool                           `binapi:"bool,name=drr_active" json:"drr_active,omitempty"`
+	DrrBlocked      uint64                         `binapi:"u64,name=drr_blocked" json:"drr_blocked,omitempty"`
+	ParentBlocked   uint64                         `binapi:"u64,name=parent_blocked" json:"parent_blocked,omitempty"`
+	EnqueuedPkts    uint64                         `binapi:"u64,name=enqueued_pkts" json:"enqueued_pkts,omitempty"`
+	EnqueuedBytes   uint64                         `binapi:"u64,name=enqueued_bytes" json:"enqueued_bytes,omitempty"`
+	DequeuedPkts    uint64                         `binapi:"u64,name=dequeued_pkts" json:"dequeued_pkts,omitempty"`
+	DequeuedBytes   uint64                         `binapi:"u64,name=dequeued_bytes" json:"dequeued_bytes,omitempty"`
+	DroppedPkts     uint64                         `binapi:"u64,name=dropped_pkts" json:"dropped_pkts,omitempty"`
+	QueuedBuffers   uint32                         `binapi:"u32,name=queued_buffers" json:"queued_buffers,omitempty"`
+	BufferUsage     uint32                         `binapi:"u32,name=buffer_usage" json:"buffer_usage,omitempty"`
+	BufferLimit     uint32                         `binapi:"u32,name=buffer_limit" json:"buffer_limit,omitempty"`
+	OwnerThread     uint32                         `binapi:"u32,name=owner_thread" json:"owner_thread,omitempty"`
+	TinPackets      []uint64                       `binapi:"u64[8],name=tin_packets" json:"tin_packets,omitempty"`
+	TinBytes        []uint64                       `binapi:"u64[8],name=tin_bytes" json:"tin_bytes,omitempty"`
+	TinDrops        []uint64                       `binapi:"u64[8],name=tin_drops" json:"tin_drops,omitempty"`
+	TinEcnMarks     []uint64                       `binapi:"u64[8],name=tin_ecn_marks" json:"tin_ecn_marks,omitempty"`
+	TinSparseFlows  []uint32                       `binapi:"u32[8],name=tin_sparse_flows" json:"tin_sparse_flows,omitempty"`
+	TinBulkFlows    []uint32                       `binapi:"u32[8],name=tin_bulk_flows" json:"tin_bulk_flows,omitempty"`
+	TinFlowCount    []uint32                       `binapi:"u32[8],name=tin_flow_count" json:"tin_flow_count,omitempty"`
+	TinPeakDelayUs  []uint32                       `binapi:"u32[8],name=tin_peak_delay_us" json:"tin_peak_delay_us,omitempty"`
+	TinAvgDelayUs   []uint32                       `binapi:"u32[8],name=tin_avg_delay_us" json:"tin_avg_delay_us,omitempty"`
+}
+
+func (m *OsvbngCakeSchedV2Details) Reset()               { *m = OsvbngCakeSchedV2Details{} }
+func (*OsvbngCakeSchedV2Details) GetMessageName() string { return "osvbng_cake_sched_v2_details" }
+func (*OsvbngCakeSchedV2Details) GetCrcString() string   { return "07727aad" }
+func (*OsvbngCakeSchedV2Details) GetMessageType() api.MessageType {
+	return api.ReplyMessage
+}
+
+func (m *OsvbngCakeSchedV2Details) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4     // m.SwIfIndex
+	size += 8     // m.RateBytesPerSec
+	size += 1     // m.TinMode
+	size += 1     // m.TinCnt
+	size += 4     // m.Weight
+	size += 2     // m.OverheadBytes
+	size += 1     // m.AtmMode
+	size += 1     // m.Mpu
+	size += 4     // m.TargetUs
+	size += 4     // m.IntervalUs
+	size += 1     // m.HasParent
+	size += 1     // m.ParentLevel
+	size += 4     // m.ParentSwIfIndex
+	size += 2     // m.ParentSvlanID
+	size += 8     // m.EffectiveWeight
+	size += 8     // m.DrrDeficit
+	size += 1     // m.DrrActive
+	size += 8     // m.DrrBlocked
+	size += 8     // m.ParentBlocked
+	size += 8     // m.EnqueuedPkts
+	size += 8     // m.EnqueuedBytes
+	size += 8     // m.DequeuedPkts
+	size += 8     // m.DequeuedBytes
+	size += 8     // m.DroppedPkts
+	size += 4     // m.QueuedBuffers
+	size += 4     // m.BufferUsage
+	size += 4     // m.BufferLimit
+	size += 4     // m.OwnerThread
+	size += 8 * 8 // m.TinPackets
+	size += 8 * 8 // m.TinBytes
+	size += 8 * 8 // m.TinDrops
+	size += 8 * 8 // m.TinEcnMarks
+	size += 4 * 8 // m.TinSparseFlows
+	size += 4 * 8 // m.TinBulkFlows
+	size += 4 * 8 // m.TinFlowCount
+	size += 4 * 8 // m.TinPeakDelayUs
+	size += 4 * 8 // m.TinAvgDelayUs
+	return size
+}
+func (m *OsvbngCakeSchedV2Details) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeUint32(uint32(m.SwIfIndex))
+	buf.EncodeUint64(m.RateBytesPerSec)
+	buf.EncodeUint8(uint8(m.TinMode))
+	buf.EncodeUint8(m.TinCnt)
+	buf.EncodeUint32(m.Weight)
+	buf.EncodeInt16(m.OverheadBytes)
+	buf.EncodeUint8(uint8(m.AtmMode))
+	buf.EncodeUint8(m.Mpu)
+	buf.EncodeUint32(m.TargetUs)
+	buf.EncodeUint32(m.IntervalUs)
+	buf.EncodeBool(m.HasParent)
+	buf.EncodeUint8(uint8(m.ParentLevel))
+	buf.EncodeUint32(uint32(m.ParentSwIfIndex))
+	buf.EncodeUint16(m.ParentSvlanID)
+	buf.EncodeUint64(m.EffectiveWeight)
+	buf.EncodeUint64(m.DrrDeficit)
+	buf.EncodeBool(m.DrrActive)
+	buf.EncodeUint64(m.DrrBlocked)
+	buf.EncodeUint64(m.ParentBlocked)
+	buf.EncodeUint64(m.EnqueuedPkts)
+	buf.EncodeUint64(m.EnqueuedBytes)
+	buf.EncodeUint64(m.DequeuedPkts)
+	buf.EncodeUint64(m.DequeuedBytes)
+	buf.EncodeUint64(m.DroppedPkts)
+	buf.EncodeUint32(m.QueuedBuffers)
+	buf.EncodeUint32(m.BufferUsage)
+	buf.EncodeUint32(m.BufferLimit)
+	buf.EncodeUint32(m.OwnerThread)
+	for i := 0; i < 8; i++ {
+		var x uint64
+		if i < len(m.TinPackets) {
+			x = uint64(m.TinPackets[i])
+		}
+		buf.EncodeUint64(x)
+	}
+	for i := 0; i < 8; i++ {
+		var x uint64
+		if i < len(m.TinBytes) {
+			x = uint64(m.TinBytes[i])
+		}
+		buf.EncodeUint64(x)
+	}
+	for i := 0; i < 8; i++ {
+		var x uint64
+		if i < len(m.TinDrops) {
+			x = uint64(m.TinDrops[i])
+		}
+		buf.EncodeUint64(x)
+	}
+	for i := 0; i < 8; i++ {
+		var x uint64
+		if i < len(m.TinEcnMarks) {
+			x = uint64(m.TinEcnMarks[i])
+		}
+		buf.EncodeUint64(x)
+	}
+	for i := 0; i < 8; i++ {
+		var x uint32
+		if i < len(m.TinSparseFlows) {
+			x = uint32(m.TinSparseFlows[i])
+		}
+		buf.EncodeUint32(x)
+	}
+	for i := 0; i < 8; i++ {
+		var x uint32
+		if i < len(m.TinBulkFlows) {
+			x = uint32(m.TinBulkFlows[i])
+		}
+		buf.EncodeUint32(x)
+	}
+	for i := 0; i < 8; i++ {
+		var x uint32
+		if i < len(m.TinFlowCount) {
+			x = uint32(m.TinFlowCount[i])
+		}
+		buf.EncodeUint32(x)
+	}
+	for i := 0; i < 8; i++ {
+		var x uint32
+		if i < len(m.TinPeakDelayUs) {
+			x = uint32(m.TinPeakDelayUs[i])
+		}
+		buf.EncodeUint32(x)
+	}
+	for i := 0; i < 8; i++ {
+		var x uint32
+		if i < len(m.TinAvgDelayUs) {
+			x = uint32(m.TinAvgDelayUs[i])
+		}
+		buf.EncodeUint32(x)
+	}
+	return buf.Bytes(), nil
+}
+func (m *OsvbngCakeSchedV2Details) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.SwIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
+	m.RateBytesPerSec = buf.DecodeUint64()
+	m.TinMode = OsvbngCakeTinMode(buf.DecodeUint8())
+	m.TinCnt = buf.DecodeUint8()
+	m.Weight = buf.DecodeUint32()
+	m.OverheadBytes = buf.DecodeInt16()
+	m.AtmMode = OsvbngCakeAtmMode(buf.DecodeUint8())
+	m.Mpu = buf.DecodeUint8()
+	m.TargetUs = buf.DecodeUint32()
+	m.IntervalUs = buf.DecodeUint32()
+	m.HasParent = buf.DecodeBool()
+	m.ParentLevel = OsvbngCakeAggLevel(buf.DecodeUint8())
+	m.ParentSwIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
+	m.ParentSvlanID = buf.DecodeUint16()
+	m.EffectiveWeight = buf.DecodeUint64()
+	m.DrrDeficit = buf.DecodeUint64()
+	m.DrrActive = buf.DecodeBool()
+	m.DrrBlocked = buf.DecodeUint64()
+	m.ParentBlocked = buf.DecodeUint64()
+	m.EnqueuedPkts = buf.DecodeUint64()
+	m.EnqueuedBytes = buf.DecodeUint64()
+	m.DequeuedPkts = buf.DecodeUint64()
+	m.DequeuedBytes = buf.DecodeUint64()
+	m.DroppedPkts = buf.DecodeUint64()
+	m.QueuedBuffers = buf.DecodeUint32()
+	m.BufferUsage = buf.DecodeUint32()
+	m.BufferLimit = buf.DecodeUint32()
+	m.OwnerThread = buf.DecodeUint32()
+	m.TinPackets = make([]uint64, 8)
+	for i := 0; i < len(m.TinPackets); i++ {
+		m.TinPackets[i] = buf.DecodeUint64()
+	}
+	m.TinBytes = make([]uint64, 8)
+	for i := 0; i < len(m.TinBytes); i++ {
+		m.TinBytes[i] = buf.DecodeUint64()
+	}
+	m.TinDrops = make([]uint64, 8)
+	for i := 0; i < len(m.TinDrops); i++ {
+		m.TinDrops[i] = buf.DecodeUint64()
+	}
+	m.TinEcnMarks = make([]uint64, 8)
+	for i := 0; i < len(m.TinEcnMarks); i++ {
+		m.TinEcnMarks[i] = buf.DecodeUint64()
+	}
+	m.TinSparseFlows = make([]uint32, 8)
+	for i := 0; i < len(m.TinSparseFlows); i++ {
+		m.TinSparseFlows[i] = buf.DecodeUint32()
+	}
+	m.TinBulkFlows = make([]uint32, 8)
+	for i := 0; i < len(m.TinBulkFlows); i++ {
+		m.TinBulkFlows[i] = buf.DecodeUint32()
+	}
+	m.TinFlowCount = make([]uint32, 8)
+	for i := 0; i < len(m.TinFlowCount); i++ {
+		m.TinFlowCount[i] = buf.DecodeUint32()
+	}
+	m.TinPeakDelayUs = make([]uint32, 8)
+	for i := 0; i < len(m.TinPeakDelayUs); i++ {
+		m.TinPeakDelayUs[i] = buf.DecodeUint32()
+	}
+	m.TinAvgDelayUs = make([]uint32, 8)
+	for i := 0; i < len(m.TinAvgDelayUs); i++ {
+		m.TinAvgDelayUs[i] = buf.DecodeUint32()
+	}
+	return nil
+}
+
+// Dump subscriber schedulers with hierarchy and DRR state
+//   - sw_if_index - one scheduler, ~0 for all
+//   - parent_sw_if_index - restrict to members of one aggregate,
+//     ~0 for no parent filter
+//   - parent_level - tier of the parent filter, when one is set
+//   - parent_svlan_id - any tag the parent S-VLAN owns; ignored when
+//     parent_level is port
+//     The parent filter exists so a hierarchy view costs one targeted dump per
+//     aggregate instead of a full walk of every subscriber on the box.
+//
+// OsvbngCakeSchedV2Dump defines message 'osvbng_cake_sched_v2_dump'.
+type OsvbngCakeSchedV2Dump struct {
+	SwIfIndex       interface_types.InterfaceIndex `binapi:"interface_index,name=sw_if_index" json:"sw_if_index,omitempty"`
+	ParentSwIfIndex interface_types.InterfaceIndex `binapi:"interface_index,name=parent_sw_if_index" json:"parent_sw_if_index,omitempty"`
+	ParentLevel     OsvbngCakeAggLevel             `binapi:"osvbng_cake_agg_level,name=parent_level" json:"parent_level,omitempty"`
+	ParentSvlanID   uint16                         `binapi:"u16,name=parent_svlan_id" json:"parent_svlan_id,omitempty"`
+}
+
+func (m *OsvbngCakeSchedV2Dump) Reset()               { *m = OsvbngCakeSchedV2Dump{} }
+func (*OsvbngCakeSchedV2Dump) GetMessageName() string { return "osvbng_cake_sched_v2_dump" }
+func (*OsvbngCakeSchedV2Dump) GetCrcString() string   { return "76b0ed53" }
+func (*OsvbngCakeSchedV2Dump) GetMessageType() api.MessageType {
+	return api.RequestMessage
+}
+
+func (m *OsvbngCakeSchedV2Dump) Size() (size int) {
+	if m == nil {
+		return 0
+	}
+	size += 4 // m.SwIfIndex
+	size += 4 // m.ParentSwIfIndex
+	size += 1 // m.ParentLevel
+	size += 2 // m.ParentSvlanID
+	return size
+}
+func (m *OsvbngCakeSchedV2Dump) Marshal(b []byte) ([]byte, error) {
+	if b == nil {
+		b = make([]byte, m.Size())
+	}
+	buf := codec.NewBuffer(b)
+	buf.EncodeUint32(uint32(m.SwIfIndex))
+	buf.EncodeUint32(uint32(m.ParentSwIfIndex))
+	buf.EncodeUint8(uint8(m.ParentLevel))
+	buf.EncodeUint16(m.ParentSvlanID)
+	return buf.Bytes(), nil
+}
+func (m *OsvbngCakeSchedV2Dump) Unmarshal(b []byte) error {
+	buf := codec.NewBuffer(b)
+	m.SwIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
+	m.ParentSwIfIndex = interface_types.InterfaceIndex(buf.DecodeUint32())
+	m.ParentLevel = OsvbngCakeAggLevel(buf.DecodeUint8())
+	m.ParentSvlanID = buf.DecodeUint16()
+	return nil
+}
+
 // Enable or disable a subscriber scheduler, with a weight
 //   - weight - operator multiplier on the rate-derived weight, 1-256,
 //     0 for the default of 1
@@ -1522,6 +1858,8 @@ func file_osvbng_qos_sched_binapi_init() {
 	api.RegisterMessage((*OsvbngCakeSchedEnableDisableReply)(nil), "osvbng_cake_sched_enable_disable_reply_e8d4e804")
 	api.RegisterMessage((*OsvbngCakeSchedResetStats)(nil), "osvbng_cake_sched_reset_stats_f9e6675e")
 	api.RegisterMessage((*OsvbngCakeSchedResetStatsReply)(nil), "osvbng_cake_sched_reset_stats_reply_e8d4e804")
+	api.RegisterMessage((*OsvbngCakeSchedV2Details)(nil), "osvbng_cake_sched_v2_details_07727aad")
+	api.RegisterMessage((*OsvbngCakeSchedV2Dump)(nil), "osvbng_cake_sched_v2_dump_76b0ed53")
 	api.RegisterMessage((*OsvbngCakeSchedV2EnableDisable)(nil), "osvbng_cake_sched_v2_enable_disable_bb7aade1")
 	api.RegisterMessage((*OsvbngCakeSchedV2EnableDisableReply)(nil), "osvbng_cake_sched_v2_enable_disable_reply_e8d4e804")
 }
@@ -1551,6 +1889,8 @@ func AllMessages() []api.Message {
 		(*OsvbngCakeSchedEnableDisableReply)(nil),
 		(*OsvbngCakeSchedResetStats)(nil),
 		(*OsvbngCakeSchedResetStatsReply)(nil),
+		(*OsvbngCakeSchedV2Details)(nil),
+		(*OsvbngCakeSchedV2Dump)(nil),
 		(*OsvbngCakeSchedV2EnableDisable)(nil),
 		(*OsvbngCakeSchedV2EnableDisableReply)(nil),
 	}

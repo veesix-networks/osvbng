@@ -24,6 +24,7 @@ type RPCService interface {
 	OsvbngCakeSchedDump(ctx context.Context, in *OsvbngCakeSchedDump) (RPCService_OsvbngCakeSchedDumpClient, error)
 	OsvbngCakeSchedEnableDisable(ctx context.Context, in *OsvbngCakeSchedEnableDisable) (*OsvbngCakeSchedEnableDisableReply, error)
 	OsvbngCakeSchedResetStats(ctx context.Context, in *OsvbngCakeSchedResetStats) (*OsvbngCakeSchedResetStatsReply, error)
+	OsvbngCakeSchedV2Dump(ctx context.Context, in *OsvbngCakeSchedV2Dump) (RPCService_OsvbngCakeSchedV2DumpClient, error)
 	OsvbngCakeSchedV2EnableDisable(ctx context.Context, in *OsvbngCakeSchedV2EnableDisable) (*OsvbngCakeSchedV2EnableDisableReply, error)
 }
 
@@ -234,6 +235,49 @@ func (c *serviceClient) OsvbngCakeSchedResetStats(ctx context.Context, in *Osvbn
 		return nil, err
 	}
 	return out, api.RetvalToVPPApiError(out.Retval)
+}
+
+func (c *serviceClient) OsvbngCakeSchedV2Dump(ctx context.Context, in *OsvbngCakeSchedV2Dump) (RPCService_OsvbngCakeSchedV2DumpClient, error) {
+	stream, err := c.conn.NewStream(ctx)
+	if err != nil {
+		return nil, err
+	}
+	x := &serviceClient_OsvbngCakeSchedV2DumpClient{stream}
+	if err := x.Stream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err = x.Stream.SendMsg(&memclnt.ControlPing{}); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type RPCService_OsvbngCakeSchedV2DumpClient interface {
+	Recv() (*OsvbngCakeSchedV2Details, error)
+	api.Stream
+}
+
+type serviceClient_OsvbngCakeSchedV2DumpClient struct {
+	api.Stream
+}
+
+func (c *serviceClient_OsvbngCakeSchedV2DumpClient) Recv() (*OsvbngCakeSchedV2Details, error) {
+	msg, err := c.Stream.RecvMsg()
+	if err != nil {
+		return nil, err
+	}
+	switch m := msg.(type) {
+	case *OsvbngCakeSchedV2Details:
+		return m, nil
+	case *memclnt.ControlPingReply:
+		err = c.Stream.Close()
+		if err != nil {
+			return nil, err
+		}
+		return nil, io.EOF
+	default:
+		return nil, fmt.Errorf("unexpected message: %T %v", m, m)
+	}
 }
 
 func (c *serviceClient) OsvbngCakeSchedV2EnableDisable(ctx context.Context, in *OsvbngCakeSchedV2EnableDisable) (*OsvbngCakeSchedV2EnableDisableReply, error) {
