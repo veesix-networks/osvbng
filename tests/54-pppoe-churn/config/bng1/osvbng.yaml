@@ -1,0 +1,103 @@
+# Copyright 2026 The osvbng Authors
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Eight authenticated QinQ PPPoE subscribers across two dot1ad S-VLANs,
+# four C-VLANs each. The PPPoE twin of suite 53's config.
+#
+# No QoS anywhere: no schedulers, no aggregates, no service groups. Suite
+# 52 carries a hand-swapped osvbng-noqos.yaml for exactly the question
+# this suite asks by default - whether the dataplane survives PPPoE
+# session churn on its own, with the CAKE plugin out of the picture. If
+# it does not survive here, the fault is not in QoS.
+#
+# service-groups is omitted entirely rather than emptied: a service group
+# with a nil body panics osvbngd at startup in Resolver.Set.
+#
+# There is no max_concurrent_sessions here and that is not an oversight.
+# Unlike IPoE, the PPPoE component has no admission counter; the session
+# limit path does not exist for PPPoE, so setting it would configure
+# nothing.
+
+subscriber-groups:
+    groups:
+        churn-100:
+            vlan-tpid: dot1ad
+            ipv4-profile: default
+            vlans:
+                - svlan: "100"
+                  cvlan: any
+                  interface: loop100
+                  parent-interface: eth1
+                  access-types: [pppoe]
+            aaa-policy: pppoe-policy
+        churn-200:
+            vlan-tpid: dot1ad
+            ipv4-profile: default
+            vlans:
+                - svlan: "200"
+                  cvlan: any
+                  interface: loop100
+                  parent-interface: eth1
+                  access-types: [pppoe]
+            aaa-policy: pppoe-policy
+
+ipv4-profiles:
+    default:
+        gateway: 10.255.0.1
+        dns:
+            - 8.8.8.8
+        pools:
+            - name: subscriber-pool
+              network: 10.255.0.0/16
+              priority: 1
+
+interfaces:
+    loop0:
+        description: Control Plane Loopback
+        enabled: true
+        address:
+            ipv4:
+                - 10.254.0.1/32
+    eth1:
+        description: Access Interface
+        enabled: true
+    eth2:
+        description: Core Link (bngblaster network side)
+        enabled: true
+        address:
+            ipv4:
+                - 10.0.0.1/30
+    loop100:
+        description: Subscriber Gateway Loopback
+        enabled: true
+        address:
+            ipv4:
+                - 10.255.0.1/32
+
+aaa:
+    auth_provider: local
+    nas_identifier: osvbng
+    policy:
+        - name: pppoe-policy
+          type: ppp
+          format: $agent-remote-id$
+          authenticate: true
+
+plugins:
+    northbound.api:
+        enabled: true
+        listeners:
+            - address: :8080
+    subscriber.auth.local:
+        allow_all: false
+        database_path: /tmp/osvbng.db
+
+logging:
+    format: text
+    level: info
+    components:
+        pppoe: debug
+
+dataplane:
+    lcp-netns: dataplane
