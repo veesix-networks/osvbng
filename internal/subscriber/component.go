@@ -37,19 +37,27 @@ type Component struct {
 	restoredSub     events.Subscription
 	mutationResSub  events.Subscription
 	mutationWaiters sync.Map
+
+	// sw_if_index <-> session-id, maintained by persistSession and read by
+	// the QoS show views (see ifindex.go).
+	ifIndexMu        sync.RWMutex
+	sessionByIfIndex map[uint32]string
+	ifIndexBySession map[string]uint32
 }
 
 func New(deps component.Dependencies, srgMgr ha.SRGProvider) (*Component, error) {
 	log := logger.Get(logger.Subscriber)
 
 	c := &Component{
-		Base:     component.NewBase("subscriber"),
-		logger:   log,
-		eventBus: deps.EventBus,
-		srgMgr:   srgMgr,
-		vpp:      deps.Southbound,
-		cfgMgr:   deps.ConfigManager,
-		cache:    deps.Cache,
+		Base:             component.NewBase("subscriber"),
+		logger:           log,
+		eventBus:         deps.EventBus,
+		srgMgr:           srgMgr,
+		vpp:              deps.Southbound,
+		cfgMgr:           deps.ConfigManager,
+		cache:            deps.Cache,
+		sessionByIfIndex: make(map[uint32]string),
+		ifIndexBySession: make(map[string]uint32),
 	}
 
 	c.expiryMgr = session.NewExpiryManager(c.handleSessionExpiry)
@@ -66,6 +74,10 @@ func (c *Component) Start(ctx context.Context) error {
 	c.lifecycleSub = c.eventBus.Subscribe(events.TopicSessionLifecycle, c.handleSessionLifecycle)
 	c.restoredSub = c.eventBus.Subscribe(events.TopicSessionRestored, c.handleSessionRestored)
 	c.mutationResSub = c.eventBus.Subscribe(events.TopicSubscriberMutationResult, c.handleMutationResult)
+
+	// Off the start path: the scan races nothing (lifecycle events index
+	// themselves) and only fills in sessions from before this process.
+	go c.warmSessionIfIndex(ctx)
 
 	return nil
 }
@@ -695,6 +707,8 @@ func (c *Component) persistSession(sess models.SubscriberSession) error {
 			}
 		}
 
+		c.unindexSessionIfIndex(sessionID)
+
 		c.logger.Debug("Deleted session from cache", "session_id", sessionID)
 		return nil
 	}
@@ -733,6 +747,8 @@ func (c *Component) persistSession(sess models.SubscriberSession) error {
 	} else {
 		c.logger.Debug("Skipping ARP lookup index creation", "session_id", sessionID, "reason", "empty key")
 	}
+
+	c.indexSessionIfIndex(sess)
 
 	return nil
 }
@@ -787,6 +803,7 @@ func (c *Component) handleSessionExpiry(sessionID string, expiryTime time.Time) 
 	if err := c.cache.Delete(c.Ctx, key); err != nil {
 		c.logger.Warn("Failed to delete expired session", "session_id", sessionID, "error", err)
 	}
+	c.unindexSessionIfIndex(sessionID)
 
 	accessType := models.AccessType(meta.AccessType)
 	protocol := models.Protocol(meta.Protocol)

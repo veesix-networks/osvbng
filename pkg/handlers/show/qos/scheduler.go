@@ -26,12 +26,42 @@ type SchedulerHandler struct {
 	deps *deps.ShowDeps
 }
 
-func (h *SchedulerHandler) Collect(_ context.Context, _ *show.Request) (interface{}, error) {
+// Collect with no options returns every scheduler: the telemetry poller
+// calls this path with an empty request, so filters are subtractive only.
+func (h *SchedulerHandler) Collect(_ context.Context, req *show.Request) (interface{}, error) {
 	if h.deps.Southbound == nil {
 		return nil, fmt.Errorf("southbound not available")
 	}
 
-	return h.deps.Southbound.DumpSchedulers()
+	states, err := h.deps.Southbound.DumpSchedulers()
+	if err != nil {
+		return nil, err
+	}
+	enrichSessionIDs(h.deps, states)
+
+	if ifOpt := req.Options["interface"]; ifOpt != "" {
+		swIfIndex, err := resolveIfIndex(h.deps, ifOpt)
+		if err != nil {
+			return nil, err
+		}
+		filtered := states[:0]
+		for _, s := range states {
+			if s.SwIfIndex == swIfIndex {
+				filtered = append(filtered, s)
+			}
+		}
+		states = filtered
+	}
+
+	return states, nil
+}
+
+type SchedulerListOptions struct {
+	Interface string `query:"interface" description:"Limit to one session interface, by name or sw_if_index"`
+}
+
+func (h *SchedulerHandler) OptionsType() interface{} {
+	return &SchedulerListOptions{}
 }
 
 func (h *SchedulerHandler) PathPattern() paths.Path {

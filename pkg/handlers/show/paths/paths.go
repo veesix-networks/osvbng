@@ -198,8 +198,11 @@ const (
 	CGNATStatistics Path = "cgnat.statistics"
 	CGNATLookup     Path = "cgnat.lookup"
 
-	QoSScheduler Path = "qos.scheduler"
-	QoSAggregate Path = "qos.aggregate"
+	QoSScheduler        Path = "qos.scheduler"
+	QoSSchedulerSession Path = "qos.scheduler.session"
+	QoSSchedulerDetail  Path = "qos.scheduler.detail"
+	QoSAggregate        Path = "qos.aggregate"
+	QoSAggregateDetail  Path = "qos.aggregate.detail"
 
 	RoutingPolicyPrefixSets         Path = "routing-policies.prefix-sets"
 	RoutingPolicyPrefixSet          Path = "routing-policies.prefix-sets.<*>"
