@@ -12,6 +12,8 @@ package vpp
 import (
 	"fmt"
 
+	govppapi "go.fd.io/govpp/api"
+
 	"github.com/veesix-networks/osvbng/pkg/config/qos"
 	"github.com/veesix-networks/osvbng/pkg/southbound"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/interface_types"
@@ -283,15 +285,194 @@ func (v *VPP) RemoveScheduler(swIfIndex uint32) error {
 	return nil
 }
 
+// interfaceName resolves a sw_if_index to its interface name, empty when the
+// interface is not (or no longer) known.
+func (v *VPP) interfaceName(swIfIndex uint32) string {
+	if iface := v.ifMgr.Get(swIfIndex); iface != nil {
+		return iface.Name
+	}
+	return ""
+}
+
+// DumpSchedulers reports every subscriber scheduler, through the v2 dump
+// when the dataplane carries it and the v1 dump otherwise.
 func (v *VPP) DumpSchedulers() ([]southbound.SchedulerState, error) {
+	return v.dumpSchedulers(^uint32(0), nil)
+}
+
+// DumpScheduler reports one scheduler, nil when the interface has none.
+func (v *VPP) DumpScheduler(swIfIndex uint32) (*southbound.SchedulerState, error) {
+	states, err := v.dumpSchedulers(swIfIndex, nil)
+	if err != nil || len(states) == 0 {
+		return nil, err
+	}
+	return &states[0], nil
+}
+
+type schedParentFilter struct {
+	swIfIndex uint32
+	level     cake.OsvbngCakeAggLevel
+	svlanID   uint16
+}
+
+// DumpSchedulersByParent reports the members of one aggregate. Membership
+// only exists on the v2 wire, so a v1-only dataplane gets
+// ErrSchedV2Unsupported rather than a silently empty answer.
+func (v *VPP) DumpSchedulersByParent(parentSwIfIndex uint32, level string, svlanID uint16) ([]southbound.SchedulerState, error) {
+	if !v.schedV2Available() {
+		return nil, southbound.ErrSchedV2Unsupported
+	}
+
+	lvl := cake.OSVBNG_CAKE_AGG_LEVEL_PORT
+	if level == "svlan" {
+		lvl = cake.OSVBNG_CAKE_AGG_LEVEL_SVLAN
+	}
+	return v.dumpSchedulers(^uint32(0), &schedParentFilter{
+		swIfIndex: parentSwIfIndex,
+		level:     lvl,
+		svlanID:   svlanID,
+	})
+}
+
+// The v2 scheduler dump has no capabilities feature bit: adding one would
+// have changed the CRC of capabilities_reply and broken every older control
+// plane. Availability is discovered the way capabilities themselves are -
+// send the message, and treat its absence as an answer. Only an answer
+// latches; a transport failure leaves the question open for the next call.
+func (v *VPP) schedV2Available() bool {
+	capsMu.Lock()
+	defer capsMu.Unlock()
+	return !schedV2.known || schedV2.supported
+}
+
+func latchSchedV2(supported bool) {
+	capsMu.Lock()
+	schedV2 = schedV2State{known: true, supported: supported}
+	capsMu.Unlock()
+}
+
+func (v *VPP) dumpSchedulers(swIfIndex uint32, parent *schedParentFilter) ([]southbound.SchedulerState, error) {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
 		return nil, fmt.Errorf("create API channel: %w", err)
 	}
 	defer ch.Close()
 
+	if v.schedV2Available() {
+		states, v2err := v.dumpSchedulersV2(ch, swIfIndex, parent)
+		if v2err == nil {
+			latchSchedV2(true)
+			return states, nil
+		}
+		if schedV2Latched() {
+			return nil, v2err
+		}
+		// First contact failed: distinguish "message not there" from a
+		// failing dataplane by asking the v1 question. Only a v1 success
+		// latches the fallback.
+		states, v1err := v.dumpSchedulersV1(ch, swIfIndex)
+		if v1err != nil {
+			return nil, fmt.Errorf("dump schedulers: %w", v2err)
+		}
+		latchSchedV2(false)
+		v.logger.Info("CAKE scheduler v2 dump not supported, using v1", "error", v2err)
+		return states, nil
+	}
+
+	return v.dumpSchedulersV1(ch, swIfIndex)
+}
+
+func schedV2Latched() bool {
+	capsMu.Lock()
+	defer capsMu.Unlock()
+	return schedV2.known && schedV2.supported
+}
+
+func (v *VPP) dumpSchedulersV2(ch govppapi.Channel, swIfIndex uint32, parent *schedParentFilter) ([]southbound.SchedulerState, error) {
+	req := &cake.OsvbngCakeSchedV2Dump{
+		SwIfIndex:       interface_types.InterfaceIndex(swIfIndex),
+		ParentSwIfIndex: ^interface_types.InterfaceIndex(0),
+	}
+	if parent != nil {
+		req.ParentSwIfIndex = interface_types.InterfaceIndex(parent.swIfIndex)
+		req.ParentLevel = parent.level
+		req.ParentSvlanID = parent.svlanID
+	}
+
+	var result []southbound.SchedulerState
+
+	multi := ch.SendMultiRequest(req)
+	for {
+		d := &cake.OsvbngCakeSchedV2Details{}
+		stop, err := multi.ReceiveReply(d)
+		if stop {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("dump schedulers v2: %w", err)
+		}
+
+		s := southbound.SchedulerState{
+			SwIfIndex:       uint32(d.SwIfIndex),
+			InterfaceName:   v.interfaceName(uint32(d.SwIfIndex)),
+			RateKbps:        d.RateBytesPerSec * 8 / 1000,
+			TinMode:         d.TinMode.String(),
+			TinCount:        d.TinCnt,
+			Weight:          d.Weight,
+			EffectiveWeight: d.EffectiveWeight,
+			HasParent:       d.HasParent,
+			DRRActive:       d.DrrActive,
+			DRRDeficit:      int64(d.DrrDeficit),
+			DRRBlocked:      d.DrrBlocked,
+			ParentBlocked:   d.ParentBlocked,
+			EnqueuedPkts:    d.EnqueuedPkts,
+			EnqueuedBytes:   d.EnqueuedBytes,
+			DequeuedPkts:    d.DequeuedPkts,
+			DequeuedBytes:   d.DequeuedBytes,
+			DroppedPkts:     d.DroppedPkts,
+			QueuedBuffers:   d.QueuedBuffers,
+			BufferUsage:     d.BufferUsage,
+			BufferLimit:     d.BufferLimit,
+			OwnerThread:     d.OwnerThread,
+			OverheadBytes:   d.OverheadBytes,
+			ATMMode:         d.AtmMode.String(),
+			MPU:             d.Mpu,
+			TargetUs:        d.TargetUs,
+			IntervalUs:      d.IntervalUs,
+		}
+		if d.HasParent {
+			s.ParentSwIfIndex = uint32(d.ParentSwIfIndex)
+			s.ParentSVLANID = d.ParentSvlanID
+			s.ParentLevel = "port"
+			if d.ParentLevel == cake.OSVBNG_CAKE_AGG_LEVEL_SVLAN {
+				s.ParentLevel = "svlan"
+			}
+		}
+
+		for i := uint8(0); i < d.TinCnt && i < 8; i++ {
+			s.Tins = append(s.Tins, southbound.SchedulerTinState{
+				Tin:         i,
+				Packets:     d.TinPackets[i],
+				Bytes:       d.TinBytes[i],
+				Drops:       d.TinDrops[i],
+				ECNMarks:    d.TinEcnMarks[i],
+				SparseFlows: d.TinSparseFlows[i],
+				BulkFlows:   d.TinBulkFlows[i],
+				FlowCount:   d.TinFlowCount[i],
+				PeakDelayUs: d.TinPeakDelayUs[i],
+				AvgDelayUs:  d.TinAvgDelayUs[i],
+			})
+		}
+
+		result = append(result, s)
+	}
+
+	return result, nil
+}
+
+func (v *VPP) dumpSchedulersV1(ch govppapi.Channel, swIfIndex uint32) ([]southbound.SchedulerState, error) {
 	req := &cake.OsvbngCakeSchedDump{
-		SwIfIndex: ^interface_types.InterfaceIndex(0),
+		SwIfIndex: interface_types.InterfaceIndex(swIfIndex),
 	}
 
 	var result []southbound.SchedulerState
@@ -308,17 +489,20 @@ func (v *VPP) DumpSchedulers() ([]southbound.SchedulerState, error) {
 		}
 
 		s := southbound.SchedulerState{
-			SwIfIndex:   uint32(d.SwIfIndex),
-			RateKbps:    d.RateBytesPerSec * 8 / 1000,
-			TinMode:     d.TinMode.String(),
-			TinCount:    d.TinCnt,
-			BufferUsage: d.BufferUsage,
-			BufferLimit: d.BufferLimit,
+			SwIfIndex:     uint32(d.SwIfIndex),
+			InterfaceName: v.interfaceName(uint32(d.SwIfIndex)),
+			RateKbps:      d.RateBytesPerSec * 8 / 1000,
+			TinMode:       d.TinMode.String(),
+			TinCount:      d.TinCnt,
+			BufferUsage:   d.BufferUsage,
+			BufferLimit:   d.BufferLimit,
 		}
 
 		for i := uint8(0); i < d.TinCnt && i < 8; i++ {
 			s.Tins = append(s.Tins, southbound.SchedulerTinState{
+				Tin:         i,
 				Packets:     d.TinPackets[i],
+				Bytes:       d.TinBytes[i],
 				Drops:       d.TinDrops[i],
 				ECNMarks:    d.TinEcnMarks[i],
 				SparseFlows: d.TinSparseFlows[i],

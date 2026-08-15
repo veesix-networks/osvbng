@@ -41,7 +41,17 @@ func isRetval(err error, code int32) bool {
 var (
 	capsMu sync.Mutex
 	caps   cakeCapabilities
+
+	// schedV2 latches whether the dataplane carries the scheduler v2 dump.
+	// Discovered by sending the message rather than a capabilities bit -
+	// see the comment on (*VPP).schedV2Available. Shares capsMu.
+	schedV2 schedV2State
 )
+
+type schedV2State struct {
+	known     bool
+	supported bool
+}
 
 type cakeCapabilities struct {
 	known    bool
@@ -264,11 +274,13 @@ func (v *VPP) DumpAggregates() ([]southbound.AggregateState, error) {
 
 		out = append(out, southbound.AggregateState{
 			SwIfIndex:        uint32(details.SwIfIndex),
+			InterfaceName:    v.interfaceName(uint32(details.SwIfIndex)),
 			Level:            level,
 			SVLANID:          details.SvlanID,
 			SVLANIDEnd:       details.SvlanIDEnd,
 			RateKbps:         details.RateBytesPerSec * 8 / 1000,
 			Weight:           details.Weight,
+			EffectiveWeight:  details.EffectiveWeight,
 			BurstMs:          details.BurstNs / 1_000_000,
 			BufferUsage:      details.BufferUsage,
 			BufferLimit:      details.BufferLimit,
