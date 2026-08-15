@@ -247,6 +247,7 @@ func (c *Component) setupSessionRestore(ctx context.Context, sess *SessionState)
 		OuterVLAN:        sess.OuterVLAN,
 		InnerVLAN:        sess.InnerVLAN,
 		IfIndex:          sess.SwIfIndex,
+		AccessIfIndex:    sess.EncapIfIndex,
 		VRF:              sess.VRF,
 		ServiceGroup:     sess.ServiceGroup.Name,
 		SRGName:          sess.SRGName,

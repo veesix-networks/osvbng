@@ -706,15 +706,20 @@ func (s *SessionState) checkOpen() {
 			s.component.checkpointSession(s)
 
 			s.component.publishSessionLifecycle(&models.PPPSession{
-				SessionID:        s.SessionID,
-				State:            models.SessionStateActive,
-				AccessType:       string(models.AccessTypePPPoE),
-				Protocol:         string(models.ProtocolPPPoESession),
-				PPPSessionID:     s.PPPoESessionID,
-				MAC:              s.MAC,
-				OuterVLAN:        s.OuterVLAN,
-				InnerVLAN:        s.InnerVLAN,
+				SessionID:    s.SessionID,
+				State:        models.SessionStateActive,
+				AccessType:   string(models.AccessTypePPPoE),
+				Protocol:     string(models.ProtocolPPPoESession),
+				PPPSessionID: s.PPPoESessionID,
+				MAC:          s.MAC,
+				OuterVLAN:    s.OuterVLAN,
+				InnerVLAN:    s.InnerVLAN,
+				// The session interface does not exist yet - the async VPP
+				// add runs after this publish - so IfIndex still holds the
+				// punt interface here. TopicSessionProgrammed carries the
+				// real one; the subscriber component re-persists it.
 				IfIndex:          s.SwIfIndex,
+				AccessIfIndex:    s.EncapIfIndex,
 				VRF:              s.VRF,
 				ServiceGroup:     s.ServiceGroup.Name,
 				SRGName:          s.SRGName,
@@ -810,6 +815,7 @@ func (s *SessionState) onVPPSessionCreated(swIfIndex uint32, err error) {
 		OuterVLAN:        s.OuterVLAN,
 		InnerVLAN:        s.InnerVLAN,
 		IfIndex:          s.SwIfIndex,
+		AccessIfIndex:    s.EncapIfIndex,
 		VRF:              s.VRF,
 		ServiceGroup:     s.ServiceGroup.Name,
 		SRGName:          s.SRGName,
