@@ -42,6 +42,26 @@
     groups: docker
     append: true
 
+# Workflows publish and fetch release assets with the GitHub CLI.
+- name: GitHub CLI apt key
+  ansible.builtin.get_url:
+    url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
+    dest: /etc/apt/keyrings/githubcli.gpg
+    mode: "0644"
+
+- name: GitHub CLI apt repo
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/etc/apt/keyrings/githubcli.gpg]
+      https://cli.github.com/packages stable main
+    filename: github-cli
+
+- name: Install GitHub CLI
+  ansible.builtin.apt:
+    name: gh
+    state: present
+    update_cache: true
+
 # Preallocate the hugepage pool at the host level. Every BNG
 # container draws 2M pages from this one global pool, so parallel
 # labs need it sized for all of them, and preallocation at boot
