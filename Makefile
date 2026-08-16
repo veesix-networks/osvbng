@@ -2,7 +2,7 @@
 # Licensed under the GNU General Public License v3.0 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-.PHONY: all build generate generate-proto clean run test cli build-cli docker-local docker-kea-local lint fmt robot-test clean-branches dev-vm dev-vm-sync validate-artifacts tarball-smoke bump-submodules
+.PHONY: all build generate generate-proto clean run test cli build-cli docker-local docker-kea-local qa qa-sweep lint fmt robot-test clean-branches dev-vm dev-vm-sync validate-artifacts tarball-smoke bump-submodules
 
 all: generate build
 
@@ -54,11 +54,30 @@ build-cli: generate
 	go build -o bin/osvbngcli ./cmd/osvbngcli
 
 docker-local:
-	docker build -f docker/Dockerfile \
+	DOCKER_BUILDKIT=1 docker build -f docker/Dockerfile \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg COMMIT=$(COMMIT) \
 		--build-arg DATE=$(DATE) \
 		-t veesixnetworks/osvbng:local .
+
+# One-command dev loop: rebuild the image, run the suite covering the
+# change. Usage: make qa suite=04-pppoe-local
+qa: docker-local
+	@test -n "$(suite)" || { echo "usage: make qa suite=NN-topic"; exit 1; }
+	./scripts/run-qa-tests.sh -r 1 -t $(suite)
+
+# Full local regression sweep, one run per suite. Exclusions are the
+# suites not expected green right now; record the reason when adding
+# one.
+QA_SWEEP_EXCLUDE := \
+	-x 09-cgnat-ipoe-det \
+	-x 11-cgnat-pppoe-det \
+	-x 18-ipoe-linux-client \
+	-x 19-ipoe-linux-client-cake \
+	-x 25-l3vpn
+
+qa-sweep: docker-local
+	./scripts/run-qa-tests.sh -r 1 $(QA_SWEEP_EXCLUDE)
 
 docker-kea-local:
 	docker build -f docker/dev/Dockerfile.kea \

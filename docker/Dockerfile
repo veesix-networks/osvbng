@@ -11,9 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /build
 
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
-RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10 && \
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10 && \
     go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
 
 COPY . .
@@ -22,7 +24,12 @@ ARG VERSION=dev
 ARG COMMIT=unknown
 ARG DATE=unknown
 
-RUN VERSION=${VERSION} COMMIT=${COMMIT} DATE=${DATE} make build
+# The cache mounts persist the module and build caches across image
+# builds, so an incremental source change recompiles only its packages
+# instead of the whole daemon.
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    VERSION=${VERSION} COMMIT=${COMMIT} DATE=${DATE} make build
 
 FROM debian:12-slim
 
