@@ -1,0 +1,130 @@
+{
+ "path": "qos.aggregate.detail",
+ "data": {
+  "aggregate": {
+   "sw_if_index": 1,
+   "interface": "eth1",
+   "level": "port",
+   "svlan_id": 0,
+   "svlan_id_end": 0,
+   "rate_kbps": 8000,
+   "weight": 1,
+   "effective_weight": 1000000,
+   "buffer_usage": 1204224,
+   "buffer_limit": 16777216,
+   "active_weight": 1750000,
+   "active_children": 3,
+   "shaped_pkts": 88213404,
+   "shaped_bytes": 112400000000,
+   "backpressure": 122,
+   "drr_blocked": 0,
+   "parent_blocked": 904211
+  },
+  "children": [
+   {
+    "aggregate": {
+     "sw_if_index": 1,
+     "interface": "eth1",
+     "level": "svlan",
+     "svlan_id": 100,
+     "svlan_id_end": 100,
+     "rate_kbps": 6000,
+     "weight": 1,
+     "effective_weight": 750000,
+     "buffer_usage": 96256,
+     "buffer_limit": 1048576,
+     "active_weight": 500000,
+     "active_children": 2,
+     "shaped_pkts": 40100000,
+     "shaped_bytes": 51200000000,
+     "backpressure": 31,
+     "drr_blocked": 421882,
+     "parent_blocked": 88104
+    },
+    "schedulers": [
+     {
+      "sw_if_index": 7,
+      "interface": "ipoe0.100.1",
+      "session_id": "9f8be1a2-77c1-4a83-9e0f-0d5a2f6b3c11",
+      "rate_kbps": 2000
+     },
+     {
+      "sw_if_index": 9,
+      "interface": "ipoe0.100.2",
+      "session_id": "41c2d90e-8f11-4b02-b7aa-3c99e01d22f4",
+      "rate_kbps": 8000
+     }
+    ]
+   },
+   {
+    "aggregate": {
+     "sw_if_index": 1,
+     "interface": "eth1",
+     "level": "svlan",
+     "svlan_id": 200,
+     "svlan_id_end": 200,
+     "rate_kbps": 3000,
+     "weight": 1,
+     "effective_weight": 375000,
+     "buffer_usage": 0,
+     "buffer_limit": 1048576,
+     "active_weight": 250000,
+     "active_children": 2,
+     "shaped_pkts": 9012383,
+     "shaped_bytes": 11100000000,
+     "backpressure": 0,
+     "drr_blocked": 10233,
+     "parent_blocked": 4411
+    },
+    "schedulers": [
+     {
+      "sw_if_index": 12,
+      "interface": "pppoe-session-3",
+      "rate_kbps": 4000
+     },
+     {
+      "sw_if_index": 13,
+      "interface": "pppoe-session-4",
+      "session_id": "c81f33ab-2d0e-47c1-9d6a-88f0be12aa07",
+      "rate_kbps": 4000
+     }
+    ]
+   },
+   {
+    "aggregate": {
+     "sw_if_index": 1,
+     "interface": "eth1",
+     "level": "svlan",
+     "svlan_id": 300,
+     "svlan_id_end": 300,
+     "rate_kbps": 3000,
+     "weight": 1,
+     "effective_weight": 375000,
+     "buffer_usage": 51200,
+     "buffer_limit": 1048576,
+     "active_weight": 125000,
+     "active_children": 1,
+     "shaped_pkts": 5000000,
+     "shaped_bytes": 6000000000,
+     "backpressure": 3,
+     "drr_blocked": 100,
+     "parent_blocked": 50
+    },
+    "schedulers": [
+     {
+      "sw_if_index": 14,
+      "interface": "ipoe0.300.5",
+      "session_id": "5d2f6b3c-0d5a-4e0f-9e77-c14a831a2f8b",
+      "rate_kbps": 4000
+     },
+     {
+      "sw_if_index": 15,
+      "interface": "ipoe0.300.6",
+      "session_id": "aa10c44e-9d21-4f6e-8a02-77b3e91cd554",
+      "rate_kbps": 4000
+     }
+    ]
+   }
+  ]
+ }
+}

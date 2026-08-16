@@ -26,7 +26,7 @@ Resource            ../common.robot
 Resource            ../bngblaster.robot
 Resource            ../sessions.robot
 
-Suite Setup         Deploy Topology    ${lab-file}
+Suite Setup         Setup HQoS Test
 Suite Teardown      Teardown HQoS Test
 
 *** Variables ***
@@ -50,11 +50,8 @@ Verify HQoS Aggregates Programmed
     [Documentation]    The port and all three S-VLAN aggregates exist in the
     ...    dataplane with their configured rates, applied through the
     ...    qos-aggregates conf schema at startup.
-    ${output} =    Get osvbng API Response    ${bng1}    /api/show/qos/aggregate
-    ${rc}    ${result} =    Run And Return Rc And Output
-    ...    echo '${output}' | python3 -c "import sys,json; e=(json.load(sys.stdin).get('data') or []); port=[a for a in e if a['level']=='port']; sv={a['svlan_id']: a['rate_kbps'] for a in e if a['level']=='svlan'}; assert len(port)==1 and port[0]['rate_kbps']==8000, port; assert sv=={100:6000,200:3000,300:3000}, sv; print('port 8000, svlans', sv)"
-    Log    ${result}    console=yes
-    Should Be Equal As Integers    ${rc}    0    Aggregates not programmed as configured: ${output}
+    Save API Response To File    ${bng1}    /api/show/qos/aggregate    ${OUTPUT DIR}/qos-aggregate.json
+    Run QoS Check    aggregates-programmed    ${OUTPUT DIR}/qos-aggregate.json    8000    100:6000,200:3000,300:3000
 
 Establish Subscriber Sessions
     [Documentation]    Six QinQ IPoE sessions, two per S-VLAN, via bngblaster.
@@ -77,24 +74,30 @@ Verify Aggregate Detail Hierarchy Via API
     [Documentation]    The aggregate detail view renders the whole tree over
     ...    the API: the port, its three S-VLAN children, and two member
     ...    schedulers under each child, every member carrying its session id.
-    ${output} =    Get osvbng API Response    ${bng1}    /api/show/qos/aggregate/detail?interface=eth1
-    ${rc}    ${result} =    Run And Return Rc And Output
-    ...    echo '${output}' | python3 -c "import sys,json; d=json.load(sys.stdin)['data']; assert d['aggregate']['level']=='port', d['aggregate']; ch={c['aggregate']['svlan_id']: c for c in d.get('children') or []}; assert sorted(ch)==[100,200,300], sorted(ch); members={sv: len(c.get('schedulers') or []) for sv,c in ch.items()}; assert members=={100:2,200:2,300:2}, members; ids=[s.get('session_id') for c in ch.values() for s in c['schedulers']]; assert all(ids), ids; print('members per svlan:', members)"
-    Log    ${result}    console=yes
-    Should Be Equal As Integers    ${rc}    0    Aggregate detail hierarchy wrong: ${output}
+    Save API Response To File    ${bng1}    /api/show/qos/aggregate/detail?interface=eth1    ${OUTPUT DIR}/qos-detail.json
+    Run QoS Check    aggregate-detail    ${OUTPUT DIR}/qos-detail.json    100,200,300    2
 
 Verify Scheduler Session View Via API
     [Documentation]    The per-session view resolves a session id to its
     ...    scheduler and the aggregate tiers above it.
-    ${sessions} =    Get osvbng API Response    ${bng1}    /api/show/subscriber/sessions
-    ${rc}    ${sid} =    Run And Return Rc And Output
-    ...    echo '${sessions}' | python3 -c "import sys,json; print(json.load(sys.stdin)['data'][0]['SessionID'])"
-    Should Be Equal As Integers    ${rc}    0    Could not pick a session id: ${sessions}
-    ${output} =    Get osvbng API Response    ${bng1}    /api/show/qos/scheduler/session?session_id=${sid}
-    ${rc}    ${result} =    Run And Return Rc And Output
-    ...    echo '${output}' | python3 -c "import sys,json; d=json.load(sys.stdin)['data']; assert d.get('session_id'), d; s=d.get('scheduler'); assert s and s['rate_kbps']>0, d; assert d.get('parent_svlan') and d.get('parent_port'), d; print(d['session_id'], '->', s['rate_kbps'], 'kbps under svlan', d['parent_svlan']['svlan_id'])"
-    Log    ${result}    console=yes
-    Should Be Equal As Integers    ${rc}    0    Scheduler session view wrong: ${output}
+    Save API Response To File    ${bng1}    /api/show/subscriber/sessions    ${OUTPUT DIR}/qos-sessions.json
+    ${sid} =    Run QoS Check    pick-session-id    ${OUTPUT DIR}/qos-sessions.json
+    Save API Response To File    ${bng1}    /api/show/qos/scheduler/session?session_id=${sid}    ${OUTPUT DIR}/qos-session-view.json
+    Run QoS Check    session-view    ${OUTPUT DIR}/qos-session-view.json
+
+Verify CLI Scheduler Table
+    [Documentation]    osvbngcli renders the compact one-line-per-scheduler
+    ...    table: header tokens present, every session uuid full-length, no
+    ...    JSON blobs and no interactive banner.
+    Save CLI Command Output To File    ${bng1}    show qos scheduler    ${OUTPUT DIR}/qos-cli-scheduler.txt
+    Run QoS Check    cli-scheduler-table    ${OUTPUT DIR}/qos-cli-scheduler.txt    ${session-count}
+
+Verify CLI Aggregate Tree
+    [Documentation]    osvbngcli renders the aggregate hierarchy as a tree:
+    ...    the port line with each S-VLAN beneath it and counter lines per
+    ...    tier.
+    Save CLI Command Output To File    ${bng1}    show qos aggregate    ${OUTPUT DIR}/qos-cli-aggregate.txt
+    Run QoS Check    cli-aggregate-tree    ${OUTPUT DIR}/qos-cli-aggregate.txt    100,200,300
 
 Verify Per-Tin Metrics Exported
     [Documentation]    Every scheduler tin series carries a tin label, one
@@ -126,21 +129,22 @@ Verify Aggregates Drain On Teardown
     ...    Check Aggregates Drained    ${bng1}
 
 *** Keywords ***
+Setup HQoS Test
+    # Self-test the assertion tooling against committed fixtures before
+    # spending any lab time: a broken assertion fails here in seconds, not
+    # thirty minutes into a topology run.
+    Run QoS Check    selftest
+    Deploy Topology    ${lab-file}
+
 Check Tin Metric Series
     [Arguments]    ${container}    ${expected}
-    ${ip} =    Get Container IPv4    ${container}
-    ${rc}    ${result} =    Run And Return Rc And Output
-    ...    curl -sf http://${ip}:9090/metrics | python3 -c "import sys,re; text=sys.stdin.read(); rows=re.findall(r'osvbng_qos_scheduler_tin_packets\\{([^}]*)\\}', text); labelled=[r for r in rows if re.search(r'tin=\\x22\\d+\\x22', r)]; assert rows, 'no tin_packets series scraped'; assert len(labelled)==len(rows), 'unlabelled tin series: %d of %d' % (len(rows)-len(labelled), len(rows)); assert len(labelled)==${expected}, 'expected ${expected} labelled series, got %d' % len(labelled); print(len(labelled), 'tin series, all labelled')"
-    Log    ${result}
-    Should Be Equal As Integers    ${rc}    0    Per-tin metric series wrong: ${result}
+    Save Metrics Scrape To File    ${container}    ${OUTPUT DIR}/qos-metrics.txt
+    Run QoS Check    tin-metrics    ${OUTPUT DIR}/qos-metrics.txt    ${expected}
 
 Check Scheduler Rates
     [Arguments]    ${container}
-    ${output} =    Get osvbng API Response    ${container}    /api/show/qos/scheduler
-    ${rc}    ${result} =    Run And Return Rc And Output
-    ...    echo '${output}' | python3 -c "import sys,json,collections; e=(json.load(sys.stdin).get('data') or []); c=collections.Counter(s['rate_kbps'] for s in e); assert c=={2000:1,8000:1,4000:4}, c; print(dict(c))"
-    Log    ${result}
-    Should Be Equal As Integers    ${rc}    0    Scheduler rates wrong: ${output}
+    Save API Response To File    ${container}    /api/show/qos/scheduler    ${OUTPUT DIR}/qos-scheduler.json
+    Run QoS Check    scheduler-rates    ${OUTPUT DIR}/qos-scheduler.json    2000:1,8000:1,4000:4
 
 Check HQoS Attachment
     [Arguments]    ${container}
@@ -151,11 +155,8 @@ Check HQoS Attachment
 
 Check No Sessions Remain
     [Arguments]    ${container}
-    ${output} =    Get osvbng API Response    ${container}    /api/show/subscriber/sessions
-    ${rc}    ${count} =    Run And Return Rc And Output
-    ...    echo '${output}' | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('data') or []))"
-    Should Be Equal As Integers    ${rc}    0
-    Should Be Equal As Integers    ${count}    0    ${count} session(s) still present after teardown
+    Save API Response To File    ${container}    /api/show/subscriber/sessions    ${OUTPUT DIR}/qos-teardown-sessions.json
+    Run QoS Check    no-sessions    ${OUTPUT DIR}/qos-teardown-sessions.json
 
 Check Aggregates Drained
     [Arguments]    ${container}

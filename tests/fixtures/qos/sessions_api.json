@@ -1,0 +1,29 @@
+{
+ "path": "subscriber.sessions",
+ "data": [
+  {
+   "SessionID": "9f8be1a2-77c1-4a83-9e0f-0d5a2f6b3c11",
+   "AccessType": "ipoe"
+  },
+  {
+   "SessionID": "41c2d90e-8f11-4b02-b7aa-3c99e01d22f4",
+   "AccessType": "ipoe"
+  },
+  {
+   "SessionID": "07d9b127-1048-4ed2-ab79-065d70efd72d",
+   "AccessType": "ipoe"
+  },
+  {
+   "SessionID": "c81f33ab-2d0e-47c1-9d6a-88f0be12aa07",
+   "AccessType": "ipoe"
+  },
+  {
+   "SessionID": "5d2f6b3c-0d5a-4e0f-9e77-c14a831a2f8b",
+   "AccessType": "ipoe"
+  },
+  {
+   "SessionID": "aa10c44e-9d21-4f6e-8a02-77b3e91cd554",
+   "AccessType": "ipoe"
+  }
+ ]
+}

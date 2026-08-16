@@ -57,6 +57,38 @@ Get Container IPv4
     Should Not Be Empty    ${ip}
     RETURN    ${ip}
 
+# The Save * To File keywords exist so suite assertions can run out-of-band
+# in a checked script (tests/qos_checks.py and friends) against a captured
+# file instead of inline `python3 -c` one-liners piped through the shell:
+# every argument below is passed argv-style, so there is no quoting surface
+# and no output-in-shell round trip.
+
+Save API Response To File
+    [Arguments]    ${container}    ${path}    ${file}
+    ${ip} =    Get Container IPv4    ${container}
+    ${result} =    Run Process    curl    -sf    http://${ip}:${OSVBNG_API_PORT}${path}    stdout=${file}
+    Should Be Equal As Integers    ${result.rc}    0    curl ${path} failed: ${result.stderr}
+
+Save Metrics Scrape To File
+    [Arguments]    ${container}    ${file}
+    ${ip} =    Get Container IPv4    ${container}
+    ${result} =    Run Process    curl    -sf    http://${ip}:9090/metrics    stdout=${file}
+    Should Be Equal As Integers    ${result.rc}    0    metrics scrape failed: ${result.stderr}
+
+Save CLI Command Output To File
+    [Arguments]    ${container}    ${command}    ${file}
+    ${result} =    Run Process    sudo    docker    exec    ${container}
+    ...    osvbngcli    --server    http://127.0.0.1:${OSVBNG_API_PORT}    -c    ${command}
+    ...    stdout=${file}    stderr=STDOUT
+    Should Be Equal As Integers    ${result.rc}    0    osvbngcli -c "${command}" failed, output in ${file}
+
+Run QoS Check
+    [Arguments]    @{args}
+    ${result} =    Run Process    python3    ${CURDIR}/qos_checks.py    @{args}
+    Log    ${result.stdout}
+    Should Be Equal As Integers    ${result.rc}    0    qos_checks ${args}[0]: ${result.stdout}
+    RETURN    ${result.stdout}
+
 Wait For osvbng Healthy
     [Arguments]    ${node}    ${lab_name}
     ${container} =    Set Variable    clab-${lab_name}-${node}

@@ -1,0 +1,14 @@
+{
+ "path": "qos.scheduler.session",
+ "data": {
+  "session_id": "9f8be1a2-77c1-4a83-9e0f-0d5a2f6b3c11",
+  "acct_session_id": "9f8be1a2",
+  "access_type": "ipoe",
+  "service_group": "sg-slow",
+  "interface": "ipoe0.100.1",
+  "access_interface": "eth1.100",
+  "outer_vlan": 100,
+  "inner_vlan": 11,
+  "note": "no QoS scheduler on this interface"
+ }
+}

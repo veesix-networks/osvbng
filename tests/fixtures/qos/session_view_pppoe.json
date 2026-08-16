@@ -1,0 +1,27 @@
+{
+ "path": "qos.scheduler.session",
+ "data": {
+  "session_id": "07d9b127-1048-4ed2-ab79-065d70efd72d",
+  "acct_session_id": "07d9b127",
+  "access_type": "pppoe",
+  "service_group": "sg-fast",
+  "interface": "pppoe-session-3",
+  "access_interface": "eth1.100",
+  "outer_vlan": 100,
+  "inner_vlan": 11,
+  "scheduler": {
+   "sw_if_index": 7,
+   "rate_kbps": 2000,
+   "tin_mode": "OSVBNG_CAKE_TIN_MODE_DIFFSERV4"
+  },
+  "parent_svlan": {
+   "level": "svlan",
+   "svlan_id": 200,
+   "rate_kbps": 3000
+  },
+  "parent_port": {
+   "level": "port",
+   "rate_kbps": 8000
+  }
+ }
+}

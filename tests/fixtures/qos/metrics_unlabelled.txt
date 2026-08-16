@@ -1,0 +1,6 @@
+osvbng_qos_scheduler_tin_packets{sw_if_index="7",interface="ipoe0.100.1",tin_mode="OSVBNG_CAKE_TIN_MODE_BESTEFFORT",tin="0"} 12345
+osvbng_qos_scheduler_tin_packets{sw_if_index="9",interface="ipoe0.100.2",tin_mode="OSVBNG_CAKE_TIN_MODE_BESTEFFORT",tin="0"} 12345
+osvbng_qos_scheduler_tin_packets{sw_if_index="12",interface="pppoe-session-3",tin_mode="OSVBNG_CAKE_TIN_MODE_BESTEFFORT",tin="0"} 12345
+osvbng_qos_scheduler_tin_packets{sw_if_index="13",interface="pppoe-session-4",tin_mode="OSVBNG_CAKE_TIN_MODE_BESTEFFORT",tin="0"} 12345
+osvbng_qos_scheduler_tin_packets{sw_if_index="14",interface="ipoe0.300.5",tin_mode="OSVBNG_CAKE_TIN_MODE_BESTEFFORT",tin="0"} 12345
+osvbng_qos_scheduler_tin_packets{sw_if_index="15",interface="unknown",tin_mode="OSVBNG_CAKE_TIN_MODE_BESTEFFORT"} 99

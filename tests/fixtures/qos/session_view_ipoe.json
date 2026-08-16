@@ -1,0 +1,27 @@
+{
+ "path": "qos.scheduler.session",
+ "data": {
+  "session_id": "9f8be1a2-77c1-4a83-9e0f-0d5a2f6b3c11",
+  "acct_session_id": "9f8be1a2",
+  "access_type": "ipoe",
+  "service_group": "sg-slow",
+  "interface": "ipoe0.100.1",
+  "access_interface": "eth1.100",
+  "outer_vlan": 100,
+  "inner_vlan": 11,
+  "scheduler": {
+   "sw_if_index": 7,
+   "rate_kbps": 2000,
+   "tin_mode": "OSVBNG_CAKE_TIN_MODE_DIFFSERV4"
+  },
+  "parent_svlan": {
+   "level": "svlan",
+   "svlan_id": 100,
+   "rate_kbps": 6000
+  },
+  "parent_port": {
+   "level": "port",
+   "rate_kbps": 8000
+  }
+ }
+}
