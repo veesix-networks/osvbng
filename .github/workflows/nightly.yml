@@ -1,0 +1,75 @@
+# Copyright 2026 The osvbng Authors
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Nightly tier: the full suite matrix against main, ungated because
+# it runs only already-merged code. A red nightly means main is red:
+# fix forward or revert before merging anything else, while the
+# failure still implicates at most a day of merges. The sweep is
+# skipped when nothing changed: the pair (osvbng HEAD, dataplane
+# provenance commit) is compared against the NIGHTLY_LAST repo
+# variable recorded by the previous successful sweep, so an
+# osvbng-vpp merge alone still triggers a run, since it changes what
+# is under test.
+
+name: nightly
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: integration
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      current: ${{ steps.check.outputs.current }}
+      changed: ${{ steps.check.outputs.changed }}
+      suites: ${{ steps.list.outputs.suites }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        run: echo "suites=$(./scripts/list-qa-suites.sh --all)" >> "$GITHUB_OUTPUT"
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          dp=$(gh release view dataplane-latest -R veesix-networks/osvbng-vpp \
+            --json body -q .body | grep -oE 'from [0-9a-f]{40}' | awk '{print $2}')
+          test -n "$dp"
+          current="${GITHUB_SHA}:${dp}"
+          last=$(gh variable get NIGHTLY_LAST --repo "$GITHUB_REPOSITORY" 2>/dev/null || echo none)
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          if [ "$current" = "$last" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "no changes since last successful sweep ($last), skipping"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  run:
+    needs: changes
+    if: needs.changes.outputs.changed == 'true'
+    uses: ./.github/workflows/suite-run.yml
+    with:
+      suites: ${{ needs.changes.outputs.suites }}
+
+  record:
+    needs: [changes, run]
+    if: needs.run.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record swept state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh variable set NIGHTLY_LAST --repo "$GITHUB_REPOSITORY" \
+            --body "${{ needs.changes.outputs.current }}"

@@ -2,15 +2,10 @@
 # Licensed under the GNU General Public License v3.0 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# Integration suites on the shared self-hosted pool, gated on
-# maintainer approval: the image job references the integration-rig
-# environment, whose required reviewer must approve before anything
-# executes PR code on the runner. The image is built once per run
-# from the osvbng-vpp dataplane-latest release debs (patched VPP core
-# plus all osvbng plugins from one build), so every suite in a run
-# tests the same image and the same dataplane. The suite matrix is
-# generated from tests/ at run time; adding a suite directory adds it
-# to CI without touching this file.
+# Per-PR tier: the core suite set from tests/ci-suites.txt, gated on
+# maintainer approval because it executes PR code on the shared
+# runner pool. The full matrix runs nightly (nightly.yml) and before
+# releases (release-qualification.yml).
 
 name: integration
 
@@ -19,8 +14,8 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Whole runs serialize: the suites share one image tag on the box,
-# and two runs building it concurrently would race.
+# Whole runs serialize across all tiers: the suites share one image
+# tag on the box, and two runs building it concurrently would race.
 concurrency:
   group: integration
   cancel-in-progress: false
@@ -35,81 +30,9 @@ jobs:
       - id: list
         run: echo "suites=$(./scripts/list-qa-suites.sh)" >> "$GITHUB_OUTPUT"
 
-  image:
-    environment: integration-rig
-    runs-on: [self-hosted, osvbng-metal]
-    steps:
-      - uses: actions/checkout@v4
-
-      # The runner keeps a per-commit cache of the four debs the
-      # image actually installs (the release also carries vpp-dbg,
-      # 92MB of symbols the image never uses), so a run downloads
-      # nothing unless the dataplane changed since the last run on
-      # this box.
-      - name: Fetch dataplane artifacts
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          body=$(gh release view dataplane-latest -R veesix-networks/osvbng-vpp \
-            --json body -q .body)
-          echo "dataplane provenance: $body"
-          sha=$(echo "$body" | grep -oE 'from [0-9a-f]{40}' | awk '{print $2}')
-          test -n "$sha"
-          cache="$HOME/.cache/osvbng-dataplane/$sha"
-          if [ ! -d "$cache" ]; then
-            tmp=$(mktemp -d)
-            for p in 'vpp_*.deb' 'vpp-plugin-core_*.deb' \
-                     'vpp-plugin-dpdk_*.deb' 'libvppinfra_*.deb'; do
-              gh release download dataplane-latest -R veesix-networks/osvbng-vpp \
-                -p "$p" -D "$tmp"
-            done
-            mkdir -p "$HOME/.cache/osvbng-dataplane"
-            mv "$tmp" "$cache"
-            ls -dt "$HOME"/.cache/osvbng-dataplane/*/ | tail -n +4 | xargs -r rm -rf
-          fi
-          mkdir -p docker/dataplane-debs
-          cp "$cache"/*.deb docker/dataplane-debs/
-
-      - name: Build osvbng image from dataplane debs
-        run: make docker-local
-
-      - name: Build Kea image
-        run: make docker-kea-local
-
-      - name: Pre-pull suite dependency images
-        run: |
-          docker pull veesixnetworks/bngblaster:0.9.30
-          docker pull frrouting/frr:v8.4.1
-
-  suites:
-    needs: [suites-list, image]
-    runs-on: [self-hosted, osvbng-metal]
-    strategy:
-      fail-fast: false
-      max-parallel: 3
-      matrix:
-        suite: ${{ fromJSON(needs.suites-list.outputs.suites) }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run ${{ matrix.suite }}
-        run: ./scripts/run-qa-tests.sh -r 1 -t ${{ matrix.suite }}
-
-      # A cancelled job kills robot before its suite teardown, which
-      # would leave the lab's containers up with VPP polling a core
-      # forever. Scoped to this suite's topology only: parallel jobs
-      # own other labs on the same box, so never destroy --all here.
-      - name: Destroy suite lab
-        if: always()
-        run: |
-          sudo containerlab destroy \
-            -t tests/${{ matrix.suite }}/${{ matrix.suite }}.clab.yml \
-            --cleanup 2>/dev/null || true
-
-      - name: Upload robot output
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: robot-${{ matrix.suite }}
-          path: tests/out/
-          retention-days: 14
+  run:
+    needs: suites-list
+    uses: ./.github/workflows/suite-run.yml
+    with:
+      suites: ${{ needs.suites-list.outputs.suites }}
+      environment: integration-rig

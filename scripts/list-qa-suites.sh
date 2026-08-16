@@ -8,13 +8,14 @@
 # integration workflow builds its matrix from this, so a new suite
 # directory joins CI without touching any workflow yaml.
 #
-# Staging override: while tests/ci-suites.txt exists, CI runs exactly
-# the suites it lists. Delete the file to return to the full
-# generated matrix.
+# Core-set override: while tests/ci-suites.txt exists, the default
+# output is exactly the suites it lists (the per-PR tier). --all
+# ignores the override and emits the full matrix minus skips: the
+# nightly and release-qualification tiers use it.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-if [ -f tests/ci-suites.txt ]; then
+if [ "${1:-}" != "--all" ] && [ -f tests/ci-suites.txt ]; then
     sed 's/#.*//; s/[[:space:]]*$//' tests/ci-suites.txt | grep -v '^$' \
         | jq -R . | jq -sc .
     exit 0
