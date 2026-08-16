@@ -1,4 +1,0 @@
-- name: Restart wg0
-  ansible.builtin.service:
-    name: wg-quick@wg0
-    state: restarted

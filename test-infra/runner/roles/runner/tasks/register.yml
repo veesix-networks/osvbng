@@ -1,54 +1,54 @@
 # One runner service per instance, from the shared dist. Registration
 # is one-shot: once .runner exists the token tasks are skipped, so
-# reruns of the playbook never need tokens.
-- name: "Create instance directory for {{ repo.instance }}"
+# reruns of the playbook never need a token.
+- name: "Create instance directory for shared-{{ instance_no }}"
   ansible.builtin.copy:
     src: /opt/runner-dist/
-    dest: "/opt/runner-{{ repo.instance }}/"
+    dest: "/opt/runner-shared-{{ instance_no }}/"
     remote_src: true
     owner: runner
     group: runner
     mode: preserve
 
-- name: "Check registration of {{ repo.instance }}"
+- name: "Check registration of shared-{{ instance_no }}"
   ansible.builtin.stat:
-    path: "/opt/runner-{{ repo.instance }}/.runner"
+    path: "/opt/runner-shared-{{ instance_no }}/.runner"
   register: runner_registered
 
-- name: "Require registration token for {{ repo.instance }}"
+- name: "Require registration token for shared-{{ instance_no }}"
   ansible.builtin.assert:
-    that: lookup('vars', repo.token_var, default='') | length > 0
+    that: runner_token | default('') | length > 0
     fail_msg: >-
-      {{ repo.instance }} is unregistered and no {{ repo.token_var }}
-      was passed; fetch one with gh (see README) and rerun with
-      -e {{ repo.token_var }}=...
+      shared-{{ instance_no }} is unregistered and no runner_token was
+      passed; fetch an org registration token with gh (see README) and
+      rerun with -e runner_token=...
   when: not runner_registered.stat.exists
 
-- name: "Register {{ repo.instance }}"
+- name: "Register shared-{{ instance_no }}"
   become: true
   become_user: runner
   ansible.builtin.command:
-    chdir: "/opt/runner-{{ repo.instance }}"
+    chdir: "/opt/runner-shared-{{ instance_no }}"
     cmd: >-
       ./config.sh --unattended
-      --url {{ repo.url }}
-      --token {{ lookup('vars', repo.token_var) }}
-      --name {{ ansible_hostname }}-{{ repo.instance }}
+      --url {{ runner_org_url }}
+      --token {{ runner_token }}
+      --name {{ ansible_hostname }}-shared-{{ instance_no }}
       --labels {{ runner_labels }}
       --replace
   when: not runner_registered.stat.exists
   changed_when: true
   no_log: true
 
-- name: "Install runner service for {{ repo.instance }}"
+- name: "Install runner service for shared-{{ instance_no }}"
   ansible.builtin.command:
-    chdir: "/opt/runner-{{ repo.instance }}"
+    chdir: "/opt/runner-shared-{{ instance_no }}"
     cmd: ./svc.sh install runner
-    creates: "/etc/systemd/system/actions.runner.*{{ repo.instance }}*.service"
+    creates: "/etc/systemd/system/actions.runner.*shared-{{ instance_no }}*.service"
 
-- name: "Start runner service for {{ repo.instance }}"
+- name: "Start runner service for shared-{{ instance_no }}"
   ansible.builtin.command:
-    chdir: "/opt/runner-{{ repo.instance }}"
+    chdir: "/opt/runner-shared-{{ instance_no }}"
     cmd: ./svc.sh start
   changed_when: false
   failed_when: false

@@ -22,19 +22,30 @@
     mode: "0440"
     validate: visudo -cf %s
 
+# Ubuntu activates sshd through ssh.socket, which overrides the Port
+# directive in sshd_config. Disable the socket so ssh_listen_port is
+# authoritative on every distro; hosts behind an edge firewall keep
+# the default 22 and forward to it, directly exposed hosts set their
+# moved port here and the firewall role opens the same value.
+- name: Disable sshd socket activation
+  ansible.builtin.systemd_service:
+    name: ssh.socket
+    enabled: false
+    state: stopped
+  failed_when: false
+  notify: Restart sshd
+
 - name: Harden sshd
   ansible.builtin.copy:
     dest: /etc/ssh/sshd_config.d/90-runner.conf
     mode: "0644"
     content: |
+      Port {{ ssh_listen_port | default(22) }}
       PermitRootLogin no
       PasswordAuthentication no
       KbdInteractiveAuthentication no
       X11Forwarding no
-      AllowUsers runner
-      {% if ssh_wg_only %}
-      ListenAddress {{ wg_server_address | ansible.utils.ipaddr('address') }}
-      {% endif %}
+      AllowUsers runner {{ ansible_user }}
   notify: Restart sshd
 
 - name: Install fail2ban
@@ -50,4 +61,5 @@
     content: |
       [sshd]
       enabled = true
+      port = {{ ssh_listen_port | default(22) }}
   notify: Restart fail2ban

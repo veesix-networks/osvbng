@@ -14,7 +14,7 @@
 
 - name: Docker apt key
   ansible.builtin.get_url:
-    url: https://download.docker.com/linux/debian/gpg
+    url: "https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg"
     dest: /etc/apt/keyrings/docker.asc
     mode: "0644"
 
@@ -22,7 +22,8 @@
   ansible.builtin.apt_repository:
     repo: >-
       deb [signed-by=/etc/apt/keyrings/docker.asc]
-      https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable
+      https://download.docker.com/linux/{{ ansible_distribution | lower }}
+      {{ ansible_distribution_release }} stable
     filename: docker
 
 - name: Install docker
