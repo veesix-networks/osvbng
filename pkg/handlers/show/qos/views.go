@@ -17,7 +17,7 @@ import (
 // identity, its CAKE scheduler, and the aggregate tiers above it.
 type SchedulerSessionView struct {
 	SessionID       string `json:"session_id,omitempty"`
-	UUID            string `json:"uuid,omitempty"`
+	AcctSessionID   string `json:"acct_session_id,omitempty"`
 	AccessType      string `json:"access_type,omitempty"`
 	ServiceGroup    string `json:"service_group,omitempty"`
 	Interface       string `json:"interface,omitempty"`
@@ -41,7 +41,7 @@ type SessionCandidates struct {
 
 type SessionCandidate struct {
 	SessionID       string `json:"session_id"`
-	UUID            string `json:"uuid,omitempty"`
+	AcctSessionID   string `json:"acct_session_id,omitempty"`
 	AccessInterface string `json:"access_interface,omitempty"`
 	OuterVLAN       uint16 `json:"outer_vlan"`
 	InnerVLAN       uint16 `json:"inner_vlan"`
@@ -103,7 +103,7 @@ func buildSchedulerView(d *deps.ShowDeps, sess models.SubscriberSession, swIfInd
 
 	if sess != nil {
 		view.SessionID = sess.GetSessionID()
-		view.UUID = sess.GetAAASessionID()
+		view.AcctSessionID = sess.GetAAASessionID()
 		view.AccessType = string(sess.GetAccessType())
 		view.ServiceGroup = sess.GetServiceGroup()
 		view.OuterVLAN = sess.GetOuterVLAN()

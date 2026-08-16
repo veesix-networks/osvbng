@@ -29,11 +29,11 @@ type SchedulerSessionHandler struct {
 }
 
 type SchedulerSessionOptions struct {
-	SessionID string `query:"session_id" description:"Subscriber session identifier"`
-	UUID      string `query:"uuid" description:"AAA/accounting session identifier"`
-	Interface string `query:"interface" description:"Access interface, matched against the session's encap interface or its parent"`
-	OuterVLAN string `query:"outer_vlan" description:"Outer (S-) VLAN, with --interface"`
-	InnerVLAN string `query:"inner_vlan" description:"Inner (C-) VLAN, with --interface"`
+	SessionID     string `query:"session_id" description:"Subscriber session identifier"`
+	AcctSessionID string `query:"acct_session_id" description:"AAA/accounting session identifier (Acct-Session-Id)"`
+	Interface     string `query:"interface" description:"Access interface, matched against the session's encap interface or its parent"`
+	OuterVLAN     string `query:"outer_vlan" description:"Outer (S-) VLAN, with --interface"`
+	InnerVLAN     string `query:"inner_vlan" description:"Inner (C-) VLAN, with --interface"`
 }
 
 func (h *SchedulerSessionHandler) Collect(ctx context.Context, req *show.Request) (interface{}, error) {
@@ -67,10 +67,10 @@ func (h *SchedulerSessionHandler) Collect(ctx context.Context, req *show.Request
 	}
 	for _, sess := range matches {
 		cand := SessionCandidate{
-			SessionID: sess.GetSessionID(),
-			UUID:      sess.GetAAASessionID(),
-			OuterVLAN: sess.GetOuterVLAN(),
-			InnerVLAN: sess.GetInnerVLAN(),
+			SessionID:     sess.GetSessionID(),
+			AcctSessionID: sess.GetAAASessionID(),
+			OuterVLAN:     sess.GetOuterVLAN(),
+			InnerVLAN:     sess.GetInnerVLAN(),
 		}
 		if accessIfIndex := sess.GetAccessIfIndex(); accessIfIndex != 0 {
 			cand.AccessInterface = interfaceName(h.deps, accessIfIndex)
@@ -80,16 +80,17 @@ func (h *SchedulerSessionHandler) Collect(ctx context.Context, req *show.Request
 	return out, nil
 }
 
-// matchSessions filters the session store by uuid or interface+VLANs and
+// matchSessions filters the session store by accounting session id or
+// interface+VLANs and
 // fails when nothing matches or no filter was given at all.
 func (h *SchedulerSessionHandler) matchSessions(ctx context.Context, req *show.Request) ([]models.SubscriberSession, error) {
-	uuid := req.Options["uuid"]
+	acctID := req.Options["acct_session_id"]
 	ifName := req.Options["interface"]
 	outerStr := req.Options["outer_vlan"]
 	innerStr := req.Options["inner_vlan"]
 
-	if uuid == "" && ifName == "" && outerStr == "" {
-		return nil, fmt.Errorf("one of --session-id, --uuid, or --interface/--outer-vlan is required")
+	if acctID == "" && ifName == "" && outerStr == "" {
+		return nil, fmt.Errorf("one of --session-id, --acct-session-id, or --interface/--outer-vlan is required")
 	}
 
 	var outer, inner uint64
@@ -114,7 +115,7 @@ func (h *SchedulerSessionHandler) matchSessions(ctx context.Context, req *show.R
 
 	var matches []models.SubscriberSession
 	for _, sess := range sessions {
-		if uuid != "" && sess.GetAAASessionID() != uuid {
+		if acctID != "" && sess.GetAAASessionID() != acctID {
 			continue
 		}
 		if ifName != "" && !h.matchesAccessInterface(sess, ifName) {
@@ -170,7 +171,7 @@ func (h *SchedulerSessionHandler) Summary() string {
 }
 
 func (h *SchedulerSessionHandler) Description() string {
-	return "Look up a session by ID, AAA UUID, or interface and VLAN, and display its CAKE scheduler with per-tin stats plus the S-VLAN and port aggregates above it."
+	return "Look up a session by ID, accounting session id, or interface and VLAN, and display its CAKE scheduler with per-tin stats plus the S-VLAN and port aggregates above it."
 }
 
 func (h *SchedulerSessionHandler) OptionsType() interface{} {
