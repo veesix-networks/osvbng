@@ -85,15 +85,11 @@ qa: docker-local
 # Full local regression sweep, one run per suite. Exclusions are the
 # suites not expected green right now; record the reason when adding
 # one.
-QA_SWEEP_EXCLUDE := \
-	-x 09-cgnat-ipoe-det \
-	-x 11-cgnat-pppoe-det \
-	-x 18-ipoe-linux-client \
-	-x 19-ipoe-linux-client-cake \
-	-x 25-l3vpn
-
+# Exclusions come from tests/skip-suites.txt, the same file the
+# integration workflow's generated matrix uses, so local sweeps and
+# CI always agree on what is skipped.
 qa-sweep: docker-local
-	./scripts/run-qa-tests.sh -r 1 $(QA_SWEEP_EXCLUDE)
+	./scripts/run-qa-tests.sh -r 1 $$(sed 's/\#.*//' tests/skip-suites.txt | awk 'NF {print "-x " $$1}')
 
 docker-kea-local:
 	docker build -f docker/dev/Dockerfile.kea \

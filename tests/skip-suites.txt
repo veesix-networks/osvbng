@@ -1,0 +1,7 @@
+# Suites excluded from CI and the local qa-sweep, one per line.
+# Record the reason when adding one.
+09-cgnat-ipoe-det
+11-cgnat-pppoe-det
+18-ipoe-linux-client
+19-ipoe-linux-client-cake
+25-l3vpn

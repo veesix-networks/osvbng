@@ -2,6 +2,10 @@
 # Licensed under the GNU General Public License v3.0 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+# Build and unit tests only. The integration suites live in
+# integration.yml: approval-gated on the self-hosted pool, with the
+# suite matrix generated from tests/ instead of listed by hand.
+
 name: CI
 
 on:
@@ -20,12 +24,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.filter.outputs.code }}
-      ha: ${{ steps.filter.outputs.ha }}
-      sessions: ${{ steps.filter.outputs.sessions }}
-      dhcp: ${{ steps.filter.outputs.dhcp }}
-      radius: ${{ steps.filter.outputs.radius }}
-      cgnat: ${{ steps.filter.outputs.cgnat }}
-      vrf: ${{ steps.filter.outputs.vrf }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -42,51 +40,6 @@ jobs:
               - 'templates/**'
               - 'tests/**'
               - '.github/workflows/**'
-            ha:
-              - 'pkg/ha/**'
-              - 'api/proto/ha/**'
-              - 'tests/02-smoke-ha/**'
-              - 'tests/14-ha-failover-ipoe/**'
-              - 'tests/15-ha-failover-pppoe/**'
-              - 'tests/16-ha-failover-radius-ipoe/**'
-              - 'tests/17-ha-tracker-promotion-ipoe/**'
-            sessions:
-              - 'internal/ipoe/**'
-              - 'internal/pppoe/**'
-              - 'pkg/config/aaa/**'
-              - 'pkg/dhcp/**'
-              - 'plugins/auth/**'
-              - 'tests/03-ipoe-local/**'
-              - 'tests/04-pppoe-local/**'
-              - 'tests/sessions.robot'
-              - 'tests/localauth.robot'
-              - 'tests/bngblaster.robot'
-            dhcp:
-              - 'pkg/dhcp/**'
-              - 'plugins/dhcp4/**'
-              - 'plugins/dhcp6/**'
-              - 'tests/07-dhcp-relay-proxy/**'
-            radius:
-              - 'plugins/auth/radius/**'
-              - 'internal/aaa/**'
-              - 'pkg/config/aaa/**'
-              - 'tests/05-ipoe-radius/**'
-              - 'tests/06-pppoe-radius/**'
-            vrf:
-              - 'tests/24-vrf-lite/**'
-              - 'tests/25-l3vpn/**'
-            cgnat:
-              - 'internal/cgnat/**'
-              - 'pkg/config/cgnat/**'
-              - 'pkg/southbound/cgnat.go'
-              - 'pkg/southbound/vpp/cgnat.go'
-              - 'pkg/vpp/binapi/osvbng_cgnat/**'
-              - 'pkg/handlers/show/cgnat/**'
-              - 'pkg/handlers/oper/cgnat/**'
-              - 'tests/08-cgnat-ipoe-pba/**'
-              - 'tests/09-cgnat-ipoe-det/**'
-              - 'tests/10-cgnat-pppoe-pba/**'
-              - 'tests/11-cgnat-pppoe-det/**'
 
   build:
     runs-on: ubuntu-latest
@@ -141,92 +94,3 @@ jobs:
           name: Unit Tests
           path: build/reports/unit-tests.xml
           reporter: java-junit
-
-  build-image:
-    name: Build Docker Image
-    runs-on: self-hosted
-    needs: [file-changes, build]
-    if: (needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Build osvbng Docker image
-        run: make docker-local
-
-      - name: Build Kea Docker image
-        run: make docker-kea-local
-
-      - name: Pre-pull test dependency images
-        run: |
-          docker pull veesixnetworks/bngblaster:0.9.30
-          docker pull frrouting/frr:v8.4.1
-
-      - name: Ensure containerlab network exists
-        run: docker network create --subnet 172.20.20.0/24 --ipv6 --subnet 3fff:172:20:20::/64 clab 2>/dev/null || true
-
-  smoke-tests:
-    uses: ./.github/workflows/smoke-tests.yml
-    needs: [file-changes, build-image]
-    if: (needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-
-  smoke-ha-tests:
-    uses: ./.github/workflows/smoke-ha-tests.yml
-    needs: [file-changes, build-image]
-    if: (needs.file-changes.outputs.ha == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-
-  ipoe-local-tests:
-    uses: ./.github/workflows/ipoe-local-tests.yml
-    needs: [file-changes, build-image]
-    if: (needs.file-changes.outputs.sessions == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-
-  pppoe-local-tests:
-    uses: ./.github/workflows/pppoe-local-tests.yml
-    needs: [file-changes, build-image]
-    if: (needs.file-changes.outputs.sessions == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-
-  dhcp-relay-proxy-tests:
-    uses: ./.github/workflows/dhcp-relay-proxy-tests.yml
-    needs: [file-changes, build-image]
-    if: (needs.file-changes.outputs.dhcp == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-
-  ipoe-radius-tests:
-    uses: ./.github/workflows/ipoe-radius-tests.yml
-    needs: [file-changes, build-image]
-    if: (needs.file-changes.outputs.radius == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-
-  pppoe-radius-tests:
-    uses: ./.github/workflows/pppoe-radius-tests.yml
-    needs: [file-changes, build-image]
-    if: (needs.file-changes.outputs.radius == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-
-  cgnat-tests:
-    uses: ./.github/workflows/cgnat-tests.yml
-    needs: [file-changes, build-image]
-    if: (needs.file-changes.outputs.cgnat == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-
-  ha-failover-tests:
-    uses: ./.github/workflows/ha-failover-tests.yml
-    needs: [file-changes, build-image]
-    if: (needs.file-changes.outputs.ha == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-
-  ipoe-linux-client-tests:
-    uses: ./.github/workflows/ipoe-linux-client-tests.yml
-    needs: [file-changes, build-image]
-    if: (needs.file-changes.outputs.sessions == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-
-  opdb-restore-tests:
-    uses: ./.github/workflows/opdb-restore-tests.yml
-    needs: [file-changes, build-image]
-    if: (needs.file-changes.outputs.sessions == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-
-  vrf-lite-tests:
-    uses: ./.github/workflows/vrf-lite-tests.yml
-    needs: [file-changes, build-image]
-    if: (needs.file-changes.outputs.vrf == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-
-  l3vpn-tests:
-    uses: ./.github/workflows/l3vpn-tests.yml
-    needs: [file-changes, build-image]
-    if: (needs.file-changes.outputs.vrf == 'true' || needs.file-changes.outputs.code == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
