@@ -65,7 +65,15 @@ mkdir -p /var/log/osvbng
 echo "Configuring hugepages..."
 mkdir -p /dev/hugepages
 mount -t hugetlbfs -o pagesize=2M none /dev/hugepages || true
-echo 512 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages || true
+# nr_hugepages is the HOST-wide pool shared by every container on the
+# box. Grow it if it is too small, never shrink it: a plain write of
+# 512 here would pull the pool out from under labs already running.
+HP_PATH=/sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
+HP_WANT=512
+HP_HAVE=$(cat $HP_PATH 2>/dev/null || echo 0)
+if [ "$HP_HAVE" -lt "$HP_WANT" ]; then
+    echo $HP_WANT > $HP_PATH || true
+fi
 
 sysctl -w net.unix.max_dgram_qlen=10000 2>/dev/null || echo "Warning: Could not set max_dgram_qlen (need privileged mode)"
 sysctl -w net.core.rmem_max=67108864 2>/dev/null || true
