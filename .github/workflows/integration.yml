@@ -83,6 +83,17 @@ jobs:
       - name: Run ${{ matrix.suite }}
         run: ./scripts/run-qa-tests.sh -r 1 -t ${{ matrix.suite }}
 
+      # A cancelled job kills robot before its suite teardown, which
+      # would leave the lab's containers up with VPP polling a core
+      # forever. Scoped to this suite's topology only: parallel jobs
+      # own other labs on the same box, so never destroy --all here.
+      - name: Destroy suite lab
+        if: always()
+        run: |
+          sudo containerlab destroy \
+            -t tests/${{ matrix.suite }}/${{ matrix.suite }}.clab.yml \
+            --cleanup 2>/dev/null || true
+
       - name: Upload robot output
         if: always()
         uses: actions/upload-artifact@v4

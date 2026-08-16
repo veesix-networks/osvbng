@@ -130,9 +130,14 @@ total_pass=0
 total_fail=0
 
 REWRITTEN_TOPOS=()
+# Plain if, not a && chain: under set -e a failed test in the EXIT
+# trap becomes the script's exit code, which made every fully green
+# run exit 1.
 restore_topologies() {
     for f in "${REWRITTEN_TOPOS[@]:-}"; do
-        [ -n "$f" ] && [ -f "$f.qabak" ] && mv "$f.qabak" "$f"
+        if [ -n "$f" ] && [ -f "$f.qabak" ]; then
+            mv "$f.qabak" "$f"
+        fi
     done
 }
 trap restore_topologies EXIT
@@ -200,3 +205,8 @@ echo "" | tee -a "$SUMMARY"
 echo "========================================" | tee -a "$SUMMARY"
 echo "TOTAL: $total_pass passed, $total_fail failed out of $((total_pass + total_fail))" | tee -a "$SUMMARY"
 echo "Done: $(date)" | tee -a "$SUMMARY"
+
+# Exit red when any suite failed; the count was previously tallied
+# but never propagated, so CI could not tell a failed sweep from a
+# green one.
+[ "$total_fail" -eq 0 ]

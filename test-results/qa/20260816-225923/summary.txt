@@ -1,0 +1,13 @@
+QA Test Run: 20260816-225923
+Runs per test: 1
+Tests: 01-smoke
+Results: /tmp/claude-1000/-home-brandon-osvbng-dev-osvbng-context/68545c9c-186f-4326-856f-554b5025900b/scratchpad/osvbng-cifix/test-results/qa/20260816-225923
+========================================
+
+--- 01-smoke ---
+PASS (10 tests, 10 passed, 0 failed)
+  Result: 1/1 passed
+
+========================================
+TOTAL: 1 passed, 0 failed out of 1
+Done: Sun Aug 16 23:01:47 UTC 2026

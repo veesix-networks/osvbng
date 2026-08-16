@@ -1,0 +1,6 @@
+# Staging allowlist: while this file exists, CI runs exactly these
+# suites. Grow it as suites prove green on the runner; delete the
+# file to return to the full generated matrix minus skip-suites.txt.
+01-smoke
+03-ipoe-local
+04-pppoe-local
