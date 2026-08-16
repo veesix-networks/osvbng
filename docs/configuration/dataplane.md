@@ -5,9 +5,34 @@ Dataplane and DPDK configuration.
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
 | `rx_mode` | string | Interface RX mode: `polling`, `interrupt`, or `adaptive` | `polling` |
+| `main-core` | int | Core for VPP's main thread. Auto-resolved when unset | `0` |
+| `workers` | string | Core set for VPP workers. Auto-resolved when unset | `1-5` |
+| `cp-cores` | string | Core set for the Go control plane. Auto-resolved when unset | `6-7` |
 | `poll-sleep-usec` | int | Microseconds an idle worker sleeps between dispatch loops. Default `100` (low idle CPU); `0` polls continuously for lowest latency | `0` |
 | `dpdk` | [DPDK](#dpdk-configuration) | DPDK-specific configuration | |
 | `statseg` | [StatsSegment](#stats-segment) | Stats segment configuration | |
+
+## CPU Cores
+
+Each host resolves core placement locally at startup from the cores actually available to it (container cpusets are respected), so the same config works across hosts with different core counts. Unset fields follow the auto layout:
+
+| Cores | VPP main | VPP workers | Control plane |
+|-------|----------|-------------|---------------|
+| 1 | 0 | - | shared (0) |
+| 2 | 0 | 1 | shared (0) |
+| 3 | 0 | 1 | 2 |
+| 4 | 0 | 1-2 | 3 |
+| 5-7 | 0 | 1-(N-2) | N-1 |
+| 8+ | 0 | 1-(N-3) | (N-2)-(N-1) |
+
+Explicit sets override the auto layout per field and use the same syntax everywhere: ranges and commas, for example `2-3,34-35`. The control plane sizes `GOMAXPROCS` to its resolved set and is pinned to it, so giving it more cores is a config change, not a build change. Resolution is topology-blind: on a multi-socket host, expressing NUMA placement (workers beside their NICs, control-plane cores on a chosen socket) is done with explicit sets.
+
+```yaml
+dataplane:
+  main-core: 0
+  workers: 1-5
+  cp-cores: 6-7
+```
 
 ## RX Mode
 

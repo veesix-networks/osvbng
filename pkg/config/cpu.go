@@ -33,8 +33,9 @@ type ResolvedCPU struct {
 //	8+    | 0              | 1-(N-3)    | (N-2)-(N-1)
 //
 // Env var overrides (OSVBNG_DP_MAIN_CORE, OSVBNG_DP_WORKER_CORES, OSVBNG_CP_CORES)
-// and YAML config (dataplane.main-core, dataplane.workers) take priority over
-// auto-detection.
+// and YAML config (dataplane.main-core, dataplane.workers, dataplane.cp-cores)
+// take priority over auto-detection. The auto layout is topology-blind; on
+// multi-socket hosts NUMA placement is the operator's, via the explicit sets.
 func ResolveCPULayout(cfg *Config) *ResolvedCPU {
 	total := DetectAvailableCores()
 
@@ -61,8 +62,10 @@ func ResolveCPULayout(cfg *Config) *ResolvedCPU {
 		resolved.WorkerCores = autoWorkerCores(total)
 	}
 
-	// Priority for CP cores: env var > auto-layout
-	if v := os.Getenv("OSVBNG_CP_CORES"); v != "" {
+	// Priority for CP cores: YAML config > env var > auto-layout
+	if cfg.Dataplane.CPCores != "" {
+		resolved.CPCores = cfg.Dataplane.CPCores
+	} else if v := os.Getenv("OSVBNG_CP_CORES"); v != "" {
 		resolved.CPCores = v
 	} else {
 		resolved.CPCores = autoCPCores(total)
@@ -72,17 +75,33 @@ func ResolveCPULayout(cfg *Config) *ResolvedCPU {
 }
 
 func autoWorkerCores(total int) string {
-	if total > 1 {
+	switch {
+	case total <= 1:
+		return ""
+	case total <= 3:
 		return "1"
+	case total == 4:
+		return "1-2"
+	case total <= 7:
+		return fmt.Sprintf("1-%d", total-2)
+	default:
+		return fmt.Sprintf("1-%d", total-3)
 	}
-	return ""
 }
 
 func autoCPCores(total int) string {
-	if total >= 3 {
+	switch {
+	case total < 3:
+		return ""
+	case total == 3:
 		return "2"
+	case total == 4:
+		return "3"
+	case total <= 7:
+		return strconv.Itoa(total - 1)
+	default:
+		return fmt.Sprintf("%d-%d", total-2, total-1)
 	}
-	return ""
 }
 
 // WriteEnvFile writes the resolved layout as shell-evaluable variables.
