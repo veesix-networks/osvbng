@@ -12,8 +12,12 @@ Library             Collections
 ${CLAB_BIN}             sudo containerlab
 ${runtime}              docker
 ${OSVBNG_API_PORT}      8080
-${HEALTH_RETRIES}       60
-${HEALTH_INTERVAL}      5s
+# 300 x 1s keeps the same 5-minute budget as the previous 60 x 5s but
+# stops quantizing readiness to 5s steps: the daemon typically goes
+# healthy 11-15s after deploy, and a coarse poll pays up to a full
+# interval past that in every suite.
+${HEALTH_RETRIES}       300
+${HEALTH_INTERVAL}      1s
 ${VPPCTL_SOCK}          /run/osvbng/cli.sock
 ${TEST_LOG_DIR}         /tmp/test-logs
 
