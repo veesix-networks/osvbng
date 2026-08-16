@@ -668,13 +668,21 @@ func (s *SessionState) onIPCPDown() {
 func (s *SessionState) onIPv6CPUp() {
 	s.component.logger.Debug("IPv6CP up", "session_id", s.SessionID)
 	s.ipv6cpOpen = true
+	s.raInitialLeft = raInitialAdverts
 	s.component.placeSessionInRABucket(s)
+	// Hand the session to the emitter for its initial RA burst. Non-blocking:
+	// a full channel degrades to wheel-paced first RA, never blocks the FSM.
+	select {
+	case s.component.raKicks <- s.SessionID:
+	default:
+	}
 	s.checkOpen()
 }
 
 func (s *SessionState) onIPv6CPDown() {
 	s.component.logger.Debug("IPv6CP down", "session_id", s.SessionID)
 	s.ipv6cpOpen = false
+	s.raInitialLeft = 0
 	s.component.removeSessionFromRABucket(s)
 	s.nextRADue = time.Time{}
 }
