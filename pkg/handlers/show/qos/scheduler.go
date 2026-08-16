@@ -77,7 +77,11 @@ func (h *SchedulerHandler) Summary() string {
 }
 
 func (h *SchedulerHandler) Description() string {
-	return "Display all QoS scheduler policies configured in the dataplane."
+	return "Display all QoS scheduler policies configured in the dataplane. " +
+		"The CLI's compact table abbreviates tin modes (be=besteffort, ds3/ds4/ds8=diffserv3/4/8) " +
+		"and shows W(EFF) as weight(effective DRR weight), ST as A=active in the parent's " +
+		"arbitration, BUF as buffer usage percent, and BLK D/P as drr_blocked/parent_blocked. " +
+		"Use '| json' for the full field set."
 }
 
 func (h *SchedulerHandler) SortKey() string {

@@ -1,0 +1,17 @@
+eth1  port  8M  ·  3 active / W 1.8M  ·  buf 1.2M/16.8M (7%)
+│       shaped 88.2M pkts / 112.4 GB   backpressure 122   parent-blk 904.2K
+├─ svlan 100  6M  w1 (eff 750K)   2 active / W 500K   buf 96.3K/1M (9%)
+│       shaped 40.1M pkts / 51.2 GB   backpressure 31   blk drr 421.9K par 88.1K
+├─ svlan 200  3M  w1 (eff 375K)   2 active / W 250K   buf 0/1M (0%)
+│       shaped 9M pkts / 11.1 GB   backpressure 0   blk drr 10.2K par 4.4K
+└─ svlan 300  3M  w1 (eff 375K)   1 active / W 125K   buf 51.2K/1M (5%)
+        shaped 5M pkts / 6 GB   backpressure 3   blk drr 100 par 50
+
+eth2  port  10M  ·  1 active / W 200K  ·  buf 0/16.8M (0%)
+│       shaped 1K pkts / 1.2 MB   backpressure 0   parent-blk 0
+└─ svlan 400-499  5M  w4 (eff 2.5M)   1 active / W 200K   buf 0/1M (0%)
+        shaped 1K pkts / 1.2 MB   backpressure 0   blk drr 0 par 0
+
+eth3  port  20M  ·  0 active / W 0  ·  buf 0/16.8M (0%)
+        shaped 0 pkts / 0 B   backpressure 0   parent-blk 0
+        (no svlan aggregates)

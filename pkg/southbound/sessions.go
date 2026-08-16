@@ -119,6 +119,7 @@ type SchedulerState struct {
 	HasParent       bool   `json:"has_parent"`
 	ParentLevel     string `json:"parent_level,omitempty"`
 	ParentSwIfIndex uint32 `json:"parent_sw_if_index,omitempty"`
+	ParentInterface string `json:"parent_interface,omitempty"`
 	ParentSVLANID   uint16 `json:"parent_svlan_id,omitempty"`
 
 	DRRActive     bool   `json:"drr_active"`

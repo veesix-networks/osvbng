@@ -442,6 +442,7 @@ func (v *VPP) dumpSchedulersV2(ch govppapi.Channel, swIfIndex uint32, parent *sc
 		}
 		if d.HasParent {
 			s.ParentSwIfIndex = uint32(d.ParentSwIfIndex)
+			s.ParentInterface = v.interfaceName(uint32(d.ParentSwIfIndex))
 			s.ParentSVLANID = d.ParentSvlanID
 			s.ParentLevel = "port"
 			if d.ParentLevel == cake.OSVBNG_CAKE_AGG_LEVEL_SVLAN {

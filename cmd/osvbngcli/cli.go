@@ -367,6 +367,15 @@ func (c *CLI) executeGeneratedCommand(invocation *Invocation) error {
 		if err != nil {
 			return fmt.Errorf("decode show response: %w", err)
 		}
+		// Compact per-path renderings apply to the cli format only; | json
+		// and | yaml always carry the full payload. A renderer that does
+		// not recognise the shape falls through to the generic formatter.
+		if invocation.Format == FormatCLI {
+			if out, ok := renderCompact(response.Path, payload); ok {
+				fmt.Print(out)
+				return nil
+			}
+		}
 		return c.printFormatted(payload, invocation.Format)
 	case CommandExec:
 		var response json.RawMessage

@@ -1,0 +1,8 @@
+SW_IF  INTERFACE        SESSION                               RATE  MODE  W(EFF)   PARENT      ST  TX PKTS/BYTES  DROP  Q   BUF  BLK D/P      
+-----  ---------------  ------------------------------------  ----  ----  -------  ----------  --  -------------  ----  --  ---  -----------  
+7      ipoe0.100.1      9f8be1a2-77c1-4a83-9e0f-0d5a2f6b3c11  2M    ds4   1(250K)  sv100@eth1  A   18.2M/25.9G    1.2K  14  5%   88.2K/12.1K  
+9      ipoe0.100.2      41c2d90e-8f11-4b02-b7aa-3c99e01d22f4  8M    ds4   1(1M)    sv100@eth1  A   40.1M/58.3G    3.4K  31  5%   45.1K/8.8K   
+12     pppoe-session-3  07d9b127-1048-4ed2-ab79-065d70efd72d  4M    be    1(500K)  sv200@eth1  -   2.2M/2.9G      87    0   0%   0/0          
+13     pppoe-session-4  c81f33ab-2d0e-47c1-9d6a-88f0be12aa07  4M    be    2(1M)    port@eth1   A   9.9M/12.3G     301   2   1%   210/45       
+14     ipoe0.300.5      5d2f6b3c-0d5a-4e0f-9e77-c14a831a2f8b  4M    ds4   -        (none)      -   0/0            0     0   0%   0/0          
+15     -                -                                     4M    be    1(500K)  sv300@eth1  -   5M/6G          12    0   0%   3K/1K        
