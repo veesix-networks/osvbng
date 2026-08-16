@@ -97,11 +97,13 @@ Verify Scheduler Session View Via API
     Should Be Equal As Integers    ${rc}    0    Scheduler session view wrong: ${output}
 
 Verify Per-Tin Metrics Exported
-    [Documentation]    Scheduler tin metrics carry a tin label - one series
-    ...    per tin per scheduler, not eight tins collapsed into one. Waits
-    ...    out the 10s telemetry poll cadence.
+    [Documentation]    Every scheduler tin series carries a tin label, one
+    ...    series per scheduler per tin. This suite's policies are all
+    ...    besteffort (a single tin), so that means exactly one tin=0 series
+    ...    per subscriber - and none of the unlabelled series the collapsed
+    ...    pre-fix flattening produced. Waits out the 10s telemetry poll.
     Wait Until Keyword Succeeds    6 x    5s
-    ...    Check Tin Metric Series    ${bng1}
+    ...    Check Tin Metric Series    ${bng1}    ${session-count}
 
 Verify HQoS Share Distribution
     [Documentation]    Under saturation the port splits 50/25/25 between the
@@ -125,12 +127,12 @@ Verify Aggregates Drain On Teardown
 
 *** Keywords ***
 Check Tin Metric Series
-    [Arguments]    ${container}
+    [Arguments]    ${container}    ${expected}
     ${ip} =    Get Container IPv4    ${container}
     ${rc}    ${result} =    Run And Return Rc And Output
-    ...    curl -sf http://${ip}:9090/metrics | python3 -c "import sys,re; text=sys.stdin.read(); tins=sorted({m.group(1) for m in re.finditer(r'osvbng_qos_scheduler_tin_packets\\{[^}]*tin=\\x22(\\d+)\\x22', text)}); assert len(tins) > 1, 'tin labels found: %s' % tins; print('tin labels:', tins)"
+    ...    curl -sf http://${ip}:9090/metrics | python3 -c "import sys,re; text=sys.stdin.read(); rows=re.findall(r'osvbng_qos_scheduler_tin_packets\\{([^}]*)\\}', text); labelled=[r for r in rows if re.search(r'tin=\\x22\\d+\\x22', r)]; assert rows, 'no tin_packets series scraped'; assert len(labelled)==len(rows), 'unlabelled tin series: %d of %d' % (len(rows)-len(labelled), len(rows)); assert len(labelled)==${expected}, 'expected ${expected} labelled series, got %d' % len(labelled); print(len(labelled), 'tin series, all labelled')"
     Log    ${result}
-    Should Be Equal As Integers    ${rc}    0    Per-tin metric series missing: ${result}
+    Should Be Equal As Integers    ${rc}    0    Per-tin metric series wrong: ${result}
 
 Check Scheduler Rates
     [Arguments]    ${container}
