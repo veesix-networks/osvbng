@@ -1,0 +1,42 @@
+- name: Install ufw
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+    update_cache: true
+
+# Docker and containerlab manage their own bridge traffic in
+# DOCKER-USER and per-lab chains; ufw here governs only what the
+# outside world can reach on the host itself.
+- name: Default deny inbound
+  community.general.ufw:
+    direction: incoming
+    policy: deny
+
+- name: Default allow outbound
+  community.general.ufw:
+    direction: outgoing
+    policy: allow
+
+- name: Allow WireGuard
+  community.general.ufw:
+    rule: allow
+    port: "{{ wg_listen_port }}"
+    proto: udp
+
+- name: Allow public SSH during bootstrap only
+  community.general.ufw:
+    rule: "{{ 'deny' if ssh_wg_only else 'allow' }}"
+    port: "{{ ansible_port | default(22) }}"
+    proto: tcp
+
+- name: Allow SSH over the tunnel
+  community.general.ufw:
+    rule: allow
+    interface: wg0
+    direction: in
+    port: "22"
+    proto: tcp
+
+- name: Enable ufw
+  community.general.ufw:
+    state: enabled

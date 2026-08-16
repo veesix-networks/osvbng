@@ -1,0 +1,11 @@
+# Provision the dedicated CI runner box. Idempotent: rerunning is how
+# drift gets fixed. See README.md for the bootstrap and cutover flow.
+- name: Provision CI runner
+  hosts: runner
+  become: true
+  roles:
+    - hardening
+    - wireguard
+    - firewall
+    - ci-deps
+    - runner

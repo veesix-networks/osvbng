@@ -1,0 +1,53 @@
+- name: Create runner user
+  ansible.builtin.user:
+    name: runner
+    shell: /bin/bash
+    groups: []
+
+- name: Authorize SSH keys for runner user
+  ansible.posix.authorized_key:
+    user: runner
+    key: "{{ item }}"
+  loop: "{{ authorized_keys }}"
+
+# The suites need root (containerlab, docker) and the box is
+# single-purpose, so the runner user gets full passwordless sudo
+# rather than a curated command list that would drift with every
+# suite change. The security boundary is the approval gate on
+# workflow runs, not this sudoers file.
+- name: Passwordless sudo for runner user
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/runner
+    content: "runner ALL=(ALL) NOPASSWD:ALL\n"
+    mode: "0440"
+    validate: visudo -cf %s
+
+- name: Harden sshd
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/90-runner.conf
+    mode: "0644"
+    content: |
+      PermitRootLogin no
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      X11Forwarding no
+      AllowUsers runner
+      {% if ssh_wg_only %}
+      ListenAddress {{ wg_server_address | ansible.utils.ipaddr('address') }}
+      {% endif %}
+  notify: Restart sshd
+
+- name: Install fail2ban
+  ansible.builtin.apt:
+    name: fail2ban
+    state: present
+    update_cache: true
+
+- name: Enable fail2ban sshd jail
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.d/sshd.local
+    mode: "0644"
+    content: |
+      [sshd]
+      enabled = true
+  notify: Restart fail2ban

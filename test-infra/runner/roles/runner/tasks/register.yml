@@ -1,0 +1,54 @@
+# One runner instance per repo, from the shared dist. Registration is
+# one-shot: once .runner exists the token tasks are skipped, so
+# reruns of the playbook never need tokens.
+- name: "Create instance directory for {{ repo.name }}"
+  ansible.builtin.copy:
+    src: /opt/runner-dist/
+    dest: "/opt/runner-{{ repo.name }}/"
+    remote_src: true
+    owner: runner
+    group: runner
+    mode: preserve
+
+- name: "Check registration of {{ repo.name }}"
+  ansible.builtin.stat:
+    path: "/opt/runner-{{ repo.name }}/.runner"
+  register: runner_registered
+
+- name: "Require registration token for {{ repo.name }}"
+  ansible.builtin.assert:
+    that: lookup('vars', repo.token_var, default='') | length > 0
+    fail_msg: >-
+      {{ repo.name }} is unregistered and no {{ repo.token_var }} was
+      passed; fetch one with gh (see README) and rerun with
+      -e {{ repo.token_var }}=...
+  when: not runner_registered.stat.exists
+
+- name: "Register {{ repo.name }}"
+  become: true
+  become_user: runner
+  ansible.builtin.command:
+    chdir: "/opt/runner-{{ repo.name }}"
+    cmd: >-
+      ./config.sh --unattended
+      --url {{ repo.url }}
+      --token {{ lookup('vars', repo.token_var) }}
+      --name {{ ansible_hostname }}-{{ repo.name }}
+      --labels {{ runner_labels }}
+      --replace
+  when: not runner_registered.stat.exists
+  changed_when: true
+  no_log: true
+
+- name: "Install runner service for {{ repo.name }}"
+  ansible.builtin.command:
+    chdir: "/opt/runner-{{ repo.name }}"
+    cmd: ./svc.sh install runner
+    creates: "/etc/systemd/system/actions.runner.*{{ repo.name }}*.service"
+
+- name: "Start runner service for {{ repo.name }}"
+  ansible.builtin.command:
+    chdir: "/opt/runner-{{ repo.name }}"
+    cmd: ./svc.sh start
+  changed_when: false
+  failed_when: false

@@ -1,0 +1,20 @@
+- name: Download actions runner
+  ansible.builtin.unarchive:
+    src: "https://github.com/actions/runner/releases/download/v{{ runner_version }}/actions-runner-linux-x64-{{ runner_version }}.tar.gz"
+    dest: /opt
+    remote_src: true
+    creates: /opt/bin/Runner.Listener
+    extra_opts: [--one-top-level=runner-dist]
+    owner: runner
+
+- name: Install runner OS dependencies
+  ansible.builtin.command: /opt/runner-dist/bin/installdependencies.sh
+  args:
+    creates: /usr/lib/x86_64-linux-gnu/libicu*
+  failed_when: false
+
+- name: Per-repo runner instances
+  ansible.builtin.include_tasks: register.yml
+  loop: "{{ runner_repos }}"
+  loop_control:
+    loop_var: repo

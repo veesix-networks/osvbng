@@ -1,0 +1,48 @@
+# Copy to inventory.yml (gitignored) and fill in. Everything
+# host-specific or secret belongs there, never in this file.
+all:
+  hosts:
+    runner:
+      # Provider-assigned public address. First run connects here on
+      # ansible_port with the provider's initial key; after cutover
+      # (ssh_wg_only: true) connect via wg_server_address instead.
+      ansible_host: 203.0.113.10
+      ansible_port: 22
+      ansible_user: root
+
+  vars:
+    # SSH public keys allowed to log in as the runner user, one per
+    # line entry. Password and root logins are disabled outright.
+    authorized_keys:
+      - ssh-ed25519 AAAA... you@workstation
+
+    # WireGuard tunnel. The server keypair is generated on the box on
+    # first run; the play prints the server public key so you can add
+    # the peer on your workstation.
+    wg_listen_port: 51820
+    wg_server_address: 10.99.0.1/24
+    wg_peers:
+      - name: workstation
+        public_key: REPLACE_WITH_WORKSTATION_WG_PUBLIC_KEY
+        allowed_ips: 10.99.0.2/32
+
+    # false for the first run (sshd still reachable on the public
+    # address); flip to true and rerun once the tunnel is verified.
+    ssh_wg_only: false
+
+    # Tool versions. containerlab matches the dev machine so CI and
+    # local runs exercise the same deployer.
+    containerlab_version: "0.73.0"
+
+    # GitHub repos this box serves. One runner service is installed
+    # per repo; registration tokens are passed as extra-vars at run
+    # time (see README) and never stored.
+    runner_version: "2.328.0"
+    runner_labels: osvbng-metal
+    runner_repos:
+      - name: osvbng
+        url: https://github.com/veesix-networks/osvbng
+        token_var: osvbng_runner_token
+      - name: osvbng-vpp
+        url: https://github.com/veesix-networks/osvbng-vpp
+        token_var: osvbng_vpp_runner_token
