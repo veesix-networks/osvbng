@@ -37,3 +37,4 @@ jobs:
     with:
       suites: ${{ needs.suites-list.outputs.suites }}
       runs: ${{ fromJSON(inputs.runs) }}
+      suite_timeout: 60

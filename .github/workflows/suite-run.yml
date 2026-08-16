@@ -30,6 +30,11 @@ on:
         required: false
         type: string
         default: ""
+      suite_timeout:
+        description: Minutes before a suite job is killed
+        required: false
+        type: number
+        default: 20
 
 jobs:
   image:
@@ -81,6 +86,11 @@ jobs:
   suites:
     needs: image
     runs-on: [self-hosted, osvbng-metal]
+    # A wedged suite must be a bounded failure, not a stalled lane:
+    # the slowest healthy suites finish in a few minutes, and one
+    # deadlocked deploy held two lanes for 20 minutes before this.
+    # Callers with repeated runs pass a larger budget.
+    timeout-minutes: ${{ inputs.suite_timeout }}
     strategy:
       fail-fast: false
       max-parallel: 3
@@ -92,13 +102,16 @@ jobs:
       - name: Run ${{ matrix.suite }}
         run: ./scripts/run-qa-tests.sh -r ${{ inputs.runs }} -t ${{ matrix.suite }}
 
-      # A cancelled job kills robot before its suite teardown, which
-      # would leave the lab's containers up with VPP polling a core
-      # forever. Scoped to this suite's topology only: parallel jobs
-      # own other labs on the same box, so never destroy --all here.
+      # A cancelled job kills robot before its suite teardown but not
+      # the root-owned sudo children, and an orphaned deploy holds
+      # containerlab's locks against every later deploy of that lab.
+      # Kill this suite's strays, then destroy its topology. Scoped
+      # to this suite only: parallel jobs own other labs on the same
+      # box, so never destroy --all here.
       - name: Destroy suite lab
         if: always()
         run: |
+          sudo pkill -f "containerlab deploy.*${{ matrix.suite }}" 2>/dev/null || true
           sudo containerlab destroy \
             -t tests/${{ matrix.suite }}/${{ matrix.suite }}.clab.yml \
             --cleanup 2>/dev/null || true

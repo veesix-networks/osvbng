@@ -24,8 +24,13 @@ ${TEST_LOG_DIR}         /tmp/test-logs
 *** Keywords ***
 Deploy Topology
     [Arguments]    ${topology_file}
+    # Deploys from parallel suites serialize under a host-wide lock:
+    # concurrent containerlab deploys race each other's network and
+    # container setup and have deadlocked half-created labs. Deploys
+    # take seconds, so serializing them costs little; the suites
+    # themselves still run in parallel.
     ${rc}    ${output} =    Run And Return Rc And Output
-    ...    ${CLAB_BIN} deploy -t ${topology_file} --reconfigure
+    ...    flock /tmp/osvbng-clab-deploy.lock ${CLAB_BIN} deploy -t ${topology_file} --reconfigure
     Log    ${output}
     Should Be Equal As Integers    ${rc}    0
     RETURN    ${output}
