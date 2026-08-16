@@ -41,22 +41,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The runner keeps a per-commit cache of the four debs the
+      # image actually installs (the release also carries vpp-dbg,
+      # 92MB of symbols the image never uses), so a run downloads
+      # nothing unless the dataplane changed since the last run on
+      # this box.
       - name: Fetch dataplane artifacts
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          rm -rf /tmp/dataplane-debs && mkdir -p /tmp/dataplane-debs
-          gh release download dataplane-latest -R veesix-networks/osvbng-vpp \
-            -p '*.deb' -D /tmp/dataplane-debs
-          echo "dataplane provenance:"
-          gh release view dataplane-latest -R veesix-networks/osvbng-vpp \
-            --json body -q .body
+          body=$(gh release view dataplane-latest -R veesix-networks/osvbng-vpp \
+            --json body -q .body)
+          echo "dataplane provenance: $body"
+          sha=$(echo "$body" | grep -oE 'from [0-9a-f]{40}' | awk '{print $2}')
+          test -n "$sha"
+          cache="$HOME/.cache/osvbng-dataplane/$sha"
+          if [ ! -d "$cache" ]; then
+            tmp=$(mktemp -d)
+            for p in 'vpp_*.deb' 'vpp-plugin-core_*.deb' \
+                     'vpp-plugin-dpdk_*.deb' 'libvppinfra_*.deb'; do
+              gh release download dataplane-latest -R veesix-networks/osvbng-vpp \
+                -p "$p" -D "$tmp"
+            done
+            mkdir -p "$HOME/.cache/osvbng-dataplane"
+            mv "$tmp" "$cache"
+            ls -dt "$HOME"/.cache/osvbng-dataplane/*/ | tail -n +4 | xargs -r rm -rf
+          fi
           mkdir -p docker/dataplane-debs
-          cp /tmp/dataplane-debs/vpp_*.deb \
-             /tmp/dataplane-debs/vpp-plugin-core_*.deb \
-             /tmp/dataplane-debs/vpp-plugin-dpdk_*.deb \
-             /tmp/dataplane-debs/libvppinfra_*.deb \
-             docker/dataplane-debs/
+          cp "$cache"/*.deb docker/dataplane-debs/
 
       - name: Build osvbng image from dataplane debs
         run: make docker-local
