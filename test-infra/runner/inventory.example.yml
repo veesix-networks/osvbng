@@ -9,6 +9,10 @@ all:
       ansible_host: 203.0.113.10
       ansible_port: 22
       ansible_user: root
+      # The port sshd LISTENS on. Differs from ansible_port when the
+      # provider NAT-forwards a public port to it; the firewall rule
+      # uses this one.
+      ssh_listen_port: 22
 
   vars:
     # SSH public keys allowed to log in as the runner user, one per
