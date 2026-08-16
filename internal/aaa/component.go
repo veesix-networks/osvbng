@@ -81,7 +81,13 @@ type AccountingSession struct {
 type Component struct {
 	*component.Base
 
-	logger       *logger.Logger
+	logger *logger.Logger
+	// authFailures samples auth-failure logging: a RADIUS outage during a
+	// reconnect wave fails every request in flight, and one line per event
+	// would melt the sink and bury the signal. One line per interval plus a
+	// suppressed count; per-request detail stays visible at debug level in
+	// the provider.
+	authFailures *logger.Sampler
 	authProvider auth.AuthProvider
 	eventBus     events.Bus
 	cache        cache.Cache
@@ -106,6 +112,7 @@ func New(deps component.Dependencies, authProvider auth.AuthProvider) (*Componen
 	c := &Component{
 		Base:         component.NewBase("aaa"),
 		logger:       log,
+		authFailures: logger.NewSampler(log, 10*time.Second),
 		authProvider: authProvider,
 		eventBus:     deps.EventBus,
 		cache:        deps.Cache,
@@ -378,7 +385,7 @@ func (c *Component) handleAAARequest(event events.Event) {
 
 	authResp, err := c.authProvider.Authenticate(c.Ctx, authReq)
 	if err != nil {
-		c.logger.Error("Authentication failed",
+		c.authFailures.Error("authenticate", "Authentication failed",
 			"mac", req.MAC,
 			"acct_session_id", req.AcctSessionID,
 			"error", err)
