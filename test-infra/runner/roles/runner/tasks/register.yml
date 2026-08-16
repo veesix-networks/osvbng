@@ -1,6 +1,14 @@
 # One runner service per instance, from the shared dist. Registration
 # is one-shot: once .runner exists the token tasks are skipped, so
-# reruns of the playbook never need a token.
+# reruns of the playbook never need a token. The dist copy is also
+# one-shot: resyncing an existing instance fails with ETXTBSY when
+# its Runner.Listener is mid-job, and a live instance must not be
+# overwritten anyway.
+- name: "Check instance directory for shared-{{ instance_no }}"
+  ansible.builtin.stat:
+    path: "/opt/runner-shared-{{ instance_no }}/bin/Runner.Listener"
+  register: runner_instance
+
 - name: "Create instance directory for shared-{{ instance_no }}"
   ansible.builtin.copy:
     src: /opt/runner-dist/
@@ -9,6 +17,7 @@
     owner: runner
     group: runner
     mode: preserve
+  when: not runner_instance.stat.exists
 
 - name: "Check registration of shared-{{ instance_no }}"
   ansible.builtin.stat:
