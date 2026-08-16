@@ -31,7 +31,7 @@
       PasswordAuthentication no
       KbdInteractiveAuthentication no
       X11Forwarding no
-      AllowUsers runner
+      AllowUsers runner {{ ansible_user }}
       {% if ssh_wg_only %}
       ListenAddress {{ wg_server_address | ansible.utils.ipaddr('address') }}
       {% endif %}
