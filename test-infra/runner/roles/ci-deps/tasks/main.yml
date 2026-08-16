@@ -41,6 +41,16 @@
     groups: docker
     append: true
 
+# Preallocate the hugepage pool at the host level. Every BNG
+# container draws 2M pages from this one global pool, so parallel
+# labs need it sized for all of them, and preallocation at boot
+# avoids late-allocation failures from memory fragmentation.
+- name: Preallocate hugepages
+  ansible.posix.sysctl:
+    name: vm.nr_hugepages
+    value: "{{ hugepages_2m | default(4096) }}"
+    sysctl_file: /etc/sysctl.d/90-hugepages.conf
+
 # Pinned release deb from GitHub, not the fury apt repo: the repo is
 # unsigned (upstream's instructions use trusted=yes) and unpinned,
 # and CI wants the same containerlab version as the dev machine.
