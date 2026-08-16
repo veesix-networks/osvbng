@@ -173,15 +173,16 @@ re-attaching its members).
 ### Monitoring
 
 Show commands (each also available at `/api/show/qos/...` and, with
-`| json`, as raw JSON in the CLI):
+`| json`, as raw JSON in the CLI). Session IDs are UUIDs for every access
+type, exactly as `show subscriber sessions` reports them:
 
 ```text
 show qos scheduler [--interface X]
     Every subscriber scheduler: rate, weight, DRR state, throughput,
     drops, buffer usage, session id.
 
-show qos scheduler session --session-id ipoe:<mac>:<vlan>
-show qos scheduler session --uuid <aaa-session-uuid>
+show qos scheduler session --session-id <session-uuid>
+show qos scheduler session --acct-session-id <aaa-acct-session-id>
 show qos scheduler session --interface <access-if> --outer-vlan N [--inner-vlan M]
     One subscriber's full shaping chain: session identity, scheduler with
     per-tin stats, and the S-VLAN / port aggregates above it. An ambiguous
@@ -199,6 +200,37 @@ show qos aggregate detail --interface <port> [--svlan N]
     The whole hierarchy under one port as a tree: the port aggregate, its
     S-VLAN aggregates, and every member scheduler with stats and session id.
 ```
+
+Any command runs non-interactively with `osvbngcli -c "<command>"`, which
+prints the result with no banner and exits non-zero on failure — the form
+scripts and the test suites use.
+
+In the CLI, the two list views render compactly. `show qos scheduler` is
+one line per scheduler:
+
+```text
+SW_IF  INTERFACE    SESSION                               RATE  MODE  W(EFF)   PARENT      ST  TX PKTS/BYTES  DROP  Q   BUF  BLK D/P
+-----  -----------  ------------------------------------  ----  ----  -------  ----------  --  -------------  ----  --  ---  -----------
+7      ipoe0.100.1  9f8be1a2-77c1-4a83-9e0f-0d5a2f6b3c11  2M    ds4   1(250K)  sv100@eth1  A   18.2M/25.9G    1.2K  14  5%   88.2K/12.1K
+```
+
+MODE abbreviates the tin mode (`be`, `ds3`, `ds4`, `ds8`); `W(EFF)` is the
+configured weight with the effective DRR weight; `ST` is `A` while the
+scheduler is active in its parent's arbitration; `BUF` is buffer usage as a
+percentage of the limit; `BLK D/P` is `drr_blocked`/`parent_blocked`.
+Values are SI-scaled. `show qos aggregate` renders each port's hierarchy as
+a tree:
+
+```text
+eth1  port  8M  ·  3 active / W 1.8M  ·  buf 1.2M/16.8M (7%)
+│       shaped 88.2M pkts / 112.4 GB   backpressure 122   parent-blk 904.2K
+├─ svlan 100  6M  w1 (eff 750K)   2 active / W 500K   buf 96.3K/1M (9%)
+│       shaped 40.1M pkts / 51.2 GB   backpressure 31   blk drr 421.9K par 88.1K
+└─ svlan 200-300  3M  w1 (eff 375K)   2 active / W 250K   buf 0/1M (0%)
+        shaped 9M pkts / 11.1 GB   backpressure 0   blk drr 10.2K par 4.4K
+```
+
+The full field set is always available with `| json`.
 
 Modify or disable a scheduler at runtime via the operational API:
 
