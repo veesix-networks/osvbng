@@ -13,6 +13,7 @@ import (
 var (
 	serverAddr  = flag.String("server", "auto", "Northbound API base URL; \"auto\" probes /run/osvbng/api.sock then falls back to http://localhost:8080")
 	showVersion = flag.Bool("version", false, "Print version and exit")
+	oneShot     = flag.String("c", "", "Run a single command non-interactively and exit; no banner, exit code reflects success")
 )
 
 func main() {
@@ -27,6 +28,14 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
+	}
+
+	if *oneShot != "" {
+		if err := cli.processCommand(*oneShot); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	sigCh := make(chan os.Signal, 2)
