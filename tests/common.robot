@@ -28,9 +28,12 @@ Deploy Topology
     # concurrent containerlab deploys race each other's network and
     # container setup and have deadlocked half-created labs. Deploys
     # take seconds, so serializing them costs little; the suites
-    # themselves still run in parallel.
+    # themselves still run in parallel. The lock path carries the uid
+    # because flock cannot open another user's lock file (exit 66):
+    # CI's runner instances share one uid so they still serialize,
+    # and a developer's local runs are single anyway.
     ${rc}    ${output} =    Run And Return Rc And Output
-    ...    flock /tmp/osvbng-clab-deploy.lock ${CLAB_BIN} deploy -t ${topology_file} --reconfigure
+    ...    flock /tmp/osvbng-clab-deploy.$(id -u).lock ${CLAB_BIN} deploy -t ${topology_file} --reconfigure
     Log    ${output}
     Should Be Equal As Integers    ${rc}    0
     RETURN    ${output}
