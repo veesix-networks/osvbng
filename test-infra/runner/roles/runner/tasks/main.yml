@@ -13,8 +13,23 @@
     creates: /usr/lib/x86_64-linux-gnu/libicu*
   failed_when: false
 
-- name: Per-repo runner instances
+# A runner service executes one job at a time, so a repo's count is
+# its job parallelism on this box. Expand repos into one entry per
+# instance (osvbng-1, osvbng-2, ...) before stamping out services.
+- name: Expand runner instances
+  ansible.builtin.set_fact:
+    runner_instances: >-
+      {%- set out = [] -%}
+      {%- for r in runner_repos -%}
+      {%- for i in range(r.count | default(1)) -%}
+      {%- set _ = out.append(r | combine({'instance': r.name ~ '-' ~ (i + 1)})) -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {{ out }}
+
+- name: Per-instance runner services
   ansible.builtin.include_tasks: register.yml
-  loop: "{{ runner_repos }}"
+  loop: "{{ runner_instances }}"
   loop_control:
     loop_var: repo
+    label: "{{ repo.instance }}"

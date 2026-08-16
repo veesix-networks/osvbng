@@ -49,6 +49,22 @@ Rerunning the playbook is how drift gets fixed. Registration tasks
 are skipped when the runner services already exist, so reruns do not
 need tokens.
 
+## Concurrency
+
+A GitHub runner service executes one job at a time. Parallelism on
+this box comes from running several runner instances, set per repo
+via `count` in the inventory: a suite matrix fans out across the
+osvbng instances, while osvbng-vpp keeps a single instance because
+the artifact build uses fixed docker volume and container names and
+must never run concurrently with itself.
+
+Different suites deploy differently named containerlab labs, so they
+coexist on one host. Two runs of the SAME suite collide on lab and
+container names; workflows must serialize per suite with a
+concurrency group (for example `group: suite-${{ matrix.suite }}`).
+Perf jobs want a quiet machine and should take a box-wide
+concurrency group instead.
+
 ## Not covered here
 
 Workflow definitions live in each repo's `.github/workflows/`. This

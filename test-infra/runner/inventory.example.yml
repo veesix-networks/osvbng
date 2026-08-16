@@ -34,15 +34,22 @@ all:
     # local runs exercise the same deployer.
     containerlab_version: "0.73.0"
 
-    # GitHub repos this box serves. One runner service is installed
-    # per repo; registration tokens are passed as extra-vars at run
-    # time (see README) and never stored.
+    # GitHub repos this box serves. Each runner service executes one
+    # job at a time, so count is that repo's job parallelism here:
+    # osvbng gets several for concurrent integration suites,
+    # osvbng-vpp stays at 1 because the artifact build uses fixed
+    # volume and container names and must not run concurrently with
+    # itself. Registration tokens are passed as extra-vars at run
+    # time (see README) and never stored; one token per repo covers
+    # all its instances.
     runner_version: "2.328.0"
     runner_labels: osvbng-metal
     runner_repos:
       - name: osvbng
         url: https://github.com/veesix-networks/osvbng
         token_var: osvbng_runner_token
+        count: 3
       - name: osvbng-vpp
         url: https://github.com/veesix-networks/osvbng-vpp
         token_var: osvbng_vpp_runner_token
+        count: 1
