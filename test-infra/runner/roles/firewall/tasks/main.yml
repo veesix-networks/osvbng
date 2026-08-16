@@ -23,10 +23,14 @@
     port: "{{ wg_listen_port }}"
     proto: udp
 
+# ssh_listen_port is the port sshd LISTENS on, not the port the
+# operator dials: behind a provider NAT the public port (ansible_port)
+# forwards to the listen port, and allowing the public port here
+# firewalled off the real one and locked the box out.
 - name: Allow public SSH during bootstrap only
   community.general.ufw:
     rule: "{{ 'deny' if ssh_wg_only else 'allow' }}"
-    port: "{{ ansible_port | default(22) }}"
+    port: "{{ ssh_listen_port | default(22) }}"
     proto: tcp
 
 - name: Allow SSH over the tunnel
