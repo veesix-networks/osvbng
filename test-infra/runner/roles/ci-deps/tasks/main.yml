@@ -72,6 +72,23 @@
     value: "{{ hugepages_2m | default(4096) }}"
     sysctl_file: /etc/sysctl.d/90-hugepages.conf
 
+# Nothing on the box prunes itself: every image build strands the
+# previous build's unique layers as dangling, the BuildKit cache
+# only grows, and runner job diagnostics accumulate forever. Weekly
+# janitor keeps growth bounded. Dangling-only image prune: an
+# aggressive prune would evict the warm layers that make builds
+# fast, which is the box's whole value.
+- name: Install disk janitor
+  ansible.builtin.copy:
+    dest: /etc/cron.weekly/ci-disk-janitor
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      docker image prune -f
+      docker builder prune -f --keep-storage {{ builder_cache_keep | default('20GB') }}
+      find /opt/runner-*/_diag -name '*.log' -mtime +14 -delete 2>/dev/null
+      exit 0
+
 # Pinned release deb from GitHub, not the fury apt repo: the repo is
 # unsigned (upstream's instructions use trusted=yes) and unpinned,
 # and CI wants the same containerlab version as the dev machine.
