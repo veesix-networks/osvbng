@@ -13,23 +13,15 @@
     creates: /usr/lib/x86_64-linux-gnu/libicu*
   failed_when: false
 
-# A runner service executes one job at a time, so a repo's count is
-# its job parallelism on this box. Expand repos into one entry per
-# instance (osvbng-1, osvbng-2, ...) before stamping out services.
-- name: Expand runner instances
-  ansible.builtin.set_fact:
-    runner_instances: >-
-      {%- set out = [] -%}
-      {%- for r in runner_repos -%}
-      {%- for i in range(r.count | default(1)) -%}
-      {%- set _ = out.append(r | combine({'instance': r.name ~ '-' ~ (i + 1)})) -%}
-      {%- endfor -%}
-      {%- endfor -%}
-      {{ out }}
-
+# One shared org-level pool: every repo in the org schedules jobs
+# across all instances, and one workflow fanning out into many jobs
+# consumes as many as are free. A runner service executes one job at
+# a time, so runner_count is the box's total job parallelism.
+# Workflows that must not overlap themselves (the osvbng-vpp release
+# build with its fixed volume names) serialize with a concurrency
+# group, never by capping the pool.
 - name: Per-instance runner services
   ansible.builtin.include_tasks: register.yml
-  loop: "{{ runner_instances }}"
+  loop: "{{ range(1, (runner_count | int) + 1) | list }}"
   loop_control:
-    loop_var: repo
-    label: "{{ repo.instance }}"
+    loop_var: instance_no

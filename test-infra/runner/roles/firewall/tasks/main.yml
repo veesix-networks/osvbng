@@ -6,7 +6,8 @@
 
 # Docker and containerlab manage their own bridge traffic in
 # DOCKER-USER and per-lab chains; ufw here governs only what the
-# outside world can reach on the host itself.
+# outside world can reach on the host itself. The runner needs no
+# inbound ports (it dials out to GitHub), so the only opening is SSH.
 - name: Default deny inbound
   community.general.ufw:
     direction: incoming
@@ -17,28 +18,14 @@
     direction: outgoing
     policy: allow
 
-- name: Allow WireGuard
+# ssh_listen_port is the port sshd LISTENS on, which is not always
+# the port the operator dials: an edge firewall may forward a public
+# port to it. Allowing the dialed port instead of this one is how the
+# box got locked out once already.
+- name: Allow SSH on the listen port
   community.general.ufw:
     rule: allow
-    port: "{{ wg_listen_port }}"
-    proto: udp
-
-# ssh_listen_port is the port sshd LISTENS on, not the port the
-# operator dials: behind a provider NAT the public port (ansible_port)
-# forwards to the listen port, and allowing the public port here
-# firewalled off the real one and locked the box out.
-- name: Allow public SSH during bootstrap only
-  community.general.ufw:
-    rule: "{{ 'deny' if ssh_wg_only else 'allow' }}"
     port: "{{ ssh_listen_port | default(22) }}"
-    proto: tcp
-
-- name: Allow SSH over the tunnel
-  community.general.ufw:
-    rule: allow
-    interface: wg0
-    direction: in
-    port: "22"
     proto: tcp
 
 - name: Enable ufw
