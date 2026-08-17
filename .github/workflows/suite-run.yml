@@ -43,6 +43,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The run heals the box instead of assuming it is clean. This
+      # job runs once per run before any suite, and runs serialize,
+      # so nothing legitimate is executing on the host here: stray
+      # deploy processes and leftover lab containers are residue by
+      # definition, and a docker daemon that cannot answer a bounded
+      # probe is wedged and gets restarted. Every one of these was a
+      # by-hand SSH intervention once; none may ever be again.
+      - name: Reset host state
+        run: |
+          sudo pkill -9 -f 'containerlab deploy' 2>/dev/null || true
+          if ! timeout 20 docker info >/dev/null 2>&1; then
+            echo "docker unresponsive, restarting"
+            sudo systemctl restart docker
+            sleep 5
+            timeout 20 docker info >/dev/null
+          fi
+          stray=$(sudo docker ps -aq --filter name=clab-)
+          [ -n "$stray" ] && echo "$stray" | xargs -r sudo docker rm -f || true
+          timeout 20 sudo docker network inspect clab >/dev/null 2>&1 || \
+            timeout 30 sudo docker network create \
+              --subnet 172.20.20.0/24 --ipv6 --subnet 3fff:172:20:20::/64 clab
+          rm -f "/tmp/osvbng-clab-deploy.$(id -u).lock"
+
       # The runner keeps a per-commit cache of the four debs the
       # image actually installs (the release also carries vpp-dbg,
       # 92MB of symbols the image never uses), so a run downloads
