@@ -4,6 +4,12 @@
 
 name: osvbng-ipoe-hqos-svlan
 
+# v4-only mgmt: without an explicit subnet containerlab creates a
+# dual-stack network whose static v6 default route on eth0 competes
+# with the test RA route and breaks subscriber-originated IPv6.
+mgmt:
+  ipv4-subnet: 172.20.20.0/24
+
 topology:
   nodes:
     bng1:
