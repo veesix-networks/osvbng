@@ -20,6 +20,7 @@ all:
     # Tool versions. containerlab matches the dev machine so CI and
     # local runs exercise the same deployer.
     containerlab_version: "0.73.0"
+    docker_version: "5:28.5.2-1~ubuntu.24.04~noble"
 
     # One shared org-level runner pool; runner_count is the box's job
     # parallelism. The registration token is passed as an extra-var at

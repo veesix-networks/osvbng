@@ -26,15 +26,30 @@
       {{ ansible_distribution_release }} stable
     filename: docker
 
+# Pinned: unpinned docker-ce put 29.x on the runner while the dev
+# machine ran a proven 27.x, and 29.x's buildkit session handling
+# storms dockerd healthchecks under our cache-mounted builds
+# ("only one connection allowed"), leaving deploys that run during
+# a storm half-wired. Same-version-as-dev is the principle; 28.5.2
+# is the newest pre-29 packaged for noble.
 - name: Install docker
   ansible.builtin.apt:
     name:
-      - docker-ce
-      - docker-ce-cli
+      - "docker-ce={{ docker_version }}"
+      - "docker-ce-cli={{ docker_version }}"
       - containerd.io
       - docker-buildx-plugin
     state: present
     update_cache: true
+    allow_downgrade: true
+
+- name: Hold docker at the pinned version
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - docker-ce
+    - docker-ce-cli
 
 - name: Runner user in docker group
   ansible.builtin.user:
