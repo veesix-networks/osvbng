@@ -129,9 +129,11 @@ jobs:
     # deadlocked deploy held two lanes for 20 minutes before this.
     # Callers with repeated runs pass a larger budget.
     timeout-minutes: ${{ inputs.suite_timeout }}
+    # No max-parallel: suite concurrency is bounded by the runner
+    # pool itself, and an overloaded box shows up as bounded, logged
+    # suite timeouts rather than a silently undersized pipeline.
     strategy:
       fail-fast: false
-      max-parallel: 3
       matrix:
         suite: ${{ fromJSON(inputs.suites) }}
     steps:
