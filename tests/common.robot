@@ -33,7 +33,7 @@ Deploy Topology
     # CI's runner instances share one uid so they still serialize,
     # and a developer's local runs are single anyway.
     ${rc}    ${output} =    Run And Return Rc And Output
-    ...    flock /tmp/osvbng-clab-deploy.$(id -u).lock ${CLAB_BIN} deploy -t ${topology_file} --reconfigure
+    ...    flock -w 300 /tmp/osvbng-clab-deploy.$(id -u).lock ${CLAB_BIN} deploy -t ${topology_file} --reconfigure
     Log    ${output}
     Should Be Equal As Integers    ${rc}    0
     RETURN    ${output}

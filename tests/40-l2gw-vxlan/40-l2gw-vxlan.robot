@@ -32,7 +32,7 @@ Suite Teardown      Teardown L2GW VXLAN Test
 ${lab-name}         osvbng-l2gw-vxlan
 ${lab-file}         ${CURDIR}/40-l2gw-vxlan.clab.yml
 ${bng1}             clab-${lab-name}-bng1
-${bng1-mgmt-ip}     172.20.21.2
+${bng1-mgmt-ip}     172.20.41.2
 ${subscribers}      clab-${lab-name}-subscribers
 ${session-count}    2
 

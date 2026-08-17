@@ -93,9 +93,9 @@ ipv4-profiles:
         dhcp:
             mode: relay
             servers:
-                - address: "172.20.20.11:67"
+                - address: "172.20.33.11:67"
                   priority: 100
-            giaddr: 172.20.20.2
+            giaddr: 172.20.33.2
             option82:
                 circuit-id-format: "{interface}:{svlan}:{cvlan}"
                 remote-id-format: "{mac}"
@@ -107,9 +107,9 @@ ipv4-profiles:
         dhcp:
             mode: proxy
             servers:
-                - address: "172.20.20.11:67"
+                - address: "172.20.33.11:67"
                   priority: 100
-            giaddr: 172.20.20.2
+            giaddr: 172.20.33.2
             client-lease: 300
             option82:
                 circuit-id-format: "{interface}:{svlan}:{cvlan}"
@@ -252,9 +252,9 @@ plugins:
             - address: :8080
     subscriber.auth.radius:
         servers:
-            - host: 172.20.20.10
+            - host: 172.20.33.10
               secret: testing123
-        nas_ip: 172.20.20.2
+        nas_ip: 172.20.33.2
 
 monitoring:
   collect_interval: 30s

@@ -147,11 +147,11 @@ Destroy Failover Topology
     Destroy Access Bridge
 
 Create Access Bridge
-    ${rc} =    Run And Return Rc    sudo ip link add access-sw type bridge
-    ${rc} =    Run And Return Rc    sudo ip link set access-sw up
+    ${rc} =    Run And Return Rc    sudo ip link add access-sw15 type bridge
+    ${rc} =    Run And Return Rc    sudo ip link set access-sw15 up
 
 Destroy Access Bridge
-    Run And Return Rc    sudo ip link del access-sw
+    Run And Return Rc    sudo ip link del access-sw15
 
 Check HA Status
     [Arguments]    ${container}    ${expected_state}

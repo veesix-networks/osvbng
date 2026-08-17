@@ -12,6 +12,7 @@
 name: osvbng-pppoe-evpn-pwhe
 
 mgmt:
+  network: clab-48
   ipv4-subnet: 172.20.28.0/24
 
 topology:

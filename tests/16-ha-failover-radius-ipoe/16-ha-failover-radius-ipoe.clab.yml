@@ -58,7 +58,7 @@ topology:
       exec:
         - bash -c "freeradius -X &"
 
-    access-sw:
+    access-sw16:
       kind: bridge
 
     subscribers:
@@ -68,11 +68,11 @@ topology:
         - config/subscribers/subscribers.json:/config/subscribers.json:ro
 
   links:
-    - endpoints: [bng1:eth1, access-sw:bng1]
+    - endpoints: [bng1:eth1, access-sw16:bng1-16]
       mtu: 1500
-    - endpoints: [bng2:eth1, access-sw:bng2]
+    - endpoints: [bng2:eth1, access-sw16:bng2-16]
       mtu: 1500
-    - endpoints: [subscribers:eth1, access-sw:sub1]
+    - endpoints: [subscribers:eth1, access-sw16:sub1-16]
       mtu: 1500
     - endpoints: [bng1:eth2, corerouter1:eth1]
       mtu: 1500

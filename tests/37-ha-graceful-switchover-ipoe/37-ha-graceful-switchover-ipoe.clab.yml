@@ -59,11 +59,11 @@ topology:
         - config/subscribers/subscribers.json:/config/subscribers.json:ro
 
   links:
-    - endpoints: [bng1:eth1, access-sw-gr:bng1]
+    - endpoints: [bng1:eth1, access-sw-gr:bng1-37]
       mtu: 1500
-    - endpoints: [bng2:eth1, access-sw-gr:bng2]
+    - endpoints: [bng2:eth1, access-sw-gr:bng2-37]
       mtu: 1500
-    - endpoints: [subscribers:eth1, access-sw-gr:sub1]
+    - endpoints: [subscribers:eth1, access-sw-gr:sub1-37]
       mtu: 1500
     - endpoints: [bng1:eth2, corerouter1:eth1]
       mtu: 1500

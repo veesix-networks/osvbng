@@ -12,6 +12,7 @@
 name: osvbng-lac-evpn-pwhe
 
 mgmt:
+  network: clab-49
   ipv4-subnet: 172.20.29.0/24
 
 topology:

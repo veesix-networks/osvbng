@@ -13,6 +13,7 @@
 name: osvbng-l2gw-evpn
 
 mgmt:
+  network: clab-46
   ipv4-subnet: 172.20.26.0/24
 
 topology:

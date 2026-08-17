@@ -27,7 +27,7 @@ ${subscribers}      clab-${lab-name}-subscribers
 ${session-count}    1
 ${freeradius}       clab-${lab-name}-freeradius
 ${acct-interim-wait}    90s
-${detail-file-glob}     /var/log/freeradius/radacct/172.20.20.2/detail-*
+${detail-file-glob}     /var/log/freeradius/radacct/172.20.32.2/detail-*
 
 *** Test Cases ***
 Verify BNG Is Healthy

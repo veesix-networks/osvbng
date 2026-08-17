@@ -34,7 +34,7 @@ on:
         description: Minutes before a suite job is killed
         required: false
         type: number
-        default: 20
+        default: 12
 
 jobs:
   image:

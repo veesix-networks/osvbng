@@ -215,9 +215,9 @@ plugins:
             - address: :8080
     subscriber.auth.radius:
         servers:
-            - host: 172.20.21.10
+            - host: 172.20.40.10
               secret: testing123
-        nas_ip: 172.20.21.2
+        nas_ip: 172.20.40.2
 
 monitoring:
   collect_interval: 30s

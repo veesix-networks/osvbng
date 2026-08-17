@@ -12,6 +12,7 @@
 name: osvbng-ipoe-evpn-pwhe
 
 mgmt:
+  network: clab-47
   ipv4-subnet: 172.20.27.0/24
 
 topology:

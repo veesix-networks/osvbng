@@ -33,13 +33,13 @@ Suite Teardown      Teardown L2GW Dynamic Test
 ${lab-name}             osvbng-l2gw-dynamic
 ${lab-file}             ${CURDIR}/39-l2gw-dynamic.clab.yml
 ${bng1}                 clab-${lab-name}-bng1
-${bng1-mgmt-ip}         172.20.20.2
+${bng1-mgmt-ip}         172.20.38.2
 ${subscribers}          clab-${lab-name}-subscribers
 ${freeradius}           clab-${lab-name}-freeradius
 ${session-count}        2
 ${coa-secret}           testing123
 ${acct-interim-wait}    90s
-${detail-file-glob}     /var/log/freeradius/radacct/172.20.20.2/detail-*
+${detail-file-glob}     /var/log/freeradius/radacct/172.20.38.2/detail-*
 
 *** Test Cases ***
 Verify BNG Is Healthy
@@ -137,12 +137,12 @@ Verify Prometheus L2GW Circuit Metrics
     [Documentation]    Per-circuit counters must be exported through the
     ...    telemetry SDK with the access/handoff identity labels.
     ${rc}    ${output} =    Run And Return Rc And Output
-    ...    curl -sf http://172.20.20.2:9090/metrics | grep "^osvbng_dataplane_vpp_l2gw_upstream_packets"
+    ...    curl -sf http://172.20.38.2:9090/metrics | grep "^osvbng_dataplane_vpp_l2gw_upstream_packets"
     Should Be Equal As Integers    ${rc}    0    no l2gw upstream metrics exported
     Log    ${output}
     Should Contain    ${output}    handoff_group="isp-blue"
     ${rc}    ${nonzero} =    Run And Return Rc And Output
-    ...    curl -sf http://172.20.20.2:9090/metrics | awk '/^osvbng_dataplane_vpp_l2gw_upstream_packets/ {if ($NF+0 > 0) n++} END {print n+0}'
+    ...    curl -sf http://172.20.38.2:9090/metrics | awk '/^osvbng_dataplane_vpp_l2gw_upstream_packets/ {if ($NF+0 > 0) n++} END {print n+0}'
     Should Be Equal As Integers    ${rc}    0
     Should Be True    ${nonzero} >= ${session-count}    l2gw upstream packet metrics all zero
 

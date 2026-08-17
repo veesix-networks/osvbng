@@ -28,7 +28,7 @@ ${bng1}             clab-${lab-name}-bng1
 ${subscribers}      clab-${lab-name}-subscribers
 ${freeradius}       clab-${lab-name}-freeradius
 ${session-count}    10
-${bng1-mgmt-ip}    172.20.20.2
+${bng1-mgmt-ip}    172.20.34.2
 ${coa-secret}       testing123
 
 *** Test Cases ***
