@@ -47,12 +47,13 @@ none of the access infrastructure.
 
 ```yaml
 interfaces:
-  eth1: {}          # Access Network 1 NNI
-  eth2: {}          # Access Network 2 NNI
-  eth3: {}          # Access Network 3 NNI
-  eth5: {}          # ISP Y NNI
-  eth6: {}          # ISP Z NNI
-  bond1:            # ISP X NNI (LACP)
+  eth1: {enabled: true}   # Access Network 1 NNI
+  eth2: {enabled: true}   # Access Network 2 NNI
+  eth3: {enabled: true}   # Access Network 3 NNI
+  eth5: {enabled: true}   # ISP Y NNI
+  eth6: {enabled: true}   # ISP Z NNI
+  bond1:                  # ISP X NNI (LACP)
+    enabled: true
     bond:
       mode: lacp
       members: [eth7, eth8]

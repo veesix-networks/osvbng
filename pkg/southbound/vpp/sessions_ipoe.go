@@ -1,6 +1,7 @@
 package vpp
 
 import (
+	"errors"
 	"fmt"
 	"github.com/veesix-networks/osvbng/pkg/ifmgr"
 	"github.com/veesix-networks/osvbng/pkg/vpp/binapi/ethernet_types"
@@ -34,42 +35,48 @@ func (v *VPP) AddIPoESession(clientMAC net.HardwareAddr, localMAC net.HardwareAd
 		DecapVrfID:   decapVrfID,
 	}
 
+	// govpp's ReceiveReply converts every nonzero retval into a
+	// VPPApiError before the caller can inspect reply.Retval, so the
+	// plugin's non-fatal retvals must be caught on the error, not the
+	// retval. The reply body is decoded before the conversion, so
+	// reply.SwIfIndex is valid on these paths. The plugin returns
+	// already-exists with the live session's sw_if_index for a replayed
+	// identical add; opdb restore over a live VPP replays every session
+	// and must re-attach, not fail.
 	reply := &osvbng_ipoe.OsvbngIpoeAddDelSessionReply{}
 	if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
-		return 0, fmt.Errorf("add ipoe session: %w", err)
-	}
+		if errors.Is(err, api.VPPApiError(retvalEntryNeedsRefresh)) {
+			v.logger.Info("IPoE session exists with drifted mutable inputs; refreshing",
+				"client_mac", clientMAC.String(),
+				"encap_if_index", encapIfIndex,
+				"inner_vlan", innerVLAN,
+				"stale_sw_if_index", reply.SwIfIndex)
 
-	if reply.Retval == retvalEntryNeedsRefresh {
-		v.logger.Info("IPoE session exists with drifted mutable inputs; refreshing",
-			"client_mac", clientMAC.String(),
-			"encap_if_index", encapIfIndex,
-			"inner_vlan", innerVLAN,
-			"stale_sw_if_index", reply.SwIfIndex)
+			delReq := &osvbng_ipoe.OsvbngIpoeAddDelSession{
+				IsAdd:        false,
+				EncapIfIndex: interface_types.InterfaceIndex(encapIfIndex),
+				ClientMac:    clientMacAddr,
+				InnerVlan:    innerVLAN,
+			}
+			delReply := &osvbng_ipoe.OsvbngIpoeAddDelSessionReply{}
+			if err := ch.SendRequest(delReq).ReceiveReply(delReply); err != nil {
+				return 0, fmt.Errorf("refresh ipoe session: del: %w", err)
+			}
+			v.ifMgr.Remove(uint32(delReply.SwIfIndex))
 
-		delReq := &osvbng_ipoe.OsvbngIpoeAddDelSession{
-			IsAdd:        false,
-			EncapIfIndex: interface_types.InterfaceIndex(encapIfIndex),
-			ClientMac:    clientMacAddr,
-			InnerVlan:    innerVLAN,
+			reply = &osvbng_ipoe.OsvbngIpoeAddDelSessionReply{}
+			if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
+				return 0, fmt.Errorf("refresh ipoe session: re-add: %w", err)
+			}
+		} else if errors.Is(err, api.ENTRY_ALREADY_EXISTS) {
+			v.logger.Info("IPoE session already exists; re-attaching",
+				"client_mac", clientMAC.String(),
+				"encap_if_index", encapIfIndex,
+				"inner_vlan", innerVLAN,
+				"sw_if_index", reply.SwIfIndex)
+		} else {
+			return 0, fmt.Errorf("add ipoe session: %w", err)
 		}
-		delReply := &osvbng_ipoe.OsvbngIpoeAddDelSessionReply{}
-		if err := ch.SendRequest(delReq).ReceiveReply(delReply); err != nil {
-			return 0, fmt.Errorf("refresh ipoe session: del: %w", err)
-		}
-		if delReply.Retval != 0 {
-			return 0, fmt.Errorf("refresh ipoe session: del retval=%d", delReply.Retval)
-		}
-		v.ifMgr.Remove(uint32(delReply.SwIfIndex))
-
-		reply = &osvbng_ipoe.OsvbngIpoeAddDelSessionReply{}
-		if err := ch.SendRequest(req).ReceiveReply(reply); err != nil {
-			return 0, fmt.Errorf("refresh ipoe session: re-add: %w", err)
-		}
-		if reply.Retval != 0 {
-			return 0, fmt.Errorf("refresh ipoe session: re-add retval=%d", reply.Retval)
-		}
-	} else if reply.Retval != 0 {
-		return 0, fmt.Errorf("add ipoe session failed: retval=%d", reply.Retval)
 	}
 
 	swIdx := uint32(reply.SwIfIndex)

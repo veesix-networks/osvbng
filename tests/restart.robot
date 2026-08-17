@@ -33,6 +33,25 @@ Check osvbngd Not Running
     ...    sudo docker exec ${container} pgrep -x osvbngd
     Should Not Be Equal As Integers    ${rc}    0    osvbngd still running
 
+# "osvbng started successfully" survives an osvbngd respawn in docker
+# logs, so log-grep health checks pass instantly after a restart while
+# opdb recovery is still running. /run/osvbng/state only reads ready
+# once every restoring component (ipoe, pppoe, cgnat, l2gw) finishes
+# recovery (cmd/osvbngd/main.go, TrackReadiness). Call this only after
+# Wait For osvbng Healthy confirms the new process is answering: the
+# killed process leaves a stale "ready" state file behind.
+Wait For osvbng State Ready
+    [Arguments]    ${container}    ${timeout}=${RESPAWN_TIMEOUT}    ${interval}=${RESPAWN_INTERVAL}
+    Wait Until Keyword Succeeds    ${timeout}    ${interval}
+    ...    Check osvbng State Ready    ${container}
+
+Check osvbng State Ready
+    [Arguments]    ${container}
+    ${rc}    ${output} =    Run And Return Rc And Output
+    ...    sudo docker exec ${container} cat /run/osvbng/state
+    Should Be Equal As Integers    ${rc}    0    cannot read /run/osvbng/state
+    Should Contain    ${output}    "state":"ready"    osvbng reports ${output}
+
 Restart VPP
     [Arguments]    ${container}
     ${rc}    ${output} =    Run And Return Rc And Output

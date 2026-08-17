@@ -138,6 +138,7 @@ Restart Survives With Circuits On Discovered Tunnels
     Restart osvbngd    ${bng1}
     Wait For osvbngd Down    ${bng1}
     Wait For osvbng Healthy    bng1    ${lab-name}
+    Wait For osvbng State Ready    ${bng1}
     Wait Until Keyword Succeeds    60s    5s
     ...    Verify VPP Tunnel Programmed    10101
     Wait Until Keyword Succeeds    60s    5s

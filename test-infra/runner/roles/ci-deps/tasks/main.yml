@@ -1,0 +1,112 @@
+- name: Base packages
+  ansible.builtin.apt:
+    name:
+      - git
+      - make
+      - curl
+      - jq
+      - rsync
+      - python3-venv
+      - ca-certificates
+      - gnupg
+    state: present
+    update_cache: true
+
+- name: Docker apt key
+  ansible.builtin.get_url:
+    url: "https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg"
+    dest: /etc/apt/keyrings/docker.asc
+    mode: "0644"
+
+- name: Docker apt repo
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/etc/apt/keyrings/docker.asc]
+      https://download.docker.com/linux/{{ ansible_distribution | lower }}
+      {{ ansible_distribution_release }} stable
+    filename: docker
+
+# Pinned: unpinned docker-ce put 29.x on the runner while the dev
+# machine ran a proven 27.x, and 29.x's buildkit session handling
+# storms dockerd healthchecks under our cache-mounted builds
+# ("only one connection allowed"), leaving deploys that run during
+# a storm half-wired. Same-version-as-dev is the principle; 28.5.2
+# is the newest pre-29 packaged for noble.
+- name: Install docker
+  ansible.builtin.apt:
+    name:
+      - "docker-ce={{ docker_version }}"
+      - "docker-ce-cli={{ docker_version }}"
+      - containerd.io
+      - docker-buildx-plugin
+    state: present
+    update_cache: true
+    allow_downgrade: true
+
+- name: Hold docker at the pinned version
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - docker-ce
+    - docker-ce-cli
+
+- name: Runner user in docker group
+  ansible.builtin.user:
+    name: runner
+    groups: docker
+    append: true
+
+# Workflows publish and fetch release assets with the GitHub CLI.
+- name: GitHub CLI apt key
+  ansible.builtin.get_url:
+    url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
+    dest: /etc/apt/keyrings/githubcli.gpg
+    mode: "0644"
+
+- name: GitHub CLI apt repo
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/etc/apt/keyrings/githubcli.gpg]
+      https://cli.github.com/packages stable main
+    filename: github-cli
+
+- name: Install GitHub CLI
+  ansible.builtin.apt:
+    name: gh
+    state: present
+    update_cache: true
+
+# Preallocate the hugepage pool at the host level. Every BNG
+# container draws 2M pages from this one global pool, so parallel
+# labs need it sized for all of them, and preallocation at boot
+# avoids late-allocation failures from memory fragmentation.
+- name: Preallocate hugepages
+  ansible.posix.sysctl:
+    name: vm.nr_hugepages
+    value: "{{ hugepages_2m | default(4096) }}"
+    sysctl_file: /etc/sysctl.d/90-hugepages.conf
+
+# Nothing on the box prunes itself: every image build strands the
+# previous build's unique layers as dangling, the BuildKit cache
+# only grows, and runner job diagnostics accumulate forever. Weekly
+# janitor keeps growth bounded. Dangling-only image prune: an
+# aggressive prune would evict the warm layers that make builds
+# fast, which is the box's whole value.
+- name: Install disk janitor
+  ansible.builtin.copy:
+    dest: /etc/cron.weekly/ci-disk-janitor
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      docker image prune -f
+      docker builder prune -f --keep-storage {{ builder_cache_keep | default('20GB') }}
+      find /opt/runner-*/_diag -name '*.log' -mtime +14 -delete 2>/dev/null
+      exit 0
+
+# Pinned release deb from GitHub, not the fury apt repo: the repo is
+# unsigned (upstream's instructions use trusted=yes) and unpinned,
+# and CI wants the same containerlab version as the dev machine.
+- name: Install containerlab
+  ansible.builtin.apt:
+    deb: "https://github.com/srl-labs/containerlab/releases/download/v{{ containerlab_version }}/containerlab_{{ containerlab_version }}_linux_amd64.deb"

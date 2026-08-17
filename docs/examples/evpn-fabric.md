@@ -136,10 +136,13 @@ osvbng consumes type-3 (IMET) routes with ingress replication - the
 baseline every mainstream NOS originates for a bridged L2 VNI. Notes
 for real fabrics:
 
-- **Set explicit route-targets per EVI** so both sides agree
-  (`protocols.bgp.l2vpn-evpn` neighbors plus FRR's per-VNI `rd` /
-  `route-target` overrides render from the config); auto-derived RTs
-  differ across vendors and ASNs.
+- **RD and route-targets are auto-derived and not configurable.**
+  osvbng renders only `advertise-all-vni` in the `l2vpn evpn` address
+  family, so FRR derives the RD and RT for each VNI itself. There is no
+  per-VNI `rd` or `route-target` in osvbng's config today. Auto-derived
+  values differ across vendors and ASNs, so where the leaf does not
+  agree with FRR's derivation, set the matching import and export RT on
+  the leaf side.
 - **One remote VTEP per VNI.** A dual-homed NNI on a leaf pair must
   present a shared anycast service VTEP (MLAG/vPC-style, universally
   supported); underlay ECMP spreads flows across the pair using the

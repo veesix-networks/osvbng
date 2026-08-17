@@ -487,6 +487,53 @@ func (c *Component) sendNAResponse(pkt *dataplane.ParsedPacket, parentSwIfIndex 
 		naFlags |= 0x40
 	}
 
+	return c.emitNA(pkt.MAC.String(), dstIP, pkt.OuterVLAN, pkt.InnerVLAN,
+		pkt.SwIfIndex, parentSwIfIndex, localMAC, srcIP, naFlags, solicited)
+}
+
+// sendRestoreNA multicasts one unsolicited Neighbor Advertisement for
+// the session's gateway link-local after a restore. RFC 4861 7.2.6:
+// Solicited MUST be zero, a router MUST set the Router flag, Override
+// installs our link-layer address, destination is all-nodes. A
+// subscriber whose NUD probe went unanswered during the outage holds a
+// FAILED neighbour entry whose backoff outlives most retry windows;
+// the advertisement moves it to STALE so the next packet re-resolves
+// against the now-answering daemon.
+func (c *Component) sendRestoreNA(sess *SessionState) {
+	if sess.OuterVLAN == 0 {
+		return
+	}
+	match, ok := c.cfgMgr.LookupSubscriberGroup(sess.OuterVLAN, sess.InnerVLAN)
+	if !ok || !groupV6Enabled(match.Group) {
+		return
+	}
+	srgName := c.resolveSRGName(sess.OuterVLAN, sess.InnerVLAN)
+	if c.srgMgr != nil && !c.srgMgr.IsActive(srgName) {
+		return
+	}
+	var parentSwIfIndex uint32
+	if c.ifMgr != nil {
+		if iface := c.ifMgr.Get(sess.EncapIfIndex); iface != nil {
+			parentSwIfIndex = iface.SupSwIfIndex
+		}
+	}
+	localMAC := c.getLocalMAC(srgName, sess.EncapIfIndex)
+	if localMAC == nil {
+		return
+	}
+	srcIP := ra.LinkLocalFromMAC(localMAC)
+	if srcIP == nil {
+		return
+	}
+	if err := c.emitNA("33:33:00:00:00:01", net.ParseIP("ff02::1"),
+		sess.OuterVLAN, sess.InnerVLAN, sess.EncapIfIndex, parentSwIfIndex,
+		localMAC, srcIP, 0x80|0x20, false); err != nil {
+		c.logger.Warn("Failed to send restore NA",
+			"session_id", sess.SessionID, "error", err)
+	}
+}
+
+func (c *Component) emitNA(dstMAC string, dstIP net.IP, outerVLAN, innerVLAN uint16, tpidIfIndex, egressIfIndex uint32, localMAC net.HardwareAddr, srcIP net.IP, naFlags uint8, solicited bool) error {
 	naOptions := layers.ICMPv6Options{
 		{
 			Type: layers.ICMPv6OptTargetAddress,
@@ -523,20 +570,20 @@ func (c *Component) sendNAResponse(pkt *dataplane.ParsedPacket, parentSwIfIndex 
 	}
 
 	egressPayload := &models.EgressPacketPayload{
-		DstMAC:    pkt.MAC.String(),
+		DstMAC:    dstMAC,
 		SrcMAC:    localMAC.String(),
-		OuterVLAN: pkt.OuterVLAN,
-		InnerVLAN: pkt.InnerVLAN,
-		OuterTPID: c.ifMgr.OuterTPID(pkt.SwIfIndex),
-		SwIfIndex: parentSwIfIndex,
+		OuterVLAN: outerVLAN,
+		InnerVLAN: innerVLAN,
+		OuterTPID: c.ifMgr.OuterTPID(tpidIfIndex),
+		SwIfIndex: egressIfIndex,
 		RawData:   buf.Bytes(),
 	}
 
-	c.logger.Debug("Sending NA response",
-		"dst_mac", pkt.MAC.String(),
+	c.logger.Debug("Sending NA",
+		"dst_mac", dstMAC,
 		"src_mac", localMAC.String(),
-		"svlan", pkt.OuterVLAN,
-		"cvlan", pkt.InnerVLAN,
+		"svlan", outerVLAN,
+		"cvlan", innerVLAN,
 		"solicited", solicited,
 	)
 

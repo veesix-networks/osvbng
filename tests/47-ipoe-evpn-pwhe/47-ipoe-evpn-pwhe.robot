@@ -105,6 +105,7 @@ Restart Survives With Sessions On Headend
     Restart osvbngd    ${bng1}
     Wait For osvbngd Down    ${bng1}
     Wait For osvbng Healthy    bng1    ${lab-name}
+    Wait For osvbng State Ready    ${bng1}
     Wait Until Keyword Succeeds    60s    5s
     ...    Verify Tunnel And Binding Present
     Verify Sessions In API    ${bng1}    ${session-count}

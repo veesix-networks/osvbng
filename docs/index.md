@@ -24,6 +24,13 @@
 - 20,000+ Subscriber Sessions
 - Plugin-based architecture
 - IPoE (DHCPv4 + DHCPv6) and PPPoE
+- L2TP LAC and LNS
+- L2 wholesale gateway (cross-connect subscriber circuits to a retail ISP)
+- Hierarchical QoS with port and S-VLAN aggregates
+- CGNAT with PBA and Deterministic modes
+- High availability with Subscriber Redundancy Groups
+- EVPN-VXLAN and pseudowire headend access
+- MPLS L3VPN and VRFs
 - Modern monitoring stack
 - Core implementation is fully open source
 - Docker and KVM support
@@ -287,5 +294,5 @@ What can you expect from the open source version of this project? Below are some
 - Authenticate customers via DHCPv4 Option 82 (Sub-options 1 and 2, Circuit ID and/or Remote ID)
 - BGP and OSPF support
 - Multi-VRF support
-- No QoS/HQoS support from day 1 of the v1.0.0 release
+- Per-subscriber QoS and hierarchical QoS with port and S-VLAN aggregates
 - Modern monitoring solution with Prometheus

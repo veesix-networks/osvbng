@@ -86,3 +86,68 @@ func TestPPPoERABucketMaintenance(t *testing.T) {
 		t.Fatalf("bucket should be empty after remove, got %d", got)
 	}
 }
+
+// The initial burst: three advertisements at MAX_INITIAL_RTR_ADVERT_INTERVAL
+// spacing (RFC 4861 section 6.2.4), then the wheel's refresh cadence.
+func TestPPPoEInitialRABurstSpacing(t *testing.T) {
+	s, bus := ndSession(t)
+	s.ipv6cpOpen = true
+	s.raInitialLeft = raInitialAdverts
+	cfg, _ := s.component.cfgMgr.GetRunning()
+	t0 := time.Now()
+
+	s.component.emitPeriodicRA(s, cfg, t0)
+	if len(bus.egress) != 1 {
+		t.Fatalf("first burst RA: want 1 egress, got %d", len(bus.egress))
+	}
+	if want := t0.Add(raInitialAdvertInterval); !s.nextRADue.Equal(want) {
+		t.Fatalf("second burst RA due = %v, want %v", s.nextRADue, want)
+	}
+
+	// Not due inside the burst interval.
+	s.component.emitPeriodicRA(s, cfg, t0.Add(time.Second))
+	if len(bus.egress) != 1 {
+		t.Fatalf("burst RA re-sent before its interval, got %d", len(bus.egress))
+	}
+
+	s.component.emitPeriodicRA(s, cfg, t0.Add(raInitialAdvertInterval))
+	s.component.emitPeriodicRA(s, cfg, t0.Add(2*raInitialAdvertInterval))
+	if len(bus.egress) != 3 {
+		t.Fatalf("want 3 burst RAs, got %d", len(bus.egress))
+	}
+	if s.raInitialLeft != 0 {
+		t.Fatalf("raInitialLeft = %d after burst, want 0", s.raInitialLeft)
+	}
+	// Fourth advertisement is a full refresh away, not another 16s.
+	if due := s.nextRADue.Sub(t0.Add(2 * raInitialAdvertInterval)); due <= raInitialAdvertInterval {
+		t.Fatalf("post-burst due %v not on refresh cadence", due)
+	}
+}
+
+// walkInitialRAs drops finished, torn-down and IPv6CP-down sessions from the
+// burst set and emits for the rest.
+func TestPPPoEWalkInitialRAs(t *testing.T) {
+	s, bus := ndSession(t)
+	s.ipv6cpOpen = true
+	s.raInitialLeft = raInitialAdverts
+	c := s.component
+	c.sessionIDIndex = map[string]*SessionState{s.SessionID: s}
+
+	initial := map[string]struct{}{s.SessionID: {}, "gone": {}}
+	c.walkInitialRAs(initial)
+	if len(bus.egress) != 1 {
+		t.Fatalf("want 1 RA from walk, got %d", len(bus.egress))
+	}
+	if _, ok := initial["gone"]; ok {
+		t.Fatal("torn-down session must leave the burst set")
+	}
+	if _, ok := initial[s.SessionID]; !ok {
+		t.Fatal("bursting session must stay in the set")
+	}
+
+	s.raInitialLeft = 0
+	c.walkInitialRAs(initial)
+	if _, ok := initial[s.SessionID]; ok {
+		t.Fatal("finished session must leave the burst set")
+	}
+}

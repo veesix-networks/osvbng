@@ -1,0 +1,39 @@
+# Copyright 2026 The osvbng Authors
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Release tier: the full matrix with repeated runs so flakes cannot
+# hide, dispatched deliberately by the maintainer against main before
+# merging a release-please PR. Merge the release only on a green
+# qualification. Ungated: it runs already-merged code.
+
+name: release-qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: Runs per suite
+        required: false
+        default: "3"
+
+jobs:
+  suites-list:
+    runs-on: ubuntu-latest
+    outputs:
+      suites: ${{ steps.list.outputs.suites }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        run: echo "suites=$(./scripts/list-qa-suites.sh --all)" >> "$GITHUB_OUTPUT"
+
+  run:
+    needs: suites-list
+    concurrency:
+      group: rig
+      cancel-in-progress: false
+    uses: ./.github/workflows/suite-run.yml
+    with:
+      suites: ${{ needs.suites-list.outputs.suites }}
+      runs: ${{ fromJSON(inputs.runs) }}
+      suite_timeout: 60

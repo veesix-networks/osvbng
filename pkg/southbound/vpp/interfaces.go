@@ -3,6 +3,7 @@ package vpp
 import (
 	"fmt"
 	"net"
+	"os"
 	"strings"
 	"time"
 
@@ -1463,12 +1464,32 @@ func (v *VPP) afPacketRxQueues() uint16 {
 	return 1
 }
 
+// silenceKernelIPv6 disables the kernel IPv6 stack on a netdev VPP is
+// about to claim via af-packet. af-packet leaves the kernel bound to
+// the same wire with the same MAC and link-local: the kernel answers
+// ND probes for that address, VPP hears those frames as inbound,
+// learns its own link-local as a dynamic neighbour, and that entry
+// shadows the interface's local-receive route in the ip6-ll FIB, after
+// which every ND reply to the interface hairpins back out the wire and
+// IPv6 forwarding through the box is dead. VPP must be the only IPv6
+// speaker on a claimed interface; the kernel-side routing stack talks
+// through the linux-cp taps, never through the claimed netdev.
+func silenceKernelIPv6(linuxIface string) error {
+	path := "/proc/sys/net/ipv6/conf/" + linuxIface + "/disable_ipv6"
+	return os.WriteFile(path, []byte("1"), 0o644)
+}
+
 func (v *VPP) createVPPHostInterface(linuxIface string) (string, error) {
 	ch, err := v.conn.NewAPIChannel()
 	if err != nil {
 		return "", fmt.Errorf("create API channel: %w", err)
 	}
 	defer ch.Close()
+
+	if err := silenceKernelIPv6(linuxIface); err != nil {
+		v.logger.Warn("Failed to disable kernel IPv6 on claimed interface; kernel ND can poison the ip6-ll FIB",
+			"interface", linuxIface, "error", err)
+	}
 
 	afReq := &af_packet.AfPacketCreateV2{
 		HostIfName:      linuxIface,

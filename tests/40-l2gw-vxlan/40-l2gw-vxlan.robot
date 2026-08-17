@@ -32,7 +32,7 @@ Suite Teardown      Teardown L2GW VXLAN Test
 ${lab-name}         osvbng-l2gw-vxlan
 ${lab-file}         ${CURDIR}/40-l2gw-vxlan.clab.yml
 ${bng1}             clab-${lab-name}-bng1
-${bng1-mgmt-ip}     172.20.21.2
+${bng1-mgmt-ip}     172.20.41.2
 ${subscribers}      clab-${lab-name}-subscribers
 ${session-count}    2
 
@@ -132,6 +132,7 @@ Restart Survives With Circuits On Tunnels
     Restart osvbngd    ${bng1}
     Wait For osvbngd Down    ${bng1}
     Wait For osvbng Healthy    bng1    ${lab-name}
+    Wait For osvbng State Ready    ${bng1}
     Wait For L2GW Circuit Count    ${bng1}    ${session-count}
     ${restored} =    Snapshot L2GW Circuit IDs    ${bng1}
     Should Be Equal As Strings    ${restored}    ${snapshot}    circuit set changed across restart

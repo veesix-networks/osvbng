@@ -9,19 +9,34 @@ Library             Process
 Library             Collections
 
 *** Variables ***
-${CLAB_BIN}             sudo containerlab
+# preserve-env carries the CI runner's per-slot core assignment through
+# sudo so containerlab can expand it in the topologies; unset locally,
+# where the ${VAR:=auto} defaults select the auto layout.
+${CLAB_BIN}             sudo --preserve-env=OSVBNG_LAB_WORKER_CORES,OSVBNG_LAB_CP_CORES containerlab
 ${runtime}              docker
 ${OSVBNG_API_PORT}      8080
-${HEALTH_RETRIES}       60
-${HEALTH_INTERVAL}      5s
+# 300 x 1s keeps the same 5-minute budget as the previous 60 x 5s but
+# stops quantizing readiness to 5s steps: the daemon typically goes
+# healthy 11-15s after deploy, and a coarse poll pays up to a full
+# interval past that in every suite.
+${HEALTH_RETRIES}       300
+${HEALTH_INTERVAL}      1s
 ${VPPCTL_SOCK}          /run/osvbng/cli.sock
 ${TEST_LOG_DIR}         /tmp/test-logs
 
 *** Keywords ***
 Deploy Topology
     [Arguments]    ${topology_file}
+    # Deploys from parallel suites serialize under a host-wide lock:
+    # concurrent containerlab deploys race each other's network and
+    # container setup and have deadlocked half-created labs. Deploys
+    # take seconds, so serializing them costs little; the suites
+    # themselves still run in parallel. The lock path carries the uid
+    # because flock cannot open another user's lock file (exit 66):
+    # CI's runner instances share one uid so they still serialize,
+    # and a developer's local runs are single anyway.
     ${rc}    ${output} =    Run And Return Rc And Output
-    ...    ${CLAB_BIN} deploy -t ${topology_file} --reconfigure
+    ...    flock -w 300 /tmp/osvbng-clab-deploy.$(id -u).lock ${CLAB_BIN} deploy -t ${topology_file} --reconfigure
     Log    ${output}
     Should Be Equal As Integers    ${rc}    0
     RETURN    ${output}

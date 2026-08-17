@@ -1,0 +1,79 @@
+# One runner service per instance, from the shared dist. Registration
+# is one-shot: once .runner exists the token tasks are skipped, so
+# reruns of the playbook never need a token. The dist copy is also
+# one-shot: resyncing an existing instance fails with ETXTBSY when
+# its Runner.Listener is mid-job, and a live instance must not be
+# overwritten anyway.
+- name: "Check instance directory for shared-{{ instance_no }}"
+  ansible.builtin.stat:
+    path: "/opt/runner-shared-{{ instance_no }}/bin/Runner.Listener"
+  register: runner_instance
+
+- name: "Create instance directory for shared-{{ instance_no }}"
+  ansible.builtin.copy:
+    src: /opt/runner-dist/
+    dest: "/opt/runner-shared-{{ instance_no }}/"
+    remote_src: true
+    owner: runner
+    group: runner
+    mode: preserve
+  when: not runner_instance.stat.exists
+
+- name: "Check registration of shared-{{ instance_no }}"
+  ansible.builtin.stat:
+    path: "/opt/runner-shared-{{ instance_no }}/.runner"
+  register: runner_registered
+
+- name: "Require registration token for shared-{{ instance_no }}"
+  ansible.builtin.assert:
+    that: runner_token | default('') | length > 0
+    fail_msg: >-
+      shared-{{ instance_no }} is unregistered and no runner_token was
+      passed; fetch an org registration token with gh (see README) and
+      rerun with -e runner_token=...
+  when: not runner_registered.stat.exists
+
+- name: "Register shared-{{ instance_no }}"
+  become: true
+  become_user: runner
+  ansible.builtin.command:
+    chdir: "/opt/runner-shared-{{ instance_no }}"
+    cmd: >-
+      ./config.sh --unattended
+      --url {{ runner_org_url }}
+      --token {{ runner_token }}
+      --name {{ ansible_hostname }}-shared-{{ instance_no }}
+      --labels {{ runner_labels }}
+      --replace
+  when: not runner_registered.stat.exists
+  changed_when: true
+  no_log: true
+
+# Each instance owns a disjoint host core slot, exported to every job
+# so containerlab can expand it into the test topologies: concurrent
+# labs then never share a VPP polling core (todo item 16). Three cores
+# per slot, core 0 left for the VPP main threads; runner_count 5 on a
+# 16-core box fills cores 1-15 exactly.
+- name: "Write job environment for shared-{{ instance_no }}"
+  ansible.builtin.copy:
+    dest: "/opt/runner-shared-{{ instance_no }}/.env"
+    owner: runner
+    group: runner
+    mode: "0644"
+    content: |
+      LANG=en_GB.UTF-8
+      OSVBNG_LAB_WORKER_CORES={{ 3 * instance_no - 2 }}-{{ 3 * instance_no - 1 }}
+      OSVBNG_LAB_CP_CORES={{ 3 * instance_no }}
+
+- name: "Install runner service for shared-{{ instance_no }}"
+  ansible.builtin.command:
+    chdir: "/opt/runner-shared-{{ instance_no }}"
+    cmd: ./svc.sh install runner
+    creates: "/etc/systemd/system/actions.runner.*shared-{{ instance_no }}*.service"
+
+- name: "Start runner service for shared-{{ instance_no }}"
+  ansible.builtin.command:
+    chdir: "/opt/runner-shared-{{ instance_no }}"
+    cmd: ./svc.sh start
+  changed_when: false
+  failed_when: false

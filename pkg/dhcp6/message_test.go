@@ -354,3 +354,58 @@ func TestSerializeNoExtrasUnchanged(t *testing.T) {
 		t.Fatalf("response with nil Extras differs from empty slice")
 	}
 }
+
+func TestParseOptionsLengthOverflow(t *testing.T) {
+	for _, length := range []uint16{0xFFFC, 0xFFFD, 0xFFFE, 0xFFFF} {
+		opt := []byte{0x00, 0x01, 0x00, 0x00}
+		binary.BigEndian.PutUint16(opt[2:4], length)
+
+		data := append([]byte{byte(MsgTypeSolicit), 0x00, 0x00, 0x01}, opt...)
+		msg, err := ParseMessage(data)
+		if err != nil {
+			t.Fatalf("length %#x: unexpected error: %v", length, err)
+		}
+		if msg.Options.ClientID != nil {
+			t.Fatalf("length %#x: overflowing option must not produce ClientID", length)
+		}
+	}
+}
+
+func TestParseIANALengthOverflow(t *testing.T) {
+	iana := make([]byte, 12)
+	binary.BigEndian.PutUint32(iana[0:4], 1)
+	iana = append(iana, 0x00, byte(OptIAAddr), 0xFF, 0xFF)
+
+	if opt := parseIANA(iana); opt == nil || opt.Address != nil {
+		t.Fatalf("overflowing IA_NA sub-option must not yield an address, got %+v", opt)
+	}
+}
+
+func TestParseIAPDLengthOverflow(t *testing.T) {
+	iapd := make([]byte, 12)
+	binary.BigEndian.PutUint32(iapd[0:4], 1)
+	iapd = append(iapd, 0x00, byte(OptIAPrefix), 0xFF, 0xFF)
+
+	if opt := parseIAPD(iapd); opt == nil || opt.Prefix != nil {
+		t.Fatalf("overflowing IA_PD sub-option must not yield a prefix, got %+v", opt)
+	}
+}
+
+func TestUnwrapRelayInnerLengthOverflow(t *testing.T) {
+	inner := []byte{byte(MsgTypeSolicit), 0x00, 0x00, 0x01, 0x00, 0x01, 0xFF, 0xFF}
+
+	relay := make([]byte, 0, 64)
+	relay = append(relay, byte(MsgTypeRelayForward))
+	relay = append(relay, 0)
+	relay = append(relay, make([]byte, 16)...)
+	relay = append(relay, make([]byte, 16)...)
+	relay = appendOption(relay, OptRelayMsg, inner)
+
+	msg, info := UnwrapRelay(relay)
+	if msg == nil || info == nil {
+		t.Fatal("relay unwrap should succeed; the inner option is malformed, the envelope is not")
+	}
+	if msg.Options.ClientID != nil {
+		t.Fatal("overflowing inner option must not produce ClientID")
+	}
+}

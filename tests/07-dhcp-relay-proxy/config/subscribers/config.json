@@ -6,14 +6,16 @@
         "type": "ipoe",
         "vlan-mode": "N:1",
         "outer-vlan-min": 300,
-        "outer-vlan-max": 300
+        "outer-vlan-max": 300,
+        "ipv6": false
       },
       {
         "interface": "eth1",
         "type": "ipoe",
         "vlan-mode": "N:1",
         "outer-vlan-min": 400,
-        "outer-vlan-max": 400
+        "outer-vlan-max": 400,
+        "ipv6": false
       }
     ]
   },

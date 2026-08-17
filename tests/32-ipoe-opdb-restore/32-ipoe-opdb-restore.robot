@@ -55,6 +55,7 @@ ${session-count}        1
     Restart osvbngd                                ${bng1}
     Wait For osvbngd Down                          ${bng1}
     Wait For osvbng Healthy                        bng1    ${lab-name}
+    Wait For osvbng State Ready                    ${bng1}
     Verify OpDB Sessions Match Snapshot            ${bng1}    ${OPDB_SNAPSHOT}
     Verify OpDB Session IP Addresses Match         ${bng1}    ${OPDB_SNAPSHOT}
     Verify Subscriber Has Stable Lease V4
@@ -79,6 +80,7 @@ ${session-count}        1
     ...    subscriber ND caches. Tracked separately.
     Restart VPP                                    ${bng1}
     Wait For VPP Recovery                          ${bng1}
+    Wait For osvbng State Ready                    ${bng1}
     Wait Until Keyword Succeeds    60s    2s
     ...    Verify OpDB Session Count               ${bng1}    ${session-count}
     Verify OpDB Sessions Match Snapshot            ${bng1}    ${OPDB_SNAPSHOT}

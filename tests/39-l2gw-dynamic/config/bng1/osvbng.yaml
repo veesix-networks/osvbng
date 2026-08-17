@@ -52,11 +52,11 @@ plugins:
     # PEN 32473); no response/accounting mappings needed.
     subscriber.auth.radius:
         servers:
-            - host: 172.20.20.10
+            - host: 172.20.38.10
               secret: testing123
-        nas_ip: 172.20.20.2
+        nas_ip: 172.20.38.2
         coa_clients:
-            - host: 172.20.20.0/24
+            - host: 172.20.38.0/24
               secret: testing123
 
 monitoring:

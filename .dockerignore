@@ -1,0 +1,11 @@
+# Keep the docker build context to what the image build reads. Test
+# results and the robot venv churn on every suite run; without this
+# file that churn invalidates the COPY layer and forces a full Go
+# recompile with no code change.
+.git
+bin
+tests
+test-results
+docs
+site
+dist

@@ -70,11 +70,11 @@ plugins:
             - address: :8080
     subscriber.auth.radius:
         servers:
-            - host: 172.20.21.10
+            - host: 172.20.41.10
               secret: testing123
-        nas_ip: 172.20.21.2
+        nas_ip: 172.20.41.2
         coa_clients:
-            - host: 172.20.21.0/24
+            - host: 172.20.41.0/24
               secret: testing123
 
 monitoring:

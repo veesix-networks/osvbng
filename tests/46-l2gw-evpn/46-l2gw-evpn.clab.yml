@@ -13,6 +13,7 @@
 name: osvbng-l2gw-evpn
 
 mgmt:
+  network: clab-46
   ipv4-subnet: 172.20.26.0/24
 
 topology:
@@ -30,6 +31,8 @@ topology:
       env:
         OSVBNG_WAIT_FOR_INTERFACES: "true"
         OSVBNG_NUM_INTERFACES: "2"
+        OSVBNG_DP_WORKER_CORES: "${OSVBNG_LAB_WORKER_CORES:=auto}"
+        OSVBNG_CP_CORES: "${OSVBNG_LAB_CP_CORES:=auto}"
         OSVBNG_RESPAWN: "true"
       binds:
         - config/bng1/osvbng.yaml:/etc/osvbng/osvbng.yaml:ro

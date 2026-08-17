@@ -1,0 +1,19 @@
+# Staging allowlist: while this file exists, the per-PR tier runs
+# exactly these suites. Grow it as suites prove green on the runner;
+# delete the file to return to the full generated matrix minus
+# skip-suites.txt.
+01-smoke
+02-smoke-ha
+03-ipoe-local
+04-pppoe-local
+05-ipoe-radius
+06-pppoe-radius
+07-dhcp-relay-proxy
+08-cgnat-ipoe-pba
+10-cgnat-pppoe-pba
+12-cgnat-ha-ipoe-pba
+13-cgnat-ha-pppoe-pba
+14-ha-failover-ipoe
+15-ha-failover-pppoe
+16-ha-failover-radius-ipoe
+17-ha-tracker-promotion-ipoe

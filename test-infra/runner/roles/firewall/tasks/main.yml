@@ -1,0 +1,33 @@
+- name: Install ufw
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+    update_cache: true
+
+# Docker and containerlab manage their own bridge traffic in
+# DOCKER-USER and per-lab chains; ufw here governs only what the
+# outside world can reach on the host itself. The runner needs no
+# inbound ports (it dials out to GitHub), so the only opening is SSH.
+- name: Default deny inbound
+  community.general.ufw:
+    direction: incoming
+    policy: deny
+
+- name: Default allow outbound
+  community.general.ufw:
+    direction: outgoing
+    policy: allow
+
+# ssh_listen_port is the port sshd LISTENS on, which is not always
+# the port the operator dials: an edge firewall may forward a public
+# port to it. Allowing the dialed port instead of this one is how the
+# box got locked out once already.
+- name: Allow SSH on the listen port
+  community.general.ufw:
+    rule: allow
+    port: "{{ ssh_listen_port | default(22) }}"
+    proto: tcp
+
+- name: Enable ufw
+  community.general.ufw:
+    state: enabled

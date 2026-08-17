@@ -122,10 +122,11 @@ func ParseOptions(data []byte) Options {
 	for len(data) >= 4 {
 		code := binary.BigEndian.Uint16(data[0:2])
 		length := binary.BigEndian.Uint16(data[2:4])
-		if len(data) < int(4+length) {
+		end := 4 + int(length)
+		if len(data) < end {
 			break
 		}
-		optData := data[4 : 4+length]
+		optData := data[4:end:end]
 		switch code {
 		case OptClientID:
 			opts.ClientID = optData
@@ -157,7 +158,7 @@ func ParseOptions(data []byte) Options {
 				}
 			}
 		}
-		data = data[4+length:]
+		data = data[end:]
 	}
 	return opts
 }
@@ -175,7 +176,8 @@ func parseIANA(data []byte) *IANAOption {
 	for len(sub) >= 4 {
 		subCode := binary.BigEndian.Uint16(sub[0:2])
 		subLen := binary.BigEndian.Uint16(sub[2:4])
-		if len(sub) < int(4+subLen) {
+		end := 4 + int(subLen)
+		if len(sub) < end {
 			break
 		}
 		if subCode == OptIAAddr && subLen >= 24 {
@@ -183,7 +185,7 @@ func parseIANA(data []byte) *IANAOption {
 			opt.PreferredTime = binary.BigEndian.Uint32(sub[20:24])
 			opt.ValidTime = binary.BigEndian.Uint32(sub[24:28])
 		}
-		sub = sub[4+subLen:]
+		sub = sub[end:]
 	}
 	return opt
 }
@@ -201,7 +203,8 @@ func parseIAPD(data []byte) *IAPDOption {
 	for len(sub) >= 4 {
 		subCode := binary.BigEndian.Uint16(sub[0:2])
 		subLen := binary.BigEndian.Uint16(sub[2:4])
-		if len(sub) < int(4+subLen) {
+		end := 4 + int(subLen)
+		if len(sub) < end {
 			break
 		}
 		if subCode == OptIAPrefix && subLen >= 25 {
@@ -210,7 +213,7 @@ func parseIAPD(data []byte) *IAPDOption {
 			opt.PrefixLen = sub[12]
 			opt.Prefix = net.IP(sub[13:29])
 		}
-		sub = sub[4+subLen:]
+		sub = sub[end:]
 	}
 	return opt
 }

@@ -1,0 +1,13 @@
+QA Test Run: 20260817-004557
+Runs per test: 1
+Tests: 07-dhcp-relay-proxy
+Results: /tmp/claude-1000/-home-brandon-osvbng-dev-osvbng-context/68545c9c-186f-4326-856f-554b5025900b/scratchpad/osvbng-subnets/test-results/qa/20260817-004557
+========================================
+
+--- 07-dhcp-relay-proxy ---
+FAIL (11 tests, 9 passed, 2 failed)
+  Result: 0/1 passed
+
+========================================
+TOTAL: 0 passed, 1 failed out of 1
+Done: Mon Aug 17 00:48:38 UTC 2026

@@ -43,12 +43,12 @@ Verify FRR Is Running On BNG
 
 Verify OSPF Adjacency Established
     [Documentation]    Wait for OSPF adjacency between bng1 and corerouter1.
-    Wait Until Keyword Succeeds    12 x    10s
+    Wait Until Keyword Succeeds    60 x    2s
     ...    Verify OSPF Adjacency On Router    ${corerouter1}
 
 Verify BGP Session Established
     [Documentation]    Wait for BGP session from bng1 (10.254.0.1) on corerouter1.
-    Wait Until Keyword Succeeds    12 x    10s
+    Wait Until Keyword Succeeds    60 x    2s
     ...    Verify BGP Session On Router    ${corerouter1}    10.254.0.1
 
 Verify REST API Responds
@@ -73,7 +73,7 @@ Verify Sessions Have IPv4
 
 Verify Traffic Flowing
     [Documentation]    Verify end-to-end traffic between access and network interfaces.
-    Wait Until Keyword Succeeds    6 x    10s
+    Wait Until Keyword Succeeds    30 x    2s
     ...    Verify Traffic Flowing    ${subscribers}    expected_flows=${session-count}
 
 *** Keywords ***

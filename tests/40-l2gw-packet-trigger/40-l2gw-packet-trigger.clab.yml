@@ -5,7 +5,8 @@
 name: osvbng-l2gw-packet-trigger
 
 mgmt:
-  ipv4-subnet: 172.20.20.0/24
+  network: clab-40pt
+  ipv4-subnet: 172.20.39.0/24
 
 topology:
   nodes:
@@ -13,7 +14,7 @@ topology:
       kind: linux
       image: veesixnetworks/osvbng:local
       image-pull-policy: Never
-      mgmt-ipv4: 172.20.20.2
+      mgmt-ipv4: 172.20.39.2
       cap-add:
         - SYS_ADMIN
         - NET_ADMIN
@@ -22,6 +23,8 @@ topology:
       env:
         OSVBNG_WAIT_FOR_INTERFACES: "true"
         OSVBNG_NUM_INTERFACES: "3"
+        OSVBNG_DP_WORKER_CORES: "${OSVBNG_LAB_WORKER_CORES:=auto}"
+        OSVBNG_CP_CORES: "${OSVBNG_LAB_CP_CORES:=auto}"
         OSVBNG_RESPAWN: "true"
       binds:
         - config/bng1/osvbng.yaml:/etc/osvbng/osvbng.yaml:ro

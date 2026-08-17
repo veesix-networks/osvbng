@@ -1,0 +1,25 @@
+QA Test Run: 20260817-003824
+Runs per test: 1
+Runs per test: 1
+Tests: 07-dhcp-relay-proxy
+Results: /tmp/claude-1000/-home-brandon-osvbng-dev-osvbng-context/68545c9c-186f-4326-856f-554b5025900b/scratchpad/osvbng-subnets/test-results/qa/20260817-003824
+Tests: 05-ipoe-radius
+========================================
+Results: /tmp/claude-1000/-home-brandon-osvbng-dev-osvbng-context/68545c9c-186f-4326-856f-554b5025900b/scratchpad/osvbng-subnets/test-results/qa/20260817-003824
+
+========================================
+--- 07-dhcp-relay-proxy ---
+
+--- 05-ipoe-radius ---
+FAIL (11 tests, 0 passed, 11 failed)
+  Result: 0/1 passed
+
+========================================
+TOTAL: 0 passed, 1 failed out of 1
+Done: Mon Aug 17 00:38:47 UTC 2026
+PASS (11 tests, 11 passed, 0 failed)
+  Result: 1/1 passed
+
+========================================
+TOTAL: 1 passed, 0 failed out of 1
+Done: Mon Aug 17 00:40:48 UTC 2026

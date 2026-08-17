@@ -1,0 +1,27 @@
+- name: Download actions runner
+  ansible.builtin.unarchive:
+    src: "https://github.com/actions/runner/releases/download/v{{ runner_version }}/actions-runner-linux-x64-{{ runner_version }}.tar.gz"
+    dest: /opt
+    remote_src: true
+    creates: /opt/bin/Runner.Listener
+    extra_opts: [--one-top-level=runner-dist]
+    owner: runner
+
+- name: Install runner OS dependencies
+  ansible.builtin.command: /opt/runner-dist/bin/installdependencies.sh
+  args:
+    creates: /usr/lib/x86_64-linux-gnu/libicu*
+  failed_when: false
+
+# One shared org-level pool: every repo in the org schedules jobs
+# across all instances, and one workflow fanning out into many jobs
+# consumes as many as are free. A runner service executes one job at
+# a time, so runner_count is the box's total job parallelism.
+# Workflows that must not overlap themselves (the osvbng-vpp release
+# build with its fixed volume names) serialize with a concurrency
+# group, never by capping the pool.
+- name: Per-instance runner services
+  ansible.builtin.include_tasks: register.yml
+  loop: "{{ range(1, (runner_count | int) + 1) | list }}"
+  loop_control:
+    loop_var: instance_no

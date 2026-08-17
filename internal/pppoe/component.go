@@ -84,6 +84,12 @@ type Component struct {
 	raBuckets     map[int][]string
 	raBucketMu    sync.RWMutex
 	raBucketCount int
+	// raKicks hands a session that just became advertising (IPv6CP up) to
+	// the emitter goroutine for its initial RA burst (RFC 4861 section
+	// 6.2.4). Bounded, drop on full: a dropped kick only means the first
+	// RA waits for the session's wheel bucket, which was the behavior for
+	// every session before the burst existed.
+	raKicks chan string
 
 	// DHCPv6 over PPP. dhcp6Providers is the same encap-agnostic provider map
 	// IPoE uses (keyed by mode: local/relay/proxy); empty means DHCPv6 is not
@@ -170,6 +176,12 @@ type SessionState struct {
 	// the subscriber's default route alive. Zero means due immediately (set on
 	// IPv6CP up); maintained by the periodic emitter.
 	nextRADue time.Time
+	// raInitialLeft counts the remaining advertisements of the initial burst
+	// (RFC 4861 section 6.2.4: up to MAX_INITIAL_RTR_ADVERTISEMENTS spaced at
+	// most MAX_INITIAL_RTR_ADVERT_INTERVAL apart when the session becomes an
+	// advertising interface). Set on IPv6CP up, decremented per emitted RA;
+	// the wheel cadence takes over at zero.
+	raInitialLeft uint8
 
 	pap            *ppp.PAPHandler
 	chap           *ppp.CHAPHandler
@@ -268,6 +280,7 @@ func New(deps component.Dependencies, srgMgr ha.SRGProvider, ifMgr *ifmgr.Manage
 		ipv6Index:        make(map[string]*SessionState),
 		raEngine:         ra.NewEngine(false, log),
 		raBuckets:        make(map[int][]string),
+		raKicks:          make(chan string, raKickBuffer),
 		dhcp6Providers:   dhcp6Providers,
 		dhcp6Sem:         make(chan struct{}, 16),
 		registry:         allocator.GetGlobalRegistry(),

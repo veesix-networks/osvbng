@@ -2,7 +2,7 @@
 # Licensed under the GNU General Public License v3.0 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-.PHONY: all build generate generate-proto clean run test cli build-cli docker-local docker-kea-local lint fmt robot-test clean-branches dev-vm dev-vm-sync validate-artifacts tarball-smoke bump-submodules
+.PHONY: all build generate generate-proto clean run test cli build-cli docker-local docker-local-dataplane docker-kea-local qa qa-sweep lint fmt robot-test clean-branches dev-vm dev-vm-sync validate-artifacts tarball-smoke bump-submodules
 
 all: generate build
 
@@ -54,11 +54,42 @@ build-cli: generate
 	go build -o bin/osvbngcli ./cmd/osvbngcli
 
 docker-local:
-	docker build -f docker/Dockerfile \
+	DOCKER_BUILDKIT=1 docker build -f docker/Dockerfile \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg COMMIT=$(COMMIT) \
 		--build-arg DATE=$(DATE) \
 		-t veesixnetworks/osvbng:local .
+
+# Build the image against an osvbng-vpp release build instead of
+# upstream debs plus the prebuilt plugin drop: patched core and all
+# osvbng plugins from one build. Run `make vpp-build` in osvbng-vpp
+# first. The staged debs are cleared afterwards so a later plain
+# docker-local returns to the upstream path.
+DATAPLANE_DIST ?= ../osvbng-vpp/dist
+docker-local-dataplane:
+	@ls $(DATAPLANE_DIST)/vpp_*.deb >/dev/null 2>&1 || \
+		{ echo "no debs in $(DATAPLANE_DIST); run make vpp-build in osvbng-vpp"; exit 1; }
+	rm -f docker/dataplane-debs/*.deb
+	cp $(DATAPLANE_DIST)/vpp_*.deb $(DATAPLANE_DIST)/vpp-plugin-core_*.deb \
+		$(DATAPLANE_DIST)/vpp-plugin-dpdk_*.deb $(DATAPLANE_DIST)/libvppinfra_*.deb \
+		docker/dataplane-debs/
+	$(MAKE) docker-local || { rm -f docker/dataplane-debs/*.deb; exit 1; }
+	rm -f docker/dataplane-debs/*.deb
+
+# One-command dev loop: rebuild the image, run the suite covering the
+# change. Usage: make qa suite=04-pppoe-local
+qa: docker-local
+	@test -n "$(suite)" || { echo "usage: make qa suite=NN-topic"; exit 1; }
+	./scripts/run-qa-tests.sh -r 1 -t $(suite)
+
+# Full local regression sweep, one run per suite. Exclusions are the
+# suites not expected green right now; record the reason when adding
+# one.
+# Exclusions come from tests/skip-suites.txt, the same file the
+# integration workflow's generated matrix uses, so local sweeps and
+# CI always agree on what is skipped.
+qa-sweep: docker-local
+	./scripts/run-qa-tests.sh -r 1 $$(sed 's/\#.*//' tests/skip-suites.txt | awk 'NF {print "-x " $$1}')
 
 docker-kea-local:
 	docker build -f docker/dev/Dockerfile.kea \

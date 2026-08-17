@@ -20,6 +20,21 @@ const (
 	raTickInterval   = time.Second
 	raMinBucketCount = 10
 	raMaxBucketCount = 600
+
+	// RFC 4861 section 6.2.4 and section 10: when an interface becomes an
+	// advertising interface, up to MAX_INITIAL_RTR_ADVERTISEMENTS (3)
+	// unsolicited RAs go out spaced at most MAX_INITIAL_RTR_ADVERT_INTERVAL
+	// (16s) apart, so a subscriber discovers its router promptly instead of
+	// waiting out the wheel (whose cycle can be the full refresh interval).
+	// The CPE starting DHCPv6 off the RA's M flag is what makes this
+	// latency subscriber-visible.
+	raInitialAdverts        = 3
+	raInitialAdvertInterval = 16 * time.Second
+
+	// raKickBuffer bounds the IPv6CP-up to emitter handoff; raInitialPerTick
+	// bounds the burst work one tick performs during a reconnect wave.
+	raKickBuffer     = 8192
+	raInitialPerTick = 2048
 )
 
 // computeRABucketCount sizes the emitter wheel so a session is visited within
@@ -104,14 +119,58 @@ func (c *Component) periodicRAEmitter() {
 	ticker := time.NewTicker(raTickInterval)
 	defer ticker.Stop()
 	bucket := 0
+	// initial holds sessions still inside their RFC 4861 6.2.4 burst.
+	// Owned by this goroutine only, like the template cache.
+	initial := make(map[string]struct{})
 	for {
 		select {
 		case <-c.Ctx.Done():
 			return
+		case id := <-c.raKicks:
+			initial[id] = struct{}{}
 		case <-ticker.C:
 			c.emitRABucket(bucket)
 			bucket = (bucket + 1) % c.raBucketCount
+			c.walkInitialRAs(initial)
 		}
+	}
+}
+
+// walkInitialRAs drives the initial-burst sessions between wheel visits: each
+// still-bursting session is offered an emit (the due check inside
+// emitPeriodicRA spaces the burst), and sessions that finished, tore down or
+// lost IPv6CP fall out of the set. Bounded per tick so a reconnect wave
+// spreads over ticks instead of spiking one.
+func (c *Component) walkInitialRAs(initial map[string]struct{}) {
+	if len(initial) == 0 {
+		return
+	}
+	cfg, err := c.cfgMgr.GetRunning()
+	if err != nil || cfg == nil {
+		return
+	}
+	now := time.Now()
+	n := 0
+	for id := range initial {
+		if n >= raInitialPerTick {
+			return
+		}
+		n++
+		c.sessionMu.RLock()
+		s := c.sessionIDIndex[id]
+		c.sessionMu.RUnlock()
+		if s == nil {
+			delete(initial, id)
+			continue
+		}
+		s.mu.Lock()
+		done := !s.ipv6cpOpen || s.raInitialLeft == 0
+		s.mu.Unlock()
+		if done {
+			delete(initial, id)
+			continue
+		}
+		c.emitPeriodicRA(s, cfg, now)
 	}
 }
 
@@ -192,7 +251,17 @@ func (c *Component) emitPeriodicRA(s *SessionState, cfg *config.Config, now time
 	s.sendIPv6Packet(raw)
 
 	s.mu.Lock()
-	s.nextRADue = now.Add(st.Refresh)
+	if s.raInitialLeft > 0 {
+		s.raInitialLeft--
+	}
+	if s.raInitialLeft > 0 {
+		// Still inside the RFC 4861 6.2.4 burst: the next advertisement
+		// is due within MAX_INITIAL_RTR_ADVERT_INTERVAL, not a full
+		// refresh away.
+		s.nextRADue = now.Add(raInitialAdvertInterval)
+	} else {
+		s.nextRADue = now.Add(st.Refresh)
+	}
 	s.mu.Unlock()
 }
 

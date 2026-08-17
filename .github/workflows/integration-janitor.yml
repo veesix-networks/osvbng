@@ -1,0 +1,35 @@
+# Copyright 2026 The osvbng Authors
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# A PR-triggered integration run that is never approved sits at the
+# environment gate holding the shared concurrency group, and every
+# later run (other PRs, the nightly sweep) queues behind it forever.
+# Cancel a PR's parked runs as soon as the PR closes; an unapproved
+# run for a closed PR can never be worth executing.
+
+name: integration-janitor
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  actions: write
+
+jobs:
+  cancel-stale:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel parked integration runs for this PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for st in waiting pending queued; do
+            for id in $(gh run list -R "$GITHUB_REPOSITORY" \
+                --workflow integration --branch "${{ github.head_ref }}" \
+                --status "$st" --json databaseId -q '.[].databaseId'); do
+              echo "cancelling $st run $id"
+              gh run cancel "$id" -R "$GITHUB_REPOSITORY" || true
+            done
+          done

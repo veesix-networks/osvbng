@@ -1,0 +1,25 @@
+QA Test Run: 20260817-012400
+Runs per test: 1
+Tests: 14-ha-failover-ipoe
+Runs per test: 1
+Results: /tmp/claude-1000/-home-brandon-osvbng-dev-osvbng-context/68545c9c-186f-4326-856f-554b5025900b/scratchpad/osvbng-subnets/test-results/qa/20260817-012400
+Tests: 15-ha-failover-pppoe
+========================================
+Results: /tmp/claude-1000/-home-brandon-osvbng-dev-osvbng-context/68545c9c-186f-4326-856f-554b5025900b/scratchpad/osvbng-subnets/test-results/qa/20260817-012400
+
+========================================
+--- 14-ha-failover-ipoe ---
+
+--- 15-ha-failover-pppoe ---
+PASS (26 tests, 26 passed, 0 failed)
+  Result: 1/1 passed
+
+========================================
+TOTAL: 1 passed, 0 failed out of 1
+Done: Mon Aug 17 01:25:05 UTC 2026
+PASS (26 tests, 26 passed, 0 failed)
+  Result: 1/1 passed
+
+========================================
+TOTAL: 1 passed, 0 failed out of 1
+Done: Mon Aug 17 01:25:30 UTC 2026

@@ -10,12 +10,12 @@ Subscribers connect via PPPoE discovery on QinQ double-tagged access ports. Each
 subscriber-groups:
   groups:
     residential:
-      access-types: [pppoe]
       ipv4-profile: residential-v4
       ipv6-profile: residential-v6
       vlans:
         - svlan: "200-299"
           cvlan: any
+          access-types: [pppoe]
           interface: loop100
           parent-interface: eth1
       aaa-policy: pppoe-policy
@@ -73,14 +73,12 @@ interfaces:
     address:
       ipv4:
         - 10.254.0.1/32
-    lcp: true
   eth1:
     description: Access Interface
     enabled: true
   eth2:
     description: Core Uplink
     enabled: true
-    lcp: true
     address:
       ipv4:
         - 10.0.0.1/30
@@ -94,7 +92,6 @@ interfaces:
         - 10.255.0.1/32
       ipv6:
         - 2001:db8:0:1::1/128
-    lcp: true
 
 protocols:
   bgp:
@@ -139,7 +136,8 @@ aaa:
 plugins:
   northbound.api:
     enabled: true
-    listen_address: :8080
+    listeners:
+      - address: :8080
   subscriber.auth.local:
     allow_all: false
     database_path: /var/lib/osvbng/subscribers.db

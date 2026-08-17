@@ -19,6 +19,8 @@ osvbngd config > /etc/osvbng/osvbng.yaml
 - [DHCP](dhcp.md) - DHCPv4 provider configuration
 - [DHCPv6](dhcpv6.md) - DHCPv6 provider configuration
 - [AAA](aaa.md) - Authentication and policies
+- [L2TP](l2tp.md) - L2TPv2 tunnel pools, profiles, and peer policies
+- [L2GW (L2 Wholesale)](l2gw.md) - Layer 2 wholesale cross-connects and handoff groups
 - [CGNAT](cgnat.md) - Carrier-Grade NAT with PBA and Deterministic modes
 - [QoS Policies](qos.md) - Per-subscriber rate limiting (policer) and traffic shaping (CAKE scheduler)
 - [Service Groups](service-groups.md) - Named per-subscriber attribute bundles (VRF, ACL, QoS)
@@ -27,6 +29,7 @@ osvbngd config > /etc/osvbng/osvbng.yaml
 - [Routing Policies](routing-policies.md) - Prefix-sets, community-sets, AS-path-sets, route-policies
 - [Protocols](protocols.md) - BGP, OSPF, OSPFv3, IS-IS, static routes
 - [MPLS](mpls.md) - LDP, Segment Routing, SRv6 (in development)
+- [High Availability](ha.md) - Active/standby nodes and Subscriber Redundancy Groups
 - [System](system.md) - System-level settings and control plane protection
 - [Monitoring](monitoring.md) - Metrics collection
 - [Plugins](plugins.md) - Plugin configuration

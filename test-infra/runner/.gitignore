@@ -1,0 +1,5 @@
+# Host-specific and secret material stays local. The example file is
+# the only inventory that ships.
+inventory.yml
+*.key
+*.pem

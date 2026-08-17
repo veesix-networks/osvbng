@@ -1,0 +1,13 @@
+QA Test Run: 20260817-024318
+Runs per test: 1
+Tests: 32-ipoe-opdb-restore
+Results: /tmp/claude-1000/-home-brandon-osvbng-dev-osvbng-context/68545c9c-186f-4326-856f-554b5025900b/scratchpad/osvbng-nafix/test-results/qa/20260817-024318
+========================================
+
+--- 32-ipoe-opdb-restore ---
+PASS (3 tests, 2 passed, 0 failed, 1 skipped)
+  Result: 1/1 passed
+
+========================================
+TOTAL: 1 passed, 0 failed out of 1
+Done: Mon Aug 17 02:44:52 UTC 2026

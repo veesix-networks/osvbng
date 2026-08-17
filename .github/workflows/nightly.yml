@@ -1,0 +1,107 @@
+# Copyright 2026 The osvbng Authors
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Nightly tier: the full suite matrix against main, ungated because
+# it runs only already-merged code. A red nightly means main is red:
+# fix forward or revert before merging anything else, while the
+# failure still implicates at most a day of merges. The sweep is
+# skipped when nothing changed: the pair (osvbng HEAD, dataplane
+# provenance commit) is compared against the state the previous
+# successful sweep recorded, so an osvbng-vpp merge alone still
+# triggers a run, since it changes what is under test.
+#
+# That state lives on the rig box, not in an Actions variable:
+# GITHUB_TOKEN cannot read or write repository variables (both return
+# 403, probed on this repo), there is no workflow permissions key
+# that grants it, and the read was masked by a fallback that made
+# every night look changed. The box that ran the sweep is also the
+# honest owner of the record. Losing the box loses the record, which
+# costs one extra full sweep - the safe direction.
+
+name: nightly
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # The record the sweep writes and the next night compares against.
+  # Outside /var/log/osvbng-ci deliberately: that tree is pruned at
+  # 7 days, and a quiet week would delete the record.
+  STATE_FILE: /var/lib/osvbng-ci/nightly-last
+
+jobs:
+  # Runs on the rig because the record it reads is on the rig's disk.
+  # It claims a runner slot for seconds and takes no rig lock: it
+  # deploys nothing.
+  changes:
+    runs-on: [self-hosted, osvbng-metal]
+    outputs:
+      current: ${{ steps.check.outputs.current }}
+      changed: ${{ steps.check.outputs.changed }}
+      suites: ${{ steps.list.outputs.suites }}
+    steps:
+      # Plain git for the same reason suite-run uses it: action
+      # tarballs come from codeload, which rate-limits this box.
+      - name: Checkout
+        run: |
+          git init -q .
+          sudo chown -R "$(id -u):$(id -g)" .
+          git remote remove origin 2>/dev/null || true
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}"
+          git fetch -q --depth 1 origin "$GITHUB_SHA"
+          git checkout -q -f FETCH_HEAD
+          git clean -qfdx
+          git remote set-url origin "https://github.com/${{ github.repository }}"
+
+      - id: list
+        run: echo "suites=$(./scripts/list-qa-suites.sh --all)" >> "$GITHUB_OUTPUT"
+
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          dp=$(gh release view dataplane-latest -R veesix-networks/osvbng-vpp \
+            --json body -q .body | grep -oE 'from [0-9a-f]{40}' | awk '{print $2}')
+          test -n "$dp"
+          current="${GITHUB_SHA}:${dp}"
+          last=$(cat "$STATE_FILE" 2>/dev/null || echo none)
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "current: $current"
+          echo "last swept: $last"
+          if [ "$current" = "$last" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "no changes since the last successful sweep, skipping"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  run:
+    needs: changes
+    if: needs.changes.outputs.changed == 'true'
+    # Box-level mutual exclusion, shared with the other tiers'
+    # run jobs; claimed only when execution starts.
+    concurrency:
+      group: rig
+      cancel-in-progress: false
+    uses: ./.github/workflows/suite-run.yml
+    with:
+      suites: ${{ needs.changes.outputs.suites }}
+
+  record:
+    needs: [changes, run]
+    if: needs.run.result == 'success'
+    runs-on: [self-hosted, osvbng-metal]
+    steps:
+      - name: Record swept state
+        run: |
+          sudo install -d -m 0755 "$(dirname "$STATE_FILE")"
+          printf '%s\n' "${{ needs.changes.outputs.current }}" \
+            | sudo tee "$STATE_FILE" >/dev/null
+          sudo chmod 0644 "$STATE_FILE"
+          echo "recorded: $(cat "$STATE_FILE")"

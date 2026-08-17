@@ -236,11 +236,11 @@ Modify or disable a scheduler at runtime via the operational API:
 
 ```bash
 # Change rate
-curl -X POST http://localhost:8080/api/oper/qos.scheduler.set \
+curl -X POST http://localhost:8080/api/exec/qos/scheduler/set \
   -d '{"sw_if_index": 5, "rate_kbps": 200000, "tin_mode": "diffserv4"}'
 
 # Disable
-curl -X POST http://localhost:8080/api/oper/qos.scheduler.set \
+curl -X POST http://localhost:8080/api/exec/qos/scheduler/set \
   -d '{"sw_if_index": 5, "disable": true}'
 ```
 

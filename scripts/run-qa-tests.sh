@@ -130,9 +130,14 @@ total_pass=0
 total_fail=0
 
 REWRITTEN_TOPOS=()
+# Plain if, not a && chain: under set -e a failed test in the EXIT
+# trap becomes the script's exit code, which made every fully green
+# run exit 1.
 restore_topologies() {
     for f in "${REWRITTEN_TOPOS[@]:-}"; do
-        [ -n "$f" ] && [ -f "$f.qabak" ] && mv "$f.qabak" "$f"
+        if [ -n "$f" ] && [ -f "$f.qabak" ]; then
+            mv "$f.qabak" "$f"
+        fi
     done
 }
 trap restore_topologies EXIT
@@ -178,19 +183,21 @@ for test in "${TESTS[@]}"; do
         log_file="$RESULTS_DIR/${test}-run${i}.log"
         echo -n "  Run $i/$RUNS: "
 
-        if output=$(make robot-test suite="$test" 2>&1); then
-            result=$(echo "$output" | grep "tests," | tail -1)
+        # Stream to the log as the suite runs instead of buffering:
+        # a killed run (job timeout, cancellation) used to lose its
+        # entire output, which is exactly the evidence a post-mortem
+        # needs.
+        if make robot-test suite="$test" > "$log_file" 2>&1; then
+            result=$(grep "tests," "$log_file" | tail -1)
             echo "PASS ($result)" | tee -a "$SUMMARY"
             pass=$((pass + 1))
             total_pass=$((total_pass + 1))
         else
-            result=$(echo "$output" | grep "tests," | tail -1)
+            result=$(grep "tests," "$log_file" | tail -1)
             echo "FAIL ($result)" | tee -a "$SUMMARY"
             fail=$((fail + 1))
             total_fail=$((total_fail + 1))
         fi
-
-        echo "$output" > "$log_file"
     done
 
     echo "  Result: $pass/$RUNS passed" | tee -a "$SUMMARY"
@@ -200,3 +207,8 @@ echo "" | tee -a "$SUMMARY"
 echo "========================================" | tee -a "$SUMMARY"
 echo "TOTAL: $total_pass passed, $total_fail failed out of $((total_pass + total_fail))" | tee -a "$SUMMARY"
 echo "Done: $(date)" | tee -a "$SUMMARY"
+
+# Exit red when any suite failed; the count was previously tallied
+# but never propagated, so CI could not tell a failed sweep from a
+# green one.
+[ "$total_fail" -eq 0 ]

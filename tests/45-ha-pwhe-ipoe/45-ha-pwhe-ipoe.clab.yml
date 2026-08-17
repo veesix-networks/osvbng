@@ -14,6 +14,7 @@
 name: osvbng-ha-pwhe-ipoe
 
 mgmt:
+  network: clab-45
   ipv4-subnet: 172.20.25.0/24
 
 topology:
@@ -31,6 +32,8 @@ topology:
       env:
         OSVBNG_WAIT_FOR_INTERFACES: "true"
         OSVBNG_NUM_INTERFACES: "2"
+        OSVBNG_DP_WORKER_CORES: "${OSVBNG_LAB_WORKER_CORES:=auto}"
+        OSVBNG_CP_CORES: "${OSVBNG_LAB_CP_CORES:=auto}"
         OSVBNG_RESPAWN: "true"
       binds:
         - config/bng1/osvbng.yaml:/etc/osvbng/osvbng.yaml:ro
@@ -48,6 +51,8 @@ topology:
       env:
         OSVBNG_WAIT_FOR_INTERFACES: "true"
         OSVBNG_NUM_INTERFACES: "2"
+        OSVBNG_DP_WORKER_CORES: "${OSVBNG_LAB_WORKER_CORES:=auto}"
+        OSVBNG_CP_CORES: "${OSVBNG_LAB_CP_CORES:=auto}"
         OSVBNG_RESPAWN: "true"
       binds:
         - config/bng2/osvbng.yaml:/etc/osvbng/osvbng.yaml:ro
@@ -77,9 +82,9 @@ topology:
         - ip link set br-acc up
 
   links:
-    - endpoints: [bng1:eth1, access-sw-pwhe:bng1]
+    - endpoints: [bng1:eth1, access-sw-pwhe:bng1-45]
       mtu: 9000
-    - endpoints: [bng2:eth1, access-sw-pwhe:bng2]
+    - endpoints: [bng2:eth1, access-sw-pwhe:bng2-45]
       mtu: 9000
-    - endpoints: [subscribers:eth1, access-sw-pwhe:sub1]
+    - endpoints: [subscribers:eth1, access-sw-pwhe:sub1-45]
       mtu: 9000

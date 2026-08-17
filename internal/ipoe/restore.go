@@ -109,6 +109,8 @@ func (c *Component) restoreSessions(ctx context.Context) error {
 			return nil
 		}
 
+		c.sendRestoreNA(&sess)
+
 		if sess.State == "bound" && sess.MAC != nil {
 			counterKey := fmt.Sprintf("osvbng:session_count:%s:%d:%d",
 				sess.MAC.String(), sess.OuterVLAN, sess.InnerVLAN)

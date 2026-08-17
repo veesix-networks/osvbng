@@ -4,6 +4,12 @@
 
 name: osvbng-ipoe-opdb-restore
 
+# v4-only mgmt: without an explicit subnet containerlab creates a
+# dual-stack network whose static v6 default route on eth0 competes
+# with the test RA route and breaks subscriber-originated IPv6.
+mgmt:
+  ipv4-subnet: 172.20.20.0/24
+
 topology:
   nodes:
     bng1:
@@ -18,6 +24,8 @@ topology:
       env:
         OSVBNG_WAIT_FOR_INTERFACES: "true"
         OSVBNG_NUM_INTERFACES: "3"
+        OSVBNG_DP_WORKER_CORES: "${OSVBNG_LAB_WORKER_CORES:=auto}"
+        OSVBNG_CP_CORES: "${OSVBNG_LAB_CP_CORES:=auto}"
         OSVBNG_RESPAWN: "true"
       binds:
         - config/bng1/osvbng.yaml:/etc/osvbng/osvbng.yaml:ro

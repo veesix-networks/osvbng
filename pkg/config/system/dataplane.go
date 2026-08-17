@@ -12,25 +12,29 @@ import (
 )
 
 type DataplaneConfig struct {
-	DPAPISocket     string              `json:"dp_api_socket,omitempty" yaml:"dp_api_socket,omitempty"`
-	PuntSocketPath  string              `json:"punt_socket_path,omitempty" yaml:"punt_socket_path,omitempty"`
-	MemifSocketPath string              `json:"memif_socket_path,omitempty" yaml:"memif_socket_path,omitempty"`
-	RxMode          string              `json:"rx_mode,omitempty" yaml:"rx_mode,omitempty"`
-	MainCore        *int                `json:"main_core,omitempty" yaml:"main-core,omitempty"`
-	Workers         string              `json:"workers,omitempty" yaml:"workers,omitempty"`
-	SkipConfGen     bool                `json:"skip_conf_gen,omitempty" yaml:"skip-conf-gen,omitempty"`
-	LCPNetNs        string              `json:"lcp_netns,omitempty" yaml:"lcp-netns,omitempty"`
+	DPAPISocket     string `json:"dp_api_socket,omitempty" yaml:"dp_api_socket,omitempty"`
+	PuntSocketPath  string `json:"punt_socket_path,omitempty" yaml:"punt_socket_path,omitempty"`
+	MemifSocketPath string `json:"memif_socket_path,omitempty" yaml:"memif_socket_path,omitempty"`
+	RxMode          string `json:"rx_mode,omitempty" yaml:"rx_mode,omitempty"`
+	MainCore        *int   `json:"main_core,omitempty" yaml:"main-core,omitempty"`
+	Workers         string `json:"workers,omitempty" yaml:"workers,omitempty"`
+	// CPCores pins the Go control plane to an explicit core set ("2-3",
+	// "2,34"), same syntax as Workers. Empty lets the auto layout pick.
+	// Resolution is topology-blind; NUMA placement is expressed here.
+	CPCores     string `json:"cp_cores,omitempty" yaml:"cp-cores,omitempty"`
+	SkipConfGen bool   `json:"skip_conf_gen,omitempty" yaml:"skip-conf-gen,omitempty"`
+	LCPNetNs    string `json:"lcp_netns,omitempty" yaml:"lcp-netns,omitempty"`
 	// PollSleepUsec caps how long an idle worker sleeps between dispatch loops.
 	// Unset defaults to 100us, which keeps the dev/test environment off 100% CPU
 	// but bounds worker-handoff latency to that sleep. Set to 0 in production so
 	// workers poll continuously for lowest latency (DPDK workers spin regardless
 	// under load; this only affects idle workers). Pointer distinguishes unset
 	// from an explicit 0.
-	PollSleepUsec *uint32 `json:"poll_sleep_usec,omitempty" yaml:"poll-sleep-usec,omitempty"`
-	DPDK            *DPDKConfig         `json:"dpdk,omitempty" yaml:"dpdk,omitempty"`
-	StatsSegment    *StatsSegmentConfig `json:"statseg,omitempty" yaml:"statseg,omitempty"`
-	Memory          *MemoryConfig       `json:"memory,omitempty" yaml:"memory,omitempty"`
-	APITrace        *APITraceConfig     `json:"api-trace,omitempty" yaml:"api-trace,omitempty"`
+	PollSleepUsec *uint32             `json:"poll_sleep_usec,omitempty" yaml:"poll-sleep-usec,omitempty"`
+	DPDK          *DPDKConfig         `json:"dpdk,omitempty" yaml:"dpdk,omitempty"`
+	StatsSegment  *StatsSegmentConfig `json:"statseg,omitempty" yaml:"statseg,omitempty"`
+	Memory        *MemoryConfig       `json:"memory,omitempty" yaml:"memory,omitempty"`
+	APITrace      *APITraceConfig     `json:"api-trace,omitempty" yaml:"api-trace,omitempty"`
 }
 
 var validHeapPageSizes = map[string]bool{
