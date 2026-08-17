@@ -208,7 +208,15 @@ func (c *Component) BuildAccountingBuckets() {
 			}
 
 			c.logger.Debug("Bucket sleeping", "id", bucketId, "until", next, "duration", time.Until(next))
-			time.Sleep(time.Until(next))
+			// Interruptible: StopContext cancels Ctx then waits on the
+			// goroutine WaitGroup, so a plain Sleep here holds shutdown
+			// open until the bucket's second-of-minute arrives, up to a
+			// full minute of dead daemon on every restart.
+			select {
+			case <-time.After(time.Until(next)):
+			case <-c.Ctx.Done():
+				return
+			}
 
 			ticker := time.NewTicker(1 * time.Minute)
 			defer ticker.Stop()
