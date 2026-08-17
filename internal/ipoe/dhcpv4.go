@@ -759,13 +759,6 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 	}
 
 	if deleteSession {
-		counterKey := fmt.Sprintf("osvbng:session_count:%s:%d:%d", pkt.MAC.String(), pkt.OuterVLAN, pkt.InnerVLAN)
-		newCount, err := c.cache.Decr(c.Ctx, counterKey)
-		if err != nil {
-			c.logger.Warn("Failed to decrement session counter", "error", err, "key", counterKey)
-		} else if newCount <= 0 {
-			c.cache.Delete(c.Ctx, counterKey)
-		}
 		c.deleteSessionCheckpoint(sessID)
 	} else if sess != nil {
 		c.checkpointSession(sess)
@@ -913,7 +906,6 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 	}
 
 	sess.mu.Lock()
-	alreadyBound := sess.State == "bound"
 	sess.State = "bound"
 	sess.IPv4 = pkt.DHCPv4.YourClientIP
 	sess.LeaseTime = leaseTime
@@ -921,9 +913,6 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 	if sess.ActivatedAt.IsZero() {
 		sess.ActivatedAt = sess.BoundAt
 	}
-	mac := sess.MAC
-	svlan := sess.OuterVLAN
-	cvlan := sess.InnerVLAN
 	ipoeSwIfIndex := sess.IPoESwIfIndex
 	snapshotIPv6 := sess.IPv6Address
 	snapshotIPv6LeaseTime := sess.IPv6LeaseTime
@@ -955,18 +944,6 @@ func (c *Component) handleAck(sess *SessionState, pkt *dataplane.ParsedPacket) e
 			c.logger.WithGroup(logger.IPoEDHCP4).Debug("IPoE session not ready, queued IPv4 binding", "session_id", sessID, "ipv4", ipv4.String())
 		}
 	}
-
-	counterKey := fmt.Sprintf("osvbng:session_count:%s:%d:%d", mac.String(), svlan, cvlan)
-	if !alreadyBound {
-		if _, err := c.cache.Incr(c.Ctx, counterKey); err != nil {
-			c.logger.Warn("Failed to increment session counter", "error", err, "key", counterKey)
-		}
-	}
-	expiry := time.Duration(sess.LeaseTime*2) * time.Second
-	if expiry == 0 || expiry > 24*time.Hour {
-		expiry = 24 * time.Hour
-	}
-	c.cache.Expire(c.Ctx, counterKey, expiry)
 
 	c.checkpointSession(sess)
 

@@ -1,0 +1,67 @@
+{
+  "interfaces": {
+    "network": [
+      {
+        "interface": "eth2",
+        "address": "10.0.0.2/30",
+        "gateway": "10.0.0.1"
+      }
+    ],
+    "access": [
+      {
+        "interface": "eth1",
+        "type": "pppoe",
+        "qinq": true,
+        "vlan-mode": "1:1",
+        "outer-vlan": 100,
+        "inner-vlan-min": 10,
+        "inner-vlan-max": 13,
+        "monkey": true
+      },
+      {
+        "interface": "eth1",
+        "type": "pppoe",
+        "qinq": true,
+        "vlan-mode": "1:1",
+        "outer-vlan": 200,
+        "inner-vlan-min": 10,
+        "inner-vlan-max": 13,
+        "monkey": true
+      }
+    ]
+  },
+  "sessions": {
+    "count": 8,
+    "max-outstanding": 8,
+    "reconnect": true,
+    "monkey-autostart": false
+  },
+  "pppoe": {
+    "reconnect": true,
+    "discovery-timeout": 5,
+    "discovery-retry": 30,
+    "host-uniq": true
+  },
+  "ppp": {
+    "authentication": {
+      "username": "user{session-global}",
+      "password": "test",
+      "timeout": 10,
+      "retry": 30
+    },
+    "lcp": {
+      "conf-request-timeout": 5,
+      "conf-request-retry": 10,
+      "keepalive-retry": 5
+    },
+    "ipcp": {
+      "enable": true
+    },
+    "ip6cp": {
+      "enable": false
+    }
+  },
+  "access-line": {
+    "agent-remote-id": "user{session-global}"
+  }
+}

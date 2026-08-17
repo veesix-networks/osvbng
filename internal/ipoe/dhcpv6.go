@@ -515,13 +515,6 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket, msg *dhcp6.
 	}
 
 	if deleteSession {
-		counterKey := fmt.Sprintf("osvbng:session_count:%s:%d:%d", pkt.MAC.String(), pkt.OuterVLAN, pkt.InnerVLAN)
-		newCount, err := c.cache.Decr(c.Ctx, counterKey)
-		if err != nil {
-			c.logger.Warn("Failed to decrement session counter", "error", err, "key", counterKey)
-		} else if newCount <= 0 {
-			c.cache.Delete(c.Ctx, counterKey)
-		}
 		c.deleteSessionCheckpoint(sessID)
 	} else if sess != nil {
 		c.checkpointSession(sess)

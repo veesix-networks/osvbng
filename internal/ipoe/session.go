@@ -5,6 +5,7 @@
 package ipoe
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"sync"
@@ -174,11 +175,7 @@ func (c *Component) checkSessionLimit(mac net.HardwareAddr, svlan, cvlan uint16)
 		return nil
 	}
 
-	count, err := c.countExistingSessions(mac, svlan, cvlan)
-	if err != nil {
-		c.logger.Warn("Failed to count sessions", "error", err)
-		return nil
-	}
+	count := c.countExistingSessions(mac, svlan, cvlan)
 
 	if count >= maxSessions {
 		return fmt.Errorf("session limit reached (%d/%d) for %s on VLAN %d:%d",
@@ -190,20 +187,59 @@ func (c *Component) checkSessionLimit(mac net.HardwareAddr, svlan, cvlan uint16)
 	return nil
 }
 
-func (c *Component) countExistingSessions(mac net.HardwareAddr, svlan, cvlan uint16) (int, error) {
-	counterKey := fmt.Sprintf("osvbng:session_count:%s:%d:%d", mac.String(), svlan, cvlan)
-
-	val, err := c.cache.Get(c.Ctx, counterKey)
-	if err != nil {
-		return 0, nil
+// countExistingSessions reports how many IPv4 leases this subscriber tuple
+// currently holds, derived from the live session map.
+//
+// This was once an explicit counter in the cache, incremented on bind and
+// decremented only by the two DHCP RELEASE handlers. Every other teardown
+// path (the stale-session reaper, a CoA terminate) removed the session and
+// left the count behind, so the subscriber was locked out until the key's
+// TTL expired. Deriving it removes the class of bug: the session map is
+// already the authoritative record every teardown path must update.
+//
+// In independent session mode a dual-stack subscriber holds two
+// SessionStates. Only the one carrying the IPv4 binding is counted, which
+// matches what the old counter tracked.
+//
+// The tuple is already the session map's key, so the count is two O(1)
+// lookups, not a scan: every store site keys a session by its own
+// (MAC, SVLAN, CVLAN), under "ipoe:" in unified mode or "ipoe-v4:" in
+// independent mode. Both forms are probed, rather than only the one the
+// current config would produce, so a session established before a
+// session-mode reconfiguration still counts. "ipoe-v6:" is not probed:
+// no path sets an IPv4 binding on a v6-keyed session, and the count
+// requires one.
+func (c *Component) countExistingSessions(mac net.HardwareAddr, svlan, cvlan uint16) int {
+	keys := [...]string{
+		sessionKeyUnified(mac, svlan, cvlan),
+		sessionKeyIndependentV4(mac, svlan, cvlan),
 	}
 
-	var count int64
-	if _, err := fmt.Sscanf(string(val), "%d", &count); err != nil {
-		return 0, nil
-	}
+	count := 0
+	for _, key := range keys {
+		v, ok := c.sessions.Load(key)
+		if !ok {
+			continue
+		}
+		sess, ok := v.(*SessionState)
+		if !ok {
+			continue
+		}
 
-	return int(count), nil
+		sess.mu.Lock()
+		// Closing is set before the session leaves the map; a DISCOVER
+		// landing in that window is the re-establishment, not a second
+		// session.
+		match := !sess.Closing && sess.IPv4 != nil &&
+			sess.OuterVLAN == svlan && sess.InnerVLAN == cvlan &&
+			bytes.Equal(sess.MAC, mac)
+		sess.mu.Unlock()
+
+		if match {
+			count++
+		}
+	}
+	return count
 }
 
 const (
@@ -383,20 +419,30 @@ func (c *Component) getSessionMode(svlan, cvlan uint16) subscriber.SessionMode {
 	return match.Group.GetSessionMode()
 }
 
-func (c *Component) makeSessionKeyV4(mac net.HardwareAddr, svlan, cvlan uint16) string {
-	mode := c.getSessionMode(svlan, cvlan)
-	if mode == subscriber.SessionModeUnified {
-		return fmt.Sprintf("ipoe:%s:%d:%d", mac.String(), svlan, cvlan)
-	}
+func sessionKeyUnified(mac net.HardwareAddr, svlan, cvlan uint16) string {
+	return fmt.Sprintf("ipoe:%s:%d:%d", mac.String(), svlan, cvlan)
+}
+
+func sessionKeyIndependentV4(mac net.HardwareAddr, svlan, cvlan uint16) string {
 	return fmt.Sprintf("ipoe-v4:%s:%d:%d", mac.String(), svlan, cvlan)
 }
 
-func (c *Component) makeSessionKeyV6(mac net.HardwareAddr, svlan, cvlan uint16) string {
-	mode := c.getSessionMode(svlan, cvlan)
-	if mode == subscriber.SessionModeUnified {
-		return fmt.Sprintf("ipoe:%s:%d:%d", mac.String(), svlan, cvlan)
-	}
+func sessionKeyIndependentV6(mac net.HardwareAddr, svlan, cvlan uint16) string {
 	return fmt.Sprintf("ipoe-v6:%s:%d:%d", mac.String(), svlan, cvlan)
+}
+
+func (c *Component) makeSessionKeyV4(mac net.HardwareAddr, svlan, cvlan uint16) string {
+	if c.getSessionMode(svlan, cvlan) == subscriber.SessionModeUnified {
+		return sessionKeyUnified(mac, svlan, cvlan)
+	}
+	return sessionKeyIndependentV4(mac, svlan, cvlan)
+}
+
+func (c *Component) makeSessionKeyV6(mac net.HardwareAddr, svlan, cvlan uint16) string {
+	if c.getSessionMode(svlan, cvlan) == subscriber.SessionModeUnified {
+		return sessionKeyUnified(mac, svlan, cvlan)
+	}
+	return sessionKeyIndependentV6(mac, svlan, cvlan)
 }
 
 func (c *Component) sessionCount() int {
