@@ -52,8 +52,13 @@ ARG DATAPLANE_VERSION=26.06-release
 # plugins from one build. Otherwise fall back to upstream packagecloud
 # debs; the osvbng plugins then come from the prebuilt drop below.
 COPY docker/dataplane-debs/ /tmp/dataplane-debs/
+# The marker must live outside /tmp: the image-slimming purge below
+# runs rm -rf /tmp/* between this RUN and the plugin-drop decision,
+# and testing /tmp/dataplane-debs there silently reverted every image
+# to the stale prebuilt plugin drop, CI images included.
 RUN if ls /tmp/dataplane-debs/*.deb >/dev/null 2>&1; then \
-        apt-get update && apt-get install -y --no-install-recommends \
+        touch /usr/lib/osvbng-dataplane-from-debs \
+        && apt-get update && apt-get install -y --no-install-recommends \
         numactl \
         /tmp/dataplane-debs/vpp_*.deb \
         /tmp/dataplane-debs/vpp-plugin-core_*.deb \
@@ -98,12 +103,12 @@ RUN mkdir -p /etc/osvbng /var/log/osvbng /var/lib/osvbng /run/osvbng
 # dataplane-debs path already ships the plugins from the same build as
 # the core, and overlaying stale binaries would defeat it.
 COPY test-infra/vpp-plugins/ /tmp/stock-plugins/
-RUN if ls /tmp/dataplane-debs/*.deb >/dev/null 2>&1; then \
-        echo "dataplane debs present, skipping prebuilt plugin drop"; \
+RUN if [ -f /usr/lib/osvbng-dataplane-from-debs ]; then \
+        echo "dataplane debs installed, skipping prebuilt plugin drop"; \
     else \
         cp /tmp/stock-plugins/*.so /usr/lib/x86_64-linux-gnu/vpp_plugins/; \
     fi \
-    && rm -rf /tmp/stock-plugins /tmp/dataplane-debs
+    && rm -rf /tmp/stock-plugins /tmp/dataplane-debs /usr/lib/osvbng-dataplane-from-debs
 
 COPY --from=builder /build/bin/osvbngd /usr/local/bin/osvbngd
 COPY --from=builder /build/bin/osvbngcli /usr/local/bin/osvbngcli
