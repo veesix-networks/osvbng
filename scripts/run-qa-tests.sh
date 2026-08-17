@@ -183,19 +183,21 @@ for test in "${TESTS[@]}"; do
         log_file="$RESULTS_DIR/${test}-run${i}.log"
         echo -n "  Run $i/$RUNS: "
 
-        if output=$(make robot-test suite="$test" 2>&1); then
-            result=$(echo "$output" | grep "tests," | tail -1)
+        # Stream to the log as the suite runs instead of buffering:
+        # a killed run (job timeout, cancellation) used to lose its
+        # entire output, which is exactly the evidence a post-mortem
+        # needs.
+        if make robot-test suite="$test" > "$log_file" 2>&1; then
+            result=$(grep "tests," "$log_file" | tail -1)
             echo "PASS ($result)" | tee -a "$SUMMARY"
             pass=$((pass + 1))
             total_pass=$((total_pass + 1))
         else
-            result=$(echo "$output" | grep "tests," | tail -1)
+            result=$(grep "tests," "$log_file" | tail -1)
             echo "FAIL ($result)" | tee -a "$SUMMARY"
             fail=$((fail + 1))
             total_fail=$((total_fail + 1))
         fi
-
-        echo "$output" > "$log_file"
     done
 
     echo "  Result: $pass/$RUNS passed" | tee -a "$SUMMARY"
