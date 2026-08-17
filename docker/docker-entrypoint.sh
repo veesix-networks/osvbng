@@ -155,7 +155,18 @@ ip netns exec dataplane /usr/lib/frr/frrinit.sh status || true
 
 echo "Starting osvbng..."
 
+# "auto" is the same sentinel osvbngd's CPU resolution understands: it
+# means "no explicit set, use the auto layout". The test topologies
+# always pass the variable and default it to auto, because containerlab
+# emits the unexpanded literal when a variable is empty, so an unset
+# slot arrives here as the string auto rather than as an empty value.
+# Taking it verbatim would run taskset -c auto, which fails to parse and
+# leaves osvbngd unstarted; the resolved layout osvbngd already computed
+# is what to pin to.
 RESOLVED_CP="${OSVBNG_CP_CORES:-$OSVBNG_RESOLVED_CP_CORES}"
+if [ "$RESOLVED_CP" = "auto" ]; then
+    RESOLVED_CP="$OSVBNG_RESOLVED_CP_CORES"
+fi
 
 start_osvbngd() {
     if [ -n "$RESOLVED_CP" ]; then
