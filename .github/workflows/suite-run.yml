@@ -61,9 +61,21 @@ jobs:
           fi
           stray=$(sudo docker ps -aq --filter name=clab-)
           [ -n "$stray" ] && echo "$stray" | xargs -r sudo docker rm -f || true
+          # The mgmt network must exist AND be IPv4-only, enforced by
+          # shape, not just presence: a dual-stack mgmt network hands
+          # every node an eth0 v6 default route that races the test
+          # RA route on the access interface, and which route wins
+          # flips with RA lifetime timing. That race was the root
+          # cause of the ipoe v6 suite flakes. Nothing in the rig
+          # needs mgmt IPv6.
+          if timeout 20 sudo docker network inspect clab >/dev/null 2>&1; then
+            if [ "$(sudo docker network inspect clab -f '{{.EnableIPv6}}')" != "false" ]; then
+              echo "mgmt network is dual-stack, recreating v4-only"
+              sudo docker network rm clab
+            fi
+          fi
           timeout 20 sudo docker network inspect clab >/dev/null 2>&1 || \
-            timeout 30 sudo docker network create \
-              --subnet 172.20.20.0/24 --ipv6 --subnet 3fff:172:20:20::/64 clab
+            timeout 30 sudo docker network create --subnet 172.20.20.0/24 clab
           rm -f "/tmp/osvbng-clab-deploy.$(id -u).lock"
 
       # The runner keeps a per-commit cache of the four debs the
