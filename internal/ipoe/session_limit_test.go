@@ -5,6 +5,7 @@
 package ipoe
 
 import (
+	"fmt"
 	"net"
 	"testing"
 
@@ -146,6 +147,29 @@ func TestSessionLimitDerivesFromLiveSessions(t *testing.T) {
 
 		if err := c.checkSessionLimit(mac, limitSVLAN, limitCVLAN); err != nil {
 			t.Fatalf("session without an IPv4 binding must not block: %v", err)
+		}
+	})
+
+	t.Run("session_under_other_mode_key_still_counts", func(t *testing.T) {
+		c := sessionLimitComponent(t, 1, subscriber.SessionModeIndependent)
+
+		// A session established while the group ran in unified mode sits
+		// under the "ipoe:" key. If the group is then reconfigured to
+		// independent mode, a fresh DISCOVER computes the "ipoe-v4:" key
+		// and misses it, but the subscriber still holds a live IPv4 lease
+		// and must still count against the limit.
+		sess := &SessionState{
+			SessionID: "unified-" + mac.String(),
+			MAC:       mac,
+			OuterVLAN: limitSVLAN,
+			InnerVLAN: limitCVLAN,
+			State:     "bound",
+			IPv4:      net.ParseIP("10.0.0.5"),
+		}
+		c.sessions.Store(fmt.Sprintf("ipoe:%s:%d:%d", mac.String(), limitSVLAN, limitCVLAN), sess)
+
+		if err := c.checkSessionLimit(mac, limitSVLAN, limitCVLAN); err == nil {
+			t.Fatal("expected the limit to reject a live session stored under the other mode's key")
 		}
 	})
 
