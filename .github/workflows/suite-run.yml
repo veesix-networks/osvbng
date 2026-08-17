@@ -50,6 +50,11 @@ jobs:
       - name: Checkout
         run: |
           git init -q .
+          # Suites run robot and containerlab under sudo, which leaves
+          # root-owned files (test-results, generated certs) in the
+          # workspace. checkout -f and clean run unprivileged and fail
+          # on them, killing the job before any step output exists.
+          sudo chown -R "$(id -u):$(id -g)" .
           git remote remove origin 2>/dev/null || true
           git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}"
           git fetch -q --depth 1 origin "$GITHUB_SHA"
@@ -160,6 +165,11 @@ jobs:
       - name: Checkout
         run: |
           git init -q .
+          # Suites run robot and containerlab under sudo, which leaves
+          # root-owned files (test-results, generated certs) in the
+          # workspace. checkout -f and clean run unprivileged and fail
+          # on them, killing the job before any step output exists.
+          sudo chown -R "$(id -u):$(id -g)" .
           git remote remove origin 2>/dev/null || true
           git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}"
           git fetch -q --depth 1 origin "$GITHUB_SHA"
@@ -184,9 +194,11 @@ jobs:
             -t tests/${{ matrix.suite }}/${{ matrix.suite }}.clab.yml \
             --cleanup 2>/dev/null || true
 
-      # The host copy is the guaranteed evidence store; the artifact
-      # upload is best-effort because its action download shares
-      # codeload's rate-limit exposure.
+      # The host copy is the evidence store. No upload-artifact: its
+      # action tarball downloads during job setup, before any step
+      # runs, so continue-on-error cannot save the job when codeload
+      # rate-limits this box, and one cold action cache then fails
+      # every suite in the sweep at setup.
       - name: Keep robot output on the host
         if: always()
         run: |
@@ -194,12 +206,3 @@ jobs:
           sudo mkdir -p "$d"
           sudo cp -r tests/out/. "$d"/ 2>/dev/null || true
           sudo find /var/log/osvbng-ci -maxdepth 1 -mtime +7 -exec rm -rf {} + 2>/dev/null || true
-
-      - name: Upload robot output
-        if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: robot-${{ github.run_id }}-${{ matrix.suite }}
-          path: tests/out/
-          retention-days: 14
