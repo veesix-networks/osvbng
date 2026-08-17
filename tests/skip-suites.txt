@@ -5,3 +5,9 @@
 18-ipoe-linux-client
 19-ipoe-linux-client-cake
 25-l3vpn
+# IPoE IPv6 classification and ND punt gap, see the context repo
+# note design/ipoe-v6-dataplane-gap.md; unskip when the product fix
+# lands.
+32-ipoe-opdb-restore
+42-ipoe-vxlan-pwhe
+47-ipoe-evpn-pwhe
