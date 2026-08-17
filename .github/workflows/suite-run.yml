@@ -41,7 +41,21 @@ jobs:
     environment: ${{ inputs.environment }}
     runs-on: [self-hosted, osvbng-metal]
     steps:
-      - uses: actions/checkout@v4
+      # Plain git instead of actions/checkout: action tarballs come
+      # from codeload.github.com, which rate-limits this box's IP under
+      # heavy CI use and has taken out entire runs at the checkout
+      # step. git fetch uses a different service and the runner's
+      # short-lived job token, which is stripped from the remote URL
+      # after use.
+      - name: Checkout
+        run: |
+          git init -q .
+          git remote remove origin 2>/dev/null || true
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}"
+          git fetch -q --depth 1 origin "$GITHUB_SHA"
+          git checkout -q -f FETCH_HEAD
+          git clean -qfdx
+          git remote set-url origin "https://github.com/${{ github.repository }}"
 
       # The run heals the box instead of assuming it is clean. This
       # job runs once per run before any suite, and runs serialize,
@@ -137,7 +151,21 @@ jobs:
       matrix:
         suite: ${{ fromJSON(inputs.suites) }}
     steps:
-      - uses: actions/checkout@v4
+      # Plain git instead of actions/checkout: action tarballs come
+      # from codeload.github.com, which rate-limits this box's IP under
+      # heavy CI use and has taken out entire runs at the checkout
+      # step. git fetch uses a different service and the runner's
+      # short-lived job token, which is stripped from the remote URL
+      # after use.
+      - name: Checkout
+        run: |
+          git init -q .
+          git remote remove origin 2>/dev/null || true
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}"
+          git fetch -q --depth 1 origin "$GITHUB_SHA"
+          git checkout -q -f FETCH_HEAD
+          git clean -qfdx
+          git remote set-url origin "https://github.com/${{ github.repository }}"
 
       - name: Run ${{ matrix.suite }}
         run: ./scripts/run-qa-tests.sh -r ${{ inputs.runs }} -t ${{ matrix.suite }}
@@ -156,8 +184,20 @@ jobs:
             -t tests/${{ matrix.suite }}/${{ matrix.suite }}.clab.yml \
             --cleanup 2>/dev/null || true
 
+      # The host copy is the guaranteed evidence store; the artifact
+      # upload is best-effort because its action download shares
+      # codeload's rate-limit exposure.
+      - name: Keep robot output on the host
+        if: always()
+        run: |
+          d="/var/log/osvbng-ci/${{ github.run_id }}/${{ matrix.suite }}"
+          sudo mkdir -p "$d"
+          sudo cp -r tests/out/. "$d"/ 2>/dev/null || true
+          sudo find /var/log/osvbng-ci -maxdepth 1 -mtime +7 -exec rm -rf {} + 2>/dev/null || true
+
       - name: Upload robot output
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: robot-${{ github.run_id }}-${{ matrix.suite }}
