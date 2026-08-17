@@ -15,7 +15,8 @@ import "errors"
 // caller can delete-and-recreate to converge.
 const retvalEntryNeedsRefresh = -500
 
-// retvalValueExist matches VNET_API_ERROR_VALUE_EXIST (-116). Some plugin
+// retvalValueExist matches VNET_API_ERROR_ENTRY_ALREADY_EXISTS (-116);
+// govpp names it api.ENTRY_ALREADY_EXISTS (VALUE_EXIST is -81). Some plugin
 // add paths surface this on a redundant add (entry already present, no
 // mutable inputs differ). Callers treat it as success on isAdd=true so a
 // restart-time replay of the same mapping is a safe no-op.
