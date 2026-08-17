@@ -60,10 +60,10 @@ Verify IPv6 Bindings In VPP FIB
     ...    dataplane binding calls failed against a plugin that lacked the
     ...    messages. DHCPv6 starts off the initial RA burst and completes
     ...    seconds after establishment, so the check retries briefly. The
-    ...    IA_NA /128 is deliberately not asserted: the DHCPv6 provider
-    ...    does not serve IA_NA on PPPoE today (the API's IPv6Address is
-    ...    an administrative pool allocation the client never receives),
-    ...    a recorded gap in the osvbng-context queue.
+    ...    IA_NA /128 is not asserted because bngblaster requests IA_NA
+    ...    only on IPoE access (hard-gated in its source), so a PPPoE
+    ...    client here never asks for an address; the IA_NA bind path is
+    ...    covered by TestPPPoEDHCPv6BindProgramsDataplane instead.
     Wait Until Keyword Succeeds    30 x    2s
     ...    Check IPv6 Bindings In VPP FIB    ${bng1}    ${session-count}
 

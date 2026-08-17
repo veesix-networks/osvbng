@@ -14,6 +14,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/config/ip"
 	"github.com/veesix-networks/osvbng/pkg/dhcp6"
 	"github.com/veesix-networks/osvbng/pkg/provider"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
 
 type fakeDHCP6Provider struct {
@@ -106,5 +107,51 @@ func TestPPPoEDHCPv6NoProviderDropsSilently(t *testing.T) {
 	}
 	if len(bus.egress) != 0 {
 		t.Fatalf("no provider configured must drop, got %d egress", len(bus.egress))
+	}
+}
+
+type bindCaptureSouthbound struct {
+	southbound.Southbound
+	ianaAdds []net.IP
+	pdAdds   []net.IPNet
+}
+
+func (b *bindCaptureSouthbound) PPPoESetSessionIPv6Async(swIfIndex uint32, clientIP net.IP, isAdd bool, callback func(error)) {
+	if isAdd {
+		b.ianaAdds = append(b.ianaAdds, clientIP)
+	}
+	callback(nil)
+}
+
+func (b *bindCaptureSouthbound) PPPoESetDelegatedPrefixAsync(swIfIndex uint32, prefix net.IPNet, nextHop net.IP, isAdd bool, callback func(error)) {
+	if isAdd {
+		b.pdAdds = append(b.pdAdds, prefix)
+	}
+	callback(nil)
+}
+
+// An IA_NA-requesting client gets its binding programmed into the dataplane.
+// bngblaster cannot exercise this over PPPoE (its source hard-gates IA_NA to
+// IPoE access), so suite 04 covers the delegated prefix only and this test
+// covers the address binding.
+func TestPPPoEDHCPv6BindProgramsDataplane(t *testing.T) {
+	s, _ := ndSession(t)
+	sb := &bindCaptureSouthbound{}
+	s.component.vpp = sb
+
+	msg := &dhcp6.Message{
+		MsgType: dhcp6.MsgTypeReply,
+		Options: dhcp6.Options{
+			IANA: &dhcp6.IANAOption{Address: net.ParseIP("2001:db8:0:1::1234"), ValidTime: 7200},
+			IAPD: &dhcp6.IAPDOption{Prefix: net.ParseIP("2001:db8:beef::"), PrefixLen: 56, ValidTime: 7200},
+		},
+	}
+	s.component.bindDHCPv6(s, 35, msg)
+
+	if len(sb.ianaAdds) != 1 || !sb.ianaAdds[0].Equal(net.ParseIP("2001:db8:0:1::1234")) {
+		t.Fatalf("IA_NA dataplane adds = %v, want the bound address", sb.ianaAdds)
+	}
+	if len(sb.pdAdds) != 1 || sb.pdAdds[0].String() != "2001:db8:beef::/56" {
+		t.Fatalf("IA_PD dataplane adds = %v, want the delegated prefix", sb.pdAdds)
 	}
 }
