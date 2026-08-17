@@ -53,19 +53,24 @@ func ResolveCPULayout(cfg *Config) *ResolvedCPU {
 		}
 	}
 
-	// Priority for workers: YAML config > env var > auto-layout
+	// Priority for workers: YAML config > env var > auto-layout. The
+	// explicit value "auto" selects the auto layout: environments that
+	// template the env var (containerlab expands ${VAR:=auto} in test
+	// topologies) need a value that means "unset", because containerlab
+	// passes the unexpanded literal through when the variable is empty.
 	if cfg.Dataplane.Workers != "" {
 		resolved.WorkerCores = cfg.Dataplane.Workers
-	} else if v := os.Getenv("OSVBNG_DP_WORKER_CORES"); v != "" {
+	} else if v := os.Getenv("OSVBNG_DP_WORKER_CORES"); v != "" && v != "auto" {
 		resolved.WorkerCores = v
 	} else {
 		resolved.WorkerCores = autoWorkerCores(total)
 	}
 
-	// Priority for CP cores: YAML config > env var > auto-layout
+	// Priority for CP cores: YAML config > env var > auto-layout, with
+	// the same "auto" vocabulary as the workers.
 	if cfg.Dataplane.CPCores != "" {
 		resolved.CPCores = cfg.Dataplane.CPCores
-	} else if v := os.Getenv("OSVBNG_CP_CORES"); v != "" {
+	} else if v := os.Getenv("OSVBNG_CP_CORES"); v != "" && v != "auto" {
 		resolved.CPCores = v
 	} else {
 		resolved.CPCores = autoCPCores(total)

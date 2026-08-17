@@ -9,7 +9,10 @@ Library             Process
 Library             Collections
 
 *** Variables ***
-${CLAB_BIN}             sudo containerlab
+# preserve-env carries the CI runner's per-slot core assignment through
+# sudo so containerlab can expand it in the topologies; unset locally,
+# where the ${VAR:=auto} defaults select the auto layout.
+${CLAB_BIN}             sudo --preserve-env=OSVBNG_LAB_WORKER_CORES,OSVBNG_LAB_CP_CORES containerlab
 ${runtime}              docker
 ${OSVBNG_API_PORT}      8080
 # 300 x 1s keeps the same 5-minute budget as the previous 60 x 5s but

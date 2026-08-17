@@ -49,6 +49,22 @@
   changed_when: true
   no_log: true
 
+# Each instance owns a disjoint host core slot, exported to every job
+# so containerlab can expand it into the test topologies: concurrent
+# labs then never share a VPP polling core (todo item 16). Three cores
+# per slot, core 0 left for the VPP main threads; runner_count 5 on a
+# 16-core box fills cores 1-15 exactly.
+- name: "Write job environment for shared-{{ instance_no }}"
+  ansible.builtin.copy:
+    dest: "/opt/runner-shared-{{ instance_no }}/.env"
+    owner: runner
+    group: runner
+    mode: "0644"
+    content: |
+      LANG=en_GB.UTF-8
+      OSVBNG_LAB_WORKER_CORES={{ 3 * instance_no - 2 }}-{{ 3 * instance_no - 1 }}
+      OSVBNG_LAB_CP_CORES={{ 3 * instance_no }}
+
 - name: "Install runner service for shared-{{ instance_no }}"
   ansible.builtin.command:
     chdir: "/opt/runner-shared-{{ instance_no }}"

@@ -85,3 +85,25 @@ func TestResolveCPCoresPriority(t *testing.T) {
 		t.Errorf("CPCoreCount() = %d, want 4", n)
 	}
 }
+
+func TestResolveAutoSentinel(t *testing.T) {
+	cfg := &Config{}
+
+	t.Setenv("OSVBNG_DP_WORKER_CORES", "auto")
+	t.Setenv("OSVBNG_CP_CORES", "auto")
+	r := ResolveCPULayout(cfg)
+	total := DetectAvailableCores()
+	if r.WorkerCores != autoWorkerCores(total) {
+		t.Errorf("worker auto sentinel: got %q, want auto layout %q", r.WorkerCores, autoWorkerCores(total))
+	}
+	if r.CPCores != autoCPCores(total) {
+		t.Errorf("cp auto sentinel: got %q, want auto layout %q", r.CPCores, autoCPCores(total))
+	}
+
+	t.Setenv("OSVBNG_DP_WORKER_CORES", "7-8")
+	t.Setenv("OSVBNG_CP_CORES", "9")
+	r = ResolveCPULayout(cfg)
+	if r.WorkerCores != "7-8" || r.CPCores != "9" {
+		t.Errorf("slot values: got %q/%q, want 7-8/9", r.WorkerCores, r.CPCores)
+	}
+}

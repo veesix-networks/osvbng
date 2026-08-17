@@ -31,6 +31,8 @@ topology:
       env:
         OSVBNG_WAIT_FOR_INTERFACES: "true"
         OSVBNG_NUM_INTERFACES: "2"
+        OSVBNG_DP_WORKER_CORES: "${OSVBNG_LAB_WORKER_CORES:=auto}"
+        OSVBNG_CP_CORES: "${OSVBNG_LAB_CP_CORES:=auto}"
         OSVBNG_RESPAWN: "true"
       binds:
         - config/bng1/osvbng.yaml:/etc/osvbng/osvbng.yaml:ro
