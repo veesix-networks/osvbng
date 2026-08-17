@@ -132,6 +132,7 @@ Restart Survives With Circuits On Tunnels
     Restart osvbngd    ${bng1}
     Wait For osvbngd Down    ${bng1}
     Wait For osvbng Healthy    bng1    ${lab-name}
+    Wait For osvbng State Ready    ${bng1}
     Wait For L2GW Circuit Count    ${bng1}    ${session-count}
     ${restored} =    Snapshot L2GW Circuit IDs    ${bng1}
     Should Be Equal As Strings    ${restored}    ${snapshot}    circuit set changed across restart

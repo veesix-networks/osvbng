@@ -34,6 +34,7 @@ Identical Config Across Restart
     Wait For osvbngd Down    ${bng1}
     Wait For osvbngd Up    ${bng1}
     Wait For osvbng Healthy    bng1    ${lab-name}
+    Wait For osvbng State Ready    ${bng1}
     ${log} =    Tail osvbngd Log    ${bng1}    400
     Should Not Contain    ${log}    cgnat reconcile: replace pool
     Should Not Contain    ${log}    cgnat reconcile: drop orphan
@@ -47,6 +48,7 @@ Soft Drift Preserves Mappings
     Wait For osvbngd Down    ${bng1}
     Wait For osvbngd Up    ${bng1}
     Wait For osvbng Healthy    bng1    ${lab-name}
+    Wait For osvbng State Ready    ${bng1}
     ${log} =    Tail osvbngd Log    ${bng1}    400
     Should Contain    ${log}    cgnat reconcile: soft-update pool
 

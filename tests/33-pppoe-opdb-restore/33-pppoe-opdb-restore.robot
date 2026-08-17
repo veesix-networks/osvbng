@@ -53,6 +53,7 @@ ${session-count}        1
     Restart osvbngd                                ${bng1}
     Wait For osvbngd Down                          ${bng1}
     Wait For osvbng Healthy                        bng1    ${lab-name}
+    Wait For osvbng State Ready                    ${bng1}
     Verify OpDB Sessions Match Snapshot            ${bng1}    ${OPDB_SNAPSHOT}
     Verify PPPoE Session Has Not Re-Established
     Verify Subscriber Can Ping                     ${v4-gateway}
@@ -70,6 +71,7 @@ ${session-count}        1
     ...    v6 checks back once osvbng-context#89 lands.
     Restart VPP                                    ${bng1}
     Wait For VPP Recovery                          ${bng1}
+    Wait For osvbng State Ready                    ${bng1}
     Wait Until Keyword Succeeds    60s    2s
     ...    Verify OpDB Session Count               ${bng1}    ${session-count}
     Verify OpDB Sessions Match Snapshot            ${bng1}    ${OPDB_SNAPSHOT}

@@ -97,6 +97,7 @@ Restart Survives With Sessions On Headend
     Restart osvbngd    ${bng1}
     Wait For osvbngd Down    ${bng1}
     Wait For osvbng Healthy    bng1    ${lab-name}
+    Wait For osvbng State Ready    ${bng1}
     Verify Sessions In API    ${bng1}    ${session-count}
     ${ips} =    Get Session IPv4 Addresses    ${bng1}
     FOR    ${ip}    IN    @{ips}
