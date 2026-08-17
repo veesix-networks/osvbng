@@ -101,6 +101,9 @@ jobs:
       - name: Build Kea image
         run: make docker-kea-local
 
+      - name: Build xl2tpd image
+        run: docker build -t veesixnetworks/xl2tpd:local test-infra/xl2tpd
+
       - name: Pre-pull suite dependency images
         run: |
           docker pull veesixnetworks/bngblaster:0.9.30
