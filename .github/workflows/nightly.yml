@@ -19,10 +19,6 @@ on:
     - cron: "0 2 * * *"
   workflow_dispatch:
 
-concurrency:
-  group: integration
-  cancel-in-progress: false
-
 permissions:
   contents: read
   actions: write
@@ -58,6 +54,11 @@ jobs:
   run:
     needs: changes
     if: needs.changes.outputs.changed == 'true'
+    # Box-level mutual exclusion, shared with the other tiers'
+    # run jobs; claimed only when execution starts.
+    concurrency:
+      group: rig
+      cancel-in-progress: false
     uses: ./.github/workflows/suite-run.yml
     with:
       suites: ${{ needs.changes.outputs.suites }}

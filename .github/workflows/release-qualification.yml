@@ -17,10 +17,6 @@ on:
         required: false
         default: "3"
 
-concurrency:
-  group: integration
-  cancel-in-progress: false
-
 jobs:
   suites-list:
     runs-on: ubuntu-latest
@@ -33,6 +29,9 @@ jobs:
 
   run:
     needs: suites-list
+    concurrency:
+      group: rig
+      cancel-in-progress: false
     uses: ./.github/workflows/suite-run.yml
     with:
       suites: ${{ needs.suites-list.outputs.suites }}

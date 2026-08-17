@@ -14,13 +14,21 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Whole runs serialize across all tiers: the suites share one image
-# tag on the box, and two runs building it concurrently would race.
-concurrency:
-  group: integration
-  cancel-in-progress: false
+# No workflow-level concurrency: a run parked at the approval gate
+# must hold nothing, or every unapproved PR run blocks the nightly
+# and other PRs (a group allows one pending run, so a newer arrival
+# cancels an older pending one; only running runs are protected).
+# The gate is a no-op job on a hosted runner; the box's mutual
+# exclusion is job-level on the run job, claimed only after
+# approval, when execution actually starts.
 
 jobs:
+  gate:
+    environment: integration-rig
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "approved"
+
   suites-list:
     runs-on: ubuntu-latest
     outputs:
@@ -31,8 +39,10 @@ jobs:
         run: echo "suites=$(./scripts/list-qa-suites.sh)" >> "$GITHUB_OUTPUT"
 
   run:
-    needs: suites-list
+    needs: [gate, suites-list]
+    concurrency:
+      group: rig
+      cancel-in-progress: false
     uses: ./.github/workflows/suite-run.yml
     with:
       suites: ${{ needs.suites-list.outputs.suites }}
-      environment: integration-rig
