@@ -180,6 +180,22 @@ jobs:
       - name: Run ${{ matrix.suite }}
         run: ./scripts/run-qa-tests.sh -r ${{ inputs.runs }} -t ${{ matrix.suite }}
 
+      # Robot says which assertion failed; the daemon says why. This runs
+      # before the destroy below, while the lab still exists, because
+      # docker logs are gone with the containers. Failure only: a green
+      # suite's logs are noise. Without this, a product-side failure on
+      # the rig can only be chased by reproducing it locally, and the
+      # contention-sensitive ones do not reproduce on an idle box.
+      - name: Keep container logs on failure
+        if: failure()
+        run: |
+          d="/var/log/osvbng-ci/${{ github.run_id }}/${{ matrix.suite }}"
+          sudo mkdir -p "$d"
+          for c in $(sudo docker ps -a --filter "name=clab-" --format '{{.Names}}'); do
+            sudo sh -c "docker logs '$c' > '$d/$c.log' 2>&1" || true
+          done
+          sudo sh -c "docker ps -a --filter name=clab- > '$d/containers.txt'" || true
+
       # A cancelled job kills robot before its suite teardown but not
       # the root-owned sudo children, and an orphaned deploy holds
       # containerlab's locks against every later deploy of that lab.
