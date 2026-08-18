@@ -9,15 +9,19 @@ When contributing to low-level protocol implementations (e.g., DHCP, PPPoE, RADI
 
 ## Testing Requirements
 
-CI runs build and unit tests on every PR using GitHub shared runners.
-Integration tests (containerlab + Robot Framework) run on a self-hosted
-runner only when changes are merged to main.
+CI runs build and unit tests on every PR using GitHub hosted runners. A
+core set of integration suites (containerlab + Robot Framework) also runs
+on the project's self-hosted rig for every PR, and the full matrix runs
+nightly against `main`. [CI and Review](ci-and-review.md) describes the
+tiers, the rig, and the invariants a new suite has to carry.
 
 ### Running integration tests locally
 
-GitHub shared runners cannot reliably run the integration suite due to
-nested QEMU virtualisation and resource constraints. Contributors must
-run integration tests locally before requesting a merge.
+GitHub hosted runners cannot run the integration suite due to nested
+virtualisation and resource constraints, which is why the rig exists. The
+per-PR tier covers a subset, so run the suites relevant to your change
+locally before requesting a merge, especially in areas the core set does
+not reach.
 
 Prerequisites:
 

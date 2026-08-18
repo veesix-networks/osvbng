@@ -175,7 +175,7 @@ make test-report   # run tests with JUnit XML report in build/reports/
 
 **Integration tests** (`tests/`) use containerlab and robot framework to spin up a full osvbng instance with BNGBlaster subscribers, verifying end-to-end functionality across all supported features. They require Docker and take longer to run.
 
-CI runs build and unit tests on every PR using GitHub shared runners, and that is the only automated gate a PR has to clear. Integration tests run on a self-hosted runner only when changes are merged to main, so they never run against a PR. Linting is not in CI either, so run `make lint` yourself. Run the integration suites locally before requesting a merge; see [Contribution Guidelines](guidelines.md#running-integration-tests-locally).
+Every PR clears two automated gates: build and unit tests on GitHub hosted runners, and a core set of integration suites on the project's self-hosted rig. The full suite matrix runs nightly against `main` and again before a release. Linting is not in CI, so run `make lint` yourself. See [CI and Review](ci-and-review.md) for what each tier covers, and run the suites relevant to your change locally before requesting a merge; see [Contribution Guidelines](guidelines.md#running-integration-tests-locally).
 
 !!! note "Future: Hardware and QEMU testing"
     We plan to build physical and QEMU-based test infrastructure for throughput and subscriber scaling validation on minor and major releases.
