@@ -186,8 +186,12 @@ jobs:
       # suite's logs are noise. Without this, a product-side failure on
       # the rig can only be chased by reproducing it locally, and the
       # contention-sensitive ones do not reproduce on an idle box.
+      # cancelled() as well as failure(): exceeding timeout-minutes
+      # cancels the job rather than failing it, so a failure()-only
+      # condition skips exactly the case that most needs a log, a suite
+      # that hung. A user-cancelled run captures too, which is cheap.
       - name: Keep container logs on failure
-        if: failure()
+        if: failure() || cancelled()
         run: |
           d="/var/log/osvbng-ci/${{ github.run_id }}/${{ matrix.suite }}"
           sudo mkdir -p "$d"
