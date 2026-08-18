@@ -8,7 +8,8 @@ round trip.
 
 ## What runs on your pull request
 
-Two workflows run against a PR.
+Two workflows run against a PR: hosted checks, and the integration
+suites.
 
 **CI** runs on GitHub hosted runners: `make build`, the unit tests, and a
 changed-file summary. It is fast and it is the gate that fails most
@@ -16,13 +17,15 @@ often, usually on a compile error in a package you did not expect to
 touch.
 
 **integration** runs on the project's self-hosted rig. It deploys the
-core suite set listed in `tests/ci-suites.txt`, currently fifteen
-containerlab topologies driven by BNG Blaster and Robot Framework,
-against an image built from your branch. It takes roughly twelve
-minutes when the rig is free.
+core suite set listed in `tests/ci-suites.txt`, containerlab topologies
+driven by BNG Blaster and Robot Framework, against an image built from
+your branch. It is the slower of the two by a wide margin.
 
-Linting is not in either workflow. Run `make lint` yourself before you
-push.
+**lint** gates what your branch introduces, rather than the whole tree,
+so a finding it reports is one your change added. Run `make lint`
+locally before you push and you will not meet it. Note that a local
+`make lint` reports the repository's existing backlog as well as your
+own findings; CI scopes to the diff.
 
 !!! note "Fork pull requests wait for approval"
     A PR from a fork executes your branch's code on the shared rig, so
@@ -36,7 +39,7 @@ push.
 | Tier | Trigger | Scope | Purpose |
 |------|---------|-------|---------|
 | Per-PR (`integration`) | every PR to `main` | core set from `tests/ci-suites.txt` | fast signal before merge |
-| Nightly (`nightly`) | 02:00 UTC, or manual dispatch | every suite `scripts/list-qa-suites.sh --all` generates, minus `tests/skip-suites.txt` | catch what the core set does not cover |
+| Nightly (`nightly`) | scheduled daily, or manual dispatch | every suite `scripts/list-qa-suites.sh --all` generates, minus `tests/skip-suites.txt` | catch what the core set does not cover |
 | Release qualification | manual, before a release | the full matrix, repeated | shake out flakes before shipping |
 
 The per-PR set is a subset by choice, not by accident: suites run several
@@ -67,17 +70,18 @@ the environment (see the invariant below), so labs never contend for the
 same VPP polling cores.
 
 Robot's `output.xml` and `log.html` for every suite, plus container logs
-from a failed one, are retained on the rig for a week. That retained copy
+from a failed one, are retained on the rig for a limited window. That copy
 is the record rather than an uploaded artifact, because it survives a job
 that dies before its steps finish, which is when you most want it. Ask a
 maintainer if you need the evidence from a red CI run.
 
-!!! warning "A suite killed at exactly twelve minutes reads as cancelled"
-    Each suite job carries a twelve minute budget (`suite_timeout`).
-    GitHub reports a job that exceeds its `timeout-minutes` as
-    **cancelled**, not failed, which looks like someone or something
-    interrupted the run. Check the job duration before hunting for an
-    external cause: twelve minutes on the nose is the timeout.
+!!! warning "A timed-out suite reads as cancelled, not failed"
+    Each suite job carries a time budget, the `suite_timeout` input in
+    `.github/workflows/suite-run.yml`. GitHub reports a job that exceeds
+    its `timeout-minutes` as **cancelled**, which looks like someone or
+    something interrupted the run. Before hunting for an external cause,
+    compare the job's duration against that budget: a job that ran for
+    exactly the budget hit the timeout.
 
 ## Running the suites yourself
 
@@ -161,9 +165,9 @@ successfully" log line alone: it survives from the previous boot, so a
 health check that greps the container log passes instantly while opdb
 recovery is still running, and the assertions that follow race it.
 
-**Stay inside twelve minutes**, including deploy, session establishment,
-any soak, and teardown. A suite that needs longer needs a deliberate
-decision about its budget, not a silent timeout.
+**Stay inside the suite time budget**, including deploy, session
+establishment, any soak, and teardown. A suite that needs longer needs a
+deliberate decision about that budget, not a silent timeout.
 
 ## What a reviewer looks for
 
