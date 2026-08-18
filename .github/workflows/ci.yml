@@ -41,6 +41,42 @@ jobs:
               - 'tests/**'
               - '.github/workflows/**'
 
+  # Lint only what the pull request introduces. A full run currently
+  # reports a backlog inherited from before any lint gate existed, so
+  # gating on it wholesale would fail every PR regardless of its
+  # content. --new-from-rev scopes the gate to the diff, which stops new
+  # findings landing while the backlog is burned down separately. This
+  # job is deliberately pull-request only: on a push to main there is no
+  # diff to scope to.
+  lint:
+    runs-on: ubuntu-latest
+    needs: file-changes
+    if: github.event_name == 'pull_request' && needs.file-changes.outputs.code == 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Load versions
+        id: versions
+        run: |
+          source versions.env
+          echo "golang_version=${GOLANG_VERSION}" >> $GITHUB_OUTPUT
+          echo "golangci_version=${GOLANGCI_LINT_VERSION}" >> $GITHUB_OUTPUT
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ steps.versions.outputs.golang_version }}
+
+      - name: Install golangci-lint
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${{ steps.versions.outputs.golangci_version }}
+
+      - name: Lint changed code
+        run: |
+          git fetch -q origin "${{ github.base_ref }}"
+          golangci-lint run --new-from-rev="origin/${{ github.base_ref }}"
+
   build:
     runs-on: ubuntu-latest
     needs: file-changes
