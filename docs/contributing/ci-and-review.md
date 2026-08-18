@@ -39,13 +39,12 @@ push.
 | Nightly (`nightly`) | 02:00 UTC, or manual dispatch | every suite `scripts/list-qa-suites.sh --all` generates, minus `tests/skip-suites.txt` | catch what the core set does not cover |
 | Release qualification | manual, before a release | the full matrix, repeated | shake out flakes before shipping |
 
-The per-PR set is a subset by choice, not by accident: suites fan out
-across the rig's runner slots in waves, so the full matrix costs about
-seven minutes more than the core set on an idle box, and considerably
-more when several PRs queue behind each other. The tradeoff is that a
-change to a subsystem outside the core set gets no integration signal on
-the PR itself. If your change touches one of those areas, run the
-relevant suite locally and say so in the PR.
+The per-PR set is a subset by choice, not by accident: suites run several
+at a time, so the full matrix costs noticeably more wall clock than the
+core set, and more again when PRs queue behind each other. The tradeoff
+is that a change to a subsystem outside the core set gets no integration
+signal on the PR itself. If your change touches one of those areas, run
+the relevant suite locally and say so in the PR.
 
 The nightly skips itself when nothing has changed. It compares the pair
 (osvbng `main` commit, dataplane provenance commit) against the record
@@ -54,22 +53,24 @@ still triggers a sweep, because it changes what is under test.
 
 ## The rig
 
-One machine, five runner slots. Suite jobs across all tiers serialise on
-a shared concurrency group, so only one tier occupies the rig at a time
-and a second run queues rather than interleaving.
+Suites need nested virtualisation, VPP hugepages and real interface
+plumbing, so they run on project-maintained hardware rather than on
+hosted runners. Build and unit tests, and the jobs that coordinate a
+run, stay on hosted runners.
 
-Each runner slot owns a disjoint set of host CPUs, exported to the job as
-`OSVBNG_LAB_WORKER_CORES` and `OSVBNG_LAB_CP_CORES` and expanded into the
-topology by containerlab. Concurrent labs therefore never share a VPP
-polling core. Locally those variables are unset, the topologies default
-them to `auto`, and osvbng resolves its own layout from the host's core
-count.
+Capacity is finite and shared. Suite jobs across all tiers serialise on
+a concurrency group, so one tier occupies the rig at a time and a second
+run queues rather than interleaving. Several labs do run side by side,
+which is why a suite has to tolerate neighbours: CI assigns each
+concurrent lab its own CPU budget and passes it to the topology through
+the environment (see the invariant below), so labs never contend for the
+same VPP polling cores.
 
-Robot output for every suite is copied to
-`/var/log/osvbng-ci/<run_id>/<suite>/` on the rig and kept for seven
-days. That copy, not an uploaded artifact, is the record: it survives a
-job that dies before its steps complete, which is exactly when you most
-want the `output.xml`.
+Robot's `output.xml` and `log.html` for every suite, plus container logs
+from a failed one, are retained on the rig for a week. That retained copy
+is the record rather than an uploaded artifact, because it survives a job
+that dies before its steps finish, which is when you most want it. Ask a
+maintainer if you need the evidence from a red CI run.
 
 !!! warning "A suite killed at exactly twelve minutes reads as cancelled"
     Each suite job carries a twelve minute budget (`suite_timeout`).
@@ -135,11 +136,14 @@ env:
   OSVBNG_CP_CORES: "${OSVBNG_LAB_CP_CORES:=auto}"
 ```
 
-The `:=auto` default matters: containerlab passes the unexpanded literal
+CI sets those two variables to the budget it has allocated your lab. The
+`:=auto` default matters: containerlab passes the unexpanded literal
 through when a variable is empty, so "unset" has to arrive as a
-non-empty sentinel that osvbng understands. A topology without this
-grabs the auto layout on the rig, which sizes workers for a machine it
-does not own, and starves every lab running beside it.
+non-empty sentinel that osvbng understands, and `auto` is the value that
+tells it to size its own layout. Locally they are unset, so you get the
+auto layout and nothing changes. A topology that omits this takes the
+auto layout in CI too, sizing its dataplane for a machine it does not
+have to itself, and starves every lab running beside it.
 
 **Give shared network objects per-suite names.** Bridges, veth endpoint
 names and management subnets that collide across suites break whichever
