@@ -111,28 +111,46 @@ echo "Starting dataplane..."
 /usr/bin/vpp -c /etc/osvbng/dataplane.conf &
 DATAPLANE_PID=$!
 
-sleep 5
-
 export VPPCTL_SOCKET=/run/osvbng/cli.sock
 
-echo "Checking dataplane process status..."
-if ! kill -0 $DATAPLANE_PID 2>/dev/null; then
-    echo "Dataplane process not running (PID $DATAPLANE_PID)"
+# osvbngd connects to the API socket as soon as it starts and exits if
+# the socket is missing, so the handover has to wait for the socket
+# itself. A fixed sleep does not: it spent about eight seconds here
+# regardless of what the dataplane was doing, and on a box running
+# several labs at once VPP was still in plugin init when osvbngd gave
+# up. osvbngd is PID 1, so its exit took the container with it, and the
+# restart came back without the veths containerlab wired into the
+# original netns, which turned a few seconds of startup lag into a
+# permanently wedged node. Timeout over waiting forever: a dataplane
+# that never opens the socket is broken, and it has to say so with its
+# log rather than leave a silent restart loop behind.
+DATAPLANE_API_SOCK=/run/osvbng/dataplane_api.sock
+DATAPLANE_READY_TIMEOUT=${OSVBNG_DATAPLANE_READY_TIMEOUT:-60}
+
+dataplane_failed() {
+    echo "$1"
     echo "====== Dataplane Log (last 50 lines) ======"
     tail -50 /var/log/osvbng/dataplane.log 2>/dev/null || echo "No log file found"
     exit 1
-else
-    echo "Dataplane process running (PID $DATAPLANE_PID)"
-    echo "====== Checking if dataplane API is responsive ======"
-    vppctl -s /run/osvbng/cli.sock show version && echo "Dataplane API responsive" || echo "Dataplane API not responding yet"
-fi
+}
 
-echo "Waiting for dataplane interfaces to be ready..."
-sleep 1
+echo "Waiting for dataplane API socket (timeout ${DATAPLANE_READY_TIMEOUT}s)..."
+waited=0
+while [ ! -S "$DATAPLANE_API_SOCK" ]; do
+    if ! kill -0 $DATAPLANE_PID 2>/dev/null; then
+        dataplane_failed "Dataplane process died during startup (PID $DATAPLANE_PID)"
+    fi
+    if [ "$waited" -ge "$DATAPLANE_READY_TIMEOUT" ]; then
+        dataplane_failed "Dataplane API socket $DATAPLANE_API_SOCK did not appear after ${DATAPLANE_READY_TIMEOUT}s"
+    fi
+    sleep 1
+    waited=$((waited + 1))
+done
+echo "Dataplane API socket ready after ${waited}s (PID $DATAPLANE_PID)"
 
 echo "Setting dataplane API socket permissions..."
-chmod 660 /run/osvbng/dataplane_api.sock || true
-chown root:osvbng /run/osvbng/dataplane_api.sock || true
+chmod 660 "$DATAPLANE_API_SOCK"
+chown root:osvbng "$DATAPLANE_API_SOCK"
 
 echo "Configuring kernel MPLS in dataplane namespace..."
 ip netns exec dataplane sysctl -w net.mpls.platform_labels=1048575 || true
