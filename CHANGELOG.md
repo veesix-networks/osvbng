@@ -1,5 +1,60 @@
 # Changelog
 
+## [0.17.0](https://github.com/veesix-networks/osvbng/compare/v0.16.0...v0.17.0) (2026-08-21)
+
+
+### Features
+
+* **aaa:** built-in osvbng vendor dictionary for l2gw radius attributes ([43ed1e5](https://github.com/veesix-networks/osvbng/commit/43ed1e55cf80d0cf42539363e0ed08c0b85a4d8d))
+* **config:** implement auto cpu layout tiers and cp-cores intent knob ([#435](https://github.com/veesix-networks/osvbng/issues/435)) ([64d15d0](https://github.com/veesix-networks/osvbng/commit/64d15d0d9ac48e8ce6e5e9169d20546c82ab58d0))
+* **ha:** l2gw circuit sync with standby pre-install and promotion enable ([0e92a4b](https://github.com/veesix-networks/osvbng/commit/0e92a4bb43c8d5106c83ae4440b4aea525736d05))
+* **l2gw:** config schema, session model, and AAA attribute plumbing ([167f8f3](https://github.com/veesix-networks/osvbng/commit/167f8f37fd5b30ad10964c09a5d8fdb550a40b31))
+* **l2gw:** dataplane dhcp trigger snoop arming and multi-nni access ([582051e](https://github.com/veesix-networks/osvbng/commit/582051e0e3ec9a4d785e55d5b3b10bd6bacd0591))
+* **l2gw:** dhcpv6 relay identity options for aaa policies ([7444d92](https://github.com/veesix-networks/osvbng/commit/7444d9236e139eb678017c9c5afd87f95945c2c3))
+* **l2gw:** export per-circuit counters via telemetry sdk ([9827251](https://github.com/veesix-networks/osvbng/commit/982725120b78130eb207574b4504069df0753187))
+* **l2gw:** layer 2 wholesale gateway with dhcp-triggered circuits ([#402](https://github.com/veesix-networks/osvbng/issues/402)) ([4d772e1](https://github.com/veesix-networks/osvbng/commit/4d772e1ea7411d982f7931063ba39a86aad8c31f))
+* **l2gw:** packet-triggered circuits with tuple identity and idle-timeout ([#403](https://github.com/veesix-networks/osvbng/issues/403)) ([c7f4bcb](https://github.com/veesix-networks/osvbng/commit/c7f4bcb0f3bf3c540373608d8bb2745921676d6e))
+* **l2gw:** reconcile static maps and allocators on config commit ([5f5a710](https://github.com/veesix-networks/osvbng/commit/5f5a7104f5118e09d19730ba3021d5773e9a2c6d))
+* **l2gw:** vxlan overlay nnis via generic tunnel rx dispatch ([#404](https://github.com/veesix-networks/osvbng/issues/404)) ([d316718](https://github.com/veesix-networks/osvbng/commit/d316718b85e97cc1dd48f121f6348de2b2e3947e))
+* **l2gw:** wholesale circuit control plane ([c6b3801](https://github.com/veesix-networks/osvbng/commit/c6b38018c2250d7d3c12c5a7b9768001c0fb9ecb))
+* **logger:** per-key storm sampler, sampled auth-failure logging ([#436](https://github.com/veesix-networks/osvbng/issues/436)) ([bcae7d7](https://github.com/veesix-networks/osvbng/commit/bcae7d761225e188ef15d14287980966dcb5aac6))
+* **qos:** hierarchical qos control plane with port and s-vlan aggregates ([#422](https://github.com/veesix-networks/osvbng/issues/422)) ([95e35f0](https://github.com/veesix-networks/osvbng/commit/95e35f00117a9ce2ab93cfa18ab611a51d22b622))
+* **qos:** hqos observability - session and hierarchy views, CLI renderings, prometheus fixes ([#434](https://github.com/veesix-networks/osvbng/issues/434)) ([b8f47a8](https://github.com/veesix-networks/osvbng/commit/b8f47a8eaa568e36d61558481e0a84f2beae93be))
+* **southbound:** evpn-signaled vxlan tunnels with dynamic vtep discovery ([#409](https://github.com/veesix-networks/osvbng/issues/409)) ([6e21c0f](https://github.com/veesix-networks/osvbng/commit/6e21c0fae9c92e1171549ef3bf13e61e191a11b6))
+* **southbound:** generate osvbng_l2gw binapi bindings ([31b7b36](https://github.com/veesix-networks/osvbng/commit/31b7b3617d0cc64d173db164ea94f81cbb60c5b0))
+* **southbound:** l2gw circuit stats and paired counter indices ([dba1065](https://github.com/veesix-networks/osvbng/commit/dba1065a0fc6ec35a64a2591a2d61147043ff3df))
+* **southbound:** l2gw circuit wrappers and interface ([6ffcb53](https://github.com/veesix-networks/osvbng/commit/6ffcb53976d806daeda114aa3d2606634be6f8f2))
+* **southbound:** pseudowire headend termination prep and vxlan transport termination ([#405](https://github.com/veesix-networks/osvbng/issues/405)) ([c668a58](https://github.com/veesix-networks/osvbng/commit/c668a5870397b4238cda977a3a29b2e946a277c0))
+* **southbound:** regenerate osvbng_l2gw binapi for trigger svlan range ([7910fa6](https://github.com/veesix-networks/osvbng/commit/7910fa6240f1f647a214d17f2d72ca9b18cd238c))
+
+
+### Bug Fixes
+
+* **aaa:** make the accounting bucket sleep interruptible ([#458](https://github.com/veesix-networks/osvbng/issues/458)) ([98cdd83](https://github.com/veesix-networks/osvbng/commit/98cdd83f7f355a0a56e8c5b8d80154871b01af67))
+* **ci:** record the swept state on the rig, not in an actions variable ([#470](https://github.com/veesix-networks/osvbng/issues/470)) ([a8a4053](https://github.com/veesix-networks/osvbng/commit/a8a4053f50ff56a1cdc5b19339f57eb27f0f6219))
+* **dhcpv6:** reject overflowing option lengths instead of panicking ([#431](https://github.com/veesix-networks/osvbng/issues/431)) ([6545ccd](https://github.com/veesix-networks/osvbng/commit/6545ccdf86ad76657ee2572326bf2e4a521163b0))
+* **dhcpv6:** send LDRA Relay-Reply to port 547, not 546 ([#424](https://github.com/veesix-networks/osvbng/issues/424)) ([46b7101](https://github.com/veesix-networks/osvbng/commit/46b7101705f48183827d2797a9ace69c5db30c33))
+* **docker:** decide the plugin drop from a marker the tmp purge cannot delete ([#465](https://github.com/veesix-networks/osvbng/issues/465)) ([8475153](https://github.com/veesix-networks/osvbng/commit/8475153d62ed004d84d5889efec2eb657a0e7250))
+* **docker:** grow the hugepage pool instead of resetting it ([#433](https://github.com/veesix-networks/osvbng/issues/433)) ([0925816](https://github.com/veesix-networks/osvbng/commit/0925816fb9a8097a46dc71f1e075523882e3fc41))
+* **docker:** treat the auto core sentinel as unset before taskset ([#471](https://github.com/veesix-networks/osvbng/issues/471)) ([77f1a58](https://github.com/veesix-networks/osvbng/commit/77f1a5808ad3edab64f9daecd548667ceedebc66))
+* **docker:** wait for the dataplane API socket before starting osvbngd ([#477](https://github.com/veesix-networks/osvbng/issues/477)) ([3e2d358](https://github.com/veesix-networks/osvbng/commit/3e2d3587f8acf7486333b903fff3a24ff6dab96b))
+* **ha:** restore synced sessions on graceful switchover and resolve encap sub-interface ([ed9e3da](https://github.com/veesix-networks/osvbng/commit/ed9e3da6a584f2ff722117f8b0ae5b172b5d7545))
+* **ha:** restore synced sessions on graceful switchover and resolve encap sub-interface ([#400](https://github.com/veesix-networks/osvbng/issues/400)) ([b76ee3d](https://github.com/veesix-networks/osvbng/commit/b76ee3dadaa7de2367bb8b8522049729e6bf3ba4))
+* **ha:** send the srg garp flood on the access interface with per-session vlan encap ([#418](https://github.com/veesix-networks/osvbng/issues/418)) ([1150e78](https://github.com/veesix-networks/osvbng/commit/1150e78fa0473ea2c57962e082804eef1ad04aa9))
+* **ipoe:** send unsolicited na for restored sessions ([#451](https://github.com/veesix-networks/osvbng/issues/451)) ([d66ff01](https://github.com/veesix-networks/osvbng/commit/d66ff01569174e3fc8d1fa84721e2d45377d0453))
+* **pppoe:** make dual-stack dhcpv6 reach the dataplane ([#446](https://github.com/veesix-networks/osvbng/issues/446)) ([f13730d](https://github.com/veesix-networks/osvbng/commit/f13730d3ef120ede8b041f2f82f15dc8e3ef2a13))
+* **pppoe:** size session interface mtu as mru plus pppoe overhead ([#406](https://github.com/veesix-networks/osvbng/issues/406)) ([2066cf5](https://github.com/veesix-networks/osvbng/commit/2066cf55fb2278712e7c489f709def43f721b0f8))
+* **qos:** convert AAA download-rate from bps to kbps without truncation ([#426](https://github.com/veesix-networks/osvbng/issues/426)) ([8c6d452](https://github.com/veesix-networks/osvbng/commit/8c6d452511dd4e8135d92b7d5187bb97eff6642f))
+* **scripts:** avoid set -e death in deploy-vm.sh on hosts without SMT ([#413](https://github.com/veesix-networks/osvbng/issues/413)) ([a8835da](https://github.com/veesix-networks/osvbng/commit/a8835da96dd7d332f0eeb96cdf2a791ccaa84f0e))
+* **shm:** drain one punt ring per VPP thread for the v2 punt protocol ([#415](https://github.com/veesix-networks/osvbng/issues/415)) ([52e23a5](https://github.com/veesix-networks/osvbng/commit/52e23a50a566c2cc55b8de6b73b64958f0f273ea))
+* **southbound:** disable kernel ipv6 on interfaces claimed for the dataplane ([#461](https://github.com/veesix-networks/osvbng/issues/461)) ([975d806](https://github.com/veesix-networks/osvbng/commit/975d806cc304b149560db312c4060d76faabaefa))
+* **southbound:** re-attach ipoe sessions on already-exists instead of failing restore ([#462](https://github.com/veesix-networks/osvbng/issues/462)) ([20619c4](https://github.com/veesix-networks/osvbng/commit/20619c4ac0c5a28b955d95c80d6916d375f0a77a))
+
+
+### Reverts
+
+* worker pin, identical cores across labs concentrate contention ([#467](https://github.com/veesix-networks/osvbng/issues/467)) ([ef3e87b](https://github.com/veesix-networks/osvbng/commit/ef3e87b00dd6c182f96da4874a6a532292d413c0))
+
 ## [0.16.0](https://github.com/veesix-networks/osvbng/compare/v0.15.0...v0.16.0) (2026-07-21)
 
 
