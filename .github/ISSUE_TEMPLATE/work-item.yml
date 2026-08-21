@@ -1,0 +1,37 @@
+name: Work item
+description: A defect or task with a known start point, as filed from a review or an audit
+body:
+  - type: textarea
+    attributes:
+      label: Problem
+      description: What is wrong or missing, what it affects, and how that was established. Lead with the problem, not the fix.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Where
+      description: Files and lines at a named commit, or documents and sections. Line numbers drift, so name the symbol too.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Done when
+      description: The observable end state, not the steps. If other issues carry part of it, name them.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Verification
+      description: How the change is shown to work against reality (which suite, rig or test) and what is deliberately not verified.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Notes
+      description: What was already tried and what blocks it, dependencies, and links to the evidence (audit record, ADR, design note).
+    validations:
+      required: false
