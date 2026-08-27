@@ -1,0 +1,198 @@
+# Copyright 2026 The osvbng Authors
+# Licensed under the GNU General Public License v3.0 or later.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Two customer VRFs share one inside prefix and one outside pool in the
+# default VRF, so the same inside address is live in both VRFs at once.
+# Allocator identity is (inside_vrf_id, inside_ip) per ADR 0006.
+
+# CUSTOMER-B declares IPv4 only: the gateway loopback in such a VRF
+# must still take unnumbered sessions, which needs the loopback and the
+# session interface to agree on their IPv6 table as well.
+vrfs:
+  CUSTOMER-A:
+    description: "customer A"
+    address-families:
+      ipv4-unicast: {}
+      ipv6-unicast: {}
+  CUSTOMER-B:
+    description: "customer B"
+    address-families:
+      ipv4-unicast: {}
+
+cgnat:
+  pools:
+    residential:
+      outside_interfaces:
+        - eth2
+      mode: pba
+      inside-prefixes:
+        - prefix: 100.64.0.0/24
+          vrf: CUSTOMER-A
+        - prefix: 100.64.0.0/24
+          vrf: CUSTOMER-B
+      outside-addresses:
+        - 203.0.113.0/28
+      block-size: 512
+      max-blocks-per-subscriber: 2
+      max-sessions-per-subscriber: 2000
+      address-pooling: paired
+      filtering: endpoint-independent
+      timeouts:
+        tcp-established: 7200
+        tcp-transitory: 240
+        udp: 300
+        icmp: 60
+
+service-groups:
+  customer-a:
+    vrf: CUSTOMER-A
+    unnumbered: loop101
+    pool: customer-a-pool
+    cgnat:
+      policy: residential
+  customer-b:
+    vrf: CUSTOMER-B
+    unnumbered: loop102
+    pool: customer-b-pool
+    cgnat:
+      policy: residential
+
+subscriber-groups:
+  groups:
+    custa-ipoe:
+      vlan-tpid: dot1q
+      ipv4-profile: default
+      vrf: CUSTOMER-A
+      default-service-group: customer-a
+      vlans:
+        - svlan: "200"
+          cvlan: any
+          interface: loop101
+          parent-interface: eth1
+          access-types: [ipoe]
+      aaa-policy: default-policy
+    custb-pppoe:
+      vlan-tpid: dot1q
+      ipv4-profile: default
+      vrf: CUSTOMER-B
+      default-service-group: customer-b
+      vlans:
+        - svlan: "300"
+          cvlan: any
+          interface: loop102
+          parent-interface: eth1
+          access-types: [pppoe]
+      aaa-policy: pppoe-policy
+
+ipv4-profiles:
+  default:
+    gateway: 100.64.0.1
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    pools:
+      - name: customer-a-pool
+        network: 100.64.0.0/24
+        range_start: 100.64.0.2
+        range_end: 100.64.0.254
+        gateway: 100.64.0.1
+        vrf: CUSTOMER-A
+        priority: 1
+      - name: customer-b-pool
+        network: 100.64.0.0/24
+        range_start: 100.64.0.2
+        range_end: 100.64.0.254
+        gateway: 100.64.0.1
+        vrf: CUSTOMER-B
+        priority: 2
+    dhcp:
+      lease-time: 3600
+
+dhcp:
+  provider: local
+
+interfaces:
+  loop0:
+    description: Control Plane Loopback
+    enabled: true
+    address:
+      ipv4:
+        - 10.254.0.1/32
+  eth1:
+    description: Access Interface
+    enabled: true
+  eth2:
+    description: Core Link
+    enabled: true
+    address:
+      ipv4:
+        - 10.0.0.1/30
+  loop101:
+    description: CUSTOMER-A Subscriber Gateway
+    enabled: true
+    vrf: CUSTOMER-A
+    address:
+      ipv4:
+        - 100.64.0.1/32
+  loop102:
+    description: CUSTOMER-B Subscriber Gateway
+    enabled: true
+    vrf: CUSTOMER-B
+    address:
+      ipv4:
+        - 100.64.0.1/32
+
+protocols:
+  bgp:
+    asn: 65000
+    router-id: 10.254.0.1
+    neighbors:
+      10.254.0.2:
+        remote-as: 65000
+        peer: loop0
+    ipv4-unicast:
+      redistribute:
+        connected: true
+  ospf:
+    enabled: true
+    router-id: 10.254.0.1
+    log-adjacency-changes: true
+    areas:
+      "0.0.0.0":
+        interfaces:
+          eth2:
+            network: point-to-point
+          loop0:
+            passive: true
+
+aaa:
+  auth_provider: local
+  nas_identifier: osvbng
+  policy:
+    - name: default-policy
+      format: $mac-address$
+      max_concurrent_sessions: 1
+    - name: pppoe-policy
+      type: ppp
+      format: $mac-address$
+      max_concurrent_sessions: 1
+
+plugins:
+  northbound.api:
+    enabled: true
+    listeners:
+      - address: :8080
+  subscriber.auth.local:
+    allow_all: true
+    database_path: /tmp/osvbng.db
+
+logging:
+  format: text
+  level: info
+  components:
+    cgnat: debug
+    arp: debug
+
+dataplane:
+  lcp-netns: dataplane

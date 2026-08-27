@@ -17,3 +17,4 @@
 15-ha-failover-pppoe
 16-ha-failover-radius-ipoe
 17-ha-tracker-promotion-ipoe
+53-cgnat-vrf

@@ -51,8 +51,11 @@ Destroy Topology
 Capture Container Logs
     [Arguments]    ${topology_file}
     Create Directory    ${TEST_LOG_DIR}
+    # containerlab 0.73 keys the inspect output by lab name; earlier
+    # releases wrapped it in a "containers" list. Read both, or a failed
+    # suite leaves no container log behind.
     ${rc}    ${containers} =    Run And Return Rc And Output
-    ...    ${CLAB_BIN} inspect -t ${topology_file} --format json 2>/dev/null | python3 -c "import sys,json; cs=json.load(sys.stdin).get('containers',[]); print(' '.join(c['name'] for c in cs))" 2>/dev/null || true
+    ...    ${CLAB_BIN} inspect -t ${topology_file} --format json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); cs=d['containers'] if 'containers' in d else [c for labs in d.values() for c in labs]; print(' '.join(c['name'] for c in cs))" 2>/dev/null || true
     IF    '${containers}' != ''
         @{container_list} =    Split String    ${containers}
         FOR    ${container}    IN    @{container_list}
