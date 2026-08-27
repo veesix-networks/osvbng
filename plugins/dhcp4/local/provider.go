@@ -24,8 +24,16 @@ type Provider struct {
 	coreConfig *config.Config
 	pools      map[string]*IPPool
 	leases     map[string]*Lease
-	leasesByIP map[string]*Lease
-	mu         sync.RWMutex
+	// leasesByPoolIP is keyed by leaseKey. Pools are VRF-scoped by config,
+	// so an address is leased once per pool, not once per provider: the
+	// same subscriber prefix in two VRFs is two pools holding the same
+	// address for two subscribers (ADR 0006).
+	leasesByPoolIP map[string]*Lease
+	mu             sync.RWMutex
+}
+
+func leaseKey(poolName string, ip net.IP) string {
+	return poolName + "/" + ip.String()
 }
 
 type IPPool struct {
@@ -47,10 +55,10 @@ type Lease struct {
 
 func New(cfg *config.Config) (dhcp4.DHCPProvider, error) {
 	p := &Provider{
-		coreConfig: cfg,
-		pools:      make(map[string]*IPPool),
-		leases:     make(map[string]*Lease),
-		leasesByIP: make(map[string]*Lease),
+		coreConfig:     cfg,
+		pools:          make(map[string]*IPPool),
+		leases:         make(map[string]*Lease),
+		leasesByPoolIP: make(map[string]*Lease),
 	}
 
 	allocator.InitGlobalRegistry(cfg.IPv4Profiles, cfg.IPv6Profiles)
@@ -247,7 +255,7 @@ func (p *Provider) handleRelease(pkt *dhcp4.Packet, msg *dhcp4.Message) (*dhcp4.
 		if lease.PoolName != "" {
 			allocator.GetGlobalRegistry().Release(lease.PoolName, lease.IP)
 		}
-		delete(p.leasesByIP, lease.IP.String())
+		delete(p.leasesByPoolIP, leaseKey(lease.PoolName, lease.IP))
 		delete(p.leases, mac)
 	}
 
@@ -265,13 +273,13 @@ func (p *Provider) ReleaseLease(mac string) {
 	if lease.PoolName != "" {
 		allocator.GetGlobalRegistry().Release(lease.PoolName, lease.IP)
 	}
-	delete(p.leasesByIP, lease.IP.String())
+	delete(p.leasesByPoolIP, leaseKey(lease.PoolName, lease.IP))
 	delete(p.leases, mac)
 }
 
 func (p *Provider) reserveIP(reserveIP net.IP, mac, sessionID, poolName string, leaseTime time.Duration) error {
-	ipStr := reserveIP.String()
-	if existing, exists := p.leasesByIP[ipStr]; exists {
+	key := leaseKey(poolName, reserveIP)
+	if existing, exists := p.leasesByPoolIP[key]; exists {
 		if existing.MAC == mac {
 			existing.ExpireTime = time.Now().Add(leaseTime)
 			return nil
@@ -280,10 +288,10 @@ func (p *Provider) reserveIP(reserveIP net.IP, mac, sessionID, poolName string, 
 			if existing.PoolName != "" {
 				allocator.GetGlobalRegistry().Release(existing.PoolName, existing.IP)
 			}
-			delete(p.leasesByIP, ipStr)
+			delete(p.leasesByPoolIP, key)
 			delete(p.leases, existing.MAC)
 		} else {
-			return fmt.Errorf("IP %s already leased to %s", ipStr, existing.MAC)
+			return fmt.Errorf("IP %s already leased to %s in pool %q", reserveIP, existing.MAC, poolName)
 		}
 	}
 	lease := &Lease{
@@ -294,7 +302,7 @@ func (p *Provider) reserveIP(reserveIP net.IP, mac, sessionID, poolName string, 
 		ExpireTime: time.Now().Add(leaseTime),
 	}
 	p.leases[mac] = lease
-	p.leasesByIP[ipStr] = lease
+	p.leasesByPoolIP[key] = lease
 	return nil
 }
 
