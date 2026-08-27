@@ -23,6 +23,10 @@ func ResolveV4(ctx *allocator.Context, profile *ip.IPv4Profile) *ResolvedDHCPv4 
 		poolName = pn
 		ctx.AllocatedPool = pn
 	} else {
+		// The address was allocated on an earlier packet of this session,
+		// or handed in by AAA with no pool. The lease keeps the pool it
+		// was allocated from; the provider scopes leases by it.
+		poolName = ctx.AllocatedPool
 		if registry := allocator.GetGlobalRegistry(); registry != nil {
 			if err := registry.ReserveIP(ctx.IPv4Address, ctx.SessionID); err != nil {
 				return nil

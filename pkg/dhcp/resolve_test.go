@@ -586,3 +586,31 @@ func makeTestV6Profile() *ip.IPv6Profile {
 		}},
 	}
 }
+
+func TestResolveV4KeepsPoolOnLaterPackets(t *testing.T) {
+	v4 := map[string]*ip.IPv4Profile{
+		"prof1": {
+			Gateway: "10.0.0.1",
+			Pools: []ip.IPv4Pool{{
+				Name:       "pool1",
+				Network:    "10.0.0.0/24",
+				RangeStart: "10.0.0.2",
+				RangeEnd:   "10.0.0.10",
+			}},
+		},
+	}
+	initRegistry(t, v4, nil)
+
+	ctx := &allocator.Context{SessionID: "s1", ProfileName: "prof1"}
+	if res := ResolveV4(ctx, v4["prof1"]); res == nil || res.PoolName != "prof1/pool1" {
+		t.Fatalf("first resolve: %+v", res)
+	}
+	// REQUEST after DISCOVER: the address is already on the context.
+	res := ResolveV4(ctx, v4["prof1"])
+	if res == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if res.PoolName != "prof1/pool1" {
+		t.Fatalf("PoolName = %q on a later packet, want the pool the address came from", res.PoolName)
+	}
+}
