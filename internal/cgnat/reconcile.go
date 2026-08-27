@@ -330,7 +330,10 @@ func preflight(plans []poolPlan, desiredPools map[string]*cgnat.Pool,
 		}
 	}
 
-	desiredInside := buildDesiredInside(desiredPools, desiredIDByName, vr)
+	desiredInside, err := buildDesiredInside(desiredPools, desiredIDByName, vr)
+	if err != nil {
+		return err
+	}
 	for _, cur := range actualInside {
 		k := insidePrefixKey{poolID: cur.PoolID, prefix: cur.Prefix.String(), vrfID: cur.VRFID}
 		if _, want := desiredInside[k]; want {
@@ -367,7 +370,11 @@ func preflight(plans []poolPlan, desiredPools map[string]*cgnat.Pool,
 	return nil
 }
 
-func buildDesiredInside(desiredPools map[string]*cgnat.Pool, desiredIDByName map[string]uint32, vr vrfResolver) map[insidePrefixKey]struct{} {
+// buildDesiredInside keys each inside prefix by the table id its VRF name
+// resolves to. A name that does not resolve is an error, not table 0: the
+// prefix would be programmed into the default VRF and never match the
+// subscribers it was written for.
+func buildDesiredInside(desiredPools map[string]*cgnat.Pool, desiredIDByName map[string]uint32, vr vrfResolver) (map[insidePrefixKey]struct{}, error) {
 	out := make(map[insidePrefixKey]struct{})
 	for name, p := range desiredPools {
 		if p == nil {
@@ -380,15 +387,20 @@ func buildDesiredInside(desiredPools map[string]*cgnat.Pool, desiredIDByName map
 				continue
 			}
 			vrfID := uint32(0)
-			if ip.VRF != "" && vr != nil {
-				if tid, _, _, err := vr.ResolveVRF(ip.VRF); err == nil {
-					vrfID = tid
+			if ip.VRF != "" {
+				if vr == nil {
+					return nil, fmt.Errorf("cgnat: reconcile: pool %q inside prefix %s: no VRF resolver to resolve %q", name, ip.Prefix, ip.VRF)
 				}
+				tid, _, _, err := vr.ResolveVRF(ip.VRF)
+				if err != nil {
+					return nil, fmt.Errorf("cgnat: reconcile: pool %q inside prefix %s: %w", name, ip.Prefix, err)
+				}
+				vrfID = tid
 			}
 			out[insidePrefixKey{poolID: id, prefix: ipNet.String(), vrfID: vrfID}] = struct{}{}
 		}
 	}
-	return out
+	return out, nil
 }
 
 func buildDesiredOutside(desiredPools map[string]*cgnat.Pool, desiredIDByName map[string]uint32) map[outsideAddressKey]struct{} {
@@ -453,7 +465,10 @@ func reconcileChildren(deps reconcileDeps, plans []poolPlan, desiredPools map[st
 		}
 	}
 
-	desiredInside := buildDesiredInside(desiredPools, desiredIDByName, deps.vrf)
+	desiredInside, err := buildDesiredInside(desiredPools, desiredIDByName, deps.vrf)
+	if err != nil {
+		return err
+	}
 	actualInsideSet := make(map[insidePrefixKey]net.IPNet, len(actualInside))
 	for _, e := range actualInside {
 		k := insidePrefixKey{poolID: e.PoolID, prefix: e.Prefix.String(), vrfID: e.VRFID}

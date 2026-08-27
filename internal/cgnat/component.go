@@ -41,7 +41,7 @@ type Component struct {
 	opdb      opdb.Store
 	cfgMgr    component.ConfigManager
 	ifMgr     *ifmgr.Manager
-	vrfMgr    *vrfmgr.Manager
+	vrfMgr    vrfResolver
 
 	pools     *PoolManager
 	reverse   *ReverseIndex
@@ -100,7 +100,6 @@ func NewComponent(deps component.Dependencies, ifMgr *ifmgr.Manager, vrfMgr *vrf
 		opdb:            deps.OpDB,
 		cfgMgr:          deps.ConfigManager,
 		ifMgr:           ifMgr,
-		vrfMgr:          vrfMgr,
 		pools:           NewPoolManager(),
 		reverse:         NewReverseIndex(),
 		bypass:          NewBypassManager(),
@@ -109,6 +108,11 @@ func NewComponent(deps component.Dependencies, ifMgr *ifmgr.Manager, vrfMgr *vrf
 		sessionPoolMap:  make(map[string]string),
 		sessionProvider: sessionProvider,
 		activations:     make(map[string]struct{}),
+	}
+	// A nil manager stays a nil interface so sessionVRFID can tell
+	// "no resolver" from a resolver that answers.
+	if vrfMgr != nil {
+		c.vrfMgr = vrfMgr
 	}
 
 	return c, nil
@@ -511,14 +515,44 @@ func (c *Component) classifySession(serviceGroup string, insideIP net.IP, vrfNam
 	return classification{kind: classPBA, poolName: poolName}
 }
 
+// sessionVRFID resolves the session's VRF name to the ip4 table id that
+// keys the allocator and the plugin's mapping: identity is
+// (inside_vrf_id, inside_ip) per ADR 0006, and the plugin looks the
+// mapping up under the fib the subscriber's packets arrive in. The empty
+// name is the default table. A name that does not resolve is refused
+// rather than keyed by table 0; the same address in another VRF would
+// otherwise collide with it in the allocator and take a NO_MAPPING drop
+// in the dataplane.
+func (c *Component) sessionVRFID(vrfName string) (uint32, error) {
+	if vrfName == "" {
+		return 0, nil
+	}
+	if c.vrfMgr == nil {
+		return 0, fmt.Errorf("no VRF resolver to resolve %q", vrfName)
+	}
+	tableID, _, _, err := c.vrfMgr.ResolveVRF(vrfName)
+	if err != nil {
+		return 0, err
+	}
+	return tableID, nil
+}
+
 func (c *Component) handlePBAActivate(poolName string, insideIP net.IP, vrfName string, swIfIndex uint32, sessionID string, srgName string, done func()) {
-	if synced := c.tryRestoreSyncedMapping(sessionID, swIfIndex, poolName, srgName, done); synced {
+	vrfID, err := c.sessionVRFID(vrfName)
+	if err != nil {
+		c.logger.Error("CGNAT activation refused: session VRF does not resolve",
+			"session", sessionID, "vrf", vrfName, "error", err)
+		done()
 		return
 	}
 
-	mapping, isNew, err := c.pools.GetOrAllocate(poolName, insideIP, 0, swIfIndex)
+	if synced := c.tryRestoreSyncedMapping(sessionID, swIfIndex, vrfID, poolName, srgName, done); synced {
+		return
+	}
+
+	mapping, isNew, err := c.pools.GetOrAllocate(poolName, insideIP, vrfID, swIfIndex)
 	if err != nil {
-		c.logger.Error("CGNAT block allocation failed", "pool", poolName, "ip", insideIP, "error", err)
+		c.logger.Error("CGNAT block allocation failed", "pool", poolName, "ip", insideIP, "vrf", vrfName, "error", err)
 		done()
 		return
 	}
@@ -533,11 +567,14 @@ func (c *Component) handlePBAActivate(poolName string, insideIP net.IP, vrfName 
 	}
 
 	c.dataplane.CGNATAddDelSubscriberMappingAsync(poolID, swIfIndex, insideIP,
-		0, mapping.OutsideIP, mapping.PortBlockStart, mapping.PortBlockEnd,
+		vrfID, mapping.OutsideIP, mapping.PortBlockStart, mapping.PortBlockEnd,
 		true, true, func(err error) {
 			if err != nil {
-				c.logger.Error("subscriber mapping failed, rolling back", "error", err)
-				c.pools.ReleaseBlocks(poolName, insideIP, 0)
+				c.logger.Error("subscriber mapping failed, rolling back", "session", sessionID, "error", err)
+				if rerr := c.pools.ReleaseBlocks(poolName, insideIP, vrfID); rerr != nil {
+					c.logger.Error("CGNAT rollback: release blocks failed",
+						"session", sessionID, "inside", insideIP, "vrf", vrfName, "error", rerr)
+				}
 				done()
 				return
 			}
@@ -548,6 +585,7 @@ func (c *Component) handlePBAActivate(poolName string, insideIP net.IP, vrfName 
 			c.logger.Debug("CGNAT PBA mapping created",
 				"session", sessionID,
 				"inside", insideIP,
+				"vrf", vrfName,
 				"outside", fmt.Sprintf("%s:%d-%d", mapping.OutsideIP, mapping.PortBlockStart, mapping.PortBlockEnd),
 				"pool", poolName)
 		})
@@ -573,7 +611,7 @@ func (c *Component) commitMapping(sessionID, poolName string, mapping *models.CG
 	c.publishMappingEvent(srgName, mapping, true)
 }
 
-func (c *Component) tryRestoreSyncedMapping(sessionID string, swIfIndex uint32, poolName string, srgName string, done func()) bool {
+func (c *Component) tryRestoreSyncedMapping(sessionID string, swIfIndex uint32, vrfID uint32, poolName string, srgName string, done func()) bool {
 	if c.opdb == nil {
 		return false
 	}
@@ -596,7 +634,10 @@ func (c *Component) tryRestoreSyncedMapping(sessionID string, swIfIndex uint32, 
 		return false
 	}
 
+	// The peer's sw_if_index and table id are that node's; the identity
+	// that crosses nodes is the VRF name, resolved here.
 	mapping.SwIfIndex = swIfIndex
+	mapping.InsideVRFID = vrfID
 	mapping.SessionID = sessionID
 
 	if err := c.pools.RestoreMappingIfAbsent(&mapping); err != nil {
@@ -607,11 +648,14 @@ func (c *Component) tryRestoreSyncedMapping(sessionID string, swIfIndex uint32, 
 	poolID := c.poolIDMap[poolName]
 
 	c.dataplane.CGNATAddDelSubscriberMappingAsync(poolID, swIfIndex, mapping.InsideIP,
-		0, mapping.OutsideIP, mapping.PortBlockStart, mapping.PortBlockEnd,
+		vrfID, mapping.OutsideIP, mapping.PortBlockStart, mapping.PortBlockEnd,
 		true, true, func(err error) {
 			if err != nil {
 				c.logger.Error("restore synced mapping failed", "session", sessionID, "error", err)
-				c.pools.ReleaseBlocks(poolName, mapping.InsideIP, 0)
+				if rerr := c.pools.ReleaseBlocks(poolName, mapping.InsideIP, vrfID); rerr != nil {
+					c.logger.Error("CGNAT rollback: release blocks failed",
+						"session", sessionID, "inside", mapping.InsideIP, "vrf_id", vrfID, "error", rerr)
+				}
 				done()
 				return
 			}
@@ -646,12 +690,18 @@ func (c *Component) handleDetActivate(poolName string, swIfIndex uint32) {
 }
 
 func (c *Component) handleBypass(insideIP net.IP, vrfName string) {
-	prefix := net.IPNet{IP: insideIP.To4(), Mask: net.CIDRMask(32, 32)}
-	if err := c.dataplane.CGNATAddDelBypass(prefix, 0, true); err != nil {
-		c.logger.Error("bypass programming failed", "ip", insideIP, "error", err)
+	vrfID, err := c.sessionVRFID(vrfName)
+	if err != nil {
+		c.logger.Error("CGNAT bypass refused: session VRF does not resolve",
+			"ip", insideIP, "vrf", vrfName, "error", err)
 		return
 	}
-	c.bypass.AddIP(insideIP, 0)
+	prefix := net.IPNet{IP: insideIP.To4(), Mask: net.CIDRMask(32, 32)}
+	if err := c.dataplane.CGNATAddDelBypass(prefix, vrfID, true); err != nil {
+		c.logger.Error("bypass programming failed", "ip", insideIP, "vrf", vrfName, "error", err)
+		return
+	}
+	c.bypass.AddIP(insideIP, vrfID)
 }
 
 func (c *Component) handleSessionRelease(data *events.SessionLifecycleEvent) {
@@ -661,6 +711,7 @@ func (c *Component) handleSessionRelease(data *events.SessionLifecycleEvent) {
 		"protocol", data.Protocol)
 
 	var insideIP net.IP
+	var vrfName string
 	var swIfIndex uint32
 	var serviceGroup string
 	var srgName string
@@ -672,6 +723,7 @@ func (c *Component) handleSessionRelease(data *events.SessionLifecycleEvent) {
 			return
 		}
 		insideIP = sess.IPv4Address
+		vrfName = sess.VRF
 		swIfIndex = sess.IfIndex
 		serviceGroup = sess.ServiceGroup
 		srgName = sess.SRGName
@@ -681,6 +733,7 @@ func (c *Component) handleSessionRelease(data *events.SessionLifecycleEvent) {
 			return
 		}
 		insideIP = sess.IPv4Address
+		vrfName = sess.VRF
 		swIfIndex = sess.IfIndex
 		serviceGroup = sess.ServiceGroup
 		srgName = sess.SRGName
@@ -692,12 +745,22 @@ func (c *Component) handleSessionRelease(data *events.SessionLifecycleEvent) {
 		return
 	}
 
+	vrfID, err := c.sessionVRFID(vrfName)
+	if err != nil {
+		c.logger.Error("CGNAT release: session VRF does not resolve, mapping not released",
+			"session", data.SessionID, "inside_ip", insideIP, "vrf", vrfName, "error", err)
+		return
+	}
+
 	cfg, _ := c.cfgMgr.GetRunning()
 	if cfg != nil && cfg.CGNAT != nil && serviceGroup != "" && cfg.ServiceGroups != nil {
 		if sg, ok := cfg.ServiceGroups[serviceGroup]; ok && sg.CGNAT != nil && sg.CGNAT.Bypass {
 			prefix := net.IPNet{IP: insideIP.To4(), Mask: net.CIDRMask(32, 32)}
-			c.dataplane.CGNATAddDelBypass(prefix, 0, false)
-			c.bypass.RemovePrefix(&prefix, 0)
+			if err := c.dataplane.CGNATAddDelBypass(prefix, vrfID, false); err != nil {
+				c.logger.Error("bypass removal failed",
+					"session", data.SessionID, "ip", insideIP, "vrf", vrfName, "error", err)
+			}
+			c.bypass.RemovePrefix(&prefix, vrfID)
 			return
 		}
 	}
@@ -718,11 +781,12 @@ func (c *Component) handleSessionRelease(data *events.SessionLifecycleEvent) {
 	}
 	c.actMu.Unlock()
 
-	mappings := c.pools.GetMappings(poolName, insideIP, 0)
+	mappings := c.pools.GetMappings(poolName, insideIP, vrfID)
 	c.logger.Debug("CGNAT release: found mappings",
 		"session", data.SessionID,
 		"pool", poolName,
 		"inside_ip", insideIP,
+		"vrf", vrfName,
 		"mapping_count", len(mappings))
 	if len(mappings) == 0 {
 		c.actMu.Lock()
@@ -736,7 +800,7 @@ func (c *Component) handleSessionRelease(data *events.SessionLifecycleEvent) {
 	for i := range mappings {
 		mapping := &mappings[i]
 		c.dataplane.CGNATAddDelSubscriberMappingAsync(poolID, swIfIndex, insideIP,
-			0, mapping.OutsideIP, mapping.PortBlockStart, mapping.PortBlockEnd,
+			vrfID, mapping.OutsideIP, mapping.PortBlockStart, mapping.PortBlockEnd,
 			false, false, func(err error) {
 				if err != nil {
 					c.logger.Error("remove mapping failed", "error", err)
@@ -747,7 +811,10 @@ func (c *Component) handleSessionRelease(data *events.SessionLifecycleEvent) {
 		c.reverse.Remove(mapping.OutsideIP, mapping.PortBlockStart)
 	}
 
-	c.pools.ReleaseBlocks(poolName, insideIP, 0)
+	if err := c.pools.ReleaseBlocks(poolName, insideIP, vrfID); err != nil {
+		c.logger.Error("CGNAT release: release blocks failed",
+			"session", data.SessionID, "inside", insideIP, "vrf", vrfName, "error", err)
+	}
 	c.actMu.Lock()
 	delete(c.sessionPoolMap, data.SessionID)
 	c.actMu.Unlock()
@@ -977,7 +1044,7 @@ func (c *Component) RecoverDataplane(ctx context.Context) error {
 	// since the plugin lost that state. The non-PBA scan handles it via
 	// the same classification helper, idempotent against existing local
 	// CGNAT state because handleDetActivate / handleBypass program by
-	// (poolID, sw_if_index) / (insideIP) — VPP's add APIs treat the
+	// (poolID, sw_if_index) / (insideIP, vrf); VPP's add APIs treat the
 	// repeat as a no-op.
 	c.scanNonPBASessionsForRecover(ctx)
 
