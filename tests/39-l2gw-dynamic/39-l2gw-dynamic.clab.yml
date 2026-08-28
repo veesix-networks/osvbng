@@ -6,7 +6,7 @@ name: osvbng-l2gw-dynamic
 
 mgmt:
   network: clab-39
-  ipv4-subnet: ${OSVBNG_LAB_MGMT_PREFIX:=172.20}.38.0/24
+  ipv4-subnet: 172.20.38.0/24
 
 topology:
   nodes:

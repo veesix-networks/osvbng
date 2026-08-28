@@ -133,10 +133,15 @@ originated IPv6 then leaves through management and dies, intermittently,
 in a way that looks like a dataplane bug.
 
 The /16 comes from `OSVBNG_LAB_MGMT_PREFIX` so a developer whose
-172.20.0.0/16 is already taken by another Docker network can run every
-suite unchanged with, say, `OSVBNG_LAB_MGMT_PREFIX=172.31`. Suites that
-need their own management network keep a distinct third octet under the
-same prefix.
+172.20.0.0/16 is already taken by another Docker network can run the
+suites on the shared `clab` network unchanged with, say,
+`OSVBNG_LAB_MGMT_PREFIX=172.31`. Suites with a private management
+network (`network: clab-NN`) stay on their literal 172.20 subnet: they
+pin each node's `mgmt-ipv4`, and their bind-mounted RADIUS, Kea and
+robot files name those addresses, which containerlab does not expand.
+Moving only the subnet puts a node outside its own network and the
+deploy hangs; such a suite runs elsewhere, or from a copy with every
+address rewritten.
 
 **Take the CPU slot from the environment.**
 

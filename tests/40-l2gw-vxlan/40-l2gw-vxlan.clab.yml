@@ -11,7 +11,7 @@ name: osvbng-l2gw-vxlan
 
 mgmt:
   network: clab-40vx
-  ipv4-subnet: ${OSVBNG_LAB_MGMT_PREFIX:=172.20}.41.0/24
+  ipv4-subnet: 172.20.41.0/24
 
 topology:
   nodes:

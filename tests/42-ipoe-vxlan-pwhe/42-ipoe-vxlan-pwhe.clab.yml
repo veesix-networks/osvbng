@@ -12,7 +12,7 @@ name: osvbng-ipoe-vxlan-pwhe
 
 mgmt:
   network: clab-42
-  ipv4-subnet: ${OSVBNG_LAB_MGMT_PREFIX:=172.20}.22.0/24
+  ipv4-subnet: 172.20.22.0/24
 
 topology:
   nodes:
