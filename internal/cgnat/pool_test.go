@@ -153,3 +153,44 @@ func TestGetOrAllocate_ConcurrentSameSubscriber(t *testing.T) {
 		t.Fatalf("expected exactly 1 block allocated for subscriber after %d concurrent callers, got %d", N, len(mappings))
 	}
 }
+
+// ConfigurePool runs inside Component.Start, which the orchestrator calls
+// with no recover. Validate refuses a zero block size before it gets here;
+// this is the backstop that turns a boot loop into a reported error.
+func TestConfigurePool_ZeroBlockSizeIsAnErrorNotAPanic(t *testing.T) {
+	pm := NewPoolManager()
+	err := pm.ConfigurePool("p1", 1, &cgnat.Pool{
+		Mode:             "pba",
+		OutsideAddresses: []string{"203.0.113.0/28"},
+		SubscriberRatio:  65535,
+	})
+	if err == nil {
+		t.Fatal("expected an error for a pool whose block size resolves to 0")
+	}
+}
+
+// The allocator matches an exclusion against net.IP.String(), so a /32 in the
+// config has to exclude the same address a bare literal does.
+func TestConfigurePool_ExcludedAddressAcceptsCIDRSpelling(t *testing.T) {
+	for _, spelling := range []string{"203.0.113.1", "203.0.113.1/32"} {
+		pm := NewPoolManager()
+		if err := pm.ConfigurePool("p1", 1, &cgnat.Pool{
+			Mode:              "pba",
+			OutsideAddresses:  []string{"203.0.113.0/28"},
+			BlockSize:         512,
+			ExcludedAddresses: []string{spelling},
+		}); err != nil {
+			t.Fatalf("%s: %v", spelling, err)
+		}
+		ps := pm.pools["p1"]
+		var excluded bool
+		for _, addr := range ps.OutsideAddresses {
+			if addr.IP.String() == "203.0.113.1" {
+				excluded = addr.Excluded
+			}
+		}
+		if !excluded {
+			t.Fatalf("%s did not exclude 203.0.113.1", spelling)
+		}
+	}
+}

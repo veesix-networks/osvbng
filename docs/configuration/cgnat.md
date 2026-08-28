@@ -90,6 +90,13 @@ osvbng rejects the configuration at startup if:
 - An outside interface in any pool is also a subscriber access interface (subscriber and outside roles must not overlap on the same physical interface).
 - A pool's `outside-addresses` overlap with an IP address owned by a local interface (the BNG's own control-plane traffic would otherwise be intercepted by the NAT path).
 - A legacy top-level `outside_interface` or `outside_interfaces` field is set (the field moved into each pool block).
+- `port-range` is not `start-end`, starts at 0, or ends below its start.
+- The block size resolves to 0, or is wider than `port-range`, whether it comes from `block-size`, from `subscriber-ratio`, or from the default.
+- `mode`, `address-pooling` or `filtering` is not one of the values listed under [pool fields](#pool-fields). An unrecognised value used to fall back to the default, so a typo ran the pool in a mode nobody asked for.
+- An `inside-prefixes` entry is not an IPv4 CIDR, or an `outside-addresses` entry is not an IPv4 address or CIDR. An unparseable inside prefix used to be skipped when classifying a subscriber, which left them untranslated with nothing logged.
+- An `outside-addresses` prefix is wider than /16. The allocator holds one entry per address, each with its own block bitmap, so memory is linear in the size of the prefix: a /16 is about 65k entries, a /8 about 16M. A /16 is already around eight million port blocks at the default block size, so this refuses nothing a real pool needs. Split the pool if the outside space is genuinely larger.
+- An `excluded-addresses` entry is not a single IPv4 address or a /32. Both `10.0.0.1` and `10.0.0.1/32` are accepted and mean the same address.
+- Two pools claim overlapping `inside-prefixes` in a VRF they share, or claim the same outside address. Either way the pool a subscriber lands in would depend on map iteration order.
 
 ## Pools
 

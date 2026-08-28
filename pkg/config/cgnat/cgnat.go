@@ -4,15 +4,13 @@
 
 package cgnat
 
-import "fmt"
-
 type Config struct {
-	Standalone                bool             `json:"standalone,omitempty" yaml:"standalone,omitempty"`
-	LegacyOutsideInterfaces   []string         `json:"outside_interfaces,omitempty" yaml:"outside_interfaces,omitempty"`
-	LegacyOutsideInterface    *string          `json:"outside_interface,omitempty" yaml:"outside_interface,omitempty"`
-	Pools                     map[string]*Pool `json:"pools,omitempty" yaml:"pools,omitempty"`
-	Logging                   *LoggingConfig   `json:"logging,omitempty" yaml:"logging,omitempty"`
-	Reconcile                 *ReconcileConfig `json:"reconcile,omitempty" yaml:"reconcile,omitempty"`
+	Standalone              bool             `json:"standalone,omitempty" yaml:"standalone,omitempty"`
+	LegacyOutsideInterfaces []string         `json:"outside_interfaces,omitempty" yaml:"outside_interfaces,omitempty"`
+	LegacyOutsideInterface  *string          `json:"outside_interface,omitempty" yaml:"outside_interface,omitempty"`
+	Pools                   map[string]*Pool `json:"pools,omitempty" yaml:"pools,omitempty"`
+	Logging                 *LoggingConfig   `json:"logging,omitempty" yaml:"logging,omitempty"`
+	Reconcile               *ReconcileConfig `json:"reconcile,omitempty" yaml:"reconcile,omitempty"`
 }
 
 type ReconcileConfig struct {
@@ -42,41 +40,13 @@ func (r *ReconcileConfig) GetAllowPoolDisruption() bool {
 	return *r.AllowPoolDisruption
 }
 
-func (c *Config) Validate() error {
-	if c == nil {
-		return nil
-	}
-	if c.LegacyOutsideInterface != nil {
-		return fmt.Errorf("cgnat: outside_interface (string) has been replaced by per-pool outside_interfaces (list); move it under each pool block")
-	}
-	if len(c.LegacyOutsideInterfaces) > 0 {
-		return fmt.Errorf("cgnat: outside_interfaces at the top level has moved into each pool block; move 'outside_interfaces: [...]' under 'cgnat.pools.<name>.outside_interfaces' for each pool")
-	}
-	if c.Reconcile != nil && c.Reconcile.OnDivergence != "" &&
-		c.Reconcile.OnDivergence != "reconcile" &&
-		c.Reconcile.OnDivergence != "fail" {
-		return fmt.Errorf("cgnat: reconcile.on_divergence must be \"reconcile\" or \"fail\", got %q", c.Reconcile.OnDivergence)
-	}
-	for name, pool := range c.Pools {
-		if pool == nil {
-			continue
-		}
-		if len(pool.OutsideInterfaces) == 0 {
-			return fmt.Errorf("cgnat: pool %q: outside_interfaces is required", name)
-		}
-		seen := make(map[string]struct{}, len(pool.OutsideInterfaces))
-		for i, entry := range pool.OutsideInterfaces {
-			if entry == "" {
-				return fmt.Errorf("cgnat: pool %q: outside_interfaces[%d]: empty interface name", name, i)
-			}
-			if _, dup := seen[entry]; dup {
-				return fmt.Errorf("cgnat: pool %q: outside_interfaces: duplicate entry %q", name, entry)
-			}
-			seen[entry] = struct{}{}
-		}
-	}
-	return nil
-}
+// Defaults the getters below fall back to. Validate refuses any config where
+// these, or the values that replace them, resolve to an unusable block size.
+const (
+	defaultBlockSize      = 512
+	defaultPortRangeStart = 1024
+	defaultPortRangeEnd   = 65535
+)
 
 type Pool struct {
 	OutsideInterfaces        []string       `json:"outside_interfaces,omitempty" yaml:"outside_interfaces,omitempty"`
@@ -156,7 +126,7 @@ func (p *Pool) GetBlockSize() uint16 {
 		usable := p.GetPortRangeSize()
 		return uint16(usable / uint32(p.SubscriberRatio))
 	}
-	return 512
+	return defaultBlockSize
 }
 
 func (p *Pool) GetPortRangeStart() uint16 {
@@ -164,7 +134,7 @@ func (p *Pool) GetPortRangeStart() uint16 {
 		start, _ := parsePortRange(p.PortRange)
 		return start
 	}
-	return 1024
+	return defaultPortRangeStart
 }
 
 func (p *Pool) GetPortRangeEnd() uint16 {
@@ -172,7 +142,7 @@ func (p *Pool) GetPortRangeEnd() uint16 {
 		_, end := parsePortRange(p.PortRange)
 		return end
 	}
-	return 65535
+	return defaultPortRangeEnd
 }
 
 func (p *Pool) GetPortRangeSize() uint32 {
@@ -278,11 +248,13 @@ func (p *Pool) GetALGBitmask() uint8 {
 	return mask
 }
 
+// parsePortRange is the getters' view: the range if it parses, the default
+// otherwise. Validate has already refused anything that does not parse, so
+// the fallback is only reached by a Pool built in code rather than loaded.
 func parsePortRange(s string) (uint16, uint16) {
-	var start, end uint16
-	n, _ := fmt.Sscanf(s, "%d-%d", &start, &end)
-	if n == 2 {
-		return start, end
+	start, end, err := parsePortRangeStrict(s)
+	if err != nil {
+		return defaultPortRangeStart, defaultPortRangeEnd
 	}
-	return 1024, 65535
+	return start, end
 }

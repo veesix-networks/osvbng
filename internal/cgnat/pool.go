@@ -68,6 +68,13 @@ func (pm *PoolManager) ConfigurePool(name string, id uint32, cfg *cgnat.Pool) er
 	portStart := cfg.GetPortRangeStart()
 	portEnd := cfg.GetPortRangeEnd()
 	usablePorts := uint32(portEnd) - uint32(portStart) + 1
+	// Validate refuses every config that reaches here with a zero block size.
+	// This runs inside Component.Start, which the orchestrator calls with no
+	// recover, so returning an error is the only reportable failure: a divide
+	// by zero here is a boot loop that outlives every restart.
+	if blockSize == 0 {
+		return fmt.Errorf("pool %s: block size resolved to 0 for port range %d-%d", name, portStart, portEnd)
+	}
 	blocksPerAddr := usablePorts / uint32(blockSize)
 
 	var addresses []*outsideAddressState
@@ -86,9 +93,17 @@ func (pm *PoolManager) ConfigurePool(name string, id uint32, cfg *cgnat.Pool) er
 		}
 	}
 
-	excluded := make(map[string]bool)
+	// Both sides normalise through net.IP.String(), so "10.0.0.1" and
+	// "10.0.0.1/32" name the same address. Keying on the configured text
+	// meant one of those spellings matched nothing and the address was
+	// allocated anyway.
+	excluded := make(map[string]bool, len(cfg.ExcludedAddresses))
 	for _, ex := range cfg.ExcludedAddresses {
-		excluded[ex] = true
+		ip, err := cgnat.ParseExcludedAddress(ex)
+		if err != nil {
+			return fmt.Errorf("pool %s: invalid excluded address %s: %w", name, ex, err)
+		}
+		excluded[ip.String()] = true
 	}
 	for _, addr := range addresses {
 		if excluded[addr.IP.String()] {
@@ -563,6 +578,12 @@ func expandCIDR(cidr string) ([]net.IP, error) {
 	ones, bits := mask.Size()
 	if bits != 32 {
 		return nil, fmt.Errorf("only IPv4 supported")
+	}
+
+	// 1 << 32 wraps a uint32 to zero, which would return no addresses and
+	// leave the caller with an empty pool and no error to report.
+	if ones == 0 {
+		return nil, fmt.Errorf("prefix covers the whole address space")
 	}
 
 	count := uint32(1) << uint(bits-ones)
