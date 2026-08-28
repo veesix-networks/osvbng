@@ -17,10 +17,21 @@
         "outer-vlan-max": 200,
         "inner-vlan-min": 2,
         "inner-vlan-max": 6,
-        "stream-group-id": 1
+        "stream-group-id": 1,
+        "http-client-group-id": 1
       }
     ]
   },
+  "http-client": [
+    {
+      "name": "MSS-PROBE",
+      "http-client-group-id": 1,
+      "url": "/",
+      "destination-ipv4-address": "10.0.0.2",
+      "destination-port": 80,
+      "autostart": false
+    }
+  ],
   "pppoe": {
     "reconnect": false,
     "discovery-timeout": 5,

@@ -92,6 +92,34 @@ Verify Outside Addresses Advertised Via BGP
     ${output} =    Execute Vtysh On Router    ${corerouter1}    show ip bgp
     Should Contain    ${output}    203.0.113.
 
+Verify cgnat-in2out Runs After sv-reass And The MSS Clamp
+    [Documentation]    Translated packets continue the ip4-unicast arc, so the
+    ...    clamp's position relative to cgnat-in2out must come from
+    ...    cgnat-in2out's own constraints, not from plugin load order.
+    ${ifname} =    Get PPPoE Session Interface    ${bng1}
+    ${output} =    Execute VPP Command    ${bng1}    show interface features ${ifname}
+    ${features} =    Evaluate    [l.strip() for l in $output.split('ip4-unicast:')[1].split('\\n\\n')[0].splitlines() if l.strip()]
+    Log    ip4-unicast on ${ifname}: ${features}
+    ${reass} =    Evaluate    $features.index('ip4-sv-reassembly-feature')
+    ${clamp} =    Evaluate    $features.index('tcp-mss-clamping-ip4-in')
+    ${cgnat} =    Evaluate    $features.index('cgnat-in2out')
+    Should Be True    ${reass} < ${cgnat}    ip4-unicast order on ${ifname}: ${features}
+    Should Be True    ${clamp} < ${cgnat}    ip4-unicast order on ${ifname}: ${features}
+
+Verify Translated TCP SYN Carries The Clamped MSS On The Core Side
+    [Documentation]    bngblaster's TCP stack advertises MSS 1024 and the group
+    ...    clamps to 960, so a SYN captured on the core side tells a clamped
+    ...    packet from one that left the arc before the clamp.
+    ${handle} =    Start Process
+    ...    sudo docker exec -i ${corerouter1} python3 - tcp-syn eth1 20 80 < ${CURDIR}/../capture.py
+    ...    shell=True
+    Sleep    1s
+    BNG Blaster CLI Command    ${subscribers}    http-clients-start
+    ${result} =    Wait For Process    ${handle}    timeout=30s    on_timeout=kill
+    Log    ${result.stdout}
+    Should Be Equal As Integers    ${result.rc}    0    no TCP SYN to port 80 seen on the core side
+    Should Contain    ${result.stdout}    mss=960
+
 *** Keywords ***
 Session Dump Has Active Flows
     [Arguments]    ${bng}
@@ -100,6 +128,13 @@ Session Dump Has Active Flows
     Should Contain    ${output}    "total"
     Should Contain    ${output}    100.64.
     Should Contain    ${output}    203.0.113.
+
+Get PPPoE Session Interface
+    [Arguments]    ${bng}
+    ${output} =    Execute VPP Command    ${bng}    show interface
+    ${matches} =    Get Regexp Matches    ${output}    pppoe_session\\d+
+    Should Not Be Empty    ${matches}    no pppoe_session interface in VPP
+    RETURN    ${matches}[0]
 
 Deploy CGNAT Topology
     Deploy Topology    ${lab-file}

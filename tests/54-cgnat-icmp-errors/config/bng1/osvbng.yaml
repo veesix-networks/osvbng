@@ -13,10 +13,8 @@ cgnat:
       outside-addresses:
         - 203.0.113.0/28
       block-size: 512
-      max-blocks-per-subscriber: 2
       max-sessions-per-subscriber: 2000
       address-pooling: paired
-      filtering: endpoint-independent
       timeouts:
         tcp-established: 7200
         tcp-transitory: 240
@@ -25,21 +23,17 @@ cgnat:
 
 subscriber-groups:
     groups:
-        pppoe:
-            vlan-tpid: dot1q
+        default:
+            vlan-tpid: dot1ad
             ipv4-profile: default
             ipv6-profile: default-v6
             vlans:
-                - svlan: "200-210"
+                - svlan: "100-110"
                   cvlan: any
                   interface: loop100
                   parent-interface: eth1
-                  access-types: [pppoe]
-            aaa-policy: pppoe-policy
-            # Below bngblaster's fixed TCP MSS of 1024, so a SYN captured on
-            # the core side shows whether the clamp ran on a translated packet.
-            mss-clamp:
-              ipv4-mss: 960
+                  access-types: [ipoe]
+            aaa-policy: default-policy
             cgnat:
               policy: residential
 
@@ -115,16 +109,6 @@ interfaces:
                 - 2001:db8:0:1::1/128
 
 protocols:
-    bgp:
-        asn: 65000
-        router-id: 10.254.0.1
-        neighbors:
-            10.254.0.2:
-                remote-as: 65000
-                peer: loop0
-        ipv4-unicast:
-            redistribute:
-                connected: true
     ospf:
         enabled: true
         router-id: 10.254.0.1
@@ -136,14 +120,15 @@ protocols:
                         network: point-to-point
                     loop0:
                         passive: true
+                    loop100:
+                        passive: true
 
 aaa:
     auth_provider: local
     nas_identifier: osvbng
     policy:
-        - name: pppoe-policy
-          type: ppp
-          format: $agent-remote-id$
+        - name: default-policy
+          format: $mac-address$
           max_concurrent_sessions: 1
 
 plugins:
