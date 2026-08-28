@@ -23,7 +23,7 @@ topology:
         - SYS_NICE
       env:
         OSVBNG_WAIT_FOR_INTERFACES: "true"
-        OSVBNG_NUM_INTERFACES: "1"
+        OSVBNG_NUM_INTERFACES: "2"
         OSVBNG_DP_WORKER_CORES: "${OSVBNG_LAB_WORKER_CORES:=auto}"
         OSVBNG_CP_CORES: "${OSVBNG_LAB_CP_CORES:=auto}"
       binds:
