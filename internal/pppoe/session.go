@@ -1136,6 +1136,10 @@ func (s *SessionState) terminate() {
 
 	s.component.deleteSessionCheckpoint(s.SessionID)
 
+	// The Released event carries the identity the session held, address
+	// and VRF included: CGNAT releases the port block under that key and
+	// returns early without an address, so a bare event leaks the block
+	// until restart (audit B1).
 	s.component.publishSessionLifecycle(&models.PPPSession{
 		SessionID:    s.SessionID,
 		IfIndex:      s.SwIfIndex,
@@ -1146,7 +1150,11 @@ func (s *SessionState) terminate() {
 		MAC:          s.MAC,
 		OuterVLAN:    s.OuterVLAN,
 		InnerVLAN:    s.InnerVLAN,
+		VRF:          s.VRF,
+		ServiceGroup: s.ServiceGroup.Name,
 		SRGName:      s.SRGName,
+		IPv4Address:  s.IPv4Address,
+		IPv6Address:  s.IPv6Address,
 		Username:     s.Username,
 		AAASessionID: s.AcctSessionID,
 	})
