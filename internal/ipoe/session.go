@@ -316,17 +316,19 @@ func (c *Component) cleanupSessions() {
 				c.deleteSessionCheckpoint(sessID)
 
 				c.publishSessionLifecycle(&models.IPoESession{
-					SessionID:   sessID,
-					State:       models.SessionStateReleased,
-					AccessType:  string(models.AccessTypeIPoE),
-					MAC:         sess.MAC,
-					OuterVLAN:   sess.OuterVLAN,
-					InnerVLAN:   sess.InnerVLAN,
-					VRF:         sess.VRF,
-					SRGName:     sess.SRGName,
-					Username:    sess.Username,
-					IPv4Address: sess.IPv4,
-					IPv6Address: sess.IPv6Address,
+					SessionID:    sessID,
+					State:        models.SessionStateReleased,
+					AccessType:   string(models.AccessTypeIPoE),
+					MAC:          sess.MAC,
+					OuterVLAN:    sess.OuterVLAN,
+					InnerVLAN:    sess.InnerVLAN,
+					VRF:          sess.VRF,
+					ServiceGroup: sess.ServiceGroup.Name,
+					SRGName:      sess.SRGName,
+					Username:     sess.Username,
+					IPv4Address:  sess.IPv4,
+					IPv6Address:  sess.IPv6Address,
+					IfIndex:      sess.IPoESwIfIndex,
 				})
 			}
 		}

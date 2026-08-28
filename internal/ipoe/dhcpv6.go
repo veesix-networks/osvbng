@@ -543,6 +543,7 @@ func (c *Component) handleDHCPv6Release(pkt *dataplane.ParsedPacket, msg *dhcp6.
 			InnerVLAN:    pkt.InnerVLAN,
 			IfIndex:      ipoeSwIfIndex,
 			VRF:          sess.VRF,
+			ServiceGroup: sess.ServiceGroup.Name,
 			SRGName:      sess.SRGName,
 			IPv6Address:  ipv6Address,
 			IPv6Prefix:   prefixStr,

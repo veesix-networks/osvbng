@@ -122,6 +122,7 @@ func (c *Component) handleSubscriberTerminate(ev events.Event) {
 	acctSessionID := sess.AcctSessionID
 	username := sess.Username
 	vrf := sess.VRF
+	serviceGroup := sess.ServiceGroup.Name
 	srgName := sess.SRGName
 	outerVLAN := sess.OuterVLAN
 	sess.mu.Unlock()
@@ -165,6 +166,7 @@ func (c *Component) handleSubscriberTerminate(ev events.Event) {
 		OuterVLAN:    outerVLAN,
 		InnerVLAN:    innerVLAN,
 		VRF:          vrf,
+		ServiceGroup: serviceGroup,
 		SRGName:      srgName,
 		Username:     username,
 		IPv4Address:  ipv4,

@@ -781,6 +781,7 @@ func (c *Component) handleRelease(pkt *dataplane.ParsedPacket) error {
 		OuterVLAN:    pkt.OuterVLAN,
 		InnerVLAN:    pkt.InnerVLAN,
 		VRF:          sess.VRF,
+		ServiceGroup: sess.ServiceGroup.Name,
 		SRGName:      sess.SRGName,
 		Username:     sess.Username,
 		IPv4Address:  ipv4,
