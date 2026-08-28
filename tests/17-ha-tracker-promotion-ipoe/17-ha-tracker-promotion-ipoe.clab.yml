@@ -8,7 +8,7 @@ name: osvbng-ha-tracker-promotion-ipoe
 # dual-stack network whose static v6 default route on eth0 competes
 # with the test RA route and breaks subscriber-originated IPv6.
 mgmt:
-  ipv4-subnet: 172.20.20.0/24
+  ipv4-subnet: ${OSVBNG_LAB_MGMT_PREFIX:=172.20}.20.0/24
 
 topology:
   nodes:

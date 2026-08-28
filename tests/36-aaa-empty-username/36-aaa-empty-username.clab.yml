@@ -6,7 +6,7 @@ name: osvbng-aaa-empty-username
 
 mgmt:
   network: clab-36
-  ipv4-subnet: 172.20.36.0/24
+  ipv4-subnet: ${OSVBNG_LAB_MGMT_PREFIX:=172.20}.36.0/24
 
 topology:
   nodes:
