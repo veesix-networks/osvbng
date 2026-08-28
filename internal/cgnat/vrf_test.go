@@ -34,6 +34,7 @@ func (s *strictVRF) ResolveVRF(name string) (uint32, bool, bool, error) {
 }
 
 type mappingCall struct {
+	swIfIndex uint32
 	insideIP  net.IP
 	vrfID     uint32
 	outsideIP net.IP
@@ -55,7 +56,7 @@ type vrfDP struct {
 }
 
 func (d *vrfDP) CGNATAddDelSubscriberMappingAsync(poolID, swIfIndex uint32, insideIP net.IP, insideVRFID uint32, outsideIP net.IP, portStart, portEnd uint16, enableFeature, isAdd bool, callback func(error)) {
-	d.mappings = append(d.mappings, mappingCall{insideIP: insideIP, vrfID: insideVRFID, outsideIP: outsideIP, portStart: portStart, isAdd: isAdd})
+	d.mappings = append(d.mappings, mappingCall{swIfIndex: swIfIndex, insideIP: insideIP, vrfID: insideVRFID, outsideIP: outsideIP, portStart: portStart, isAdd: isAdd})
 	callback(nil)
 }
 
@@ -228,5 +229,30 @@ func TestBypass_CarriesSessionVRF(t *testing.T) {
 	}
 	if c.bypass.IsBypassed(ip, 100) {
 		t.Fatalf("bypass still recorded after release")
+	}
+}
+
+func TestActivate_ReusedBlockIsProgrammedForTheNewInterface(t *testing.T) {
+	dp := &vrfDP{}
+	c := newVRFComponent(t, dp)
+
+	// a1 leaves without a release reaching CGNAT; a2 takes the same
+	// address in the same VRF on a new session interface.
+	c.handleSessionActivate(ipoeEvent("a1", "100.64.0.2", "CUSTOMER-A", "nat", models.SessionStateActive))
+	ev := ipoeEvent("a2", "100.64.0.2", "CUSTOMER-A", "nat", models.SessionStateActive)
+	ev.Session.(*models.IPoESession).IfIndex = 9
+	c.handleSessionActivate(ev)
+
+	if len(dp.mappings) != 2 {
+		t.Fatalf("the reused block must be programmed for the new interface, got %+v", dp.mappings)
+	}
+	if dp.mappings[1].swIfIndex != 9 || dp.mappings[1].vrfID != 100 || !dp.mappings[1].isAdd {
+		t.Fatalf("second add must carry the new interface under the session VRF, got %+v", dp.mappings[1])
+	}
+	if dp.mappings[0].portStart != dp.mappings[1].portStart {
+		t.Fatalf("the same subscriber identity must keep its block, got %d and %d", dp.mappings[0].portStart, dp.mappings[1].portStart)
+	}
+	if c.sessionPoolMap["a2"] != "p1" {
+		t.Fatalf("a2 must commit, got %v", c.sessionPoolMap)
 	}
 }

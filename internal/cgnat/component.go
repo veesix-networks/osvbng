@@ -560,12 +560,11 @@ func (c *Component) handlePBAActivate(poolName string, insideIP net.IP, vrfName 
 	mapping.SessionID = sessionID
 	poolID := c.poolIDMap[poolName]
 
-	if !isNew {
-		c.commitMapping(sessionID, poolName, mapping, srgName, false)
-		done()
-		return
-	}
-
+	// A block the allocator already held for this (vrf, ip) is programmed
+	// too: it was left by a session whose release never reached here, and
+	// the plugin's add is idempotent for an identical mapping and refreshes
+	// one whose sw_if_index moved. Committing it without a dataplane call
+	// left the new subscriber forwarding untranslated (audit B1).
 	c.dataplane.CGNATAddDelSubscriberMappingAsync(poolID, swIfIndex, insideIP,
 		vrfID, mapping.OutsideIP, mapping.PortBlockStart, mapping.PortBlockEnd,
 		true, true, func(err error) {
@@ -579,13 +578,14 @@ func (c *Component) handlePBAActivate(poolName string, insideIP net.IP, vrfName 
 				return
 			}
 
-			c.commitMapping(sessionID, poolName, mapping, srgName, true)
+			c.commitMapping(sessionID, poolName, mapping, srgName, isNew)
 			done()
 
 			c.logger.Debug("CGNAT PBA mapping created",
 				"session", sessionID,
 				"inside", insideIP,
 				"vrf", vrfName,
+				"reused_block", !isNew,
 				"outside", fmt.Sprintf("%s:%d-%d", mapping.OutsideIP, mapping.PortBlockStart, mapping.PortBlockEnd),
 				"pool", poolName)
 		})
