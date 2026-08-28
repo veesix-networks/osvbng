@@ -52,6 +52,38 @@ func (m *Manager) Reset() {
 	clear(m.vrfs)
 }
 
+// addVPPTables creates the VRF's VPP tables for both families, whatever
+// the VRF declares. A Linux VRF carries both families and linux-cp
+// mirrors its routes into a VPP table of the same id either way, the
+// session plugins bind a subscriber's interface to that id for both
+// families, and VPP refuses unnumbered unless both ends share every
+// table. Creating one table per declared family left a loopback in an
+// IPv4-only VRF in IPv6 table 0 while its sessions sat in the VRF's
+// linux-cp-made IPv6 table, and no session could take it as its
+// unnumbered source. The declared families still gate what is
+// provisioned inside the VRF; they do not decide which tables exist.
+func (m *Manager) addVPPTables(tableID uint32, name string) error {
+	if err := m.tables.AddIPTable(tableID, false, name); err != nil {
+		return fmt.Errorf("create VPP IPv4 table for VRF %q: %w", name, err)
+	}
+	if err := m.tables.AddIPTable(tableID, true, name); err != nil {
+		if derr := m.tables.DelIPTable(tableID, false); derr != nil {
+			m.logger.Warn("Failed to delete VPP IPv4 table after IPv6 table failure", "name", name, "table_id", tableID, "error", derr)
+		}
+		return fmt.Errorf("create VPP IPv6 table for VRF %q: %w", name, err)
+	}
+	return nil
+}
+
+func (m *Manager) delVPPTables(tableID uint32, name string) {
+	if err := m.tables.DelIPTable(tableID, false); err != nil {
+		m.logger.Warn("Failed to delete VPP IPv4 table", "name", name, "table_id", tableID, "error", err)
+	}
+	if err := m.tables.DelIPTable(tableID, true); err != nil {
+		m.logger.Warn("Failed to delete VPP IPv6 table", "name", name, "table_id", tableID, "error", err)
+	}
+}
+
 func (m *Manager) CreateVRF(ctx context.Context, name string, ipv4 bool, ipv6 bool) (uint32, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -61,18 +93,8 @@ func (m *Manager) CreateVRF(ctx context.Context, name string, ipv4 bool, ipv6 bo
 	}
 
 	if tableID, ok := m.findExistingLinuxVRF(name); ok {
-		if ipv4 {
-			if err := m.tables.AddIPTable(tableID, false, name); err != nil {
-				return 0, fmt.Errorf("create VPP IPv4 table for existing VRF %q: %w", name, err)
-			}
-		}
-		if ipv6 {
-			if err := m.tables.AddIPTable(tableID, true, name); err != nil {
-				if ipv4 {
-					m.tables.DelIPTable(tableID, false)
-				}
-				return 0, fmt.Errorf("create VPP IPv6 table for existing VRF %q: %w", name, err)
-			}
+		if err := m.addVPPTables(tableID, name); err != nil {
+			return 0, err
 		}
 		m.vrfs[name] = &vrfEntry{Name: name, TableID: tableID, IPv4: ipv4, IPv6: ipv6}
 		m.logger.Info("Recovered existing VRF", "name", name, "table_id", tableID)
@@ -88,21 +110,9 @@ func (m *Manager) CreateVRF(ctx context.Context, name string, ipv4 bool, ipv6 bo
 		return 0, fmt.Errorf("create Linux VRF %q: %w", name, err)
 	}
 
-	if ipv4 {
-		if err := m.tables.AddIPTable(tableID, false, name); err != nil {
-			m.deleteLinuxVRF(name)
-			return 0, fmt.Errorf("create VPP IPv4 table for VRF %q: %w", name, err)
-		}
-	}
-
-	if ipv6 {
-		if err := m.tables.AddIPTable(tableID, true, name); err != nil {
-			if ipv4 {
-				m.tables.DelIPTable(tableID, false)
-			}
-			m.deleteLinuxVRF(name)
-			return 0, fmt.Errorf("create VPP IPv6 table for VRF %q: %w", name, err)
-		}
+	if err := m.addVPPTables(tableID, name); err != nil {
+		m.deleteLinuxVRF(name)
+		return 0, err
 	}
 
 	m.vrfs[name] = &vrfEntry{
@@ -125,18 +135,7 @@ func (m *Manager) DeleteVRF(ctx context.Context, name string) error {
 		return fmt.Errorf("VRF %q not found", name)
 	}
 
-	if e.IPv4 {
-		if err := m.tables.DelIPTable(e.TableID, false); err != nil {
-			m.logger.Warn("Failed to delete VPP IPv4 table", "name", name, "table_id", e.TableID, "error", err)
-		}
-	}
-
-	if e.IPv6 {
-		if err := m.tables.DelIPTable(e.TableID, true); err != nil {
-			m.logger.Warn("Failed to delete VPP IPv6 table", "name", name, "table_id", e.TableID, "error", err)
-		}
-	}
-
+	m.delVPPTables(e.TableID, name)
 	m.deleteLinuxVRF(name)
 	delete(m.vrfs, name)
 
@@ -196,11 +195,8 @@ func (m *Manager) Reconcile(ctx context.Context, desired map[string]*ip.VRFSConf
 		ipv6 := cfg.AddressFamilies.IPv6Unicast != nil
 
 		if tableID, ok := existing[name]; ok {
-			if ipv4 {
-				m.tables.AddIPTable(tableID, false, name)
-			}
-			if ipv6 {
-				m.tables.AddIPTable(tableID, true, name)
+			if err := m.addVPPTables(tableID, name); err != nil {
+				m.logger.Error("Failed to create VPP tables during reconcile", "name", name, "error", err)
 			}
 			m.vrfs[name] = &vrfEntry{Name: name, TableID: tableID, IPv4: ipv4, IPv6: ipv6}
 			m.logger.Info("Reconciled existing VRF", "name", name, "table_id", tableID)
@@ -218,11 +214,8 @@ func (m *Manager) Reconcile(ctx context.Context, desired map[string]*ip.VRFSConf
 			continue
 		}
 
-		if ipv4 {
-			m.tables.AddIPTable(tableID, false, name)
-		}
-		if ipv6 {
-			m.tables.AddIPTable(tableID, true, name)
+		if err := m.addVPPTables(tableID, name); err != nil {
+			m.logger.Error("Failed to create VPP tables during reconcile", "name", name, "error", err)
 		}
 
 		m.vrfs[name] = &vrfEntry{Name: name, TableID: tableID, IPv4: ipv4, IPv6: ipv6}

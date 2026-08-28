@@ -1676,12 +1676,17 @@ func (v *VPP) bindInterfaceToVRF(vppIfName, linuxIfName, vrfName string, hasLCP 
 		return fmt.Errorf("VRF resolver not configured")
 	}
 
-	tableID, hasIPv4, hasIPv6, err := v.vrfResolver(vrfName)
+	tableID, _, _, err := v.vrfResolver(vrfName)
 	if err != nil {
 		return fmt.Errorf("resolve VRF %q: %w", vrfName, err)
 	}
 
-	if err := v.setInterfaceTable(vppIfName, tableID, hasIPv4, hasIPv6); err != nil {
+	// Both families, whatever the VRF declares: vrfmgr creates both VPP
+	// tables for every VRF, the session plugins bind a subscriber's
+	// interface to both, and VPP refuses unnumbered unless both ends share
+	// every table. A member bound for one family only cannot serve as the
+	// unnumbered source for a session in that VRF.
+	if err := v.setInterfaceTable(vppIfName, tableID, true, true); err != nil {
 		return fmt.Errorf("set VPP table: %w", err)
 	}
 
