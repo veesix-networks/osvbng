@@ -126,18 +126,29 @@ jobs:
           echo "root free: ${before}G -> ${after}G"
           sudo docker system df || true
 
-      # A rig run needs room for an image rebuild plus every lab a
-      # parallel suite brings up. Below this the run is going to fail
-      # somewhere unhelpful, or worse take the pool offline mid-sweep,
-      # so fail here where the reason is legible. Raise the floor if
-      # the image set grows; do not silence it.
-      - name: Require free disk
+      # Two tiers on purpose. The failure this guards against is the
+      # box reaching zero mid-sweep, which does not fail a job, it
+      # drops every runner offline; so the hard floor sits just above
+      # what a run actually consumes (an image rebuild plus the labs a
+      # parallel suite brings up) rather than at a comfortable number.
+      # The warning is the early signal, loud in the job log and in
+      # the summary, so the trend is visible while there is still time
+      # to act. A guard that blocks work at the comfortable number is
+      # its own kind of outage.
+      - name: Check free disk
         run: |
           avail=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
           echo "root free after reclaim: ${avail}G"
-          if [ "$avail" -lt 10 ]; then
-            echo "::error::only ${avail}G free on / after reclaim; the rig needs 10G. Something is holding space the prune does not reach: check 'sudo docker system df -v', and 'sudo lsof +L1' for deleted-but-open files."
+          echo "root free after reclaim: ${avail}G" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$avail" -lt 4 ]; then
+            echo "::error::only ${avail}G free on / after reclaim; a rig run needs 4G and the box is about to take the runner pool offline. Space the prune cannot reach: check 'sudo docker system df -v' for non-dangling images and volumes, 'sudo du -xh --max-depth=1 /' for the rest, and 'sudo lsof +L1' for deleted-but-open files a docker restart would release."
+            df -h / || true
+            sudo docker system df || true
             exit 1
+          fi
+          if [ "$avail" -lt 10 ]; then
+            echo "::warning::only ${avail}G free on / after reclaim. Not blocking, but this box fills to zero and takes all five runners offline when it does; the units stay active so nothing goes red. Worth clearing before it gets there."
+            sudo docker system df || true
           fi
 
       # The runner keeps a per-commit cache of the four debs the
