@@ -97,6 +97,49 @@ jobs:
             timeout 30 sudo docker network create --subnet 172.20.20.0/24 clab
           rm -f "/tmp/osvbng-clab-deploy.$(id -u).lock"
 
+      # Nothing else on the box reclaims docker's churn, and it is the
+      # churn that fills the disk: every run rebuilds the osvbng, Kea
+      # and xl2tpd images, so the previous ones are left dangling with
+      # their layers, and BuildKit's cache grows without bound. A full
+      # root filesystem does not fail a job, it takes the runner
+      # offline: the service stays active while the agent can no
+      # longer write, so all five instances drop at once and the queue
+      # stalls silently. That is what happened on 2026-08-28, and the
+      # nightlies had been dying that way for days.
+      #
+      # What is NOT pruned, deliberately:
+      #   - volumes. osvbng-vpp-work-debian12 and its ccache are the
+      #     VPP build tree, mounted only while a build runs, so
+      #     between builds they look unused and `docker volume prune`
+      #     would take them. That costs a clean rebuild and the whole
+      #     ccache.
+      #   - images beyond dangling. `image prune -a` would drop
+      #     osvbng:local, the builder image, frr, bngblaster and
+      #     bngtester, all of which then have to be pulled or rebuilt.
+      - name: Reclaim docker disk
+        run: |
+          before=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+          sudo docker container prune -f || true
+          sudo docker image prune -f || true
+          sudo docker builder prune -af || true
+          after=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+          echo "root free: ${before}G -> ${after}G"
+          sudo docker system df || true
+
+      # A rig run needs room for an image rebuild plus every lab a
+      # parallel suite brings up. Below this the run is going to fail
+      # somewhere unhelpful, or worse take the pool offline mid-sweep,
+      # so fail here where the reason is legible. Raise the floor if
+      # the image set grows; do not silence it.
+      - name: Require free disk
+        run: |
+          avail=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+          echo "root free after reclaim: ${avail}G"
+          if [ "$avail" -lt 10 ]; then
+            echo "::error::only ${avail}G free on / after reclaim; the rig needs 10G. Something is holding space the prune does not reach: check 'sudo docker system df -v', and 'sudo lsof +L1' for deleted-but-open files."
+            exit 1
+          fi
+
       # The runner keeps a per-commit cache of the four debs the
       # image actually installs (the release also carries vpp-dbg,
       # 92MB of symbols the image never uses), so a run downloads
