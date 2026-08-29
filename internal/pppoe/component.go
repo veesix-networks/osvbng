@@ -1565,6 +1565,15 @@ func (c *Component) restoreFromHASync(srgName string) {
 			sess.ServiceGroup = c.svcGroupResolver.Resolve(cp.ServiceGroup, cp.ServiceGroup, aaaAttrs)
 		}
 
+		// Without this the promoted node has a session interface with no
+		// IPv4 enabled: VPP leaves ip4-not-enabled on its ip4-unicast arc
+		// and drops the subscriber's traffic at the end of the arc. Both
+		// other paths that build a session interface do this (fresh
+		// bring-up and the opdb replay in setupSessionRestore, and IPoE's
+		// own HA restore); only this one did not. Resolved after the
+		// service group, which is the first place the loopback is named.
+		c.setupSessionUnnumbered(sess.SessionID, swIfIndex, c.resolveUnnumberedLoopback(sess))
+
 		sess.initPPP()
 		if sess.LCPMagic != 0 {
 			sess.lcp.SetMagic(sess.LCPMagic)
