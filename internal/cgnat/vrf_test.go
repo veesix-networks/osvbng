@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/config"
@@ -17,6 +18,7 @@ import (
 	"github.com/veesix-networks/osvbng/pkg/events/local"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
+	"github.com/veesix-networks/osvbng/pkg/southbound"
 )
 
 // strictVRF answers only for the names it knows, as vrfmgr.Manager does.
@@ -65,7 +67,7 @@ func (d *vrfDP) CGNATAddDelBypass(prefix net.IPNet, vrfID uint32, isAdd bool) er
 	return nil
 }
 
-func newVRFComponent(t *testing.T, dp *vrfDP) *Component {
+func newVRFComponent(t *testing.T, dp southbound.CGNATDataplane) *Component {
 	t.Helper()
 	cfg := &config.Config{
 		CGNAT: &cgnat.Config{
@@ -89,20 +91,22 @@ func newVRFComponent(t *testing.T, dp *vrfDP) *Component {
 	if err := pm.ConfigurePool("p1", 1, cfg.CGNAT.Pools["p1"]); err != nil {
 		t.Fatalf("configure pool: %v", err)
 	}
+	log := logger.Get("cgnat-test")
 	return &Component{
-		Base:           component.NewBase("cgnat"),
-		logger:         logger.Get("cgnat-test"),
-		eventBus:       local.NewBus(),
-		dataplane:      dp,
-		cfgMgr:         &fakeCfg{cfg: cfg},
-		vrfMgr:         &strictVRF{tableID: map[string]uint32{"CUSTOMER-A": 100, "CUSTOMER-B": 200}},
-		pools:          pm,
-		reverse:        NewReverseIndex(),
-		bypass:         NewBypassManager(),
-		blacklist:      NewBlacklistManager(),
-		poolIDMap:      map[string]uint32{"p1": 1},
-		sessionPoolMap: map[string]string{},
-		activations:    map[string]struct{}{},
+		Base:      component.NewBase("cgnat"),
+		logger:    log,
+		eventBus:  local.NewBus(),
+		dataplane: dp,
+		opdb:      newFakeOpDB(),
+		cfgMgr:    &fakeCfg{cfg: cfg},
+		vrfMgr:    &strictVRF{tableID: map[string]uint32{"CUSTOMER-A": 100, "CUSTOMER-B": 200}},
+		pools:     pm,
+		reverse:   NewReverseIndex(),
+		bypass:    NewBypassManager(),
+		blacklist: NewBlacklistManager(),
+		poolIDMap: map[string]uint32{"p1": 1},
+		subs:      map[subscriberKey]*subscriberState{},
+		storm:     logger.NewSampler(log, time.Second),
 	}
 }
 
@@ -159,8 +163,11 @@ func TestActivate_SameInsideIPInTwoVRFsGetsDisjointBlocks(t *testing.T) {
 	if a.outsideIP.Equal(b.outsideIP) && a.portStart == b.portStart {
 		t.Fatalf("both VRFs were given block %s:%d", a.outsideIP, a.portStart)
 	}
-	if c.sessionPoolMap["a1"] != "p1" || c.sessionPoolMap["b1"] != "p1" {
-		t.Fatalf("both sessions must commit, got %v", c.sessionPoolMap)
+	if sid, pool := c.programmed("100.64.0.2", 100); sid != "a1" || pool != "p1" {
+		t.Fatalf("a1 must hold its key in p1, got %q %q", sid, pool)
+	}
+	if sid, pool := c.programmed("100.64.0.2", 200); sid != "b1" || pool != "p1" {
+		t.Fatalf("b1 must hold its key in p1, got %q %q", sid, pool)
 	}
 }
 
@@ -183,8 +190,8 @@ func TestRelease_UsesSessionVRF(t *testing.T) {
 	if got := c.pools.GetMappings("p1", ip, 200); len(got) != 1 {
 		t.Fatalf("CUSTOMER-B block must survive the other VRF's release: %+v", got)
 	}
-	if _, ok := c.sessionPoolMap["a1"]; ok {
-		t.Fatalf("released session still committed")
+	if sid, _ := c.programmed("100.64.0.2", 100); sid != "" {
+		t.Fatalf("released session still programmed: %q", sid)
 	}
 }
 
@@ -200,11 +207,11 @@ func TestActivate_UnknownVRFIsRefused(t *testing.T) {
 	if got := c.pools.GetAllMappings(); len(got) != 0 {
 		t.Fatalf("nothing may be allocated for an unresolvable VRF: %+v", got)
 	}
-	if _, ok := c.sessionPoolMap["x1"]; ok {
-		t.Fatalf("refused session must not commit")
-	}
-	if ok, _ := c.beginActivation("x1"); !ok {
-		t.Fatalf("refused activation must release its slot")
+	c.subMu.Lock()
+	entries := len(c.subs)
+	c.subMu.Unlock()
+	if entries != 0 {
+		t.Fatalf("refused session must leave no writer state, got %d entries", entries)
 	}
 }
 
@@ -252,7 +259,7 @@ func TestActivate_ReusedBlockIsProgrammedForTheNewInterface(t *testing.T) {
 	if dp.mappings[0].portStart != dp.mappings[1].portStart {
 		t.Fatalf("the same subscriber identity must keep its block, got %d and %d", dp.mappings[0].portStart, dp.mappings[1].portStart)
 	}
-	if c.sessionPoolMap["a2"] != "p1" {
-		t.Fatalf("a2 must commit, got %v", c.sessionPoolMap)
+	if sid, pool := c.programmed("100.64.0.2", 100); sid != "a2" || pool != "p1" {
+		t.Fatalf("a2 must hold the key in p1, got %q %q", sid, pool)
 	}
 }

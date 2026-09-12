@@ -32,10 +32,10 @@ type subscriberAllocation struct {
 }
 
 type outsideAddressState struct {
-	IP             net.IP
-	TotalBlocks    uint32
-	AllocatedBits  []uint64
-	Excluded       bool
+	IP            net.IP
+	TotalBlocks   uint32
+	AllocatedBits []uint64
+	Excluded      bool
 }
 
 type PoolManager struct {
@@ -50,8 +50,6 @@ type poolState struct {
 
 	OutsideAddresses []*outsideAddressState
 	Subscribers      map[subscriberKey]*subscriberAllocation
-
-	nextPoolID uint32
 }
 
 func NewPoolManager() *PoolManager {
@@ -439,10 +437,10 @@ func (pm *PoolManager) restoreLocked(mapping *models.CGNATMapping, ifAbsent bool
 	return nil
 }
 
-// GetOrAllocate atomically returns an existing block for the subscriber if one
-// is present, else allocates a fresh one. Removes the lookup-then-allocate
-// race that two concurrent activation events for the same session could
-// otherwise hit. Returns (mapping, isNew, error).
+// GetOrAllocate returns the block the allocator holds for the subscriber
+// identity, else allocates a fresh one. A held block changes hands: the
+// caller is the session that now owns the identity, so the recorded
+// interface follows it. Returns (mapping, isNew, error).
 func (pm *PoolManager) GetOrAllocate(poolName string, insideIP net.IP, insideVRF uint32, swIfIndex uint32) (*models.CGNATMapping, bool, error) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
@@ -455,6 +453,7 @@ func (pm *PoolManager) GetOrAllocate(poolName string, insideIP net.IP, insideVRF
 	key := makeSubscriberKey(insideVRF, insideIP)
 	if sub, ok := ps.Subscribers[key]; ok && len(sub.Blocks) > 0 {
 		b := sub.Blocks[0]
+		sub.SwIfIndex = swIfIndex
 		dup := make(net.IP, 4)
 		copy(dup, b.OutsideIP.To4())
 		return &models.CGNATMapping{
@@ -465,7 +464,7 @@ func (pm *PoolManager) GetOrAllocate(poolName string, insideIP net.IP, insideVRF
 			OutsideIP:      dup,
 			PortBlockStart: b.PortBlockStart,
 			PortBlockEnd:   b.PortBlockEnd,
-			SwIfIndex:      sub.SwIfIndex,
+			SwIfIndex:      swIfIndex,
 		}, false, nil
 	}
 

@@ -10,11 +10,13 @@ import (
 	"net"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/config"
 	"github.com/veesix-networks/osvbng/pkg/config/cgnat"
 	"github.com/veesix-networks/osvbng/pkg/config/subscriber"
+	"github.com/veesix-networks/osvbng/pkg/events/local"
 	"github.com/veesix-networks/osvbng/pkg/logger"
 	"github.com/veesix-networks/osvbng/pkg/models"
 	"github.com/veesix-networks/osvbng/pkg/opdb"
@@ -131,9 +133,11 @@ func newRestoreComponent(t *testing.T, dp *fakeDP, opdbStore *fakeOpDB, sp Sessi
 			t.Fatalf("configure pool %s: %v", name, err)
 		}
 	}
+	log := logger.Get("cgnat-test")
 	return &Component{
 		Base:            component.NewBase("cgnat"),
-		logger:          logger.Get("cgnat-test"),
+		logger:          log,
+		eventBus:        local.NewBus(),
 		dataplane:       dp,
 		opdb:            opdbStore,
 		cfgMgr:          &fakeCfg{cfg: cfg},
@@ -142,9 +146,9 @@ func newRestoreComponent(t *testing.T, dp *fakeDP, opdbStore *fakeOpDB, sp Sessi
 		bypass:          NewBypassManager(),
 		blacklist:       NewBlacklistManager(),
 		poolIDMap:       map[string]uint32{"p1": 1},
-		sessionPoolMap:  map[string]string{},
 		sessionProvider: sp,
-		activations:     map[string]struct{}{},
+		subs:            map[subscriberKey]*subscriberState{},
+		storm:           logger.NewSampler(log, time.Second),
 	}
 }
 
@@ -209,8 +213,8 @@ func TestRestore_PresentSession_ReprogramsWithFreshSwIfIndex(t *testing.T) {
 	if dp.bulkCalls[0].mappings[0].PortBlockStart != 1024 || !dp.bulkCalls[0].mappings[0].OutsideIP.Equal(net.ParseIP("100.64.0.1").To4()) {
 		t.Fatalf("outside binding changed during restore: %+v", dp.bulkCalls[0].mappings[0])
 	}
-	if got := c.sessionPoolMap["s1"]; got != "p1" {
-		t.Fatalf("sessionPoolMap[s1] = %q, want p1", got)
+	if sid, pool := c.programmed("10.0.0.1", 0); sid != "s1" || pool != "p1" {
+		t.Fatalf("s1 must hold its key in p1 after restore, got %q %q", sid, pool)
 	}
 	if c.RestoreDegraded() {
 		t.Fatalf("expected RestoreDegraded=false, got true")
@@ -262,7 +266,9 @@ func TestRestore_AbsentSession_AccessOpdbRetained_PreservesMapping(t *testing.T)
 		PortBlockEnd:   1215,
 	}
 	putMapping(t, store, mapping)
-	store.Put(context.Background(), opdb.NamespaceIPoESessions, "pending-1", []byte("{}"))
+	if err := store.Put(context.Background(), opdb.NamespaceIPoESessions, "pending-1", []byte("{}")); err != nil {
+		t.Fatalf("put access record: %v", err)
+	}
 
 	sp := &fakeProvider{sessions: map[string]models.SubscriberSession{}}
 	dp := &fakeDP{}
@@ -313,11 +319,11 @@ func TestRestore_PartialVPPFailure_PreservesEntryAndMarksDegraded(t *testing.T) 
 		t.Fatalf("restore: %v", err)
 	}
 
-	if _, ok := c.sessionPoolMap["s1"]; !ok {
-		t.Fatalf("s1 should be committed locally")
+	if sid, _ := c.programmed("10.0.0.1", 0); sid != "s1" {
+		t.Fatalf("s1 should be committed locally, got %q", sid)
 	}
-	if _, ok := c.sessionPoolMap["s2"]; ok {
-		t.Fatalf("s2 must NOT be committed locally on VPP failure")
+	if sid, _ := c.programmed("10.0.0.2", 0); sid != "" {
+		t.Fatalf("s2 must NOT be committed locally on VPP failure, got %q", sid)
 	}
 	if !c.RestoreDegraded() {
 		t.Fatalf("expected RestoreDegraded=true after partial VPP failure")

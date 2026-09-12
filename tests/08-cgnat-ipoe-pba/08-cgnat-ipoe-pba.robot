@@ -15,6 +15,7 @@ Library             Process
 Resource            ../common.robot
 Resource            ../bngblaster.robot
 Resource            ../sessions.robot
+Resource            ../cgnat.robot
 
 Suite Setup         Deploy CGNAT Topology
 Suite Teardown      Teardown CGNAT Topology
@@ -28,6 +29,8 @@ ${subscribers}      clab-${lab-name}-subscribers
 ${session-count}    5
 ${stream-count}     2
 ${trace-input}      af-packet-input
+${flap-count}       20
+${flap-session}     1
 
 *** Test Cases ***
 Verify BNG Is Healthy
@@ -91,6 +94,32 @@ Verify BNG Blaster Sessions Established
 Verify Outside Addresses Advertised Via BGP
     ${output} =    Execute Vtysh On Router    ${corerouter1}    show ip bgp
     Should Contain    ${output}    203.0.113.
+
+Flap One Subscriber Under Traffic
+    [Documentation]    Stop and start one session repeatedly while the others
+    ...                keep sending. The address allocator hands a released
+    ...                address straight back, so the old session's release and
+    ...                the new session's activate meet on the same CGNAT
+    ...                subscriber key in whichever order the bus delivers them.
+    ${before} =    Session IPv4 Address    ${subscribers}    ${flap-session}
+    Flap Session    ${subscribers}    ${flap-session}    ${flap-count}
+    Wait Until Keyword Succeeds    12 x    5s
+    ...    All Sessions Ready    ${bng1}    ${subscribers}    ${session-count}
+    ${after} =    Session IPv4 Address    ${subscribers}    ${flap-session}
+    Should Be Equal    ${before}    ${after}
+    ...    the flap did not reuse ${before}, so the same-key collision was not exercised
+    Set Suite Variable    ${flapped-ip}    ${after}
+
+Verify Flapped Subscriber Has Exactly One Mapping
+    Verify Dataplane Mapping Count For Inside IP    ${bng1}    ${flapped-ip}    1
+    Verify Control Plane Mapping Count For Inside IP    ${bng1}    ${flapped-ip}    1
+    Verify Control Plane Mapping Count    ${bng1}    ${session-count}
+
+Verify Flapped Subscriber Traffic Is Translated
+    Reset Stream Verification    ${subscribers}
+    ${expected} =    Evaluate    ${session-count} * ${stream-count}
+    Wait Until Keyword Succeeds    6 x    10s
+    ...    Verify Stream Traffic Flowing    ${subscribers}    expected_flows=${expected}
 
 
 *** Keywords ***

@@ -10,6 +10,7 @@ Resource            ../common.robot
 Resource            ../bngblaster.robot
 Resource            ../sessions.robot
 Resource            ../restart.robot
+Resource            ../cgnat.robot
 
 Suite Setup         Setup Restart Suite
 Suite Teardown      Teardown Restart Suite
@@ -26,6 +27,8 @@ ${cfg-backup}       /tmp/osvbng-restart-${lab-name}-orig.yaml
 *** Test Cases ***
 Identical Config Across Restart
     [Documentation]    Daemon restart with unchanged YAML completes; no -116, no replace, no orphan.
+    ...                Every subscriber comes back translated with one mapping, or the
+    ...                restore says so: never silently un-NATted.
     Wait For osvbng Healthy    bng1    ${lab-name}
     Start BNG Blaster In Background    ${subscribers}
     Wait Until Keyword Succeeds    18 x    10s
@@ -39,6 +42,13 @@ Identical Config Across Restart
     Should Not Contain    ${log}    cgnat reconcile: replace pool
     Should Not Contain    ${log}    cgnat reconcile: drop orphan
     Should Not Contain    ${log}    retval=-116
+    Should Not Contain    ${log}    CGNAT entered degraded restore state
+    Verify Control Plane Mapping Count    ${bng1}    ${session-count}
+    ${ip} =    Session IPv4 Address    ${subscribers}    1
+    Verify Dataplane Mapping Count For Inside IP    ${bng1}    ${ip}    1
+    Reset Stream Verification    ${subscribers}
+    Wait Until Keyword Succeeds    6 x    10s
+    ...    Verify Stream Traffic Flowing    ${subscribers}    expected_flows=${session-count}
 
 Soft Drift Preserves Mappings
     [Documentation]    Edit tcp_established timeout, restart, verify soft-update WARN logged.

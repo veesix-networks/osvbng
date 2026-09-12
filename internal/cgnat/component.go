@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/veesix-networks/osvbng/pkg/component"
 	"github.com/veesix-networks/osvbng/pkg/config"
@@ -48,8 +49,7 @@ type Component struct {
 	bypass    *BypassManager
 	blacklist *BlacklistManager
 
-	poolIDMap      map[string]uint32
-	sessionPoolMap map[string]string
+	poolIDMap map[string]uint32
 
 	lifecycleSub  events.Subscription
 	programmedSub events.Subscription
@@ -57,12 +57,12 @@ type Component struct {
 
 	sessionProvider SessionProvider
 
-	// actMu serializes the activation-state guard. It protects both
-	// sessionPoolMap and activations so the "look up existing mapping then
-	// allocate" pair is atomic, removing the race where two concurrent
-	// lifecycle events for the same session each allocate a fresh block.
-	actMu       sync.Mutex
-	activations map[string]struct{}
+	// subs is the per-key lifecycle writer state (lifecycle.go). storm
+	// samples the per-session failure logs that a reconnect wave
+	// multiplies.
+	subMu sync.Mutex
+	subs  map[subscriberKey]*subscriberState
+	storm *logger.Sampler
 
 	// Event queue: subscribers attach BEFORE the restore loop runs and
 	// queue events into pendingEvents; once restore completes drainQueue
@@ -92,9 +92,10 @@ type queuedEvent struct {
 }
 
 func NewComponent(deps component.Dependencies, ifMgr *ifmgr.Manager, vrfMgr *vrfmgr.Manager, sessionProvider SessionProvider) (*Component, error) {
+	log := logger.Get(logger.CGNAT)
 	c := &Component{
 		Base:            component.NewBase("cgnat"),
-		logger:          logger.Get(logger.CGNAT),
+		logger:          log,
 		eventBus:        deps.EventBus,
 		dataplane:       deps.Southbound,
 		opdb:            deps.OpDB,
@@ -105,9 +106,9 @@ func NewComponent(deps component.Dependencies, ifMgr *ifmgr.Manager, vrfMgr *vrf
 		bypass:          NewBypassManager(),
 		blacklist:       NewBlacklistManager(),
 		poolIDMap:       make(map[string]uint32),
-		sessionPoolMap:  make(map[string]string),
 		sessionProvider: sessionProvider,
-		activations:     make(map[string]struct{}),
+		subs:            make(map[subscriberKey]*subscriberState),
+		storm:           logger.NewSampler(log, 10*time.Second),
 	}
 	// A nil manager stays a nil interface so sessionVRFID can tell
 	// "no resolver" from a resolver that answers.
@@ -400,71 +401,6 @@ func (c *Component) dispatchRestored(event events.Event) {
 	})
 }
 
-func (c *Component) handleSessionActivate(data *events.SessionLifecycleEvent) {
-	proceed, done := c.beginActivation(data.SessionID)
-	if !proceed {
-		return
-	}
-	// done() is called from the leaf paths (sync) or from the PBA async
-	// callback (success and failure both).
-	c.handleSessionActivateLocked(data, done)
-}
-
-func (c *Component) handleSessionActivateLocked(data *events.SessionLifecycleEvent, done func()) {
-	var insideIP net.IP
-	var vrfName string
-	var swIfIndex uint32
-	var serviceGroup string
-	var srgName string
-
-	switch data.AccessType {
-	case models.AccessTypeIPoE:
-		sess, ok := data.Session.(*models.IPoESession)
-		if !ok {
-			done()
-			return
-		}
-		insideIP = sess.IPv4Address
-		vrfName = sess.VRF
-		swIfIndex = sess.IfIndex
-		serviceGroup = sess.ServiceGroup
-		srgName = sess.SRGName
-	case models.AccessTypePPPoE:
-		sess, ok := data.Session.(*models.PPPSession)
-		if !ok {
-			done()
-			return
-		}
-		insideIP = sess.IPv4Address
-		vrfName = sess.VRF
-		swIfIndex = sess.IfIndex
-		serviceGroup = sess.ServiceGroup
-		srgName = sess.SRGName
-	default:
-		done()
-		return
-	}
-
-	if insideIP == nil || insideIP.To4() == nil {
-		done()
-		return
-	}
-
-	cls := c.classifySession(serviceGroup, insideIP, vrfName)
-	switch cls.kind {
-	case classBypass:
-		c.handleBypass(insideIP, vrfName)
-		done()
-	case classDeterministic:
-		c.handleDetActivate(cls.poolName, swIfIndex)
-		done()
-	case classPBA:
-		c.handlePBAActivate(cls.poolName, insideIP, vrfName, swIfIndex, data.SessionID, srgName, done)
-	default:
-		done()
-	}
-}
-
 type classificationKind int
 
 const (
@@ -535,319 +471,6 @@ func (c *Component) sessionVRFID(vrfName string) (uint32, error) {
 		return 0, err
 	}
 	return tableID, nil
-}
-
-func (c *Component) handlePBAActivate(poolName string, insideIP net.IP, vrfName string, swIfIndex uint32, sessionID string, srgName string, done func()) {
-	vrfID, err := c.sessionVRFID(vrfName)
-	if err != nil {
-		c.logger.Error("CGNAT activation refused: session VRF does not resolve",
-			"session", sessionID, "vrf", vrfName, "error", err)
-		done()
-		return
-	}
-
-	if synced := c.tryRestoreSyncedMapping(sessionID, swIfIndex, vrfID, poolName, srgName, done); synced {
-		return
-	}
-
-	mapping, isNew, err := c.pools.GetOrAllocate(poolName, insideIP, vrfID, swIfIndex)
-	if err != nil {
-		c.logger.Error("CGNAT block allocation failed", "pool", poolName, "ip", insideIP, "vrf", vrfName, "error", err)
-		done()
-		return
-	}
-
-	mapping.SessionID = sessionID
-	poolID := c.poolIDMap[poolName]
-
-	// A block the allocator already held for this (vrf, ip) is programmed
-	// too: it was left by a session whose release never reached here, and
-	// the plugin's add is idempotent for an identical mapping and refreshes
-	// one whose sw_if_index moved. Committing it without a dataplane call
-	// left the new subscriber forwarding untranslated (audit B1).
-	c.dataplane.CGNATAddDelSubscriberMappingAsync(poolID, swIfIndex, insideIP,
-		vrfID, mapping.OutsideIP, mapping.PortBlockStart, mapping.PortBlockEnd,
-		true, true, func(err error) {
-			if err != nil {
-				c.logger.Error("subscriber mapping failed, rolling back", "session", sessionID, "error", err)
-				if rerr := c.pools.ReleaseBlocks(poolName, insideIP, vrfID); rerr != nil {
-					c.logger.Error("CGNAT rollback: release blocks failed",
-						"session", sessionID, "inside", insideIP, "vrf", vrfName, "error", rerr)
-				}
-				done()
-				return
-			}
-
-			c.commitMapping(sessionID, poolName, mapping, srgName, isNew)
-			done()
-
-			c.logger.Debug("CGNAT PBA mapping created",
-				"session", sessionID,
-				"inside", insideIP,
-				"vrf", vrfName,
-				"reused_block", !isNew,
-				"outside", fmt.Sprintf("%s:%d-%d", mapping.OutsideIP, mapping.PortBlockStart, mapping.PortBlockEnd),
-				"pool", poolName)
-		})
-}
-
-// commitMapping serializes the post-success state updates that the old async
-// callback used to do inline. Takes actMu so the activation guard sees a
-// consistent sessionPoolMap. publishMappingEvent is left outside the lock
-// because the bus dispatcher may take its own locks.
-func (c *Component) commitMapping(sessionID, poolName string, mapping *models.CGNATMapping, srgName string, persist bool) {
-	c.actMu.Lock()
-	c.sessionPoolMap[sessionID] = poolName
-	c.actMu.Unlock()
-
-	c.reverse.Add(mapping)
-
-	if persist && c.opdb != nil {
-		if data, err := json.Marshal(mapping); err == nil {
-			c.opdb.Put(context.Background(), opdbNamespace, sessionID, data)
-		}
-	}
-
-	c.publishMappingEvent(srgName, mapping, true)
-}
-
-func (c *Component) tryRestoreSyncedMapping(sessionID string, swIfIndex uint32, vrfID uint32, poolName string, srgName string, done func()) bool {
-	if c.opdb == nil {
-		return false
-	}
-
-	var found []byte
-	c.opdb.Load(context.Background(), opdb.NamespaceHASyncedCGNAT, func(key string, value []byte) error {
-		if key == sessionID {
-			found = make([]byte, len(value))
-			copy(found, value)
-		}
-		return nil
-	})
-
-	if found == nil {
-		return false
-	}
-
-	var mapping models.CGNATMapping
-	if err := json.Unmarshal(found, &mapping); err != nil {
-		return false
-	}
-
-	// The peer's sw_if_index and table id are that node's; the identity
-	// that crosses nodes is the VRF name, resolved here.
-	mapping.SwIfIndex = swIfIndex
-	mapping.InsideVRFID = vrfID
-	mapping.SessionID = sessionID
-
-	if err := c.pools.RestoreMappingIfAbsent(&mapping); err != nil {
-		c.logger.Warn("Failed to restore synced CGNAT mapping", "session", sessionID, "error", err)
-		return false
-	}
-
-	poolID := c.poolIDMap[poolName]
-
-	c.dataplane.CGNATAddDelSubscriberMappingAsync(poolID, swIfIndex, mapping.InsideIP,
-		vrfID, mapping.OutsideIP, mapping.PortBlockStart, mapping.PortBlockEnd,
-		true, true, func(err error) {
-			if err != nil {
-				c.logger.Error("restore synced mapping failed", "session", sessionID, "error", err)
-				if rerr := c.pools.ReleaseBlocks(poolName, mapping.InsideIP, vrfID); rerr != nil {
-					c.logger.Error("CGNAT rollback: release blocks failed",
-						"session", sessionID, "inside", mapping.InsideIP, "vrf_id", vrfID, "error", rerr)
-				}
-				done()
-				return
-			}
-
-			c.commitMapping(sessionID, poolName, &mapping, srgName, true)
-
-			if c.opdb != nil {
-				c.opdb.Delete(context.Background(), opdb.NamespaceHASyncedCGNAT, sessionID)
-			}
-
-			done()
-
-			c.logger.Info("CGNAT mapping restored from HA sync",
-				"session", sessionID,
-				"inside", mapping.InsideIP,
-				"outside_ip", mapping.OutsideIP,
-				"ports", fmt.Sprintf("%d-%d", mapping.PortBlockStart, mapping.PortBlockEnd))
-		})
-
-	return true
-}
-
-func (c *Component) handleDetActivate(poolName string, swIfIndex uint32) {
-	poolID, ok := c.poolIDMap[poolName]
-	if !ok {
-		return
-	}
-
-	if err := c.dataplane.CGNATEnableOnSession(poolID, swIfIndex, true); err != nil {
-		c.logger.Error("enable CGNAT on session failed", "pool", poolName, "sw_if", swIfIndex, "error", err)
-	}
-}
-
-func (c *Component) handleBypass(insideIP net.IP, vrfName string) {
-	vrfID, err := c.sessionVRFID(vrfName)
-	if err != nil {
-		c.logger.Error("CGNAT bypass refused: session VRF does not resolve",
-			"ip", insideIP, "vrf", vrfName, "error", err)
-		return
-	}
-	prefix := net.IPNet{IP: insideIP.To4(), Mask: net.CIDRMask(32, 32)}
-	if err := c.dataplane.CGNATAddDelBypass(prefix, vrfID, true); err != nil {
-		c.logger.Error("bypass programming failed", "ip", insideIP, "vrf", vrfName, "error", err)
-		return
-	}
-	c.bypass.AddIP(insideIP, vrfID)
-}
-
-func (c *Component) handleSessionRelease(data *events.SessionLifecycleEvent) {
-	c.logger.Debug("CGNAT handleSessionRelease called",
-		"session", data.SessionID,
-		"access_type", data.AccessType,
-		"protocol", data.Protocol)
-
-	var insideIP net.IP
-	var vrfName string
-	var swIfIndex uint32
-	var serviceGroup string
-	var srgName string
-
-	switch data.AccessType {
-	case models.AccessTypeIPoE:
-		sess, ok := data.Session.(*models.IPoESession)
-		if !ok {
-			return
-		}
-		insideIP = sess.IPv4Address
-		vrfName = sess.VRF
-		swIfIndex = sess.IfIndex
-		serviceGroup = sess.ServiceGroup
-		srgName = sess.SRGName
-	case models.AccessTypePPPoE:
-		sess, ok := data.Session.(*models.PPPSession)
-		if !ok {
-			return
-		}
-		insideIP = sess.IPv4Address
-		vrfName = sess.VRF
-		swIfIndex = sess.IfIndex
-		serviceGroup = sess.ServiceGroup
-		srgName = sess.SRGName
-	default:
-		return
-	}
-
-	if insideIP == nil || insideIP.To4() == nil {
-		return
-	}
-
-	vrfID, err := c.sessionVRFID(vrfName)
-	if err != nil {
-		c.logger.Error("CGNAT release: session VRF does not resolve, mapping not released",
-			"session", data.SessionID, "inside_ip", insideIP, "vrf", vrfName, "error", err)
-		return
-	}
-
-	cfg, _ := c.cfgMgr.GetRunning()
-	if cfg != nil && cfg.CGNAT != nil && serviceGroup != "" && cfg.ServiceGroups != nil {
-		if sg, ok := cfg.ServiceGroups[serviceGroup]; ok && sg.CGNAT != nil && sg.CGNAT.Bypass {
-			prefix := net.IPNet{IP: insideIP.To4(), Mask: net.CIDRMask(32, 32)}
-			if err := c.dataplane.CGNATAddDelBypass(prefix, vrfID, false); err != nil {
-				c.logger.Error("bypass removal failed",
-					"session", data.SessionID, "ip", insideIP, "vrf", vrfName, "error", err)
-			}
-			c.bypass.RemovePrefix(&prefix, vrfID)
-			return
-		}
-	}
-
-	c.actMu.Lock()
-	poolName, ok := c.sessionPoolMap[data.SessionID]
-	if !ok {
-		mapSize := len(c.sessionPoolMap)
-		c.actMu.Unlock()
-		c.logger.Debug("CGNAT release: no pool mapping for session",
-			"session", data.SessionID,
-			"inside_ip", insideIP,
-			"map_size", mapSize)
-		if err := c.dataplane.CGNATEnableOnSession(0, swIfIndex, false); err != nil {
-			c.logger.Debug("Disable CGNAT on session", "sw_if", swIfIndex, "error", err)
-		}
-		return
-	}
-	c.actMu.Unlock()
-
-	mappings := c.pools.GetMappings(poolName, insideIP, vrfID)
-	c.logger.Debug("CGNAT release: found mappings",
-		"session", data.SessionID,
-		"pool", poolName,
-		"inside_ip", insideIP,
-		"vrf", vrfName,
-		"mapping_count", len(mappings))
-	if len(mappings) == 0 {
-		c.actMu.Lock()
-		delete(c.sessionPoolMap, data.SessionID)
-		c.actMu.Unlock()
-		return
-	}
-
-	poolID := c.poolIDMap[poolName]
-
-	for i := range mappings {
-		mapping := &mappings[i]
-		c.dataplane.CGNATAddDelSubscriberMappingAsync(poolID, swIfIndex, insideIP,
-			vrfID, mapping.OutsideIP, mapping.PortBlockStart, mapping.PortBlockEnd,
-			false, false, func(err error) {
-				if err != nil {
-					c.logger.Error("remove mapping failed", "error", err)
-					return
-				}
-				c.publishMappingEvent(srgName, mapping, false)
-			})
-		c.reverse.Remove(mapping.OutsideIP, mapping.PortBlockStart)
-	}
-
-	if err := c.pools.ReleaseBlocks(poolName, insideIP, vrfID); err != nil {
-		c.logger.Error("CGNAT release: release blocks failed",
-			"session", data.SessionID, "inside", insideIP, "vrf", vrfName, "error", err)
-	}
-	c.actMu.Lock()
-	delete(c.sessionPoolMap, data.SessionID)
-	c.actMu.Unlock()
-
-	if c.opdb != nil {
-		c.opdb.Delete(context.Background(), opdbNamespace, data.SessionID)
-	}
-
-	c.logger.Debug("CGNAT mappings released", "session", data.SessionID, "inside", insideIP, "blocks", len(mappings))
-}
-
-// beginActivation atomically reserves the (sessionID) activation slot. Returns
-// (false, no-op) when a committed mapping already exists for the session or
-// another activation is in flight — both cases are correctly idempotent
-// no-ops. Callers MUST invoke done() exactly once on the proceed path; for
-// async southbound callbacks that means the callback owns done().
-func (c *Component) beginActivation(sessionID string) (bool, func()) {
-	c.actMu.Lock()
-	defer c.actMu.Unlock()
-
-	if _, ok := c.sessionPoolMap[sessionID]; ok {
-		return false, func() {}
-	}
-	if _, ok := c.activations[sessionID]; ok {
-		return false, func() {}
-	}
-	c.activations[sessionID] = struct{}{}
-
-	return true, func() {
-		c.actMu.Lock()
-		delete(c.activations, sessionID)
-		c.actMu.Unlock()
-	}
 }
 
 // maybeEnqueue buffers an event during the restore window. Returns true when
@@ -938,7 +561,7 @@ func (c *Component) RestoreDegraded() bool {
 //     still exists (retained for retry).
 //
 //  2. Non-PBA scan — iterate the subscriber session cache and classify any
-//     session not already in sessionPoolMap. This is the source of truth for
+//     session no writer already holds. This is the source of truth for
 //     deterministic and bypass recovery (neither writes cgnat_mappings) and
 //     also catches genuinely-new sessions that established during the
 //     restore window (their queued event is drained later but the scan
@@ -951,7 +574,7 @@ func (c *Component) RestoreDegraded() bool {
 // reconnect + bootstrap. Local CGNAT state is intact (osvbngd never went
 // down) but the dataplane lost the plugin's mapping table, so we reprogram
 // every known mapping into VPP without rebuilding the PoolManager /
-// reverse / sessionPoolMap state that is already correct.
+// reverse / writer state that is already correct.
 //
 // IPoE/PPPoE call their own RecoverSessions BEFORE this hook (see
 // cmd/osvbngd/main.go OnRecover), so the subscriber cache holds the live
@@ -985,14 +608,14 @@ func (c *Component) RecoverDataplane(ctx context.Context) error {
 		}
 		mapping.SessionID = key
 
-		liveSwIfIndex, present := resolveIfIndex(ctx, c.sessionProvider, key)
+		live, present := resolveSession(ctx, c.sessionProvider, key)
 		if !present {
 			// Session is gone in this recovery cycle. The cold-restart
 			// path owns orphan cleanup; here we just skip and let the
 			// next restart pick it up.
 			return nil
 		}
-		mapping.SwIfIndex = liveSwIfIndex
+		mapping.SwIfIndex = live.GetIfIndex()
 
 		poolID, ok := c.poolIDMap[mapping.PoolName]
 		if !ok {
@@ -1001,7 +624,7 @@ func (c *Component) RecoverDataplane(ctx context.Context) error {
 
 		toProgram[poolID] = append(toProgram[poolID], southbound.CGNATMapping{
 			PoolID:         poolID,
-			SwIfIndex:      liveSwIfIndex,
+			SwIfIndex:      mapping.SwIfIndex,
 			InsideIP:       mapping.InsideIP,
 			InsideVRFID:    mapping.InsideVRFID,
 			OutsideIP:      mapping.OutsideIP,
@@ -1034,18 +657,15 @@ func (c *Component) RecoverDataplane(ctx context.Context) error {
 			}
 			// Refresh sw_if_index in opdb only — local state is
 			// authoritative and untouched.
-			if data, err := json.Marshal(&rc.mapping); err == nil {
-				c.opdb.Put(ctx, opdbNamespace, rc.sessionID, data)
-			}
+			c.persistMapping(ctx, &rc.mapping)
 		}
 	}
 
 	// Deterministic and bypass need their feature re-enabled per session
 	// since the plugin lost that state. The non-PBA scan handles it via
 	// the same classification helper, idempotent against existing local
-	// CGNAT state because handleDetActivate / handleBypass program by
-	// (poolID, sw_if_index) / (insideIP, vrf); VPP's add APIs treat the
-	// repeat as a no-op.
+	// CGNAT state because the plugin's add APIs treat a repeat as a
+	// no-op.
 	c.scanNonPBASessionsForRecover(ctx)
 
 	c.logger.Info("CGNAT watchdog dataplane recovery complete",
@@ -1062,23 +682,26 @@ func (c *Component) scanNonPBASessionsForRecover(ctx context.Context) {
 		return
 	}
 	for _, sess := range sessions {
-		insideIP := sess.GetIPv4Address()
-		if insideIP == nil || insideIP.To4() == nil {
+		f, ok := restoreFields(sess)
+		if !ok {
 			continue
 		}
-		vrfName := ""
-		switch s := sess.(type) {
-		case *models.IPoESession:
-			vrfName = s.VRF
-		case *models.PPPSession:
-			vrfName = s.VRF
+		vrfID, err := c.sessionVRFID(f.vrfName)
+		if err != nil {
+			c.logger.Error("CGNAT recover: session VRF does not resolve",
+				"session", sess.GetSessionID(), "vrf", f.vrfName, "error", err)
+			continue
 		}
-		cls := c.classifySession(sess.GetServiceGroup(), insideIP, vrfName)
+		cls := c.classifySession(f.serviceGroup, f.insideIP, f.vrfName)
 		switch cls.kind {
 		case classBypass:
-			c.handleBypass(insideIP, vrfName)
+			if err := c.programBypass(makeSubscriberKey(vrfID, f.insideIP), true); err != nil {
+				c.logger.Error("bypass programming failed", "ip", f.insideIP, "vrf", f.vrfName, "error", err)
+			}
 		case classDeterministic:
-			c.handleDetActivate(cls.poolName, sess.GetIfIndex())
+			if err := c.programDeterministic(cls.poolName, f.swIfIndex, true); err != nil {
+				c.logger.Error("enable CGNAT on session failed", "pool", cls.poolName, "sw_if", f.swIfIndex, "error", err)
+			}
 		}
 	}
 }
@@ -1113,13 +736,14 @@ func (c *Component) restoreFromOpDB(ctx context.Context) error {
 		}
 		mapping.SessionID = key
 
-		liveSwIfIndex, present := resolveIfIndex(ctx, c.sessionProvider, key)
+		live, present := resolveSession(ctx, c.sessionProvider, key)
 		if !present {
 			if hasAccessRecord(key, ipoeKnown, pppoeKnown) {
 				c.logger.Warn("CGNAT restore: subscriber cache miss but access opdb entry retained; preserving mapping for retry",
 					"session", key, "inside", mapping.InsideIP)
 				if rerr := c.pools.RestoreMappingIfAbsent(&mapping); rerr == nil {
 					c.reverse.Add(&mapping)
+					c.preservedMapping(&mapping)
 				}
 				c.markRestoreDegraded(key)
 				restoreErrors = append(restoreErrors, key)
@@ -1131,7 +755,7 @@ func (c *Component) restoreFromOpDB(ctx context.Context) error {
 			return nil
 		}
 
-		mapping.SwIfIndex = liveSwIfIndex
+		mapping.SwIfIndex = live.GetIfIndex()
 
 		poolID, ok := c.poolIDMap[mapping.PoolName]
 		if !ok {
@@ -1143,7 +767,7 @@ func (c *Component) restoreFromOpDB(ctx context.Context) error {
 
 		toProgram[poolID] = append(toProgram[poolID], southbound.CGNATMapping{
 			PoolID:         poolID,
-			SwIfIndex:      liveSwIfIndex,
+			SwIfIndex:      mapping.SwIfIndex,
 			InsideIP:       mapping.InsideIP,
 			InsideVRFID:    mapping.InsideVRFID,
 			OutsideIP:      mapping.OutsideIP,
@@ -1151,7 +775,7 @@ func (c *Component) restoreFromOpDB(ctx context.Context) error {
 			PortBlockEnd:   mapping.PortBlockEnd,
 			EnableFeature:  true,
 		})
-		ctxByPool[poolID] = append(ctxByPool[poolID], restoreCtx{sessionID: key, mapping: mapping})
+		ctxByPool[poolID] = append(ctxByPool[poolID], restoreCtx{sessionID: key, mapping: mapping, srgName: live.GetSRGName()})
 		return nil
 	})
 	if err != nil {
@@ -1178,7 +802,7 @@ func (c *Component) restoreFromOpDB(ctx context.Context) error {
 				restoreErrors = append(restoreErrors, rc.sessionID)
 				continue
 			}
-			c.commitRestoredPBA(ctx, &rc.mapping)
+			c.commitRestoredPBA(ctx, &rc.mapping, rc.srgName)
 			alreadyKnown[rc.sessionID] = struct{}{}
 		}
 	}
@@ -1200,18 +824,38 @@ func (c *Component) restoreFromOpDB(ctx context.Context) error {
 type restoreCtx struct {
 	sessionID string
 	mapping   models.CGNATMapping
+	srgName   string
 }
 
-func resolveIfIndex(ctx context.Context, sp SessionProvider, sessionID string) (uint32, bool) {
+// resolveSession returns the live subscriber-cache entry for a session,
+// present only when it carries a session interface.
+func resolveSession(ctx context.Context, sp SessionProvider, sessionID string) (models.SubscriberSession, bool) {
 	snap, ok := sp.SessionSnapshot(ctx, sessionID)
-	if !ok {
-		return 0, false
+	if !ok || snap.GetIfIndex() == 0 {
+		return nil, false
 	}
-	idx := snap.GetIfIndex()
-	if idx == 0 {
-		return 0, false
+	return snap, true
+}
+
+func restoreFields(sess models.SubscriberSession) (sessionFields, bool) {
+	insideIP := sess.GetIPv4Address()
+	if insideIP == nil || insideIP.To4() == nil {
+		return sessionFields{}, false
 	}
-	return idx, true
+	vrfName := ""
+	switch s := sess.(type) {
+	case *models.IPoESession:
+		vrfName = s.VRF
+	case *models.PPPSession:
+		vrfName = s.VRF
+	}
+	return sessionFields{
+		insideIP:     insideIP,
+		vrfName:      vrfName,
+		swIfIndex:    sess.GetIfIndex(),
+		serviceGroup: sess.GetServiceGroup(),
+		srgName:      sess.GetSRGName(),
+	}, true
 }
 
 func hasAccessRecord(sessionID string, ipoeKnown, pppoeKnown map[string]struct{}) bool {
@@ -1240,21 +884,16 @@ func (c *Component) loadAccessSessionKeys(ctx context.Context) (map[string]struc
 	return ipoe, pppoe, nil
 }
 
-func (c *Component) commitRestoredPBA(ctx context.Context, mapping *models.CGNATMapping) {
+func (c *Component) commitRestoredPBA(ctx context.Context, mapping *models.CGNATMapping, srgName string) {
 	if err := c.pools.RestoreMappingIfAbsent(mapping); err != nil {
 		c.logger.Warn("CGNAT restore: local pool restore", "session", mapping.SessionID, "error", err)
 	}
 	c.reverse.Add(mapping)
-
-	c.actMu.Lock()
-	c.sessionPoolMap[mapping.SessionID] = mapping.PoolName
-	c.actMu.Unlock()
+	c.restoredMapping(mapping, srgName)
 
 	// Refresh the persisted entry if the sw_if_index changed (VPP renumbered
 	// after a cold restart). Same intent as IPoE/PPPoE's restore checkpoint.
-	if data, err := json.Marshal(mapping); err == nil {
-		c.opdb.Put(ctx, opdbNamespace, mapping.SessionID, data)
-	}
+	c.persistMapping(ctx, mapping)
 }
 
 func (c *Component) deleteOrphan(ctx context.Context, mapping *models.CGNATMapping) {
@@ -1267,7 +906,8 @@ func (c *Component) deleteOrphan(ctx context.Context, mapping *models.CGNATMappi
 // live subscriber cache. These modes write no per-subscriber opdb record, so
 // the PBA loop above cannot recover them. Also catches genuinely-new sessions
 // whose lifecycle event was dropped past the event-queue bound during
-// restore.
+// restore. Every session goes through the key's writer, so a queued event
+// for the same session drained later converges to the same state.
 func (c *Component) scanNonPBASessions(ctx context.Context, alreadyKnown map[string]struct{}) {
 	sessions, err := c.sessionProvider.GetSessions(ctx, "", "", 0)
 	if err != nil {
@@ -1283,51 +923,21 @@ func (c *Component) scanNonPBASessions(ctx context.Context, alreadyKnown map[str
 		if _, known := alreadyKnown[sid]; known {
 			continue
 		}
-		c.actMu.Lock()
-		_, committed := c.sessionPoolMap[sid]
-		c.actMu.Unlock()
-		if committed {
+		f, ok := restoreFields(sess)
+		if !ok {
 			continue
 		}
-
-		insideIP := sess.GetIPv4Address()
-		if insideIP == nil || insideIP.To4() == nil {
+		vrfID, err := c.sessionVRFID(f.vrfName)
+		if err != nil {
+			c.logger.Error("CGNAT restore: session VRF does not resolve",
+				"session", sid, "vrf", f.vrfName, "error", err)
 			continue
 		}
-		vrfName := ""
-		switch s := sess.(type) {
-		case *models.IPoESession:
-			vrfName = s.VRF
-		case *models.PPPSession:
-			vrfName = s.VRF
+		key := makeSubscriberKey(vrfID, f.insideIP)
+		if _, held := c.holder(key); held {
+			continue
 		}
-
-		cls := c.classifySession(sess.GetServiceGroup(), insideIP, vrfName)
-		switch cls.kind {
-		case classBypass:
-			proceed, done := c.beginActivation(sid)
-			if !proceed {
-				continue
-			}
-			c.handleBypass(insideIP, vrfName)
-			done()
-		case classDeterministic:
-			proceed, done := c.beginActivation(sid)
-			if !proceed {
-				continue
-			}
-			c.handleDetActivate(cls.poolName, sess.GetIfIndex())
-			done()
-		case classPBA:
-			// PBA session with no cgnat_mappings record — treat as a new
-			// activation. The atomic GetOrAllocate prevents racing with a
-			// queued event for the same session.
-			proceed, done := c.beginActivation(sid)
-			if !proceed {
-				continue
-			}
-			c.handlePBAActivate(cls.poolName, insideIP, vrfName, sess.GetIfIndex(), sid, sess.GetSRGName(), done)
-		}
+		c.activate(key, sid, f)
 	}
 }
 

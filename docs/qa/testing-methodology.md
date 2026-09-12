@@ -85,7 +85,7 @@ Each test deploys a complete network: BNG nodes, core routers, subscriber simula
 
 Number 40 is currently used by two directories on disk, `tests/40-l2gw-packet-trigger` and `tests/40-l2gw-vxlan`; both are listed above.
 
-That is 54 suite directories under `tests/`: 53 Robot suites holding 691 test cases, plus suite 41, which drives five shell scenarios against a QEMU image instead of Robot Framework.
+That is 54 suite directories under `tests/`: 53 Robot suites holding 694 test cases, plus suite 41, which drives five shell scenarios against a QEMU image instead of Robot Framework.
 
 CI does not run all of them. 20 suites are wired into the workflows under `.github/workflows/`, so "all suites pass" is not an automated gate. The rest are run locally with `scripts/run-qa-tests.sh`, which picks up every suite directory that has a matching `.robot` file.
 
