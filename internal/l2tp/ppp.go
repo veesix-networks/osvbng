@@ -156,15 +156,26 @@ func buildPPPPacket(code, id uint8, data []byte) []byte {
 // The data flag is T=0; Ns/Nr are omitted per RFC 2661 §3.1 because
 // data messages are unreliable. `pppPacket` is the full PPP packet
 // from buildPPPPacket (code | id | length | data).
+//
+// The frame carries the same HDLC framing the dataplane uses for this
+// session (Tunnel.PPPHdrSkip, resolved once at SCCRQ): Address 0xff
+// and Control 0x03 per RFC 1662 §3.1, omitted only when the session is
+// configured as ACFC compressed (§3.2). pppd accepts either form, but
+// a LAC that decodes a fixed offset (bngblaster strips the two octets
+// unconditionally) reads the wrong protocol field and drops every
+// control frame when they are missing.
 func (c *Component) sendPPPFrame(s *Session, proto uint16, pppPacket []byte) error {
 	if c.send == nil {
 		return ErrSendNotConfigured
 	}
-	body := make([]byte, 0, 2+len(pppPacket))
+	t := s.Tunnel
+	body := make([]byte, 0, 4+len(pppPacket))
+	if t.PPPHdrSkip == 2 {
+		body = append(body, 0xff, 0x03)
+	}
 	body = binary.BigEndian.AppendUint16(body, proto)
 	body = append(body, pppPacket...)
 
-	t := s.Tunnel
 	h := l2tppkt.NewData(t.PeerID, s.PeerID)
 	return c.send(t.LocalIP, t.PeerIP, t.LocalPort, t.PeerPort, *h, body)
 }
