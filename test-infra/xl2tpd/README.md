@@ -6,9 +6,9 @@ L2TP session to the address baked into the suite's `xl2tpd.conf` once
 its access interface comes up, and starts pppd with CHAP — so the LNS
 under test only has to handle the inbound side.
 
-Not intended as a general-purpose LAC. It exists so the LNS suite has a
-deterministic, scriptable external dialer (bngblaster does not support
-acting as an L2TPv2 LAC).
+Not intended as a general-purpose LAC. It exists so the LNS suite keeps
+a real pppd in its interop set next to the bngblaster PPPoL2TP LAC that
+carries the suite's multi-session load.
 
 ## Build
 

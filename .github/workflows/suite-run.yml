@@ -192,6 +192,7 @@ jobs:
       - name: Pre-pull suite dependency images
         run: |
           docker pull veesixnetworks/bngblaster:0.9.30
+          docker pull veesixnetworks/bngblaster:1.0.0
           docker pull frrouting/frr:v8.4.1
 
   suites:

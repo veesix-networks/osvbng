@@ -29,6 +29,23 @@ l2tp:
             hostname: "lac"
             secret: "shared"
             profile: LNS_DEFAULT
+        blaster:
+            hostname: "blaster"
+            secret: "shared"
+            profile: LNS_DEFAULT
+
+# The punt policer splits the configured L2TP rate across every VPP
+# worker, and all sessions from one LAC share a single UDP flow pinned
+# to one worker. On a 21-worker box the default 500 pps becomes about
+# 24 pps for that LAC, which polices ICCN and LCP during a ten-session
+# bring-up. Raised so the suite measures the LNS, not the policer.
+system:
+    cppm:
+        dataplane:
+            policer:
+                l2tp:
+                    rate: 20000
+                    burst: 2000
 
 ipv4-profiles:
     default:
