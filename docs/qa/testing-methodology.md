@@ -16,7 +16,7 @@ The integration suites focus on control plane correctness. They run on a self-ho
 - **[FRRouting](https://frrouting.org/)** for core router simulation (BGP, OSPF)
 - **[FreeRADIUS](https://freeradius.org/)** for AAA authentication testing
 - **[ISC Kea](https://www.isc.org/kea/)** for DHCP relay/proxy testing
-- **[xl2tpd](https://github.com/xelerance/xl2tpd)** for an external L2TPv2 LAC that dials the LNS suite, built from `test-infra/xl2tpd/`
+- **[xl2tpd](https://github.com/xelerance/xl2tpd)** for a pppd-based L2TPv2 LAC that dials the LNS suite alongside BNG Blaster's PPPoL2TP LAC, built from `test-infra/xl2tpd/`
 
 The dataplane the tests run against is the stock VPP image plus the twelve prebuilt osvbng plugins checked in under `test-infra/vpp-plugins/`, which the Docker build copies into `vpp_plugins/`.
 
@@ -57,7 +57,7 @@ Each test deploys a complete network: BNG nodes, core routers, subscriber simula
 | 27 | API Pagination | Pagination across list-returning northbound show endpoints |
 | 28 | Northbound API TLS | Northbound API + Prometheus over TLS with HTTP auth; CGNAT exporter dialer |
 | 29 | RADIUS VRF | RADIUS auth/acct sockets pinned to MGMT-VRF with `SO_BINDTODEVICE` proof |
-| 30 | L2TP LNS | L2TPv2 LNS terminating an external xl2tpd LAC, PPP negotiated locally |
+| 30 | L2TP LNS | L2TPv2 LNS terminating two LACs, one xl2tpd session and ten BNG Blaster PPPoL2TP sessions in one tunnel, PPP negotiated locally |
 | 31 | L2TP LAC | L2TPv2 LAC driven by AAA tunnel attributes, PPP bridged to a BNG Blaster LNS |
 | 32 | IPoE OpDB Restore | IPoE sessions restored from the operational database across osvbngd, VPP, and container restarts |
 | 33 | PPPoE OpDB Restore | Same restart matrix for PPPoE sessions |

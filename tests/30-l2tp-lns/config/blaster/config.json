@@ -1,0 +1,62 @@
+{
+  "interfaces": {
+    "network": [
+      {
+        "interface": "eth1",
+        "address": "10.30.0.2/30",
+        "gateway": "10.30.0.1"
+      }
+    ],
+    "access": [
+      {
+        "interface": "eth1",
+        "type": "pppol2tp",
+        "l2tp-client-group-id": 1,
+        "outer-vlan-min": 1,
+        "outer-vlan-max": 4000
+      }
+    ]
+  },
+  "l2tp-client": [
+    {
+      "group-id": 1,
+      "name": "blaster",
+      "network-interface": "eth1",
+      "server-address": "10.20.0.2",
+      "secret": "shared",
+      "receive-window-size": 16,
+      "hello-interval": 60
+    }
+  ],
+  "ppp": {
+    "authentication": {
+      "username": "blaster{session-global}",
+      "password": "test",
+      "timeout": 10,
+      "retry": 10,
+      "protocol": "CHAP"
+    },
+    "lcp": {
+      "conf-request-timeout": 5,
+      "conf-request-retry": 10,
+      "keepalive-interval": 30,
+      "keepalive-retry": 3
+    },
+    "ipcp": {
+      "enable": true
+    },
+    "ip6cp": {
+      "enable": true
+    }
+  },
+  "session-traffic": {
+    "ipv4-pps": 1,
+    "ipv4-address": "10.30.0.2"
+  },
+  "sessions": {
+    "count": 10,
+    "max-outstanding": 10,
+    "start-rate": 10,
+    "stop-rate": 10
+  }
+}

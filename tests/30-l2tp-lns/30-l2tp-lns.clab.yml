@@ -56,8 +56,16 @@ topology:
         - config/lac/options.xl2tpd:/etc/ppp/options.xl2tpd:ro
         - config/lac/chap-secrets:/etc/ppp/chap-secrets:ro
 
+    blaster:
+      kind: linux
+      image: veesixnetworks/bngblaster:1.0.0
+      binds:
+        - config/blaster/config.json:/config/config.json:ro
+
   links:
     - endpoints: [lac:eth1, corerouter1:eth1]
       mtu: 1500
     - endpoints: [corerouter1:eth2, bng1:eth1]
+      mtu: 1500
+    - endpoints: [blaster:eth1, corerouter1:eth3]
       mtu: 1500
