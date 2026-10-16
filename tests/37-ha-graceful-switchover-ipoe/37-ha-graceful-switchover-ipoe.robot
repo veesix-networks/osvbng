@@ -14,6 +14,9 @@ Also validates the proactive GARP flood on promotion (issue 417): the
 new active must emit broadcast gratuitous ARPs from the SRG virtual MAC
 onto the access network, with nothing skipped by the SRG plugin and no
 frames misrouted to local0-output.
+Then switches back (issue 504): the original active is promoted again
+while it still holds every session locally, and must flood GARP and
+forward traffic exactly as a node restoring from sync does.
 
 *** Settings ***
 Library             OperatingSystem
@@ -36,6 +39,7 @@ ${subscribers}      clab-${lab-name}-subscribers
 ${session-count}    5
 ${srg-vmac}         02:00:5e:00:01:01
 ${garp-pcap}        /tmp/osvbng-ha-graceful-garp.pcap
+${garp-pcap-back}   /tmp/osvbng-ha-graceful-garp-back.pcap
 # Marker source MAC, injected via the probe veth to prove the capture is
 # armed before the switchover. The GARP assertions match only ${srg-vmac}.
 ${marker-mac}       02:6f:73:76:00:99
@@ -159,6 +163,71 @@ Verify Traffic Recovers After Switchover
 Verify Switchover Was Hitless
     Verify No Session Flaps    ${subscribers}
 
+# --- Phase 5: Switch back to bng1 (issue 504) ---
+# bng1 never released its sessions when it was demoted, so this
+# promotion restores nothing from sync and must still flood GARP.
+
+Snapshot GARP And local0 Counters On bng1
+    ${garp} =    Get SRG Counter Column    ${bng1}    5
+    Set Suite Variable    ${bng1-garp-before}    ${garp}
+    ${drops} =    Get Local0 Drop Count    ${bng1}
+    Set Suite Variable    ${bng1-local0-drops-before}    ${drops}
+
+Start GARP Capture For Switchback
+    Start Packet Capture    access-sw-gr    ${garp-pcap-back}
+
+Trigger Graceful Switchback
+    Exec osvbng API    ${bng2}    /api/exec/ha/switchover
+
+Verify bng2 Is STANDBY Again
+    Wait Until Keyword Succeeds    20 x    5s
+    ...    Check HA Status    ${bng2}    STANDBY
+
+Verify bng1 Is ACTIVE Again
+    Wait Until Keyword Succeeds    20 x    5s
+    ...    Check HA Status    ${bng1}    ACTIVE
+
+Verify Sessions Present On bng1
+    Wait Until Keyword Succeeds    30 x    2s
+    ...    Check Session Count On BNG    ${bng1}    ${session-count}
+
+Verify CGNAT Mappings Present On bng1
+    Wait Until Keyword Succeeds    30 x    2s
+    ...    Check CGNAT Mapping Count    ${bng1}    ${session-count}
+
+Verify Sessions On bng1 Carry Access Interface
+    Wait Until Keyword Succeeds    12 x    5s
+    ...    Check Sessions Have Access Interface    ${bng1}
+
+Verify GARP Flood Sent On bng1
+    Wait Until Keyword Succeeds    12 x    5s
+    ...    Check SRG GARP Sent Increased    ${bng1}    ${bng1-garp-before}
+
+Verify No GARP Entries Skipped On bng1
+    ${skipped} =    Get SRG Counter Column    ${bng1}    9
+    Should Be Equal As Integers    ${skipped}    0
+    ...    SRG plugin refused ${skipped} GARP entries on switchback
+
+Verify GARP Not Dropped Via local0 On bng1
+    ${after} =    Get Local0 Drop Count    ${bng1}
+    Should Be Equal As Integers    ${after}    ${bng1-local0-drops-before}
+    ...    local0-output drops grew during switchback, GARP frames were misrouted
+
+Verify GARP Frames On Access Network After Switchback
+    Wait Until Keyword Succeeds    15 x    2s
+    ...    Check GARP In Capture    ${garp-pcap-back}
+    Stop Packet Capture    access-sw-gr
+
+Reset Stream Flow Verification After Switchback
+    Reset Stream Verification    ${subscribers}
+
+Verify Traffic Recovers After Switchback
+    Wait Until Keyword Succeeds    30 x    5s
+    ...    Verify Stream Traffic Flowing    ${subscribers}    expected_flows=${session-count}
+
+Verify Switchback Was Hitless
+    Verify No Session Flaps    ${subscribers}
+
 *** Keywords ***
 Deploy Graceful Topology
     Create Access Bridge
@@ -262,8 +331,9 @@ Stop Packet Capture
     Sleep    1s    let tcpdump flush the pcap on exit
 
 Check GARP In Capture
+    [Arguments]    ${pcap}=${garp-pcap}
     ${rc}    ${output} =    Run And Return Rc And Output
-    ...    sudo tcpdump -nn -e -r ${garp-pcap} 2>/dev/null
+    ...    sudo tcpdump -nn -e -r ${pcap} 2>/dev/null
     Log    ${output}
     Should Be Equal As Integers    ${rc}    0
     # A proactive GARP is a broadcast ARP reply sourced from the SRG
@@ -283,6 +353,12 @@ Check SRG GARP Sent Nonzero
     [Arguments]    ${container}
     ${sent} =    Get SRG Counter Column    ${container}    5
     Should Be True    ${sent} > 0    SRG reports no GARP sent after promotion
+
+Check SRG GARP Sent Increased
+    [Arguments]    ${container}    ${before}
+    ${sent} =    Get SRG Counter Column    ${container}    5
+    Should Be True    ${sent} > ${before}
+    ...    SRG GARP sent counter stayed at ${before} after promotion, no flood on switchback
 
 # Columns of `show osvbng srg`: name, vmac, state, ifs, garp sent,
 # na sent, mac adds, mac dels, garp skip.
