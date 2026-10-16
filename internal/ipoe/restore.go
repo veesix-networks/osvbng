@@ -286,8 +286,38 @@ func (c *Component) handleHAStateChange(event events.Event) {
 
 	if isActive && !wasActive && wasStandby {
 		c.logger.Debug("SRG promoted from standby, restoring synced IPoE sessions", "srg", data.SRGName)
-		go c.restoreFromHASync(data.SRGName)
+		go func() {
+			c.restoreFromHASync(data.SRGName)
+			c.requestGARP(data.SRGName)
+		}()
 	}
+}
+
+// requestGARP asks for the SRG's GARP flood after a promotion's restore
+// pass, whatever that pass found. Session sync is incremental and no
+// bulk sync follows a demotion, so a node promoted back after a
+// switchover holds every session live and zero synced checkpoints: its
+// restore has nothing to do, yet the access switches still point the
+// vMAC at the peer until a frame from this node moves it (issue 504).
+// The flood collects its entries from the live session table, so it is
+// right for both the restored and the never-released case. Only a
+// component holding sessions in the SRG asks: every access component
+// runs this handler on the same promotion, and each request restarts
+// the flood, so an idle component would double it.
+func (c *Component) requestGARP(srgName string) {
+	if c.srgMgr == nil || !c.holdsSessionsInSRG(srgName) {
+		return
+	}
+	c.srgMgr.RequestGARP(srgName)
+}
+
+func (c *Component) holdsSessionsInSRG(srgName string) bool {
+	found := false
+	c.ForEachSession(func(s models.SubscriberSession) bool {
+		found = s.GetSRGName() == srgName
+		return !found
+	})
+	return found
 }
 
 func (c *Component) restoreFromHASync(srgName string) {
@@ -504,10 +534,6 @@ func (c *Component) restoreFromHASync(srgName string) {
 		"srg", srgName,
 		"restored", restored,
 		"failed", failed)
-
-	if restored > 0 && c.srgMgr != nil {
-		c.srgMgr.RequestGARP(srgName)
-	}
 }
 
 // resolveSyncEncapIfIndex resolves the encap sw_if_index for a synced

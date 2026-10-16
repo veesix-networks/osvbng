@@ -1383,8 +1383,36 @@ func (c *Component) handleHAStateChange(event events.Event) {
 
 	if isActive && !wasActive && wasStandby {
 		c.logger.Info("SRG promoted from standby, restoring synced PPPoE sessions", "srg", data.SRGName)
-		go c.restoreFromHASync(data.SRGName)
+		go func() {
+			c.restoreFromHASync(data.SRGName)
+			c.requestGARP(data.SRGName)
+		}()
 	}
+}
+
+// requestGARP asks for the SRG's GARP flood after a promotion's restore
+// pass, whatever that pass found. The flood collects its entries from
+// the live session table, so it covers sessions this node restored from
+// sync and sessions it never released across a demotion (issue 504).
+// Until now only the IPoE restore asked for it, so a PPPoE-only SRG
+// never announced its vMAC on promotion. Only a component holding
+// sessions in the SRG asks: every access component runs this handler
+// on the same promotion, and each request restarts the flood, so an
+// idle component would double it.
+func (c *Component) requestGARP(srgName string) {
+	if c.srgMgr == nil || !c.holdsSessionsInSRG(srgName) {
+		return
+	}
+	c.srgMgr.RequestGARP(srgName)
+}
+
+func (c *Component) holdsSessionsInSRG(srgName string) bool {
+	found := false
+	c.ForEachSession(func(s models.SubscriberSession) bool {
+		found = s.GetSRGName() == srgName
+		return !found
+	})
+	return found
 }
 
 func (c *Component) restoreFromHASync(srgName string) {
