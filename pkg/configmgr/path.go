@@ -488,6 +488,51 @@ func convertValue(value interface{}, targetType reflect.Type) (interface{}, erro
 			return nil, fmt.Errorf("cannot convert %T to float", value)
 		}
 
+	case reflect.Slice:
+		source := reflect.ValueOf(value)
+		capacity := 1
+		if source.IsValid() && (source.Kind() == reflect.Slice || source.Kind() == reflect.Array) {
+			capacity = source.Len()
+		}
+		result := reflect.MakeSlice(targetType, 0, capacity)
+
+		appendConverted := func(item reflect.Value) error {
+			if !item.IsValid() {
+				return fmt.Errorf("cannot convert nil to slice element %s", targetType.Elem())
+			}
+
+			converted, err := convertValue(item.Interface(), targetType.Elem())
+			if err != nil {
+				return err
+			}
+			convertedValue := reflect.ValueOf(converted)
+			if !convertedValue.IsValid() {
+				return fmt.Errorf("conversion returned nil for slice element %s", targetType.Elem())
+			}
+
+			elemType := targetType.Elem()
+			if convertedValue.Type().AssignableTo(elemType) {
+				result = reflect.Append(result, convertedValue)
+			} else if convertedValue.Type().ConvertibleTo(elemType) {
+				result = reflect.Append(result, convertedValue.Convert(elemType))
+			} else {
+				return fmt.Errorf("cannot convert %s to slice element %s", convertedValue.Type(), elemType)
+			}
+			return nil
+		}
+
+		if source.IsValid() && (source.Kind() == reflect.Slice || source.Kind() == reflect.Array) {
+			for i := 0; i < source.Len(); i++ {
+				if err := appendConverted(source.Index(i)); err != nil {
+					return nil, fmt.Errorf("slice element %d: %w", i, err)
+				}
+			}
+		} else if err := appendConverted(source); err != nil {
+			return nil, err
+		}
+
+		return result.Interface(), nil
+
 	default:
 		return nil, fmt.Errorf("unsupported type conversion to %s", targetType.Kind())
 	}
